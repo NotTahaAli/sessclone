@@ -183,6 +183,19 @@ Workflow-tool agents need no third collection path: each fires an ordinary
 under `subagents/workflows/<run_id>/agent-<id>.jsonl`, so the sweep globs
 recursively rather than listing `subagents/` alone.
 
+Nesting is bounded by the environment, not by sessclone. Claude Code Cloud sets
+`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1` and *removes* the spawn tools from an
+agent that has reached it, rather than leaving them to fail — verified from both
+a Task-tool subagent and a workflow agent, each reporting no `Agent`, `Task`, or
+`Workflow` tool in its toolset or deferred list. Every transcript therefore sits
+at most one level below its main session here.
+
+The limit is a setting, so other environments may allow deeper trees. The
+collector reads `spawnDepth` from each `agent-<id>.meta.json` and stores it
+rather than assuming 1; an agent run is parented by its transcript's location,
+which stays correct at any depth. Turn identity is unaffected either way —
+`agent_id` is unique regardless of how deep the agent sits.
+
 A transcript's directory is derived from the working directory, and it does not
 follow a session whose working directory changes: this session's transcripts
 stayed under `projects/-home-user/` while its workflow scripts were written to
