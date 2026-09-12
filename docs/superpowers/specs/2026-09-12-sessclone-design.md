@@ -19,7 +19,7 @@ instead of paying. There is no free hosted tier; self-hosting is the free tier.
 Claude Code subscription plans do not bill per token, and no per-turn billing
 figure is exposed anywhere (verified — see §9). Every money figure in sessclone
 is an estimate derived from token counts and a maintained rate table. The
-product is spend *awareness*, not accounting.
+product is spend _awareness_, not accounting.
 
 ## 2. v1 scope
 
@@ -147,7 +147,7 @@ usage and rates, so a pricing correction fixes every past turn at once.
 Three sources produce duplicates: a hook that fires twice, a backfill sweep
 re-sending delivered rows, and a resumed session re-read from the top. A fourth
 is internal to the transcript — assistant entries are written one row per
-*content block*, all sharing one `message.id` and carrying byte-identical
+_content block_, all sharing one `message.id` and carrying byte-identical
 usage. Measured on a live transcript: naive summation overcounts output tokens
 by 2.4x (48107 vs 19746).
 
@@ -163,7 +163,7 @@ Five wired, chosen after reviewing all 32 documented events:
 
 - `Stop` — push the turns since the cursor (normally one).
 - `SubagentStop` — push the agent run's turns from `agent_transcript_path`
-  (the sibling `transcript_path` field points at the *parent*, verified).
+  (the sibling `transcript_path` field points at the _parent_, verified).
 - `SessionStart` — sweep: re-send everything for unfinished sessions and drain
   the retry queue. Fires on `startup|resume|clear|compact|fork`, so compaction
   gives extra sweeps mid-session.
@@ -184,7 +184,7 @@ under `subagents/workflows/<run_id>/agent-<id>.jsonl`, so the sweep globs
 recursively rather than listing `subagents/` alone.
 
 Nesting is bounded by the environment, not by sessclone. Claude Code Cloud sets
-`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1` and *removes* the spawn tools from an
+`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1` and _removes_ the spawn tools from an
 agent that has reached it, rather than leaving them to fail — verified from both
 a Task-tool subagent and a workflow agent, each reporting no `Agent`, `Task`, or
 `Workflow` tool in its toolset or deferred list. Every transcript therefore sits
@@ -325,7 +325,7 @@ Payment collection is deliberately absent. v1 models plans, subscriptions, and
 seat limits, and enforces them; a platform admin activates an org by hand after
 payment arrives out of band.
 
-The extensibility asked for is carried by the *schema*, not by code: a
+The extensibility asked for is carried by the _schema_, not by code: a
 subscription row records `provider` (`manual` in v1), `provider_customer_id`,
 `provider_subscription_id`, and `provider_metadata jsonb`, all nullable, and
 every activation — manual included — writes a row to `subscription_events`.
@@ -333,7 +333,7 @@ Adding Stripe, Polar, Paddle, Lemon Squeezy, or JazzCash later is then a new
 webhook route writing the same rows, with no migration and no rewrite of
 entitlement checks, which read only the subscription's status and tier.
 
-What v1 does not ship is an adapter *interface* with no implementations behind
+What v1 does not ship is an adapter _interface_ with no implementations behind
 it. The shape of that abstraction should be decided by the first real provider,
 not guessed before one exists; the schema above is what makes deferring it
 free.
@@ -367,7 +367,7 @@ Established by live inspection in this environment, not from documentation:
   `standard`/`standard`/`not_available`, so no modifier path has been exercised
   with a real non-default value.
 - Subagent turns live only in `subagents/agent-<id>.jsonl`. Those rows carry
-  the *parent's* `sessionId` plus their own `agentId`, and `isSidechain: true`.
+  the _parent's_ `sessionId` plus their own `agentId`, and `isSidechain: true`.
 - One `sessionId` per file; the filename stem equals it.
 - No cost or price field exists anywhere in the transcript.
 - No hook event payload carries token usage, cost, or pricing. Checked against
@@ -437,3 +437,10 @@ Verified at design time (`pnpm view`, this environment): next 16.3.5, react
 tailwindcss 4.3.3, zod 4.6.2, recharts 3.10.1, @aws-sdk/client-s3 3.1131.0,
 node v22.22.2, pnpm 10.33.0. Re-verify at implementation; never pin from
 memory.
+
+Linting is oxlint 1.82.0 with oxlint-tsgolint 7.0.2001, not ESLint. ESLint's
+TypeScript support goes through typescript-eslint, which throws
+`typescript-eslint does not support TS 7.0` against the pinned compiler
+(typescript-eslint#10940). oxlint parses TypeScript itself and reaches type
+information through tsgolint, which is built on the same TypeScript 7 native
+compiler, so type-aware rules work at the pinned version.

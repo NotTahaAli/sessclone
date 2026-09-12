@@ -1,0 +1,22 @@
+name: CI
+
+# Push only: every branch here is pushed before it becomes a pull request, so
+# adding `pull_request` would just run the same commit twice. Revisit if
+# contributions start arriving from forks.
+on: push
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm format
+      - run: pnpm typecheck
+      - run: pnpm test

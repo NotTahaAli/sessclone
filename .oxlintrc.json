@@ -1,0 +1,31 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "typescript",
+    "unicorn",
+    "react",
+    "react-perf",
+    "nextjs",
+    "import",
+    "promise"
+  ],
+  "rules": {
+    // The automatic JSX runtime (jsx: react-jsx) needs no React import.
+    "react/react-in-jsx-scope": "off",
+    // Placeholder modules carry `export {}` until their tickets fill them in.
+    "unicorn/require-module-specifiers": "off"
+  },
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "error"
+  },
+  "ignorePatterns": [
+    "**/node_modules/**",
+    "**/.next/**",
+    "**/dist/**",
+    "docs/tickets/**",
+    "coverage/**",
+    "apps/web/next-env.d.ts"
+  ]
+}
