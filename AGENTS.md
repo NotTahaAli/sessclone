@@ -85,3 +85,58 @@ Leaks are the failure these three share. Clear every timer and interval,
 unsubscribe in every `useEffect` cleanup, abort in-flight fetches with
 `AbortController`, and bound any module-level cache — an unbounded `Map` at
 module scope grows for the life of the process.
+
+### Look at it before calling it done
+
+Any surface a person will see — a page, a chart, an email, the marketing site —
+is verified by running it in Chromium and looking at the screenshots, not by
+reading the code that produced it. Drive it with Playwright headless, capture
+1440x900 and 390x844, in both light and dark, and inspect what came back.
+"It renders" is a claim; a screenshot is evidence.
+
+Keep the shots in the scratch directory, not in the repo. Re-capture a surface
+when its markup, styles, or data shape change — not on every commit.
+
+### Test what breaks, once
+
+Each behaviour is covered at exactly one level. A case proven by a unit test is
+not re-proven through the browser; the cost of the slow duplicate is paid on
+every run, forever.
+
+- **Pure logic** — parsing, identity, cost — unit tests, many, fast.
+- **Routes and policies** — against a real Postgres with real migrations.
+- **User flows** — Playwright, and only the flows whose failure would be
+  serious: sign in, install a Collector and see a Turn arrive, invite someone
+  into a full Org, be refused an upload, download an artifact as each Role.
+
+Keep the expensive suites cheap to live with: sign in once and reuse the stored
+session rather than logging in per test, seed data through the database rather
+than through the UI, and run browser tests on changes to the surfaces they
+cover plus once before merge. Full-page snapshot tests are noise — assert the
+thing that matters instead.
+
+When a bug escapes, add the one test that would have caught it, at the cheapest
+level that would have caught it.
+
+### Delegate, and size the agent to the task
+
+Work that would fill this context with material nobody needs afterwards goes to
+a subagent, which returns the conclusion rather than the reading. Independent
+pieces run in parallel rather than in sequence.
+
+- **Exploring or searching** — a subagent on a small model at low effort. The
+  answer is a list of paths and facts; the file contents do not belong here.
+- **Independent build work** — one subagent per concern, in parallel, each
+  owning its own files. Concurrent edits to one file are a merge conflict with
+  extra steps.
+- **Review** — a subagent that did not write the code, on a strong model at
+  high effort, told to look for defects rather than to agree. Fresh eyes catch
+  what the author's assumptions hide.
+- **Mechanical work** — renames, reformatting, moving files — smallest model,
+  low effort.
+- **Design, architecture, security, and money** — strongest model, high effort.
+  These are where a cheap wrong answer costs the most.
+
+The main thread keeps the decisions, the integration, and the conversation with
+the user. A subagent that returns a transcript instead of a conclusion was
+asked the wrong question.
