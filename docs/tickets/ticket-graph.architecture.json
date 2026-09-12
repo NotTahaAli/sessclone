@@ -1,0 +1,214 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "sessclone v1 — ticket status",
+    "subtitle": "71 tickets · 0 done · 13 ready to start · 58 blocked",
+    "output": "docs/tickets/ticket-graph.html",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    {
+      "id": "foundation",
+      "type": "backend",
+      "label": "Foundation",
+      "sublabel": "1-2 · 1 ready · 1 blocked",
+      "pos": [
+        40,
+        298
+      ],
+      "size": [
+        165,
+        68
+      ]
+    },
+    {
+      "id": "design",
+      "type": "frontend",
+      "label": "Frontend Design",
+      "sublabel": "16-20 · 1 ready · 4 blocked",
+      "pos": [
+        270,
+        70
+      ],
+      "size": [
+        165,
+        68
+      ]
+    },
+    {
+      "id": "spikes",
+      "type": "security",
+      "label": "Spikes + Fixtures",
+      "sublabel": "3-8 · 5 ready · 1 blocked",
+      "pos": [
+        40,
+        578
+      ],
+      "size": [
+        165,
+        68
+      ]
+    },
+    {
+      "id": "decisions",
+      "type": "security",
+      "label": "Decisions",
+      "sublabel": "9-15 · 6 ready · 1 blocked",
+      "pos": [
+        270,
+        578
+      ],
+      "size": [
+        165,
+        68
+      ]
+    },
+    {
+      "id": "schema",
+      "type": "database",
+      "label": "Schema + Harness",
+      "sublabel": "21-25 · 5 blocked",
+      "pos": [
+        500,
+        332
+      ],
+      "size": [
+        165,
+        68
+      ]
+    },
+    {
+      "id": "accounts",
+      "type": "frontend",
+      "label": "Site + Accounts",
+      "sublabel": "26-28 · 3 blocked",
+      "pos": [
+        730,
+        332
+      ],
+      "size": [
+        165,
+        68
+      ]
+    },
+    {
+      "id": "collection",
+      "type": "backend",
+      "label": "Collection + Cost",
+      "sublabel": "29-43 · 15 blocked",
+      "pos": [
+        960,
+        122
+      ],
+      "size": [
+        165,
+        68
+      ]
+    },
+    {
+      "id": "product",
+      "type": "security",
+      "label": "Access + Dashboard",
+      "sublabel": "44-57 · 14 blocked",
+      "pos": [
+        960,
+        560
+      ],
+      "size": [
+        165,
+        68
+      ]
+    },
+    {
+      "id": "ship",
+      "type": "external",
+      "label": "Ship + Verify",
+      "sublabel": "66-71 · 6 blocked",
+      "pos": [
+        1190,
+        122
+      ],
+      "size": [
+        165,
+        68
+      ]
+    },
+    {
+      "id": "archival",
+      "type": "cloud",
+      "label": "Archival + Admin",
+      "sublabel": "58-65 · 8 blocked",
+      "pos": [
+        1190,
+        560
+      ],
+      "size": [
+        165,
+        68
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "spikes_decisions",
+      "from": "spikes",
+      "to": "decisions",
+      "variant": "emphasis"
+    },
+    {
+      "id": "foundation_design",
+      "from": "foundation",
+      "to": "design",
+      "variant": "emphasis"
+    },
+    {
+      "id": "foundation_schema",
+      "from": "foundation",
+      "to": "schema",
+      "variant": "dashed"
+    },
+    {
+      "id": "decisions_schema",
+      "from": "decisions",
+      "to": "schema",
+      "variant": "dashed"
+    },
+    {
+      "id": "design_accounts",
+      "from": "design",
+      "to": "accounts",
+      "variant": "dashed"
+    },
+    {
+      "id": "schema_accounts",
+      "from": "schema",
+      "to": "accounts",
+      "variant": "dashed"
+    },
+    {
+      "id": "accounts_collection",
+      "from": "accounts",
+      "to": "collection",
+      "variant": "dashed"
+    },
+    {
+      "id": "collection_product",
+      "from": "collection",
+      "to": "product",
+      "variant": "dashed"
+    },
+    {
+      "id": "product_archival",
+      "from": "product",
+      "to": "archival",
+      "variant": "dashed"
+    },
+    {
+      "id": "collection_ship",
+      "from": "collection",
+      "to": "ship",
+      "variant": "dashed"
+    }
+  ]
+}
