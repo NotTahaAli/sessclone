@@ -177,6 +177,18 @@ Everything else carries no usage signal, or carries prompt text we decline to
 collect. `Notification` quota matchers and `PreCompact`/`PostCompact` are
 v1.1 candidates into the same table.
 
+Workflow-tool agents need no third collection path: each fires an ordinary
+`SubagentStop` with `agent_type: "workflow-subagent"` and its own
+`agent_transcript_path`, verified live. Their transcripts sit one level deeper,
+under `subagents/workflows/<run_id>/agent-<id>.jsonl`, so the sweep globs
+recursively rather than listing `subagents/` alone.
+
+A transcript's directory is derived from the working directory, and it does not
+follow a session whose working directory changes: this session's transcripts
+stayed under `projects/-home-user/` while its workflow scripts were written to
+`projects/-home-user-sessclone/`. The sweep therefore searches every project
+directory for the session's id rather than assuming one home.
+
 ### 5.4 Cursor, retries, and the residual gap
 
 A per-session cursor file records the last acknowledged message id and byte
@@ -297,10 +309,25 @@ Established by live inspection in this environment, not from documentation:
   the *parent's* `sessionId` plus their own `agentId`, and `isSidechain: true`.
 - One `sessionId` per file; the filename stem equals it.
 - No cost or price field exists anywhere in the transcript.
-- No hook event payload carries token usage, cost, or pricing — all 32 checked
-  against the published hooks reference.
+- No hook event payload carries token usage, cost, or pricing. Checked against
+  the published reference for all 32 events, then confirmed by capturing live
+  payloads for `Stop`, `SubagentStart`, `SubagentStop`, `PreToolUse`,
+  `PostToolUse`, `PostToolBatch`, `UserPromptSubmit`, `MessageDisplay`,
+  `PermissionRequest`, and `Notification`.
 - `SubagentStop` provides `agent_transcript_path` separately from
-  `transcript_path`, which points at the parent.
+  `transcript_path`, which points at the parent — captured live.
+- Workflow-tool agents fire ordinary `SubagentStop` with
+  `agent_type: "workflow-subagent"`, and their transcripts live under
+  `subagents/workflows/<run_id>/`. A sibling `agent-<id>.meta.json` carries
+  `agentType`, `description`, `workflowPhase`, and `spawnDepth`.
+- A session's transcript directory is derived from the working directory at
+  start and does not move when the working directory changes mid-session.
+- Live payloads depart from the published reference in three places, so the
+  collector follows the capture, not the docs: `PostToolUse` delivers
+  `tool_response` (not `tool_output`) plus `duration_ms`; `PostToolBatch`
+  delivers a `tool_calls` array (not `batch_size`); `SubagentStop` carries
+  `stop_hook_active`, `background_tasks`, and `session_crons`, and omits the
+  documented `stop_reason`.
 - Cloud environments expose `CLAUDE_CODE_ACCOUNT_UUID` (stable),
   `CLAUDE_CODE_REMOTE_SESSION_ID`, `CLAUDE_CODE_REMOTE_ENVIRONMENT_TYPE`;
   `CLAUDE_CODE_CONTAINER_ID` and hostname change per container.
