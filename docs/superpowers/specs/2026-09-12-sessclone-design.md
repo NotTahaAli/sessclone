@@ -224,9 +224,13 @@ The plugin ships from this repo via `.claude-plugin/marketplace.json`:
 sessclone`. Self-hosters use the identical path against their own fork.
 
 Two mechanics, verified by building a probe plugin and installing it here.
-Hooks are registered by a `"hooks": "./hooks/hooks.json"` pointer in
-`plugin.json` — a bare `hooks.json` in the plugin root is ignored silently, and
-`claude plugin details <name>` reporting `Hooks (0)` is how that shows up.
+Hooks register when `hooks.json` sits at `hooks/hooks.json`, or when
+`plugin.json` points at it with a `"hooks"` key — either alone is enough. Only
+the remaining combination fails: a bare `hooks.json` in the plugin root with no
+pointer is ignored silently, and `claude plugin details <name>` reporting
+`Hooks (0)` is how that shows up. (The earlier reading here, that the pointer
+was the deciding factor, came from a two-variable test; ticket 02 measured the
+four cases one variable at a time.)
 Newly installed plugin hooks **do not fire in the session that installed
 them**: the probe's `PreToolUse`, `Stop`, and `SubagentStop` never ran despite
 registering correctly. Onboarding must therefore end with "restart Claude Code",

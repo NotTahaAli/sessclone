@@ -10,7 +10,14 @@ let client: postgres.Sql | undefined
 
 // Lazily, and once: a connection per request would exhaust the pool under any
 // load, and one opened at module scope would connect during `next build`.
-const db = () => (client ??= postgres(process.env.DATABASE_URL!))
+const db = () => {
+  // `postgres(undefined)` silently falls back to localhost and the OS user, so
+  // a forgotten variable surfaces as `role "..." does not exist` three layers
+  // down. Say what is missing instead.
+  const url = process.env.DATABASE_URL
+  if (!url) throw new Error('DATABASE_URL is not set')
+  return (client ??= postgres(url))
+}
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null)

@@ -5,22 +5,39 @@ Claude Code 2.1.269 on a cloud environment.
 
 ## What had to be true for the hook to fire
 
-1. **The manifest needs a `hooks` pointer.** `packages/plugin/.claude-plugin/plugin.json`
-   carries `"hooks": "./hooks/hooks.json"`. A `hooks/hooks.json` sitting in the
-   plugin with no pointer is discovered in some layouts and ignored in others;
-   the pointer is the form that is always read. `claude plugin details
-sessclone` is how you tell — it printed `Hooks (1)  Stop` once the pointer
-   was there, and would print `Hooks (0)` without it.
+1. **The hooks file has to be somewhere Claude Code looks.** Measured one
+   variable at a time, installing each layout and reading
+   `claude plugin details <name>`:
+
+   | Where `hooks.json` lives | `hooks` key in `plugin.json` | Hooks registered |
+   | ------------------------ | ---------------------------- | ---------------- |
+   | `hooks/hooks.json`       | absent                       | 1                |
+   | `hooks/hooks.json`       | `./hooks/hooks.json`         | 1                |
+   | `hooks.json` (root)      | `./hooks.json`               | 1                |
+   | `hooks.json` (root)      | absent                       | **0**            |
+
+   So the rule is location **or** pointer, and only the bare root file with no
+   pointer fails. The design spec's §5.5 reading — that the pointer is what
+   registers hooks — came from a two-variable experiment that moved the file
+   and added the pointer in one step. §5.5 is corrected in this commit.
+
+   This repo keeps the pointer anyway: both working layouts cost the same, and
+   the pointer is the one that stays correct if the file ever moves.
+
 2. **The marketplace entry needs a relative source.** The repo root carries
    `.claude-plugin/marketplace.json` with `"source": "./packages/plugin"`, so
    `claude plugin marketplace add <path-or-repo>` then `claude plugin install
 sessclone@sessclone` works against a clone and against the GitHub repo
    unchanged. `claude plugin validate .` checks both manifests and is worth
    running before a release.
-3. **The hook must not fail loudly.** A hook that throws blocks the session it
-   fires in, so `hooks/stop.mjs` swallows every error and always exits 0. The
-   cost of that choice is that a broken deployment is silent — the collector's
-   real answer is the on-disk retry queue (spec §5.4), not a louder hook.
+3. **The hook should not fail loudly.** `hooks/stop.mjs` swallows every error
+   and always exits 0 — but not for the reason first recorded here. A throwing
+   hook does _not_ block the turn: for a `Stop` hook only exit 2 blocks, and an
+   uncaught Node exception exits 1, which Claude Code treats as a non-blocking
+   error. What exiting non-zero actually costs is a `Stop hook error` notice in
+   the transcript on every single turn, which is a poor way to report that a
+   deployment is unreachable. The collector's real answer is the on-disk retry
+   queue (spec §5.4).
 4. **Restart after installing.** Confirmed again here: the hooks of a
    just-installed plugin do not fire in the session that installed them.
    Onboarding ends with "restart Claude Code" for this reason.
@@ -41,20 +58,30 @@ its parent's `session_id` in the hook payload, and wrote its transcript to
 conversations, two different files, one id — the distinguishing part was the
 project directory, not the id.
 
+Spec §5.3 already records a different way one id lands in two directories: a
+session whose working directory changes mid-run. That is not what this was. The
+second file's rows carry the child's own prompt and nothing of the parent's
+conversation — 54 rows, opening with a `queue-operation` enqueue of the exact
+string sent to `claude -p`. Separate conversation, same id.
+
 Unsetting `CLAUDE_CODE_SESSION_ID` did not change it, so this is not simple env
 inheritance.
 
 This matters twice for turn identity (ticket 09):
 
-- The sweep of spec §5.3 searches every project directory for a session's id.
-  Against a nested run it would merge two conversations into one Session.
+- The sweep of spec §5.3 searches every project directory for a session's id,
+  precisely so a session that changed directory is reunited. Against a nested
+  run the same behaviour merges two conversations into one Session.
 - The dedup key is `(member_id, session_id, agent_id, message_id)`. Message ids
   stay distinct, so this does not overcount Turns — it misgroups them.
 
+The two cases want opposite handling and the filesystem looks the same in both,
+so ticket 09 cannot fix this by keying Session identity on the project
+directory — that would break the §5.3 sweep it is there to serve. It needs a
+signal that separates "same session, moved" from "different session, same id".
+
 Scope of the observation: nested `claude -p` inside a Claude Code session. An
-ordinary second terminal was not tested and may well get its own id. Ticket 09
-should settle whether Session identity needs the project directory (or the
-transcript path) alongside the id.
+ordinary second terminal was not tested and may well get its own id.
 
 ## What is throwaway
 

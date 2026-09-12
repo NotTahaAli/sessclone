@@ -20,8 +20,8 @@ Route tests run against a real Postgres and apply `supabase/migrations/`
 themselves, so a cluster has to be reachable:
 
 ```bash
-createuser sessclone --login --pwprompt   # password: sessclone
-createdb sessclone_test --owner sessclone
+sudo -u postgres psql -c "create role sessclone login password 'sessclone'"
+sudo -u postgres createdb sessclone_test --owner sessclone
 ```
 
 `DATABASE_URL` overrides the default,

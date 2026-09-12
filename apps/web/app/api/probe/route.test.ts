@@ -17,9 +17,22 @@ const post = (body: unknown) =>
   )
 
 beforeAll(async () => {
+  // The reset below drops everything, so refuse any database not named as a
+  // test one. A mistyped DATABASE_URL should fail, not empty someone's data.
+  const database = new URL(process.env.DATABASE_URL!).pathname.slice(1)
+  if (!database.endsWith('_test')) {
+    throw new Error(`refusing to reset ${database}: not a _test database`)
+  }
+
+  // Resetting the schema rather than the tables this migration happens to
+  // create means the next migration needs no edit here.
+  await sql.unsafe('drop schema public cascade; create schema public')
+
   const dir = new URL('../../../../../supabase/migrations/', import.meta.url)
-  await sql.unsafe('drop table if exists probe_rows')
-  for (const file of readdirSync(dir).toSorted()) {
+  const migrations = readdirSync(dir)
+    .filter((file) => file.endsWith('.sql'))
+    .toSorted()
+  for (const file of migrations) {
     // oxlint-disable-next-line no-await-in-loop -- migrations apply in order.
     await sql.unsafe(readFileSync(new URL(file, dir), 'utf8'))
   }
