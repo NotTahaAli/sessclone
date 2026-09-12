@@ -2,7 +2,7 @@
 
 **What to build:** The collection tables, including the unique index that makes ingest idempotent.
 
-**Blocked by:** 01, 09, 11.
+**Blocked by:** 01, 09, 11, 14.
 
 **Status:** ready-for-agent
 

@@ -66,8 +66,8 @@ read as authoritative.
 ## Storage and billing
 
 **Log Artifact** — the stored raw transcript of one Session, uploaded only when
-the Member has opted in. Distinct from that Session's Turns, kept separately,
-and removed on its own schedule.
+the Member has opted in and has not excluded that Session's Project. Distinct
+from that Session's Turns, kept separately, and removed on its own schedule.
 
 **Retention** — how long an Org keeps Log Artifacts. Turns are not subject to
 it.

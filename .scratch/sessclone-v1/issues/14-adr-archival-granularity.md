@@ -4,8 +4,8 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] States whether the opt-in is per Member or per Device, and why
-- [ ] Whichever loses, the glossary or the user story is updated in the same change
-- [ ] States where the flag is enforced, given that the presign route must refuse on it
+- [x] States whether the opt-in is per Member or per Device, and why
+- [x] Whichever loses, the glossary or the user story is updated in the same change
+- [x] States where the flag is enforced, given that the presign route must refuse on it

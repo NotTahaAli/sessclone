@@ -189,8 +189,10 @@ function buildSpec(tickets) {
     return {
       id: p.id,
       type: p.type,
-      label: p.label,
-      sublabel: `${p.range[0]}-${p.range[1]} \u00b7 ${parts.join(' \u00b7 ')}`,
+      // The ticket range rides in the label, not the sublabel: three count
+      // parts plus a range overflows the renderer's desktop-readability check.
+      label: `${p.label} (${p.range[0]}-${p.range[1]})`,
+      sublabel: parts.join(' \u00b7 '),
       pos: p.pos,
       size: [165, 68],
     }

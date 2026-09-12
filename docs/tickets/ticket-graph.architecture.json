@@ -3,7 +3,7 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "sessclone v1 — ticket status",
-    "subtitle": "71 tickets · 2 done · 13 ready to start · 56 blocked",
+    "subtitle": "71 tickets · 7 done · 11 ready to start · 53 blocked",
     "output": "docs/tickets/ticket-graph.html",
     "quality_profile": "showcase"
   },
@@ -11,8 +11,8 @@
     {
       "id": "foundation",
       "type": "backend",
-      "label": "Foundation",
-      "sublabel": "1-2 · 2 done",
+      "label": "Foundation (1-2)",
+      "sublabel": "2 done",
       "pos": [
         40,
         298
@@ -25,8 +25,8 @@
     {
       "id": "design",
       "type": "frontend",
-      "label": "Frontend Design",
-      "sublabel": "16-20 · 1 ready · 4 blocked",
+      "label": "Frontend Design (16-20)",
+      "sublabel": "1 ready · 4 blocked",
       "pos": [
         270,
         70
@@ -39,8 +39,8 @@
     {
       "id": "spikes",
       "type": "security",
-      "label": "Spikes + Fixtures",
-      "sublabel": "3-8 · 5 ready · 1 blocked",
+      "label": "Spikes + Fixtures (3-8)",
+      "sublabel": "5 ready · 1 blocked",
       "pos": [
         40,
         578
@@ -53,8 +53,8 @@
     {
       "id": "decisions",
       "type": "security",
-      "label": "Decisions",
-      "sublabel": "9-15 · 6 ready · 1 blocked",
+      "label": "Decisions (9-15)",
+      "sublabel": "5 done · 1 ready · 1 blocked",
       "pos": [
         270,
         578
@@ -67,8 +67,8 @@
     {
       "id": "schema",
       "type": "database",
-      "label": "Schema + Harness",
-      "sublabel": "21-25 · 5 blocked",
+      "label": "Schema + Harness (21-25)",
+      "sublabel": "3 ready · 2 blocked",
       "pos": [
         500,
         332
@@ -81,8 +81,8 @@
     {
       "id": "accounts",
       "type": "frontend",
-      "label": "Site + Accounts",
-      "sublabel": "26-28 · 3 blocked",
+      "label": "Site + Accounts (26-28)",
+      "sublabel": "3 blocked",
       "pos": [
         730,
         332
@@ -95,8 +95,8 @@
     {
       "id": "collection",
       "type": "backend",
-      "label": "Collection + Cost",
-      "sublabel": "29-43 · 1 ready · 14 blocked",
+      "label": "Collection + Cost (29-43)",
+      "sublabel": "1 ready · 14 blocked",
       "pos": [
         960,
         122
@@ -109,8 +109,8 @@
     {
       "id": "product",
       "type": "security",
-      "label": "Access + Dashboard",
-      "sublabel": "44-57 · 14 blocked",
+      "label": "Access + Dashboard (44-57)",
+      "sublabel": "14 blocked",
       "pos": [
         960,
         560
@@ -123,8 +123,8 @@
     {
       "id": "ship",
       "type": "external",
-      "label": "Ship + Verify",
-      "sublabel": "66-71 · 6 blocked",
+      "label": "Ship + Verify (66-71)",
+      "sublabel": "6 blocked",
       "pos": [
         1190,
         122
@@ -137,8 +137,8 @@
     {
       "id": "archival",
       "type": "cloud",
-      "label": "Archival + Admin",
-      "sublabel": "58-65 · 8 blocked",
+      "label": "Archival + Admin (58-65)",
+      "sublabel": "8 blocked",
       "pos": [
         1190,
         560
@@ -166,13 +166,13 @@
       "id": "foundation_schema",
       "from": "foundation",
       "to": "schema",
-      "variant": "dashed"
+      "variant": "emphasis"
     },
     {
       "id": "decisions_schema",
       "from": "decisions",
       "to": "schema",
-      "variant": "dashed"
+      "variant": "emphasis"
     },
     {
       "id": "design_accounts",

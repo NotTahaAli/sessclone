@@ -4,8 +4,8 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] States the provider columns carried on a subscription and that they are nullable
-- [ ] States that every activation, manual included, writes an event
-- [ ] States that no adapter interface is built until a real provider shapes it
+- [x] States the provider columns carried on a subscription and that they are nullable
+- [x] States that every activation, manual included, writes an event
+- [x] States that no adapter interface is built until a real provider shapes it

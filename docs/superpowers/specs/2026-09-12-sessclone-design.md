@@ -239,13 +239,31 @@ happened before the restart — not an edge case, the normal first-run path.
 
 ## 6. Transcript archival
 
-Opt-in per member, off by default. The collector requests a presigned PUT and
-uploads straight to storage, so the application never carries the bytes. One
-object per session at `orgs/<org>/sessions/<session_id>.jsonl`, latest wins —
-the use case is feeding a whole session to an analysis agent, which forty
-partial versions would only obstruct. The collector sends the SHA-256 with the
-presign request and the server declines to issue a URL when the stored hash
-matches.
+Opt-in per member, off by default, with a per-project exclusion inside it
+(ADR 0005). A project the member has not touched inherits the master switch, so
+the per-project setting is an opt-out list; a working directory with no git
+remote is keyed by its absolute path. Enforcement is server-side at the presign
+route, which the collector cannot vouch for itself.
+
+The collector requests a presigned PUT and uploads straight to storage, so the
+application never carries the bytes. One object per session at
+
+```
+orgs/<org_id>/members/<member_id>/projects/<project_key>/<session_id>.jsonl
+```
+
+latest wins — the use case is feeding a whole session to an analysis agent,
+which forty partial versions would only obstruct. The key carries member and
+project rather than session alone because a session id is not unique: ticket 02
+measured two different conversations sharing one, and a flat key would have let
+them overwrite each other silently (ADR 0003). The collector sends the SHA-256
+with the presign request and the server declines to issue a URL when the stored
+hash matches.
+
+Turning archival off is forward-only: new uploads stop, stored artifacts remain
+and age out under retention. Deleting them is a separate explicit action a
+member takes for their own artifacts, at member or project granularity, which
+the project-shaped key makes a prefix sweep.
 
 Retention is org-configurable, default 90 days, capped by the tier. It applies
 to artifacts only; disabling transcript storage never touches spend history.

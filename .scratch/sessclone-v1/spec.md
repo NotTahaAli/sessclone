@@ -108,8 +108,8 @@ plans do not bill per token, so sessclone measures awareness, not invoices.
 
 29. As a Member, I want transcript archival off by default, so that nothing
     leaves my machine until I decide it should.
-30. As a Member, I want to turn archival on per machine, so that I can archive
-    work sessions and not personal ones.
+30. As a Member, I want to exclude individual Projects once archival is on, so
+    that I can archive work sessions and not personal ones.
 31. As a Member, I want a Session's transcript uploaded once and replaced as it
     grows, so that storage does not fill with partial copies.
 32. As a Member, I want an unchanged transcript skipped rather than re-uploaded,
@@ -263,7 +263,8 @@ plans do not bill per token, so sessclone measures awareness, not invoices.
   Turns, and returns the last accepted `message.id` for the cursor.
 - `POST /api/logs/presign` refuses to issue a URL when the submitted transcript
   hash matches what is stored, and refuses outright when the Member has not
-  opted in or the Tier excludes archival.
+  opted in, when the Member has excluded that Session's Project, or when the
+  Tier excludes archival — each with a distinguishable reason.
 - Uploads go straight to storage with a presigned PUT; the application never
   carries transcript bytes.
 - Both routes validate their input with the shared zod schema before touching
@@ -326,8 +327,8 @@ Turn.
 real Postgres with the real migrations applied. Covers: a valid report stored;
 the identical report sent twice leaving one row; a revoked or unknown key
 rejected; a malformed payload rejected before any write; a presign request
-refused when the hash is unchanged, when the Member has not opted in, and when
-the Tier excludes archival; the response carrying the cursor position the
+refused when the hash is unchanged, when the Member has not opted in, when the
+Project is excluded, and when the Tier excludes archival; the response carrying the cursor position the
 Collector needs.
 
 **Seam C — RLS policies, as SQL.** Run against a seeded database as each Role,
@@ -373,7 +374,8 @@ to that, not evidence against it; the risk stands.
 
 Log Artifacts are the largest liability in the product. Transcripts contain
 source code and can contain credentials. Archival stays opt-in per Member, off
-by default, and an Admin cannot enable it on someone's behalf.
+by default, excludable per Project, and an Admin cannot enable it on someone's
+behalf.
 
 Rate accuracy is manual. A missed price change makes every estimate quietly
 wrong until someone notices, which is the strongest argument for showing token
