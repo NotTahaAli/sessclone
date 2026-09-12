@@ -223,6 +223,16 @@ The plugin ships from this repo via `.claude-plugin/marketplace.json`:
 `/plugin marketplace add NotTahaAli/sessclone`, then `/plugin install
 sessclone`. Self-hosters use the identical path against their own fork.
 
+Two mechanics, verified by building a probe plugin and installing it here.
+Hooks are registered by a `"hooks": "./hooks/hooks.json"` pointer in
+`plugin.json` — a bare `hooks.json` in the plugin root is ignored silently, and
+`claude plugin details <name>` reporting `Hooks (0)` is how that shows up.
+Newly installed plugin hooks **do not fire in the session that installed
+them**: the probe's `PreToolUse`, `Stop`, and `SubagentStop` never ran despite
+registering correctly. Onboarding must therefore end with "restart Claude Code",
+and the first post-install `SessionStart` sweep is what backfills the turns that
+happened before the restart — not an edge case, the normal first-run path.
+
 ## 6. Transcript archival
 
 Opt-in per member, off by default. The collector requests a presigned PUT and
@@ -244,15 +254,40 @@ members in scope; Member only their own.
 Estimated cost is `usage x rate`, resolved by model and effective date, so a
 turn keeps the price that was live when it ran.
 
-Two things the note's original model would have got wrong, both verified in a
-live transcript and both cheap to capture only before ingest exists:
+Prices below are as published on 2026-09-12 and seed the rate table; they are
+data, not truth, and the table is what the code reads.
 
-- Cache writes split into 1-hour and 5-minute ephemeral tokens, priced
-  differently (roughly 2x versus 1.25x base). One session here wrote 61,008
-  1-hour tokens and zero 5-minute. Collapsed into one number, the estimate is
-  simply wrong.
-- `web_search_requests` and `web_fetch_requests` are priced per request, not
-  per token, and sit outside the token rates entirely.
+A rate row is `(model, token_class, price_per_mtok, effective_from)` over five
+token classes: base input, output, 5-minute cache write, 1-hour cache write,
+and cache read. Published multipliers relative to base input are 1.25x for a
+5-minute write, 2x for a 1-hour write, and 0.1x for a read — 0.025x on Claude
+Fable 5.1 and Mythos 5.1, which is why the read price is a stored column rather
+than a computed multiple. Claude Opus 5, the model in this environment: $5
+input, $25 output, $6.25 5m write, $10 1h write, $0.50 read, per million
+tokens.
+
+Three modifiers then multiply the resolved rate, and every one of them is
+already a field on the turn:
+
+- `speed: "fast"` — fast mode on Opus 5 / Opus 4.8 is $10 input and $50 output
+  per MTok, double the standard rate. A fast-mode session priced at standard
+  rates is understated by half.
+- `inference_geo: "us"` — 1.1x across every token class on Claude 4.6 and
+  later.
+- `service_tier` — the Batch API's 50% discount.
+
+Modifiers are stored per turn and applied at read time, alongside the rate, so
+a correction to any of them reprices history.
+
+Server-tool requests are priced separately from tokens, and the two counters
+differ: web search is $10 per 1,000 searches, while **web fetch carries no
+additional charge** beyond the tokens the fetched content consumes. Both
+counters are still stored — `web_fetch_requests` at a zero rate, so the rate
+table stays the single place a price change lands.
+
+Cache writes split into 1-hour and 5-minute tokens, verified live: one turn
+here wrote 61,008 1-hour tokens and zero 5-minute. Collapsed into one column,
+the estimate is wrong by the gap between 2x and 1.25x.
 
 Rates are platform-maintained and effective-dated; an org may override them
 when it has negotiated pricing. They are updated by reviewed migration, never
@@ -316,8 +351,21 @@ Established by live inspection in this environment, not from documentation:
   `server_tool_use.{web_search_requests,web_fetch_requests}`,
   `cache_creation.{ephemeral_1h_input_tokens,ephemeral_5m_input_tokens}`,
   `service_tier`, `speed`, `inference_geo`, `iterations[]`.
-- Bookkeeping entries (`atis-latch`, `last-prompt`, `queue-operation`) have no
-  `uuid` and no `timestamp`. The parser must skip them.
+- Bookkeeping entries (`atis-latch`, `last-prompt`, `queue-operation`, `mode`)
+  have no `uuid` and no `timestamp`. The parser must skip them. The set is
+  open-ended, so the parser keys on the presence of `message.usage` rather than
+  on a list of types to exclude.
+- The transcript is append-only: after 58,941 further bytes were written, the
+  SHA-256 of the preceding 1,764,969 bytes was unchanged. The cursor's byte
+  offset is therefore sound.
+- `usage.iterations[]` had exactly one element on all 176 assistant turns
+  observed, and its counters equalled the top-level ones. Whether a
+  multi-iteration turn sums or restates remains untested — the collector reads
+  the top-level counters and ignores `iterations` until that is settled.
+- Every turn carries `service_tier`, `speed`, and `inference_geo`, each of
+  which changes the price (§7). All 176 turns here were
+  `standard`/`standard`/`not_available`, so no modifier path has been exercised
+  with a real non-default value.
 - Subagent turns live only in `subagents/agent-<id>.jsonl`. Those rows carry
   the *parent's* `sessionId` plus their own `agentId`, and `isSidechain: true`.
 - One `sessionId` per file; the filename stem equals it.
