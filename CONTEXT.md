@@ -55,7 +55,7 @@ money.
 **Rate** — the price of one unit of Usage for one model, valid from a given
 date. A Turn is always priced by the Rate that was in force when it ran.
 
-**Cost** — money, and always an *estimate* derived from Usage and Rates. Never
+**Cost** — money, and always an _estimate_ derived from Usage and Rates. Never
 what anyone was billed. When a Turn's model has no Rate, its Cost is unknown,
 which is not the same as zero.
 
