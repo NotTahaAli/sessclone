@@ -452,6 +452,13 @@ plugin adoption is the distribution channel.
 - Transcript archival is the product's largest liability: transcripts contain
   source code and can contain secrets. Opt-in, per-member, off by default,
   excludable per project, and never enabled org-wide by an admin.
+- Archived transcripts are stored **unredacted**, because a scrubbed transcript
+  defeats the reason for archiving one. Every control here is access control —
+  opt-in, per-project exclusion, RLS on download, the tier gate — and none of it
+  is content control, so a storage misconfiguration leaks credentials rather
+  than merely metadata. §7's presigned direct-to-storage design means the
+  application never holds these bytes, so redaction could only ever run in the
+  collector, before upload. No version plans to.
 - Rate accuracy is manual. A missed Anthropic price change makes every estimate
   quietly wrong until noticed.
 

@@ -383,14 +383,37 @@ source code and can contain credentials. Archival stays opt-in per Member, off
 by default, excludable per Project, and an Admin cannot enable it on someone's
 behalf.
 
+A Log Artifact is stored **exactly as Claude Code wrote it** — no redaction, no
+scrubbing, no secret detection. That is deliberate: the reason a Member turns
+archival on is to read their own sessions back and learn from them, and a
+redacted transcript cannot serve that. It has a consequence worth stating
+plainly rather than leaving implicit. Every control the product has here is
+_access_ control — the opt-in, the per-Project exclusion, the RLS on download,
+the Tier gate. None of it is _content_ control. So a Member's bucket holds their
+credentials in plaintext, and a storage misconfiguration is a credential leak
+rather than a privacy embarrassment. The presigned direct-to-storage design of
+ADR 0003 also means the application never sees these bytes, so it could not
+redact them even if a later version wanted to: any scrubbing would have to run
+in the Collector, on the Member's own machine, before the upload.
+
 Rate accuracy is manual. A missed price change makes every estimate quietly
 wrong until someone notices, which is the strongest argument for showing token
 counts beside every Cost.
 
-Several behaviours remain unverified and should be settled during
-implementation rather than assumed: whether a resumed or forked Session appends
-to the same transcript or opens a new one; whether a forcibly reclaimed
-container fires `SessionEnd` at all; what a compaction leaves in the transcript;
-how a mid-session model switch appears; and the entire local-machine path on
-macOS and Windows, which no session so far has touched. Every transcript finding
-to date comes from one Claude Code Cloud session on one model.
+Most of the behaviours this section once listed as unverified have since been
+measured; `docs/findings/03..07` carry the evidence, and
+`packages/shared/fixtures/transcripts/` carries the transcripts they came from.
+Two remain genuinely open, and their tickets stay open with them:
+
+- Whether a **forcibly reclaimed container** fires `SessionEnd`, and whether the
+  transcript is readable at all afterwards. Only a killed _process_ was
+  exercised. That established the important part — an in-flight turn is not
+  streamed to disk, so it is lost whichever signal arrives — but a reclaim that
+  takes the storage with it is a different failure and remains untested.
+- The **macOS and Windows paths**, which rest on Anthropic's documentation and
+  the CLI's own path-resolution code rather than on a real machine.
+
+One correction earned by the corpus: findings from a single model are not safe
+to generalise. Spike 07 measured only haiku and concluded that entries sharing a
+`message.id` always carry identical Usage; on opus the earlier entry holds a
+partial count, and pricing off it undercounts a turn by 200x.
