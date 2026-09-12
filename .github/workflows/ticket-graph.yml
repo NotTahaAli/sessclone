@@ -1,0 +1,26 @@
+name: Ticket graph
+
+on:
+  pull_request:
+    paths:
+      - '.scratch/sessclone-v1/issues/**'
+      - 'scripts/ticket-graph.mjs'
+      - 'docs/tickets/**'
+  push:
+    branches: [main]
+    paths:
+      - '.scratch/sessclone-v1/issues/**'
+      - 'scripts/ticket-graph.mjs'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      # The rendered HTML needs the archify skill, which lives outside this
+      # repo, so CI verifies the committed spec instead. A stale spec means the
+      # graph no longer matches the tickets.
+      - run: node scripts/ticket-graph.mjs --check

@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+# Keeps the ticket graph in step with the tickets in the same commit.
+# Install once per clone: git config core.hooksPath .githooks
+set -e
+
+if git diff --cached --name-only | grep -q '^\.scratch/sessclone-v1/issues/'; then
+  node scripts/ticket-graph.mjs >/dev/null
+  git add docs/tickets/ticket-graph.architecture.json docs/tickets/ticket-graph.html 2>/dev/null || true
+fi

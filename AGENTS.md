@@ -14,6 +14,23 @@ Default five-role vocabulary, label string equals role name. See `docs/agents/tr
 
 Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
+## Ticket graph
+
+`docs/tickets/ticket-graph.html` shows every ticket rolled into phases, with
+what is done, startable, and still blocked. It is generated, never edited:
+
+```bash
+node scripts/ticket-graph.mjs            # rebuild after changing a ticket
+node scripts/ticket-graph.mjs --check    # fails when the graph has drifted
+git config core.hooksPath .githooks      # once per clone, so commits keep it current
+```
+
+Three things keep it honest: a `PostToolUse` hook rebuilds it as tickets are
+written here, the pre-commit hook rebuilds and stages it when a commit touches
+a ticket, and CI fails a pull request whose graph has drifted. Rendering the
+HTML needs the `archify` skill, which lives outside this repo, so CI checks the
+committed spec instead.
+
 ## Repo rules
 
 ### Docs come from Context7, never from memory
