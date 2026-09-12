@@ -1,0 +1,9 @@
+{
+  "name": "sessclone",
+  "description": "Sends Claude Code usage to a sessclone deployment.",
+  "version": "0.0.0",
+  "hooks": "./hooks/hooks.json",
+  "author": {
+    "name": "sessclone contributors"
+  }
+}

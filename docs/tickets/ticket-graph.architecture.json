@@ -3,7 +3,7 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "sessclone v1 — ticket status",
-    "subtitle": "71 tickets · 1 done · 14 ready to start · 56 blocked",
+    "subtitle": "71 tickets · 2 done · 13 ready to start · 56 blocked",
     "output": "docs/tickets/ticket-graph.html",
     "quality_profile": "showcase"
   },
@@ -12,7 +12,7 @@
       "id": "foundation",
       "type": "backend",
       "label": "Foundation",
-      "sublabel": "1-2 · 1 done · 1 ready",
+      "sublabel": "1-2 · 2 done",
       "pos": [
         40,
         298

@@ -14,6 +14,19 @@ pnpm test        # vitest
 pnpm format      # prettier --check
 ```
 
+### The database
+
+Route tests run against a real Postgres and apply `supabase/migrations/`
+themselves, so a cluster has to be reachable:
+
+```bash
+createuser sessclone --login --pwprompt   # password: sessclone
+createdb sessclone_test --owner sessclone
+```
+
+`DATABASE_URL` overrides the default,
+`postgres://sessclone:sessclone@127.0.0.1:5432/sessclone_test`.
+
 Node and pnpm versions are pinned in `.nvmrc` and `package.json`; dependency
 versions live once in the `catalog` of `pnpm-workspace.yaml`.
 

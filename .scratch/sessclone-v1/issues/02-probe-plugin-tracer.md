@@ -4,9 +4,9 @@
 
 **Blocked by:** 01.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Plugin registers hooks through the manifest pointer, confirmed by the plugin details command reporting a non-zero hook count
-- [ ] Installing, restarting, and completing one turn leaves exactly one row
-- [ ] Carries its own throwaway migration, superseded by ticket 22
-- [ ] Findings note records what had to be true for the hook to fire
+- [x] Plugin registers hooks through the manifest pointer, confirmed by the plugin details command reporting a non-zero hook count
+- [x] Installing, restarting, and completing one turn leaves exactly one row
+- [x] Carries its own throwaway migration, superseded by ticket 22
+- [x] Findings note records what had to be true for the hook to fire
