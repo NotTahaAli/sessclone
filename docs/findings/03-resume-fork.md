@@ -75,9 +75,12 @@ Dedup key is `(member_id, session_id, agent_id, message_id)`.
   that the same conversation content lands as _N_ separate Turns under _N_
   session ids: fork a session three times and turn 1 exists four times, with
   four different `session_id`s and one identical `message_id`.
-- **`message_id` is the one field that survives a fork unchanged**, so it is the
-  only available join back to the original. Grouping on it would reunite forks —
-  and would also be the only way to detect that a fork happened at all.
+- **`sessionId` is the only field a fork changes**, so every other identifier is
+  a join back to the original. `message_id` is one; the entry `uuid` is another,
+  and it is the better of the two, because `message_id` is not row-unique even
+  inside a single session (every assistant turn here wrote two rows sharing one)
+  while `uuid` is. All 26 of the base's `uuid`s reappear verbatim in the fork.
+  Either would detect a fork; `uuid` identifies which row without a second key.
 - **`message_id` is not row-unique even within one session.** A single assistant
   response with a thinking block and a text block is written as two `assistant`
   rows sharing one `message.id` (seen on every assistant turn here). A collector

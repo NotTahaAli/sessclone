@@ -16,7 +16,17 @@ if (!input || !output) {
   process.exit(1)
 }
 
-const redacted = readFileSync(input, 'utf8')
+const source = readFileSync(input, 'utf8')
+
+// Redaction is not idempotent: a second pass rewrites `[redacted:35]` as
+// `[redacted:13]`, quietly collapsing every length in the corpus to the
+// length of a placeholder. Nothing downstream would fail, so refuse here.
+if (source.includes('[redacted')) {
+  console.error(`${input} is already redacted; refusing to redact it again`)
+  process.exit(1)
+}
+
+const redacted = source
   .split('\n')
   .filter((line) => line !== '')
   .map((line) => JSON.stringify(redactEntry(JSON.parse(line))))

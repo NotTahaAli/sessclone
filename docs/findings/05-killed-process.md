@@ -76,10 +76,16 @@ The SIGTERM result was reproduced twice, byte-identical.
 
 ## What the sweep must recover, based on observed behaviour
 
-- **A session whose last transcript row is `user`/`last-prompt` with no
-  following `assistant` row is an interrupted turn.** That shape is the
-  signature, and it is unambiguous here: it never occurs in a clean run, because
-  the assistant rows land before the closing rows do.
+- **A session with no `assistant` row after its last `last-prompt` row is
+  an interrupted turn.** That shape is the signature, and it is unambiguous
+  here: it never occurs in a clean run, because the assistant rows land before
+  the closing rows do.
+
+  Stated carelessly the first time as "the last row is `last-prompt`", which the
+  committed fixture disproves: `killed-mid-turn.jsonl` ends `last-prompt`,
+  `atis-latch`. Bookkeeping rows keep arriving after the prompt, so a sweep
+  testing the final row alone classifies nothing.
+
 - **The interrupted turn's content is unrecoverable from the transcript.** It
   was never on disk. The sweep can report _that a turn was lost_ and its prompt,
   never what the model said. Anything in the design that assumes a partial

@@ -18,3 +18,10 @@ mapping each to what it proves. Redaction is an allowlist in
 `packages/shared/src/corpus.test.ts` turns the criteria above into assertions,
 including a guard that fails on any string longer than 64 characters that is not
 a redaction placeholder.
+
+**One correction to the spec, not to the corpus.** The spec said four
+bookkeeping types exist with no `uuid` and no `timestamp`. Three do —
+`atis-latch`, `last-prompt` and `mode`. The other three types that look like
+candidates (`started`, `result`, `launched`) come from a workflow's
+`journal.jsonl`, which is not a session transcript. The spec is corrected; the
+corpus already held all three.

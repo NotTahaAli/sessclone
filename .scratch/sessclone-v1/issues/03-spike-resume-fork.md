@@ -12,5 +12,7 @@
 
 **Answer:** `docs/findings/03-resume-fork.md`. Resume appends to the same file
 and keeps the id. A fork opens a new file, rewrites `sessionId` on every copied
-row, and repeats every `uuid` and `message.id` verbatim — so `message_id` is the
-only field that survives a fork, and the only way to detect one.
+row, and repeats every `uuid` and `message.id` verbatim. `sessionId` is the only
+field a fork changes, so every other identifier joins a fork back to its
+original — and the entry `uuid` is the better join than `message_id`, which is
+not row-unique even within one session.

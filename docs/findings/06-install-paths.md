@@ -23,7 +23,7 @@ dir:
 
 ```
 if (env.SESSCLONE_STATE_DIR) → that path (explicit override, all platforms)
-else if (platform === 'win32')  → env.LOCALAPPDATA + '\sessclone'
+else if (platform === 'win32')  → join(env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'), 'sessclone')
 else if (platform === 'darwin') → homedir() + '/Library/Application Support/sessclone'
 else                             → env.XDG_STATE_HOME ?? (homedir() + '/.local/state') , + '/sessclone'
 ```

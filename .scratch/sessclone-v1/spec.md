@@ -213,10 +213,20 @@ plans do not bill per token, so sessclone measures awareness, not invoices.
 
 - A Turn is produced from an entry carrying `message.usage`. The parser keys on
   that presence rather than on a list of entry types to skip: bookkeeping types
-  are open-ended, and four already exist with no `uuid` and no `timestamp`.
-- Entries repeat per content block, sharing one `message.id` with identical
-  Usage. The parser emits one Turn per `message.id`, taking the entry with
-  `apiBlockIndex` 0. Summing without this overcounts by roughly 2.4x.
+  are open-ended, and three already exist with no `uuid` and no `timestamp`.
+- Entries repeat per content block, sharing one `message.id`. The parser emits
+  one Turn per `message.id`; summing entries instead overcounts by roughly
+  2.4x. Their Usage blocks are **not** reliably identical, so the Turn's
+  counters are the **maximum** of each counter across the entries sharing the
+  id — never the first, and never the sum. `apiBlockIndex` 0 is specifically
+  the wrong one to take: it is the partial count written while the response was
+  still streaming. `packages/shared/fixtures/transcripts/` holds a turn where
+  block 0 reports 1 output token and block 1 reports 202, so taking block 0
+  undercounts it by 200x. Measured on opus; on haiku the blocks do happen to
+  match, which is how the earlier rule survived.
+- A group whose entries all carry `stop_reason: null` is a Turn that never
+  finished — the run died mid-stream. Its maximum is a floor, not a total, and
+  the parser must not bill it as a complete Turn.
 - `usage.iterations[]` is ignored; the top-level counters are authoritative.
 - Cache-creation tokens are split into 1-hour and 5-minute columns, never
   summed.
@@ -319,7 +329,7 @@ tests. They set the pattern.
 
 **Seam A — `packages/shared` public API.** Pure functions, no database and no
 network. Fixtures are real captured transcripts, including the multi-block
-entries that caused the 2.4x overcount, the four bookkeeping entry types with
+entries that caused the 2.4x overcount, the three bookkeeping entry types with
 no `uuid`, a workflow Agent Run transcript, and an Agent Run transcript
 carrying its parent's Session id. Covers: one Turn per `message.id`; entries
 without Usage ignored; cache-creation split preserved; Device and Project keys

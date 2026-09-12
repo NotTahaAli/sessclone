@@ -70,13 +70,24 @@ the bill — this is the same shape as the 2.4x overcount recorded in spec §5.2
 > partial count written while the response was still streaming, and only the
 > later one carries the whole call. Two groups in `agent-run.jsonl` (opus)
 > show it — `output_tokens` of 1 then 202, and 14 then 133 — and in both the
-> partial block's `usage.iterations` is empty while the complete one's is not.
+> partial block has **no `iterations` key at all** (nor `speed`, nor
+> `server_tool_use`) and `stop_reason: null`, while the complete one has all of
+> them. Absent, not empty: a parser branching on `usage.iterations.length`
+> throws on it.
+>
 > So the rule is not "take any entry of the id", which would undercount that
-> first turn by 200x. It is **take the maximum of each counter across the
-> entries sharing the id**. Maximum is also correct for the identical case,
-> and needs no field that may be absent: one group in the same file carries no
-> `iterations` array at all. `packages/shared/src/corpus.test.ts` asserts both
-> shapes stay present in the corpus.
+> first turn by 200x, and it is emphatically not the `apiBlockIndex` 0 the v1
+> spec used to name — block 0 _is_ the partial write. It is **take the maximum
+> of each counter across the entries sharing the id**, which is also correct
+> for the identical case and needs no field that may be absent.
+>
+> One limit on that rule, from the same file: a group whose entries _all_ carry
+> `stop_reason: null` is a turn that never finished, and its maximum is a floor
+> rather than a total. `agent-run-ends-mid-turn.jsonl` is exactly that — the
+> capture ends mid-turn, both blocks report 4 output tokens, and the real total
+> is unknown. Ticket 09 has to tell that apart from a complete turn instead of
+> billing it. `packages/shared/src/corpus.test.ts` asserts all three shapes
+> stay in the corpus.
 
 **Across iterations**, the counters are independent per API call, not
 cumulative. The arithmetic is decisive: iteration 2's output is 46, not

@@ -89,7 +89,7 @@ test('redacts a tool call argument but keeps which tool was called', () => {
           type: 'tool_use',
           id: 'toolu_01VoAcj9Gn3LhyuZoyvxQ2Ab',
           name: 'Bash',
-          input: '[redacted:54]',
+          input: '[redacted]',
         },
       ],
     },
@@ -182,7 +182,7 @@ test('redacts a field it has never heard of rather than passing it through', () 
   expect(redacted).toEqual({
     type: 'assistant',
     rendered: '[redacted:40]',
-    aFieldAddedByAFutureRelease: '[redacted:30]',
+    aFieldAddedByAFutureRelease: '[redacted]',
   })
 })
 
@@ -235,5 +235,49 @@ test('keeps the working directory and the queue operation, which are structure n
     cwd: '/tmp/spike-03',
     sessionId: '107a81c9-c459-44a7-bdb4-86661d276d5b',
     content: '[redacted:34]',
+  })
+})
+
+test('replaces the fields of a block it does not know rather than dropping them', () => {
+  const redacted = redactEntry({
+    type: 'assistant',
+    message: {
+      content: [
+        {
+          type: 'thinking',
+          thinking: 'the deploy key is in ~/.ssh/id_ed25519',
+          signature: 'EqQBCkYIBxgCKkDx',
+        },
+      ],
+    },
+  })
+
+  // Dropping them left a bare `{"type":"thinking"}` in every fixture — a shape
+  // Claude Code never writes, so a parser met a block that does not exist.
+  expect(redacted).toEqual({
+    type: 'assistant',
+    message: {
+      content: [
+        {
+          type: 'thinking',
+          thinking: '[redacted:38]',
+          signature: '[redacted:16]',
+        },
+      ],
+    },
+  })
+})
+
+test('a redacted non-string carries no length, so its value cannot be read back', () => {
+  // `JSON.stringify(true).length` is 4 and `false` is 5, so a length on a
+  // boolean is the boolean. Enums are nearly as bad.
+  const redacted = redactEntry({
+    type: 'attachment',
+    attachment: { isInitial: true },
+  })
+
+  expect(redacted).toEqual({
+    type: 'attachment',
+    attachment: { isInitial: '[redacted]' },
   })
 })

@@ -32,6 +32,12 @@ const KEEP_ENTRY = new Set([
   // parent chain needs both. compactMetadata carries the token counts a
   // compaction dropped, which is cost evidence, not content.
   'logicalParentUuid',
+  // Uuid pointers, kept so the corpus can still falsify a claim made about
+  // them: finding 03 concludes there is no fork-provenance field, and
+  // `leafUuid` is the shape one would take. Redacting them away would have
+  // made that claim unfalsifiable from the fixtures.
+  'leafUuid',
+  'sourceToolAssistantUUID',
   'compactMetadata',
   'isCompactSummary',
   'isVisibleInTranscriptOnly',
@@ -39,10 +45,13 @@ const KEEP_ENTRY = new Set([
 
 const KEEP_MESSAGE = new Set(['id', 'role', 'model', 'stop_reason', 'usage'])
 
-// The length is the point: a fixture keeps the shape and the size of what it
-// replaced, so a parser test still meets a realistic entry.
+// A string's length rides along, so a fixture keeps the size of what it
+// replaced and a parser test still meets a realistic entry. Nothing else gets
+// a length: `JSON.stringify(true).length` is 4 every time, so a length on a
+// boolean recovers the boolean, and on a short enum it narrows it to a
+// handful of candidates. The allowlist exists to stop exactly that.
 const placeholder = (value: unknown) =>
-  `[redacted:${(typeof value === 'string' ? value : JSON.stringify(value)).length}]`
+  typeof value === 'string' ? `[redacted:${value.length}]` : '[redacted]'
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -56,11 +65,12 @@ const redactBlock = (block: unknown) => {
   if (!isRecord(block)) return block
   const out: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(block)) {
-    if (KEEP_BLOCK.has(key)) out[key] = value
+    // Replace, never drop — the same rule the entry level follows. Dropping
+    // left every thinking block in the corpus as a bare `{"type":"thinking"}`,
+    // a shape Claude Code never writes, so a parser test met a block that
+    // does not exist and a future block field would have vanished unseen.
+    out[key] = KEEP_BLOCK.has(key) ? value : placeholder(value)
   }
-  if (typeof block.text === 'string') out.text = placeholder(block.text)
-  if ('input' in block) out.input = placeholder(block.input)
-  if ('content' in block) out.content = placeholder(block.content)
   return out
 }
 

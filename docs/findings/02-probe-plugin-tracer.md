@@ -67,6 +67,10 @@ string sent to `claude -p`. Separate conversation, same id.
 Unsetting `CLAUDE_CODE_SESSION_ID` did not change it, so this is not simple env
 inheritance.
 
+**Refined by finding 03.** That was one variable. With `CLAUDE_CODE_CHILD_SESSION`
+unset as well, a nested run mints a fresh random id — so the inheritance is env
+driven after all, and `CLAUDE_CODE_SESSION_ID` alone is not the mechanism.
+
 This matters twice for turn identity (ticket 09):
 
 - The sweep of spec §5.3 searches every project directory for a session's id,

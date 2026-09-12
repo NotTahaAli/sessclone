@@ -12,11 +12,16 @@ const DIRECTORY = new URL('../fixtures/transcripts/', import.meta.url)
 // more; the redactor is what decides which survive, not this shape.
 type Entry = {
   type?: string
+  apiBlockIndex?: number
   uuid?: string
   timestamp?: string
   agentId?: string
   sessionId?: string
-  message?: { id?: string; usage?: { output_tokens?: number } }
+  message?: {
+    id?: string
+    stop_reason?: string | null
+    usage?: { output_tokens?: number }
+  }
 }
 
 // JSON.parse returns any, so naming the return type here is the one place the
@@ -37,7 +42,13 @@ const everyString = (value: unknown): string[] => {
   if (typeof value === 'string') return [value]
   if (Array.isArray(value)) return value.flatMap(everyString)
   if (value !== null && typeof value === 'object')
-    return Object.values(value).flatMap(everyString)
+    // Keys as well as values. A map keyed by a path, a branch or an
+    // environment variable name would otherwise walk straight past a guard
+    // that only ever looked at what the keys pointed to.
+    return Object.entries(value).flatMap(([key, nested]) => [
+      key,
+      ...everyString(nested),
+    ])
   return []
 }
 
@@ -94,24 +105,42 @@ test('the corpus contains multi-block entries sharing one message id', () => {
   expect(shared.some((group) => !group.identical)).toBe(true)
 })
 
-test('the largest counter in a message id group is the whole turn, never the first', () => {
-  // The rule ticket 09's parser has to implement: dedup on message.id and
-  // take the maximum of each counter across the entries sharing it. Summing
-  // double-counts; taking the first undercounts by 200x on the worst case in
-  // this corpus.
-  const undercounts = corpus.flatMap(({ file, entries }) =>
+test('apiBlockIndex 0 is the partial write, not the entry to price from', () => {
+  // The v1 spec said to take `apiBlockIndex` 0 and that the blocks carry
+  // identical Usage. Both are false, and this is the evidence: block 0 is
+  // written while the response is still streaming. Pricing off it returns 1
+  // output token for a 202-token turn.
+  const undercounted = corpus.flatMap(({ file, entries }) =>
     assistantsByMessageId(entries)
       .filter((group) => group.length > 1)
-      .map((group) =>
-        group.map((entry) => entry.message?.usage?.output_tokens ?? 0),
-      )
-      .filter((counts) => counts[0] !== Math.max(...counts))
-      .map(
-        (counts) => `${file}: first ${counts[0]} of max ${Math.max(...counts)}`,
-      ),
+      .map((group) => ({
+        file,
+        first: group.find((entry) => entry.apiBlockIndex === 0)?.message?.usage
+          ?.output_tokens,
+        most: Math.max(
+          ...group.map((entry) => entry.message?.usage?.output_tokens ?? 0),
+        ),
+      }))
+      .filter(({ first, most }) => first !== undefined && first < most),
   )
 
-  expect(undercounts.length).toBeGreaterThan(0)
+  expect(undercounted.length).toBeGreaterThan(0)
+})
+
+test('a turn that never finished is a floor, not a total', () => {
+  // Every entry of the group carries `stop_reason: null`, so the maximum is
+  // whatever had streamed when the run died. `agent-run-ends-mid-turn.jsonl`
+  // is that shape on purpose; ticket 09 has to tell it apart from a complete
+  // turn rather than bill it as one.
+  const unfinished = corpus.flatMap(({ file, entries }) =>
+    assistantsByMessageId(entries)
+      .filter((group) =>
+        group.every((entry) => entry.message?.stop_reason === null),
+      )
+      .map(() => file),
+  )
+
+  expect(unfinished).toContain('agent-run-ends-mid-turn.jsonl')
 })
 
 test('the corpus contains bookkeeping entries with neither an id nor a timestamp', () => {
@@ -124,24 +153,29 @@ test('the corpus contains bookkeeping entries with neither an id nor a timestamp
   )
 })
 
-test('the corpus contains an agent run and a workflow agent run under a parent session', () => {
-  const agentRun = corpus.find(({ file }) => file === 'agent-run.jsonl')!
-  const workflowRun = corpus.find(
-    ({ file }) => file === 'workflow-agent-run.jsonl',
-  )!
+test('an agent run is attributed to the session that spawned it', () => {
+  const runs = [
+    'agent-run.jsonl',
+    'agent-run-ends-mid-turn.jsonl',
+    'workflow-agent-run.jsonl',
+  ]
 
-  for (const run of [agentRun, workflowRun]) {
-    const carries = run.entries.filter(
-      (entry) =>
-        typeof entry.agentId === 'string' &&
-        typeof entry.sessionId === 'string',
-    )
+  const sessions = runs.map((file) => {
+    const entries = corpus.find((entry) => entry.file === file)!.entries
+    const carries = entries.filter((entry) => typeof entry.agentId === 'string')
     expect(carries.length).toBeGreaterThan(0)
-    // The Agent Run's own id and the Session it belongs to are different
-    // fields, which is what lets a Turn be attributed to the parent Session.
-    expect(new Set(carries.map((entry) => entry.sessionId)).size).toBe(1)
-    expect(carries.every((entry) => entry.agentId !== entry.sessionId)).toBe(
-      true,
-    )
+    return new Set(carries.map((entry) => entry.sessionId))
+  })
+
+  // Each Agent Run reports one Session, and it is the Session of the ordinary
+  // transcript that spawned it — which is what lets a Turn from an Agent Run
+  // be attributed to the parent Session rather than stranded under its own id.
+  const parent = corpus.find(
+    (entry) => entry.file === 'nested-run-inherits-parent-session-id.jsonl',
+  )!.entries[0]!.sessionId
+
+  for (const session of sessions) {
+    expect(session.size).toBe(1)
+    expect([...session]).toEqual([parent])
   }
 })
