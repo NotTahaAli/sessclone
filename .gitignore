@@ -1,0 +1,40 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# builds
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# env and secrets
+.env
+.env.*
+!.env.example
+
+# local agent config and scratch
+.claude/settings.local.json
+.scratch/*/scratch/
+
+# supabase local stack
+supabase/.branches/
+supabase/.temp/
+
+# test and tooling output
+coverage/
+playwright-report/
+test-results/
+.eslintcache
+
+# editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
