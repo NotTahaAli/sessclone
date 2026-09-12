@@ -35,11 +35,15 @@ setting.**
     intent, taken with eyes open, because an allow list silently archives
     nothing and members discover the gap when they go looking for a transcript
     that was never uploaded.
-- **A working directory with no git remote uses its absolute path as the
-  Project key.** Local-only work stays archivable and stays togglable.
-  - Paths are per-machine, so the same folder on two laptops is two Projects.
-    Accepted: they are two places the bytes live, and treating them as one
-    would let a toggle on one machine authorise an upload from the other.
+- **A working directory with no git remote keys as
+  `local:<hostname>:<absolute path>`.** Local-only work stays archivable and
+  stays togglable. This replaces the design spec's earlier
+  `local:<hostname>:<basename>`, which merged `/work/api` and `/personal/api`
+  on one machine into one Project — exactly the separation this decision is
+  for.
+  - The hostname is what makes the key per-machine. An absolute path alone is
+    not: `/home/user/api` is byte-identical on two laptops, so a toggle on one
+    would authorise an upload from the other.
   - The path is stored as the Project key, so it is Org-visible to anyone who
     may see that Member's Projects. Members who consider their directory
     layout sensitive have the master switch.
@@ -55,14 +59,25 @@ and _destroy what you hold_ should not be the same click, in either direction.
 
 **Enforcement is server-side, at the presign route.** The Collector runs on the
 Member's machine and is not trusted to enforce anything about itself. The route
-resolves Session to Project, reads the master switch and the Project setting,
-and refuses with a reason distinguishable from a Tier refusal and from an
-unchanged-hash refusal (ADR 0003).
+resolves the Session to its Project from the Turns already ingested — never
+from the Project the request claims — reads the master switch and the Project
+setting, and refuses.
+
+Master-switch-off and Project-excluded are **separate** refusals, not one: a
+member told only "archival is not enabled" cannot tell which switch to flip.
+Both are distinguishable from a Tier refusal and an unchanged-hash refusal
+(ADR 0003).
+
+A Session with no ingested Turns yet has no resolvable Project. That refuses
+too, with its own reason — transient, and retried by the Collector on the next
+opportunity rather than reported to the member.
 
 **Where the flag lives.** A boolean on `members` for the master switch, and a
 per-`(member, project)` row for the exception. Both are written by the Member
 and readable by those a Role permits; no Role may write another Member's
-setting. The policies ship in the same migration as the columns, per ADR 0001.
+setting. The policies ship in the same migration as the columns, per ADR 0001 —
+so `members` gains the boolean in ticket 21's migration, not a later one, and
+the exception table lands in ticket 22's alongside `projects`.
 
 ## Consequences
 
@@ -73,8 +88,17 @@ The glossary's "uploaded only when the Member has opted in" and user story 30's
 ran against"; this decision gives it a second job rather than inventing a
 fourth granularity.
 
-Ticket 22 creates `projects`, so the exception table belongs to its migration.
-Ticket 22 is now blocked by this ADR.
+Tickets 21 and 22 are both now blocked by this ADR: `members` carries the
+master switch, and the exception table belongs beside `projects`.
+
+The design spec's non-git Project key and the v1 spec's copy of it are both
+corrected to carry the absolute path.
+
+Neither control this decision assumes existed in the plan. Ticket 72 builds the
+settings surface — master switch and per-Project exclusions — and ticket 73
+builds artifact deletion. Ticket 59 is now blocked by 72, because "nothing
+uploads until the Member turns it on" needs something to turn on. User story 31
+records the deletion case the forward-only opt-out does not cover.
 
 An Org Owner cannot archive an Org's work by decree. That is the intended
 shape: Log Artifacts hold source code and sometimes credentials, and the

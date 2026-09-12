@@ -20,6 +20,12 @@ application issues the URL and never carries the bytes.
 **The flow.** The Collector computes the SHA-256 of the transcript and calls
 `POST /api/logs/presign` with the Session, the Project, and the hash. The route
 authorises the request, and either returns a short-lived PUT URL or refuses.
+
+**The Project in the request is advisory.** The route resolves the Session to
+its Project from the Turns already ingested, and authorises against that. A
+Collector runs on the Member's machine, so a Project key it supplies is a claim,
+and honouring it would let an excluded Project be archived by sending a
+different key — defeating the only enforcement point ADR 0005 has.
 The Collector then PUTs the file directly to storage and reports the upload so
 the `log_artifacts` row records its storage key, hash, size, and time.
 
@@ -28,13 +34,17 @@ URL when the stored hash already matches means an unchanged transcript costs
 one small request rather than a re-upload. Putting the guard after the bytes
 have moved would be a guard that has already paid the cost it exists to avoid.
 
-**Three refusals, distinguishable from one another**, because a Collector that
-cannot tell "not opted in" from "Tier excludes archival" cannot report anything
-useful to the member:
+**Five refusals, each distinguishable from the others**, because a Collector
+that cannot tell "you never opted in" from "this repository is excluded" cannot
+tell the member which switch to flip:
 
 1. the submitted hash matches what is stored;
-2. archival is not enabled for that Member and Project (see ADR 0005);
-3. the Org's Tier does not include archival at all.
+2. the Member's archival master switch is off (ADR 0005);
+3. the Member has excluded that Session's Project (ADR 0005);
+4. the Org's Tier does not include archival at all;
+5. the Session has no ingested Turns yet, so its Project cannot be resolved.
+   This one is transient — the Collector retries on the next opportunity — but
+   it is a distinct answer from any refusal a member could act on.
 
 **Only S3-compatible APIs are used.** Endpoint, bucket, and credentials are env
 vars; no code path knows the provider. Hosted runs on Supabase Storage, the
@@ -48,6 +58,11 @@ a tax on the free tier.
 ```
 orgs/<org_id>/members/<member_id>/projects/<project_key>/<session_id>.jsonl
 ```
+
+A Project key contains slashes (`host/owner/repo`, or a `local:` key carrying
+an absolute path), so it is percent-encoded into a single path segment. Left
+raw it would both break the prefix and let a collector-supplied path escape its
+own prefix.
 
 The latest upload replaces the prior one at the same key. One object per
 Session, not forty partial versions: the use case is feeding a whole session to

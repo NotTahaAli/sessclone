@@ -13,7 +13,8 @@ collected. Members are the billable unit.
 
 **Role** — a Member's authority inside their Org. One of:
 
-- **Owner** — everything, including billing and the subscription.
+- **Owner** — everything, including billing and the subscription, except
+  another Member's archival setting.
 - **Admin** — the whole Org's data and settings, assigns Scopes, no billing.
 - **Manager** — read-only, and only for the Members in their Scope.
 - **Member** — sees their own usage only.

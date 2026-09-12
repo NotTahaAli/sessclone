@@ -2,7 +2,7 @@
 
 **What to build:** A Member who opts in gets their transcripts archived off the machine, with nothing leaving it until they do.
 
-**Blocked by:** 14, 33, 58.
+**Blocked by:** 14, 33, 58, 72.
 
 **Status:** ready-for-agent
 

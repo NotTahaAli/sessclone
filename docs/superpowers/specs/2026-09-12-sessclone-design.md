@@ -122,8 +122,9 @@ worth the loss of history.
 **Project key.** Git remotes are normalised to lowercase `host/owner/repo`,
 `.git` stripped, credentials stripped, so `git@github.com:x/y.git` and
 `https://github.com/x/y` are one project rather than two. A non-git directory
-keys as `local:<hostname>:<basename>`, never a bare basename, so two unrelated
-`api` directories never merge.
+keys as `local:<hostname>:<absolute path>`, never a bare basename and never a
+bare path, so neither two unrelated `api` directories nor the same path on two
+machines ever merge (ADR 0005).
 
 **Device key.** `host:<hostname>` for a local machine. In Claude Code Cloud
 (`CLAUDE_CODE_REMOTE=true`), `cloud:<CLAUDE_CODE_ACCOUNT_UUID>`, suffixed with
@@ -242,8 +243,10 @@ happened before the restart — not an edge case, the normal first-run path.
 Opt-in per member, off by default, with a per-project exclusion inside it
 (ADR 0005). A project the member has not touched inherits the master switch, so
 the per-project setting is an opt-out list; a working directory with no git
-remote is keyed by its absolute path. Enforcement is server-side at the presign
-route, which the collector cannot vouch for itself.
+remote is keyed by `local:<hostname>:<absolute path>` (§4.2). Enforcement is
+server-side at the presign route: it resolves the session to its project from
+ingested turns rather than trusting the project the collector claims, which the
+collector cannot vouch for itself.
 
 The collector requests a presigned PUT and uploads straight to storage, so the
 application never carries the bytes. One object per session at
@@ -447,8 +450,8 @@ plugin adoption is the distribution channel.
 - No payment rail decided, so revenue depends on manual activation until one
   lands.
 - Transcript archival is the product's largest liability: transcripts contain
-  source code and can contain secrets. Opt-in, per-member, off by default, and
-  never enabled org-wide by an admin.
+  source code and can contain secrets. Opt-in, per-member, off by default,
+  excludable per project, and never enabled org-wide by an admin.
 - Rate accuracy is manual. A missed Anthropic price change makes every estimate
   quietly wrong until noticed.
 

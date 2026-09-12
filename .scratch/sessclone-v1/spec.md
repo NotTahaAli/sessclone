@@ -110,86 +110,89 @@ plans do not bill per token, so sessclone measures awareness, not invoices.
     leaves my machine until I decide it should.
 30. As a Member, I want to exclude individual Projects once archival is on, so
     that I can archive work sessions and not personal ones.
-31. As a Member, I want a Session's transcript uploaded once and replaced as it
+31. As a Member, I want to delete transcripts I have already uploaded, so that
+    turning archival off is not my only recourse when something sensitive got
+    out.
+32. As a Member, I want a Session's transcript uploaded once and replaced as it
     grows, so that storage does not fill with partial copies.
-32. As a Member, I want an unchanged transcript skipped rather than re-uploaded,
+33. As a Member, I want an unchanged transcript skipped rather than re-uploaded,
     so that repeated reports cost nothing.
-33. As a Member, I want to download a whole Session transcript, so that I can feed
+34. As a Member, I want to download a whole Session transcript, so that I can feed
     it to an analysis tool.
-34. As an Owner, I want to download any Member's Log Artifacts, so that the Org
+35. As an Owner, I want to download any Member's Log Artifacts, so that the Org
     can study its own work.
-35. As a Manager, I want to download the Log Artifacts of Members in my Scope
+36. As a Manager, I want to download the Log Artifacts of Members in my Scope
     only, so that my access matches my responsibility.
-36. As an Owner, I want to set how long Log Artifacts are kept, so that we are not
+37. As an Owner, I want to set how long Log Artifacts are kept, so that we are not
     storing transcripts indefinitely.
-37. As an Owner, I want Retention to apply only to Log Artifacts, so that turning
+38. As an Owner, I want Retention to apply only to Log Artifacts, so that turning
     off transcript storage never erases our spend history.
 
 ### Accounts and access
 
-38. As a new user, I want to sign in with GitHub, so that I do not create another
+39. As a new user, I want to sign in with GitHub, so that I do not create another
     password.
-39. As a user whose employer blocks OAuth apps, I want a magic-link sign-in, so
+40. As a user whose employer blocks OAuth apps, I want a magic-link sign-in, so
     that I can still get in.
-40. As an Owner, I want to create an Org, so that my team has somewhere to live.
-41. As an Owner, I want to invite people by email, so that they can join without
+41. As an Owner, I want to create an Org, so that my team has somewhere to live.
+42. As an Owner, I want to invite people by email, so that they can join without
     me provisioning anything.
-42. As an invited person, I want to accept an invitation and land in the Org, so
+43. As an invited person, I want to accept an invitation and land in the Org, so
     that setup ends where I need to be.
-43. As an Owner, I want to assign Roles, so that authority matches responsibility.
-44. As an Admin, I want to assign Members to a Manager's Scope, so that a team
+44. As an Owner, I want to assign Roles, so that authority matches responsibility.
+45. As an Admin, I want to assign Members to a Manager's Scope, so that a team
     lead sees their own team.
-45. As a Manager, I want my Scope to be visible to me, so that I know what I can
+46. As a Manager, I want my Scope to be visible to me, so that I know what I can
     and cannot see.
-46. As a Member, I want other Members unable to see my usage, so that a shared
+47. As a Member, I want other Members unable to see my usage, so that a shared
     dashboard is not a performance ranking.
-47. As an Owner, I want to remove a Member, so that someone who leaves stops
+48. As an Owner, I want to remove a Member, so that someone who leaves stops
     consuming a Seat.
-48. As an Owner, I want a removed Member's historical Turns kept, so that past
+49. As an Owner, I want a removed Member's historical Turns kept, so that past
     spend still reconciles.
 
 ### Keys
 
-49. As a Member, I want to create an API key and see it once, so that it is not
+50. As a Member, I want to create an API key and see it once, so that it is not
     sitting in the dashboard to be shoulder-surfed later.
-50. As a Member, I want to label each key, so that I know which machine it is on.
-51. As a Member, I want to see when a key was last used, so that I can spot a key
+51. As a Member, I want to label each key, so that I know which machine it is on.
+52. As a Member, I want to see when a key was last used, so that I can spot a key
     I have forgotten.
-52. As a Member, I want to hold several keys at once, so that I can rotate one
+53. As a Member, I want to hold several keys at once, so that I can rotate one
     machine without breaking the others.
-53. As a Member, I want to revoke a single key, so that a lost laptop does not
+54. As a Member, I want to revoke a single key, so that a lost laptop does not
     cost me every other machine.
 
 ### Billing
 
-54. As an Owner, I want to see the Tier my Org is on and what it includes, so that
+55. As an Owner, I want to see the Tier my Org is on and what it includes, so that
     I know what I am paying for.
-55. As an Owner, I want Seats counted from Members only, so that a read-only
+56. As an Owner, I want Seats counted from Members only, so that a read-only
     Manager does not cost me a Seat.
-56. As an Owner, I want to be stopped from exceeding my Tier's Seat limit, so that
+57. As an Owner, I want to be stopped from exceeding my Tier's Seat limit, so that
     I am not billed by surprise.
-57. As an Owner, I want to know when transcript archival is unavailable on my
+58. As an Owner, I want to know when transcript archival is unavailable on my
     Tier, so that the feature's absence is explained rather than broken.
-58. As a Platform Admin, I want to activate an Org's subscription by hand, so that
+59. As a Platform Admin, I want to activate an Org's subscription by hand, so that
     a team can start before a payment rail exists.
-59. As a Platform Admin, I want every activation recorded, so that the history is
+60. As a Platform Admin, I want every activation recorded, so that the history is
     auditable when a real provider is attached later.
-60. As a Platform Admin, I want to edit Tiers and their included capabilities, so
+61. As a Platform Admin, I want to edit Tiers and their included capabilities, so
     that pricing changes without a deployment.
-61. As a Platform Admin, I want to maintain the Rate table with effective dates,
+62. As a Platform Admin, I want to maintain the Rate table with effective dates,
     so that old Turns keep the price that was current when they ran.
-62. As a Platform Admin, I want to see model ids that appeared with no Rate, so
+63. As a Platform Admin, I want to see model ids that appeared with no Rate, so
     that I can fill the gap.
-63. As an Owner with negotiated pricing, I want Org-level Rate overrides, so that
+64. As an Owner with negotiated pricing, I want Org-level Rate overrides, so that
     estimates match what my Org actually pays.
 
 ### Self-hosting
 
-64. As a self-hoster, I want every external dependency configured by environment
+65. As a self-hoster, I want every external dependency configured by environment
     variable, so that I can point the app at my own Postgres and my own bucket.
-65. As a self-hoster, I want the plugin to target my deployment, so that my team's
+66. As a self-hoster, I want the plugin to target my deployment, so that my team's
     Turns go to my server.
-66. As a self-hoster, I want the same marketplace install path, so that I am not
+67. As a self-hoster, I want the same marketplace install path, so that I am not
     maintaining a separate distribution.
 
 ## Implementation Decisions
@@ -237,7 +240,7 @@ plans do not bill per token, so sessclone measures awareness, not invoices.
   type when it is not the default. Keyed per Member, never globally.
 - Project key normalises a git remote to lowercase `host/owner/repo`, stripping
   credentials and the `.git` suffix; a non-repository directory keys as
-  `local:<hostname>:<basename>`.
+  `local:<hostname>:<absolute path>`.
 - The Collector stores each Agent Run's reported spawn depth rather than
   assuming one level.
 
@@ -263,8 +266,10 @@ plans do not bill per token, so sessclone measures awareness, not invoices.
   Turns, and returns the last accepted `message.id` for the cursor.
 - `POST /api/logs/presign` refuses to issue a URL when the submitted transcript
   hash matches what is stored, and refuses outright when the Member has not
-  opted in, when the Member has excluded that Session's Project, or when the
-  Tier excludes archival — each with a distinguishable reason.
+  opted in, when the Member has excluded that Session's Project, when the Tier
+  excludes archival, or when the Session has no ingested Turns to resolve a
+  Project from — each with a distinguishable reason. The Project the request
+  carries is advisory; the route resolves it server-side.
 - Uploads go straight to storage with a presigned PUT; the application never
   carries transcript bytes.
 - Both routes validate their input with the shared zod schema before touching
@@ -327,8 +332,9 @@ Turn.
 real Postgres with the real migrations applied. Covers: a valid report stored;
 the identical report sent twice leaving one row; a revoked or unknown key
 rejected; a malformed payload rejected before any write; a presign request
-refused when the hash is unchanged, when the Member has not opted in, when the
-Project is excluded, and when the Tier excludes archival; the response carrying the cursor position the
+refused when the hash is unchanged, when the Member's master switch is off,
+when the Project is excluded, when the Tier excludes archival, and when the
+Session has no ingested Turns to resolve a Project from; the response carrying the cursor position the
 Collector needs.
 
 **Seam C — RLS policies, as SQL.** Run against a seeded database as each Role,

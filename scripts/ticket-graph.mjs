@@ -98,11 +98,17 @@ const PHASES = [
     type: 'cloud',
     pos: [1190, 560],
     range: [58, 65],
+    // Tickets added after the ranges were drawn. The label still reads its
+    // range, so keep this list short — a phase whose `also` outgrows its range
+    // wants a new range, not a longer list.
+    also: [72, 73],
   },
 ]
 
 const phaseOf = (n) =>
-  PHASES.find((p) => n >= p.range[0] && n <= p.range[1])?.id
+  PHASES.find(
+    (p) => (n >= p.range[0] && n <= p.range[1]) || p.also?.includes(n),
+  )?.id
 
 function readTickets() {
   const tickets = new Map()
@@ -130,6 +136,12 @@ function readTickets() {
     })
   }
   if (!tickets.size) throw new Error(`no tickets found in ${issuesDir}`)
+  // A ticket outside every phase would vanish from the diagram and from its
+  // counts, silently. Fail instead.
+  const orphans = [...tickets.keys()].filter((n) => !phaseOf(n))
+  if (orphans.length) {
+    throw new Error(`tickets in no phase: ${orphans.join(', ')}`)
+  }
   return tickets
 }
 

@@ -67,7 +67,9 @@ stale money.
 
 Every Cost read is a join against rates and overrides. Aggregation carries that
 cost on every dashboard query, which is the price of never having a stale
-number, and is bounded by pre-aggregation where it needs to be.
+number, and is bounded by the index strategy of design §10 — which rules out
+rollup tables in v1, because a backfill sweep writing Turns into a past day
+would invalidate them.
 
 Nothing in the product may write a Cost into a Turn as an optimisation. A
 cached aggregate is fine; a stored per-Turn Cost is this decision reversed.

@@ -12,4 +12,5 @@
 - [ ] A nullable reported-cost column that nothing populates yet
 - [ ] Indexes supporting org-and-time and member-and-time reads
 - [ ] Devices keyed per Member with an editable nickname; projects keyed by normalised remote with the raw remote retained
+- [ ] A per-Member, per-Project archival exception row, writable only by that Member, with its policies in the same migration
 - [ ] Policies ship in the same migration
