@@ -105,6 +105,9 @@ importers:
 
   packages/shared:
     devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.20.2
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
