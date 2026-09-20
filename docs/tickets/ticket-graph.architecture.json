@@ -3,7 +3,7 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "sessclone v1 — ticket status",
-    "subtitle": "73 tickets · 11 done · 9 ready to start · 53 blocked",
+    "subtitle": "73 tickets · 13 done · 9 ready to start · 51 blocked",
     "output": "docs/tickets/ticket-graph.html",
     "quality_profile": "showcase"
   },
@@ -54,7 +54,7 @@
       "id": "decisions",
       "type": "security",
       "label": "Decisions (9-15)",
-      "sublabel": "5 done · 2 ready",
+      "sublabel": "7 done",
       "pos": [
         270,
         578
@@ -68,7 +68,7 @@
       "id": "schema",
       "type": "database",
       "label": "Schema + Harness (21-25)",
-      "sublabel": "3 ready · 2 blocked",
+      "sublabel": "4 ready · 1 blocked",
       "pos": [
         500,
         332
@@ -96,7 +96,7 @@
       "id": "collection",
       "type": "backend",
       "label": "Collection + Cost (29-43)",
-      "sublabel": "1 ready · 14 blocked",
+      "sublabel": "2 ready · 13 blocked",
       "pos": [
         960,
         122
@@ -154,7 +154,7 @@
       "id": "spikes_decisions",
       "from": "spikes",
       "to": "decisions",
-      "variant": "emphasis"
+      "variant": "default"
     },
     {
       "id": "foundation_design",

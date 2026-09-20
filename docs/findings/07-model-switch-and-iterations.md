@@ -68,7 +68,7 @@ the bill — this is the same shape as the 2.4x overcount recorded in spec §5.2
 > but every group here is haiku. Across the wider fixture corpus the blocks of
 > one `message.id` are sometimes _not_ identical: the earlier block carries a
 > partial count written while the response was still streaming, and only the
-> later one carries the whole call. Two groups in `agent-run.jsonl` (opus)
+> later one carries the whole call. Two groups in `agent-run-ends-mid-turn.jsonl` (opus)
 > show it — `output_tokens` of 1 then 202, and 14 then 133 — and in both the
 > partial block has **no `iterations` key at all** (nor `speed`, nor
 > `server_tool_use`) and `stop_reason: null`, while the complete one has all of

@@ -27,6 +27,14 @@ sudo -u postgres createdb sessclone_test --owner sessclone
 `DATABASE_URL` overrides the default,
 `postgres://sessclone:sessclone@127.0.0.1:5432/sessclone_test`.
 
+### Configuration
+
+`docs/configuration.md` names every environment variable the server and the
+Collector will read, with its default and whether it is required.
+`.env.example` is the same list, copyable, carrying no real values. Most are
+not wired up yet — the doc marks which two are read today and names the ticket
+that wires each of the rest.
+
 Node and pnpm versions are pinned in `.nvmrc` and `package.json`; dependency
 versions live once in the `catalog` of `pnpm-workspace.yaml`.
 

@@ -148,15 +148,23 @@ usage and rates, so a pricing correction fixes every past turn at once.
 Three sources produce duplicates: a hook that fires twice, a backfill sweep
 re-sending delivered rows, and a resumed session re-read from the top. A fourth
 is internal to the transcript — assistant entries are written one row per
-_content block_, all sharing one `message.id` and carrying byte-identical
-usage. Measured on a live transcript: naive summation overcounts output tokens
-by 2.4x (48107 vs 19746).
+_content block_, all sharing one `message.id`. Measured on a live transcript:
+naive summation overcounts output tokens by 2.4x (48107 vs 19746).
 
 So dedup is not a safety net, it is the correctness mechanism: the unique index
 on `(member_id, session_id, agent_id, message_id)` with `ON CONFLICT DO
-NOTHING`, taking the `apiBlockIndex = 0` row. Every duplicate source collapses
-against it, which makes re-sending free and lets the collector stay stateless
-about correctness.
+NOTHING`. Every duplicate source collapses against it, which makes re-sending
+free and lets the collector stay stateless about correctness.
+
+> **Corrected by ticket 08's corpus; settled in ADR 0006.** This section said
+> the rows of one `message.id` carry byte-identical usage, so the parser could
+> take the `apiBlockIndex = 0` row. Both halves are wrong. On opus the earlier
+> block holds a _partial_ count written while the response was still streaming:
+> `fixtures/transcripts/agent-run-ends-mid-turn.jsonl` has a group reporting 1
+> output token at block 0 against 202 at block 1, so taking block 0 undercounts
+> that turn by 200x. The rule is the **maximum** of each counter across the
+> group — never the first, never the sum. The identity key above is unchanged
+> and is what ADR 0006 records; only the block-selection rule is superseded.
 
 ### 5.3 Hooks
 
