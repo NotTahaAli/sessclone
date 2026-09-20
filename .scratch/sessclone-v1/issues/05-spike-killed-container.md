@@ -4,13 +4,13 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] A container killed rather than exited cleanly, and the hook firings observed
 - [x] Findings note states what the sweep must recover and what is unrecoverable
 - [x] The documented residual gap is either confirmed or narrowed
 
-**Still open, and much narrower.** Two of the four residuals are now closed by
+**Done.** Two of the four residuals were closed by
 a container run on Docker (colima, macOS), recorded in
 `docs/findings/05-killed-process.md`. It is a stand-in, not Claude Code — the
 writer appends 200KB JSON lines with one `appendFileSync` each, the syscall
@@ -84,12 +84,21 @@ That is a useful negative for the Collector. A platform that signals before
 reclaiming needs no special handling, because the turn a flush would rescue
 does not exist in any form yet.
 
-What is still open:
+**The ticket's question is answered.** Does a forcibly reclaimed environment
+fire `SessionEnd`? Under SIGTERM yes, within 180 ms; under SIGKILL never. What
+is left unreported when it does not fire: the whole in-flight turn — and the
+measurement that matters is that the same turn is left unreported when it
+_does_ fire. A turn is written in one step on completion, so at signal time
+there is no partial turn to flush and no shutdown path can save it.
 
-- **Claude Code Cloud's own reclaim policy.** Whether the platform signals at
-  all, with what grace, and whether `SessionEnd`'s `reason` finally
-  distinguishes a reclaim. Docker's 10-second SIGTERM-then-SIGKILL is Docker's
-  and says nothing about it. Same harness applies.
+Two things stay unmeasured. Neither is in the acceptance criteria, both are
+recorded in `docs/findings/05-killed-process.md`, and the harness for them is
+committed at `docs/findings/05-harness/`:
+
+- **Whether a Claude Code Cloud reclaim leaves the transcript readable.** The
+  signalling half no longer matters — both signals are measured and the
+  in-flight turn is worth zero under each — so the only open question is
+  whether a reclaim takes the storage with it. The `docker rm` result suggests
+  it does.
 - **A real interactive TTY session.** The multi-turn run was
-  `claude -p --resume` — multi-turn but headless. An interactive session may
-  hold more in memory and flush differently.
+  `claude -p --resume`: multi-turn but headless.
