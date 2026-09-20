@@ -176,7 +176,14 @@ Five wired, chosen after reviewing all 32 documented events:
 - `SessionStart` — sweep: re-send everything for unfinished sessions and drain
   the retry queue. Fires on `startup|resume|clear|compact|fork`, so compaction
   gives extra sweeps mid-session.
-- `SessionEnd` — final flush.
+- `SessionEnd` — a notification that a session ended, not a flush. Measured in
+  `docs/findings/05-killed-process.md`: it fires 180 ms after a `SIGTERM` and
+  never fires under `SIGKILL`, and when it does fire it saves nothing — a turn
+  is written in one step on completion, so at signal time there is no partial
+  turn in flight to flush. Its `reason` is `"other"` for a kill and a clean
+  exit alike, so the collector cannot branch on it. Worth having for the
+  sweep's "not known to be complete" bookkeeping and worth nothing for the
+  turn itself.
 - `StopFailure` — record `error_type` (`rate_limit`, `overloaded`,
   `billing_error`, …) into `session_events`. Subscription users cannot be
   billed per token, so "did I hit the limit" is the question they actually
