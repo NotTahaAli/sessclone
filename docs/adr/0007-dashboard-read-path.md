@@ -78,7 +78,7 @@ design, and it makes the `security definer` helpers recurse until the stack
 gives out. Repairing that needs a `bypassrls` role to own the functions, and
 only a superuser may grant `bypassrls`, which a self-hoster applying a
 migration does not have and a Supabase project does not offer.
-`apps/web/app-role.test.ts` fails if the dashboard is ever pointed back at a
+`apps/web/test/app-role.test.ts` fails if the dashboard is ever pointed back at a
 role that owns the tables or bypasses policies.
 
 Revisit if the dashboard grows realtime subscriptions the browser needs

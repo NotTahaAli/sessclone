@@ -26,9 +26,10 @@ nothing else. The owner keeps its exemption on purpose: that is what ingest
 writes a Turn with, on a plain Postgres as `service_role` is on Supabase, and
 it is why `turns` needs no insert policy.
 
-`apps/web/schema.test.ts` applies every migration to an empty database and
-fails if a table arrives without row-level security or without a policy. The
-full Role matrix is Seam C, and belongs to ticket 44.
+`apps/web/test/harness.ts` applies every migration to an empty database once
+per test run and empties it between tests; `test/schema.test.ts` fails if a
+table arrives without row-level security or without a policy. The full Role
+matrix is Seam C, and belongs to ticket 44.
 
 ## Applying them locally
 

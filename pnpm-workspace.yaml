@@ -5,6 +5,8 @@ packages:
 # One place to pin every shared version. Looked up from the registry, never
 # recalled: `pnpm view <pkg> version`.
 catalog:
+  '@supabase/ssr': 0.12.7
+  '@supabase/supabase-js': 2.116.0
   '@types/node': 22.20.2
   '@types/react': 19.3.0
   '@types/react-dom': 19.3.0
