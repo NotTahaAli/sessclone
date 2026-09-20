@@ -102,8 +102,13 @@ create index org_rate_overrides_resolution_idx
 --      understates a total while looking authoritative, which is the worst
 --      failure available to a number about money.
 --
--- `stable` and written as a single select so Postgres can inline it into a
--- lateral join: costing a page of Turns is one query, not one call per row.
+-- `stable`, and **not** inlinable: Postgres inlines a scalar SQL function only
+-- when its body has no `from` clause, and this one has a `union all` subquery.
+-- Measured at roughly 26µs a call, so a page of Turns is fine and an Org-wide
+-- aggregate is not — seven classes times a hundred thousand Turns is seven
+-- hundred thousand calls. Tickets 42 and 43 resolve the rates a query needs
+-- once and join to them; this function is for a single lookup, which is what
+-- the platform admin surface and the tests want.
 create or replace function sessclone_resolve_rate(
   org uuid,
   model_id text,

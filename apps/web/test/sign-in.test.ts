@@ -17,6 +17,11 @@ import { asUser, owner as sql, seedFixture, type Fixture } from './harness'
 // before anything opens a pool. Without that, every assertion below would pass
 // with row-level security silently disabled — which is exactly the failure
 // `app-role.test.ts` exists to catch.
+// The harness import above is static on purpose: its pools are built as it
+// evaluates, which is before this line runs, so `owner` keeps the owner's URL
+// while the application's lazily-built pool picks up the app role's. Making it
+// a dynamic import below this line would repoint the harness too, and the
+// seeding would start failing its own policies.
 process.env.DATABASE_URL = process.env.APP_DATABASE_URL
 
 const { ensureOrgForSigner } = await import('../lib/auth/bootstrap')
@@ -114,6 +119,31 @@ describe('signing out and back in', () => {
     // fresh Org is the right answer: they are a new customer, and the Org that
     // removed them keeps their history.
     expect(removed.orgId).not.toBe(fixture.acme.id)
+  })
+})
+
+describe('an email that already belongs to another account', () => {
+  test('refuses the sign-in rather than signing them in with no Org', async () => {
+    // Reachable two ways: a Supabase project that does not link a GitHub
+    // identity to an existing magic-link account issues a second id for one
+    // address, and ticket 49's invite creates the `users` row before the
+    // invitee has ever signed in.
+    await expect(
+      ensureOrgForSigner(randomUUID(), 'member@acme.test'),
+    ).rejects.toThrow(/already signed up under a different identity/)
+  })
+
+  test('and leaves nothing half-created behind', async () => {
+    const before = await sql<
+      { n: number }[]
+    >`select count(*)::int as n from orgs`
+
+    await ensureOrgForSigner(randomUUID(), 'member@acme.test').catch(() => {})
+
+    // The transaction rolls back, so there is no Org nobody belongs to. The
+    // earlier failure mode signed them in, left no `users` row, and failed
+    // `members_user_id_fkey` on every subsequent attempt.
+    expect(await sql`select count(*)::int as n from orgs`).toEqual(before)
   })
 })
 

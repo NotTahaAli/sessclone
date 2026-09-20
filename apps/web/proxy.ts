@@ -16,7 +16,11 @@ import { NextResponse, type NextRequest } from 'next/server'
 // something ahead of the render writes it; without this, people are logged out
 // at intervals that look random.
 
-const PUBLIC_PATHS = ['/sign-in', '/auth']
+// `/api` is here because those routes do not authenticate by session at all:
+// the Collector posts from a machine with no cookie and proves who it is with
+// an API key (ADR 0001). Redirecting them to the sign-in page turns every
+// report into a 307 the Collector swallows, and nothing anywhere says so.
+const PUBLIC_PATHS = ['/sign-in', '/auth', '/api']
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request })

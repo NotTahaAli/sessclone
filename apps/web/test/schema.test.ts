@@ -1,5 +1,7 @@
 import { describe, expect, test, beforeEach } from 'vitest'
 
+import postgres from 'postgres'
+
 import { asUser, owner as sql } from './harness'
 
 // Tickets 21 and 22, checked against a real Postgres with the real migrations.
@@ -329,7 +331,6 @@ describe('the policies, from a role that is not the owner', () => {
     )
 
     expect(row?.id).toBeTruthy()
-    await sql`delete from members where id = ${row!.id}`
   })
 
   test('a Member cannot re-point or backdate their own Device', async () => {
@@ -413,8 +414,6 @@ describe('the policies, from a role that is not the owner', () => {
     })
 
     expect(created.map((row) => row.name)).toContain('New Co')
-    await sql`delete from members where org_id = '99999999-0000-0000-0000-000000000001'`
-    await sql`delete from orgs where id = '99999999-0000-0000-0000-000000000001'`
   })
 
   test('and cannot use that to walk into an Org that already has Members', async () => {
@@ -463,5 +462,70 @@ describe('constraints the policies cannot express', () => {
     await expect(
       sql`delete from orgs where id = '11111111-1111-1111-1111-111111111111'`,
     ).rejects.toThrow(/turns_org_id_fkey/)
+  })
+})
+
+const shadowing = async <T>(
+  table: string,
+  columns: string,
+  rows: string,
+  userId: string,
+  query: (tx: postgres.TransactionSql) => Promise<T>,
+) => {
+  const scratch = postgres(process.env.APP_DATABASE_URL!, { max: 1 })
+  try {
+    await scratch.unsafe(`create temp table ${table} (${columns})`)
+    await scratch.unsafe(`insert into ${table} values ${rows}`)
+    return await scratch.begin(async (tx) => {
+      await tx`select set_config('request.jwt.claims', ${JSON.stringify({ sub: userId })}, true)`
+      return query(tx)
+    })
+  } finally {
+    await scratch.end()
+  }
+}
+
+describe('the search path every security definer helper runs on', () => {
+  beforeEach(seedPolicyFixture)
+
+  // Each helper was declared `set search_path = public`, which does not mean
+  // what it reads as: Postgres searches `pg_temp` before every schema on the
+  // path when resolving a relation unless `pg_temp` is named explicitly, and
+  // `TEMP` is granted to `PUBLIC`. Every policy in this schema resolves through
+  // one of these functions, so a temp table with the right name was a rewrite
+  // of what any of them returns.
+  //
+  // `app-role.test.ts` cannot catch this — it asserts the role is not a
+  // superuser, does not bypass policies and owns nothing, all of which stayed
+  // true while the flag could be faked.
+  test('is not a temp table away from handing somebody the deployment', async () => {
+    const claimed = await shadowing(
+      'users',
+      'id uuid, is_platform_admin boolean',
+      `('${ids.member}', true)`,
+      ids.member,
+      (tx) =>
+        tx<{ admin: boolean }[]>`select sessclone_is_platform_admin() as admin`,
+    )
+
+    expect(claimed).toEqual([{ admin: false }])
+  })
+
+  test('nor a temp table away from another Org', async () => {
+    // A temp `members` row saying this Member administers Beta rewrote
+    // `sessclone_admin_org_ids()`, and with it every read that resolves
+    // through `sessclone_visible_member_ids()`.
+    const orgs = await shadowing(
+      'members',
+      'id uuid, org_id uuid, user_id uuid, role text, removed_at timestamptz',
+      `('${ids.memberRow}', '${ids.beta}', '${ids.member}', 'owner', null)`,
+      ids.member,
+      (tx) =>
+        tx<
+          { org_id: string }[]
+        >`select org_id from sessclone_org_ids() as org_id`,
+    )
+
+    expect(orgs.map((row) => row.org_id)).toEqual([ids.acme])
   })
 })

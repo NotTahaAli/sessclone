@@ -13,6 +13,9 @@ const MESSAGES: Record<string, string> = {
   exchange: 'That sign-in could not be completed. Start again.',
   callback: 'That link is missing something. Start again.',
   session: 'Signed in, but the session did not stick. Start again.',
+  identity:
+    'That email address already belongs to an account signed in a different way. Use the way you signed in the first time.',
+  bootstrap: 'Signed in, but your organisation could not be set up. Try again.',
 }
 
 export default async function SignIn({

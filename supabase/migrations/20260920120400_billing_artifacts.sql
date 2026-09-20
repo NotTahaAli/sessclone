@@ -51,6 +51,21 @@ create table tiers (
   check (max_seats is null or min_seats is null or max_seats >= min_seats)
 );
 
+-- `updated_at` is only true if something writes it, and a column that reads as
+-- the insert time forever is worse than no column: it answers the question
+-- wrongly rather than not at all.
+create or replace function sessclone_touch_updated_at() returns trigger
+  language plpgsql as $$
+begin
+  new.updated_at := now();
+  return new;
+end
+$$;
+
+create trigger tiers_touch_updated_at
+  before update on tiers
+  for each row execute function sessclone_touch_updated_at();
+
 create type subscription_status as enum ('inactive', 'active', 'past_due', 'cancelled');
 
 -- One row per Org, and the only place an entitlement check looks. The Tier
@@ -131,6 +146,10 @@ begin
   return new;
 end
 $$;
+
+create trigger subscriptions_touch_updated_at
+  before update on subscriptions
+  for each row execute function sessclone_touch_updated_at();
 
 create trigger subscriptions_write_event
   after insert or update on subscriptions

@@ -24,7 +24,24 @@ const orgNameFor = (email: string) => {
   return local ? `${local}'s Org` : 'My Org'
 }
 
+/** Postgres' `unique_violation`. Here, `users_email_key` and nothing else. */
+const UNIQUE_VIOLATION = '23505'
+
 export type SignedInOrg = { orgId: string; memberId: string }
+
+/**
+ * Thrown when the signer's email already belongs to a different account.
+ *
+ * Not a crash and not something to paper over: two ids for one address means
+ * two accounts, and picking either one silently is how somebody ends up in
+ * somebody else's Org. The callback turns this into a refused sign-in.
+ */
+export class EmailBelongsToAnotherAccount extends Error {
+  constructor(email: string) {
+    super(`${email} is already signed up under a different identity`)
+    this.name = 'EmailBelongsToAnotherAccount'
+  }
+}
 
 /**
  * Makes sure the signer has a `users` row and a Member row somewhere, creating
@@ -40,15 +57,34 @@ export const ensureOrgForSigner = async (
   email: string,
 ): Promise<SignedInOrg> =>
   asViewer(userId, async (tx) => {
-    // `on conflict do nothing` with no target rather than `(id)`: the row may
-    // already exist under this id, and `users` also carries a unique index on
-    // the lowercased email. Either collision means "this person is already
-    // known", and neither is an error worth surfacing to somebody who has just
-    // signed in successfully.
-    await tx`
-      insert into users (id, email) values (${userId}, ${email})
-      on conflict do nothing
-    `
+    // `on conflict (id)` and not a bare `on conflict`. A collision on the id is
+    // this person signing in again, which is the idempotent case. A collision
+    // on `users_email_key` is a *different* account holding that address, and
+    // swallowing it leaves no `users` row for this id — the Member insert
+    // below then failed on `members_user_id_fkey`, after the session cookie
+    // had already been written, so the person was signed in, had no Org, and
+    // every later sign-in failed the same way. It is reachable: a Supabase
+    // project that does not link a GitHub identity to an existing magic-link
+    // account issues a second id for one address, and ticket 49's invite
+    // creates a `users` row before the invitee has ever signed in.
+    //
+    // Two accounts for one address is not something to resolve by guessing, so
+    // it is raised as itself and the callback refuses the sign-in.
+    try {
+      await tx`
+        insert into users (id, email) values (${userId}, ${email})
+        on conflict (id) do nothing
+      `
+    } catch (cause) {
+      if (
+        cause instanceof Error &&
+        'code' in cause &&
+        cause.code === UNIQUE_VIOLATION
+      ) {
+        throw new EmailBelongsToAnotherAccount(email)
+      }
+      throw cause
+    }
 
     // What the policies let them see of themselves: their own live membership.
     // A removed Member reads nothing here — deliberately, per `members_read` —

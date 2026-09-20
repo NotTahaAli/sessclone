@@ -107,9 +107,7 @@ export const asUser = async <T>(
   query: (tx: postgres.TransactionSql) => Promise<T>,
 ) =>
   app.begin(async (tx) => {
-    await tx.unsafe(
-      `set local request.jwt.claims = '${JSON.stringify({ sub: userId })}'`,
-    )
+    await tx`select set_config('request.jwt.claims', ${JSON.stringify({ sub: userId })}, true)`
     return query(tx)
   })
 

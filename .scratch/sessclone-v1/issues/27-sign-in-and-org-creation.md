@@ -4,10 +4,10 @@
 
 **Blocked by:** 20, 21.
 
-**Status:** done
+**Status:** needs-verification
 
-- [x] GitHub sign-in works end to end
-- [x] Magic-link sign-in works end to end, for people whose employer blocks OAuth apps
+- [ ] GitHub sign-in works end to end
+- [ ] Magic-link sign-in works end to end, for people whose employer blocks OAuth apps
 - [x] First sign-in creates an Org and makes the signer its Owner
 - [x] Signing out and back in returns to the same Org
 - [x] No password is ever created or stored
@@ -45,6 +45,27 @@ actually in force — which is how the bootstrap's `returning` clauses were foun
 to fail their own select policies, and why the ids are generated in the
 application instead.
 
-**Not verified here:** the live click-through. This container reaches no
-Supabase project and no GitHub OAuth app, so a real GitHub sign-in and a real
-emailed link are the one thing the tests stand in for.
+**Not verified here, and the two boxes are left unticked for it:** the live
+click-through. This container reaches no Supabase project and no GitHub OAuth
+app, so a real GitHub sign-in and a real emailed link are the one thing the
+tests stand in for. Everything either flow reaches after Supabase hands over a
+verified id and email is covered; the hand-over itself is not. Tick them when
+somebody has signed in both ways against a real project.
+
+**Found by review, after the first pass:**
+
+- Every `security definer` helper in the schema was declared
+  `set search_path = public`, which does not exclude `pg_temp` — Postgres
+  searches it first for relations unless it is named. A temp `users` table on
+  the dashboard's own role was therefore a working forgery of
+  `sessclone_is_platform_admin()`, and from there global pricing and
+  self-activation; a temp `members` table was a cross-Org read.
+  `20260920120600_search_path.sql` pins the path on every one of them, with
+  regression tests in `test/schema.test.ts` that fail without it.
+- `on conflict do nothing` with no target swallowed a collision on
+  `users_email_key`, which is a _different_ account holding that address, not
+  the same person signing in again — leaving somebody signed in with no Org
+  and a 500 on every later attempt. Now raised as
+  `EmailBelongsToAnotherAccount` and refused with a message.
+- The Proxy's matcher covered `/api`, so the Collector's report was redirected
+  to the sign-in page and swallowed. Those routes authenticate by API key.

@@ -131,6 +131,18 @@ describe('a Tier', () => {
     ).rejects.toThrow(/tiers_check/)
   })
 
+  test('records when it last changed, rather than when it was created', async () => {
+    const id = await tier('team', { seat_price_usd: 10 })
+
+    await sql`update tiers set seat_price_usd = 12 where id = ${id}`
+
+    const [row] = await sql<{ moved: boolean }[]>`
+      select updated_at > created_at as moved from tiers where id = ${id}
+    `
+
+    expect(row!.moved).toBe(true)
+  })
+
   test('carries further gates as data, so the next one needs no migration', async () => {
     await tier('team', {
       features: sql.json({ sso: true, priority_support: false }),
@@ -245,6 +257,20 @@ describe('a subscription', () => {
     `
 
     expect(events.map((row) => row.tier_id)).toEqual([team, enterprise])
+  })
+
+  test('cannot be moved to another Org, which would be an entitlement with no history', async () => {
+    const team = await tier('team')
+    const [created] = await subscribe(fixture.acme.id, team, 'active')
+
+    // Moving the row is not a status change and not a Tier change, so the
+    // event trigger would say nothing happened — leaving Globex entitled,
+    // since the entitlement check reads status and Tier from this one row,
+    // with a billing history that names Acme and which its own Owner cannot
+    // read at all.
+    await expect(
+      sql`update subscriptions set org_id = ${fixture.globex.id} where id = ${created!.id}`,
+    ).rejects.toThrow(/cannot change org/)
   })
 
   test('records who did it, from the claim on the connection', async () => {

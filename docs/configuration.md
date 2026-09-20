@@ -13,10 +13,11 @@ if the two ever disagree — a variable added to one and not the other, or a
 default written differently in each, is a test failure rather than a support
 ticket.
 
-> **Most of this is not wired up yet.** v1 is mid-build. Six variables are read
-> by code today: `DATABASE_URL`, the three Supabase values and
-> `NEXT_PUBLIC_APP_URL` in `apps/web` since ticket 27 wired sign-in, and
-> `SESSCLONE_URL` in `packages/plugin/hooks/stop.mjs`. Every other row below is
+> **Most of this is not wired up yet.** v1 is mid-build. Five variables are
+> read by code today: `DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`,
+> `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `NEXT_PUBLIC_APP_URL` in `apps/web` since
+> ticket 27 wired sign-in, and `SESSCLONE_URL` in
+> `packages/plugin/hooks/stop.mjs`. Every other row below is
 > a commitment this build is working towards, and each section names the ticket
 > that wires it. Setting one today does nothing — which is worth knowing before
 > wondering why a bucket stays empty.
@@ -52,6 +53,16 @@ nothing else; give it a password (or grant it to a login role that has one) and
 put _that_ in `DATABASE_URL`. ADR 0007 has the reasoning, and
 `apps/web/test/app-role.test.ts` fails if the dashboard is pointed back at a
 privileged role.
+
+**One variable, two jobs, and the split is not done.** `sessclone_app` is the
+right role for everything the dashboard reads, and the wrong one for ingest:
+ingest writes `turns` and `log_artifacts`, which carry no insert policy by
+design, and `apps/web/app/api/probe/route.ts` writes `probe_rows`, which
+`sessclone_app` is granted nothing on at all. So a deployment that follows the
+paragraph above has a working dashboard and a probe route that answers
+`permission denied for table probe_rows`. That route is ticket 02's tracer
+bullet and is expected to be deleted; ticket 31 is where the real ingest route
+lands and where its connection gets named separately from this one.
 
 Authorisation lives in row-level security (ADR 0001), so the policies travel in
 `supabase/migrations/` and a self-hoster gets the same enforcement by applying

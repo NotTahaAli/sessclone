@@ -1,7 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { z } from 'zod'
 
-import { ensureOrgForSigner } from '../../../lib/auth/bootstrap'
+import {
+  EmailBelongsToAnotherAccount,
+  ensureOrgForSigner,
+} from '../../../lib/auth/bootstrap'
 import { supabaseServer } from '../../../lib/supabase/server'
 
 // Where both ways in come back to.
@@ -70,7 +73,18 @@ export async function GET(request: NextRequest) {
     return failed(request, 'session')
   }
 
-  await ensureOrgForSigner(claims.sub, claims.email)
+  // The session cookie is already written by this point, so an exception here
+  // leaves somebody signed in with no Org and a 500 they can only repeat. A
+  // refused sign-in they can read is the better end of that.
+  try {
+    await ensureOrgForSigner(claims.sub, claims.email)
+  } catch (cause) {
+    await supabase.auth.signOut()
+    return failed(
+      request,
+      cause instanceof EmailBelongsToAnotherAccount ? 'identity' : 'bootstrap',
+    )
+  }
 
   const destination = request.nextUrl.clone()
   destination.pathname = next
