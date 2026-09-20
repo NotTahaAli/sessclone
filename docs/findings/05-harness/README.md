@@ -55,8 +55,19 @@ stays out of your history and out of the image:
 
 ```bash
 read -rs CLAUDE_CODE_OAUTH_TOKEN && export CLAUDE_CODE_OAUTH_TOKEN
-docker run -d --name spike05-live   -e CLAUDE_CODE_OAUTH_TOKEN   -e SPIKE05_SINK=http://host.docker.internal:8477   spike05-claude   claude --settings /work/settings.json -p 'Count from 1 to 400, one number per line, nothing else.'
+docker network create spike05net
+docker run -d --name spike05-sink --network spike05net -v "$PWD/docs/findings/05-harness":/sink -w /sink node:22-alpine node collector.mjs
+docker run -d --name spike05-live --network spike05net -e CLAUDE_CODE_OAUTH_TOKEN -e SPIKE05_SINK=http://spike05-sink:8477 spike05-claude claude --settings /work/settings.container.json -p 'Count from 1 to 400, one number per line, nothing else.'
 ```
+
+Note `settings.container.json`, not `settings.json`. Hook commands resolve
+against the session's working directory, so `settings.json`'s repo-relative
+`post.sh` path does not exist inside the image. Getting this wrong fails
+silently — no hook fires and nothing says why.
+
+The sink runs as its own container on a shared network rather than on the host:
+`host.docker.internal` is not dependable under colima, and a sink in a separate
+container is unambiguously outside the one being killed.
 
 Then kill it mid-turn and read the sink's log:
 
