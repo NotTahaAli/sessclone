@@ -61,3 +61,57 @@ it also deletes `apps/web/app/api/probe/` and its tests, which is ticket 33's
 call rather than a schema ticket's. The schema test names `probe_rows` as the
 one table allowed to have no row-level security, so the exception is visible
 rather than silent.
+
+## Comments
+
+The same fresh-eyes review found four defects here, each reproduced as SQL
+against a live Postgres and each now covered by a test.
+
+**`projects_read` was Org-wide, and a Project key can be a home directory.**
+`local:<hostname>:<absolute path>` is ADR 0005's key for a directory with no
+git remote, and every Member of an Org could read every one of them — the
+Owner's machine name and folder layout included — as could a Manager with an
+empty Scope, which the spec says reads nothing. It now resolves the same way
+every other read in this migration does: an Owner or Admin sees their Org's
+Projects, and everyone else sees the Projects they have Turns in.
+
+**A Member could re-point or backdate their own Device.** The criterion is an
+editable _nickname_; a policy grants a whole row, and the comment claiming
+otherwise was the only thing enforcing it. `devices.key` is what the
+per-Device breakdown groups on, so rewriting it orphans a Member's own
+attribution. A trigger now freezes everything but the nickname.
+
+**`agent_id` had no non-empty check.** The identity index is `nulls not
+distinct`, which collapses two nulls — but `''` and `'  '` are ordinary
+distinct values, so any path that spelled a main Session's absent agent id as
+an empty string would store the same Turn twice. That is the overcount the
+index exists to prevent, re-entering through the column it is built on. Checked
+on `turns` and `session_events` both.
+
+**Deleting an Org erased its spend history.** `turns.org_id` cascaded while
+`turns.member_id` restricted, so whether history survived depended on whether
+the Org happened to own a `devices` row. Both are `restrict` now: removal is
+`members.removed_at`, and an Org that genuinely has to go deals with its Turns
+explicitly.
+
+**A Turn could also be filed under an Org its Member does not belong to** —
+invisible to everyone, because reads resolve by Member and every chart filters
+by Org. `turns`, `session_events` and `member_project_archival` now carry
+`(org_id, member_id)` foreign keys against the composite key ticket 21 put on
+`members` for exactly this.
+
+**Left as it is, with reasons:**
+
+- A Platform Admin reads no Turns, Projects or Devices. ADR 0001 grants the
+  flag platform-wide access to Rates, Tiers and subscription activation, and
+  names nothing else; the operator of a deployment reading every Org's usage is
+  a decision that wants making on purpose, not as a side effect of consistency.
+  Story 63 needs unpriced model ids, not Turns, and ticket 43 is where that
+  read gets its own narrow path.
+- The comments asserting `5m + 1h ≤` the reported total, and thinking tokens as
+  a subset of output tokens, are still only comments. They are parser
+  invariants, and `packages/shared/src/turns.test.ts` holds them; a check
+  constraint here would reject a real capture rather than catch a bug.
+- `device_id` and `project_id` stay `on delete set null`. Nothing can delete
+  either through a policy, and a Turn that loses a dimension is better than a
+  Turn that vanishes with it.

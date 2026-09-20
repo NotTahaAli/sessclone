@@ -33,7 +33,10 @@ create table projects (
   remote text,
   first_seen_at timestamptz not null default now(),
   last_seen_at timestamptz not null default now(),
-  unique (org_id, key)
+  unique (org_id, key),
+  -- As on `members`: what lets a child row name an Org and a Project in one
+  -- foreign key, so an exception cannot point across an Org boundary.
+  unique (org_id, id)
 );
 
 -- Usage exactly as reported, and no money: ADR 0002 computes Cost at read time
@@ -42,8 +45,12 @@ create table projects (
 -- real figure from Claude Code itself; nothing in v1 populates it.
 create table turns (
   id bigint generated always as identity primary key,
-  org_id uuid not null references orgs (id) on delete cascade,
-  member_id uuid not null references members (id) on delete restrict,
+  -- `restrict`, not `cascade`: deleting an Org must not be the one edge in
+  -- this graph that erases spend history. Removal is `members.removed_at`, and
+  -- an Org that genuinely has to go is an explicit operation that deals with
+  -- its Turns first.
+  org_id uuid not null references orgs (id) on delete restrict,
+  member_id uuid not null,
   device_id uuid references devices (id) on delete set null,
   project_id uuid references projects (id) on delete set null,
 
@@ -51,7 +58,12 @@ create table turns (
   -- Null for a main Session. An Agent Run carries its parent's session id, so
   -- without this column a subagent's Turns would collide with the Session that
   -- spawned it whenever both reused a message id.
-  agent_id text,
+  --
+  -- Null or a real id, never the empty string: the identity index treats two
+  -- nulls as equal and two empty strings as equal, but a null and an empty
+  -- string as different — so a caller that spelled absence both ways would
+  -- store one Turn twice, which is the overcount the index exists to stop.
+  agent_id text check (agent_id is null or length(btrim(agent_id)) > 0),
   message_id text not null check (length(btrim(message_id)) > 0),
   occurred_at timestamptz not null,
 
@@ -88,7 +100,13 @@ create table turns (
   -- died mid-stream, so these counters are a floor and not a total.
   complete boolean not null default true,
   reported_cost_usd numeric check (reported_cost_usd is null or reported_cost_usd >= 0),
-  received_at timestamptz not null default now()
+  received_at timestamptz not null default now(),
+
+  -- One key, two columns, so a Turn cannot be filed under an Org its Member
+  -- does not belong to. Such a row is invisible to everyone — the read policy
+  -- resolves by Member, and every Org chart filters by Org — so it is spend
+  -- that exists and reconciles against nothing.
+  foreign key (org_id, member_id) references members (org_id, id) on delete restrict
 );
 
 -- ADR 0006's key, and the reason ingest never reads before it writes. `nulls
@@ -111,15 +129,16 @@ create index turns_device_occurred_at_idx on turns (device_id, occurred_at);
 -- hook set the spec names; tickets 38 and 40 own extending it.
 create table session_events (
   id bigint generated always as identity primary key,
-  org_id uuid not null references orgs (id) on delete cascade,
-  member_id uuid not null references members (id) on delete restrict,
+  org_id uuid not null references orgs (id) on delete restrict,
+  member_id uuid not null,
   device_id uuid references devices (id) on delete set null,
   session_id text not null check (length(btrim(session_id)) > 0),
-  agent_id text,
+  agent_id text check (agent_id is null or length(btrim(agent_id)) > 0),
   kind text not null check (kind in ('session_start', 'session_end', 'stop_failure')),
   occurred_at timestamptz not null,
   detail jsonb,
-  received_at timestamptz not null default now()
+  received_at timestamptz not null default now(),
+  foreign key (org_id, member_id) references members (org_id, id) on delete restrict
 );
 
 -- A `SessionStart` fires twice around a compaction and a requeued report may
@@ -135,13 +154,40 @@ create index session_events_session_idx on session_events (member_id, session_id
 -- opt-out list, not an allow list, because an allow list silently archives
 -- nothing and the Member finds out when they go looking for a transcript that
 -- was never uploaded.
+-- `org_id` is not decoration: without it a Member of one Org could write an
+-- exception against another Org's Project, which is a row that can never be
+-- legitimately produced and an oracle for whether a foreign Project exists.
 create table member_project_archival (
-  member_id uuid not null references members (id) on delete cascade,
-  project_id uuid not null references projects (id) on delete cascade,
+  org_id uuid not null references orgs (id) on delete restrict,
+  member_id uuid not null,
+  project_id uuid not null,
   archival_enabled boolean not null,
   updated_at timestamptz not null default now(),
-  primary key (member_id, project_id)
+  primary key (member_id, project_id),
+  foreign key (org_id, member_id) references members (org_id, id) on delete cascade,
+  foreign key (org_id, project_id) references projects (org_id, id) on delete cascade
 );
+
+-- `devices_rename` grants the row, and a row is every column on it. The key is
+-- what `deviceKey` computes and what the per-Device breakdown groups on, and
+-- the two timestamps are the row's only provenance: a Member renaming their
+-- laptop must not be able to re-point or backdate it.
+create or replace function sessclone_guard_device_columns() returns trigger
+  language plpgsql as $$
+begin
+  if new.id is distinct from old.id
+     or new.member_id is distinct from old.member_id
+     or new.key is distinct from old.key
+     or new.first_seen_at is distinct from old.first_seen_at then
+    raise exception 'only the nickname is the member''s to change';
+  end if;
+  return new;
+end
+$$;
+
+create trigger devices_guard_columns
+  before update on devices
+  for each row execute function sessclone_guard_device_columns();
 
 alter table devices enable row level security;
 alter table projects enable row level security;
@@ -162,8 +208,23 @@ create policy devices_rename on devices for update
   using (member_id in (select sessclone_own_member_ids()))
   with check (member_id in (select sessclone_own_member_ids()));
 
+-- A Project key may be `local:<hostname>:<absolute path>`, which is a Member's
+-- machine name and directory layout. ADR 0005 allows that to be visible to
+-- whoever may see that Member's Projects — which under the Role model is the
+-- Member, an Owner or Admin, and a Manager the Member is scoped to. Org-wide
+-- would hand every Member of an Org the Owner's home directory, and would show
+-- a Manager with an empty Scope something.
+create or replace function sessclone_visible_project_ids() returns setof uuid
+  language sql stable security definer set search_path = public as $$
+  select id from projects where org_id in (select sessclone_admin_org_ids())
+  union
+  select distinct project_id from turns
+   where member_id in (select sessclone_visible_member_ids())
+     and project_id is not null
+$$;
+
 create policy projects_read on projects for select
-  using (org_id in (select sessclone_org_ids()));
+  using (id in (select sessclone_visible_project_ids()));
 
 -- Read-only to every Role. `turns` is append-only and written by ingest with
 -- the service role, which bypasses policies — so there is deliberately no

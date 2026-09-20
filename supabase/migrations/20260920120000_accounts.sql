@@ -147,6 +147,14 @@ create or replace function sessclone_visible_member_ids() returns setof uuid
      and manager.role = 'manager'
 $$;
 
+-- Consulted by the bootstrap branch of `members_invite`. It has to be
+-- `security definer` like the rest: a policy on `members` that reads `members`
+-- directly recurses into itself, and Postgres refuses the whole statement.
+create or replace function sessclone_org_has_members(org uuid) returns boolean
+  language sql stable security definer set search_path = public as $$
+  select exists (select 1 from members where org_id = org)
+$$;
+
 create or replace function sessclone_visible_user_ids() returns setof uuid
   language sql stable security definer set search_path = public as $$
   select sessclone_user_id()
@@ -171,12 +179,37 @@ create trigger users_guard_platform_admin
   before update on users
   for each row execute function sessclone_guard_platform_admin();
 
--- Two columns of `members` that the update policy alone cannot separate: a
--- Member may write their own archival switch and nothing else, and an Owner or
--- Admin may write a Role but never somebody else's archival switch.
+-- What the row policies cannot say on their own. A policy grants or refuses a
+-- whole row, so three things need saying per column here.
+--
+-- **Which row this is, is not writable.** `members_write` lets a Member update
+-- their own row and an Admin update their Org's. Without this, `user_id = me`
+-- satisfies the check on a row whose `org_id` has just been rewritten to
+-- somebody else's Org — a Member joins any Org whose id they know, and an
+-- Admin can graft another Member's row, and every Turn hanging off it, into a
+-- second Org under their own user id. Identity is set at insert and fixed.
+--
+-- **Archival is the Member's own switch**, on the way in as well as on the way
+-- out: an invite is an insert, and without the insert branch an Admin simply
+-- creates the row with the switch already on.
+--
+-- **A Role is an Owner's or an Admin's to write**, and nobody's to write for
+-- themselves.
 create or replace function sessclone_guard_member_columns() returns trigger
   language plpgsql as $$
 begin
+  if tg_op = 'INSERT' then
+    if new.archival_enabled and new.user_id is distinct from sessclone_user_id() then
+      raise exception 'archival is the member''s own switch';
+    end if;
+    return new;
+  end if;
+
+  if new.org_id is distinct from old.org_id
+     or new.user_id is distinct from old.user_id then
+    raise exception 'a member row cannot change org or user';
+  end if;
+
   if new.archival_enabled is distinct from old.archival_enabled
      and old.user_id is distinct from sessclone_user_id() then
     raise exception 'archival is the member''s own switch';
@@ -192,8 +225,26 @@ end
 $$;
 
 create trigger members_guard_columns
-  before update on members
+  before insert or update on members
   for each row execute function sessclone_guard_member_columns();
+
+-- A revoked key stays revoked. `api_keys_own` gives a Member every verb on
+-- their own keys, which is right — they issue and revoke them — but clearing
+-- `revoked_at` would bring a key back from the dead, and a lost laptop is the
+-- reason the column exists.
+create or replace function sessclone_guard_key_revocation() returns trigger
+  language plpgsql as $$
+begin
+  if old.revoked_at is not null and new.revoked_at is null then
+    raise exception 'a revoked key cannot be un-revoked';
+  end if;
+  return new;
+end
+$$;
+
+create trigger api_keys_guard_revocation
+  before update on api_keys
+  for each row execute function sessclone_guard_key_revocation();
 
 alter table orgs enable row level security;
 alter table users enable row level security;
@@ -229,14 +280,38 @@ create policy users_write_self on users for update
   using (id = (select sessclone_user_id()))
   with check (id = (select sessclone_user_id()));
 
+-- The second branch says nothing the first does not — `sessclone_visible_member_ids()`
+-- already returns everyone in an Org the caller administers. It is here for
+-- `insert … returning`: RETURNING applies this policy to the new row, the
+-- helper is `stable` and so is evaluated against the statement's snapshot, and
+-- in that snapshot the row does not exist yet. Asking about the new row's own
+-- `org_id` instead needs nothing from the snapshot, so ticket 49's invite can
+-- have the new member's id back in one round trip.
+--
+-- Deliberately no `user_id = sessclone_user_id()` branch beside it: that would
+-- show a removed Member their own row, and `members_write` would then let them
+-- clear their own `removed_at`.
 create policy members_read on members for select
   using (
     id in (select sessclone_visible_member_ids())
+    or org_id in (select sessclone_admin_org_ids())
     or (select sessclone_is_platform_admin())
   );
 
+-- An Admin invites into an Org they already administer. The second branch is
+-- the bootstrap: `orgs_create` lets a signed-in user create an Org, and
+-- without a way to become its first Member they have created something nobody
+-- can read, including themselves. It is narrow on purpose — your own user id,
+-- the Owner role, and only while the Org has no Members at all.
 create policy members_invite on members for insert
-  with check (org_id in (select sessclone_admin_org_ids()));
+  with check (
+    org_id in (select sessclone_admin_org_ids())
+    or (
+      user_id = (select sessclone_user_id())
+      and role = 'owner'
+      and not sessclone_org_has_members(org_id)
+    )
+  );
 
 -- Two writers, one policy, and the trigger above decides which column each of
 -- them owns.
