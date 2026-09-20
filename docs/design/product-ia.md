@@ -390,12 +390,12 @@ reach the surface, with the rows each Role may read decided by the policies
 | Your settings — Log Artifacts | `/settings/you` | All, own artifacts only | 60, 73 | Deletion is separate from the switch, per ADR 0005 |
 | Your settings — your Scope | `/settings/you` | Manager | 46 | **Inferred placement**; read-only |
 | Org settings — timezone | `/settings/org` | Owner, Admin | 51 | Roles stated by the ticket |
-| Org settings — retention | `/settings/org` | Owner, Admin | 61 | **Inferred for Admin** — see below |
+| Org settings — retention | `/settings/org` | Owner, Admin | 61 | Settled 2026-09-20 — see below |
 | Org settings — appearance defaults and seed lock | `/settings/org` | Owner, Admin | 77 | Roles stated by the ticket |
 | Org settings — Org logo | `/settings/org` | Owner, Admin | 77 | A Member cannot remove it |
-| Org settings — Members and Roles | `/settings/org/members` | Owner, Admin | 49, 50 | **Inferred for Admin** — see below |
+| Org settings — Members and Roles | `/settings/org/members` | Owner, Admin | 49, 50 | Settled 2026-09-20 — see below |
 | Org settings — Manager Scope assignment | `/settings/org/members` | Owner, Admin | 46 | Roles stated by the ticket |
-| Org settings — invitations | `/settings/org/members` | Owner, Admin | 49 | **Inferred for Admin** — see below |
+| Org settings — invitations | `/settings/org/members` | Owner, Admin | 49 | Settled 2026-09-20 — see below |
 | Org settings — Tier | `/settings/org/tier` | Owner | 47 | Admin has no billing, per `CONTEXT.md`; the entry is absent for an Admin |
 | Onboarding — Org name and timezone | `/costs`, as state | Owner, Admin | 27, 51 | Shown while the Org has no key |
 | Onboarding — first key | `/costs`, as state | All | 28 | Shown while the person has no key |
@@ -403,7 +403,12 @@ reach the surface, with the rows each Role may read decided by the policies
 | Onboarding — waiting for the first Turn | `/costs`, as state | All | 33, 39, 66 | The failure-naming surface |
 | Inactive Org | replaces every signed-in path | All | 48 | An inactive Org is told it is inactive rather than shown a broken dashboard |
 
-### Roles this file inferred
+### Roles settled, and roles this file inferred
+
+Two of the conflicts below were put to the product owner on 2026-09-20 and
+settled: retention is Owner or Admin, and Members, Roles and invitations are
+Owner or Admin. Tickets 49, 50 and 61 are narrower than that and should be read
+as settled here rather than as disagreeing.
 
 **Keys (ticket 28).** The ticket says "a Member creates a key" and names no
 Role. `CONTEXT.md` makes Member the least authoritative Role, and every Role
@@ -416,20 +421,19 @@ ticket asks for one.
 
 **Retention (ticket 61).** The ticket says retention is set by an Owner.
 `CONTEXT.md` gives an Admin the whole Org's data and settings, with billing as
-the only exclusion, and retention is not billing. This file reads retention as
-Owner or Admin, matching the timezone control it sits beside, and records the
-inference here because ticket 61's wording alone would put it on the Tier page
-with the Owner-only controls. If that is wrong the fix is one row, but the two
-should not diverge silently.
+the only exclusion, and retention is not billing. Settled as Owner or Admin,
+matching the timezone control it sits beside. Ticket 61's wording alone would
+have put it on the Tier page with the Owner-only controls; it does not go
+there.
 
 **Members, Roles and invitations (tickets 49, 50).** Ticket 49 says an Owner
 invites; ticket 50 says an Owner changes a Role and removes a Member. Neither
 names an Admin. Ticket 46, written against the same area, says an Owner *or
 Admin* assigns and removes Members from a Manager's Scope, and `CONTEXT.md`
-gives an Admin the whole Org's settings. This file reads all three as Owner or
-Admin. Tickets 49 and 50 read narrowly would put an Admin on a Members page
-where the Scope control works and the Role control does not, which is the split
-page this document's settings decision exists to avoid.
+gives an Admin the whole Org's settings. Settled as Owner or Admin for all three.
+Read narrowly, 49 and 50 would put an Admin on a Members page where the Scope
+control works and the Role control does not, which is the split page this
+document's settings decision exists to avoid.
 
 ## Signed-out surfaces
 

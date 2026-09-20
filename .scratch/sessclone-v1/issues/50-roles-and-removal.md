@@ -1,6 +1,6 @@
 # 50: Role assignment and member removal
 
-**What to build:** An Owner changes someone's Role, and removes someone who has left — without destroying the spend history that person generated.
+**What to build:** An Owner or Admin changes someone's Role, and removes someone who has left — without destroying the spend history that person generated.
 
 **Blocked by:** 44, 49.
 
