@@ -3,7 +3,7 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "sessclone v1 — ticket status",
-    "subtitle": "77 tickets · 23 done · 6 ready to start · 48 blocked",
+    "subtitle": "77 tickets · 25 done · 6 ready to start · 46 blocked",
     "output": "docs/tickets/ticket-graph.html",
     "quality_profile": "showcase"
   },
@@ -26,7 +26,7 @@
       "id": "design",
       "type": "frontend",
       "label": "Frontend Design (16-20)",
-      "sublabel": "1 done · 3 ready · 1 blocked",
+      "sublabel": "3 done · 2 ready",
       "pos": [
         270,
         70
@@ -82,7 +82,7 @@
       "id": "accounts",
       "type": "frontend",
       "label": "Site + Accounts (26-28)",
-      "sublabel": "3 blocked",
+      "sublabel": "1 ready · 2 blocked",
       "pos": [
         730,
         332
@@ -192,13 +192,13 @@
       "id": "design_accounts",
       "from": "design",
       "to": "accounts",
-      "variant": "dashed"
+      "variant": "emphasis"
     },
     {
       "id": "schema_accounts",
       "from": "schema",
       "to": "accounts",
-      "variant": "dashed"
+      "variant": "emphasis"
     },
     {
       "id": "accounts_collection",
