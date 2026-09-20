@@ -14,7 +14,7 @@ RUN apt-get update \
 RUN npm install -g @anthropic-ai/claude-code
 
 WORKDIR /work
-COPY post.sh settings.json ./
+COPY post.sh settings.json settings.container.json ./
 RUN chmod +x post.sh && mkdir -p /work/project
 
 ENV CLAUDE_CONFIG_DIR=/root/.claude
