@@ -150,14 +150,16 @@ data — costs nothing at all here.
 ## Across a lost container
 
 Measured in this project's oldest thread, 35 minutes after it last spoke. Its
-container reported `up 0 min` — freshly booted — while:
+container reported `/proc/uptime` of 88 seconds at 11:59:53 UTC — booted well
+after the conversation it was serving — while:
 
 - `~/.claude/projects/-home-user/61bf47bf-….jsonl` still held all 149 lines
   written before the gap, with new lines appended after it;
 - every one of its 158 lines carried the same `sessionId`, and that id matched
   the container's own `CLAUDE_CODE_SESSION_ID`;
 - `installed_plugins.json` still carried its original 11:24 mtime;
-- the gap itself was 1,780 seconds, between 11:28:52 and 11:58:31.
+- the gap itself was 1,780 seconds, between 11:28:52 and 11:58:31, and the
+  file carried exactly one `sessionId` and one `version` across every line.
 
 So a conversation that outlives its container keeps its `sessionId` and keeps
 appending to one transcript. Nothing splits, and the worry this spike was
