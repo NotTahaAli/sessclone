@@ -16,7 +16,7 @@ in the same place, so the parser, the schema, the ingest contract and ADR 0006
 all hold unchanged. One thing is missing and one thing is unanswered:
 
 - **Needed:** a Device keyed on the account rather than the container. Claude
-  Code hands one over; ticket 76 uses it.
+  Code hands one over, and ticket 30 keys on it.
 - **Unanswered:** what happens to a Session when its container is reclaimed.
   See "The open question" — it could not be observed from inside a single
   container's lifetime, and a second container did not settle it either.
@@ -86,21 +86,30 @@ Claude Code supplies the account, and nothing else here is stable:
 | `environment_id`                         | Stable, and readable only from inside the session       |
 
 The account UUID is what ticket 30 asked for, in the words it asked for it, and
-it costs the Member no setup. Its one cost is granularity: one account with
-several environments is one Device. `SESSCLONE_DEVICE` (ticket 76) is the
-override for a Member who wants them counted apart — in a Projects environment,
-set in the environment settings on claude.ai, because a session cannot set a
-variable for the container that replaces it.
+it costs the Member no setup. `deviceKey` in `packages/shared/src/identity.ts`
+spells the result `cloud:<account uuid>`, with `:<type>` appended when
+`CLAUDE_CODE_REMOTE_ENVIRONMENT_TYPE` is not `cloud_default`, against
+`host:<hostname>` for a real machine.
+
+Its one cost is granularity: one account with several environments is one
+Device. `SESSCLONE_DEVICE`, ticket 30's to add, is the override for a Member
+who wants them counted apart — in a Projects environment, set in the
+environment settings on claude.ai, because a session cannot set a variable for
+the container that replaces it.
 
 `environment_id` is the handle that would key an environment exactly, and it is
 reachable only through an in-session MCP tool, not from the separate process a
 `Stop` hook runs in. That is why the override is configuration rather than
-something the Collector can discover.
+something the Collector can discover. It is also why an account with two
+environments cannot be split automatically: nothing in the container says which
+environment it is.
 
 **An earlier draft of this note had this wrong**, and said nothing readable was
 stable. It checked `CLAUDE_ENV_ID` and `CLAUDE_SESSION_ID`, which are empty,
 and not `CLAUDE_CODE_ACCOUNT_UUID`, which is not. The thread working tickets 29
-and 30 found the account variable independently; the correction is theirs.
+and 30 found the account variable independently; the correction is theirs, and
+so is the implementation — ticket 76 was opened here to write one and is closed
+into theirs rather than shipping a second.
 
 ## One conversation, several transcripts
 

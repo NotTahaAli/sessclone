@@ -108,7 +108,6 @@ point at their own deployment without editing a vendored plugin.
 | `SESSCLONE_URL`       | in practice \* | `http://127.0.0.1:3000` | Base URL of the deployment to report to. Matches the server's `NEXT_PUBLIC_APP_URL` |
 | `SESSCLONE_API_KEY`   | yes            | —                       | The Member's API key, issued in the dashboard. Identifies the Member and the Org    |
 | `SESSCLONE_STATE_DIR` | no             | platform-dependent \*\* | Where the cursor and the retry queue are kept                                       |
-| `SESSCLONE_DEVICE`    | no \*\*\*      | machine, else account   | Overrides the Device key, for an account running several environments               |
 
 \* Not required by the code — `packages/plugin/hooks/stop.mjs` falls back to
 `http://127.0.0.1:3000` — but required by anyone whose deployment is not on
@@ -141,19 +140,6 @@ treat those two rows as the intended behaviour rather than the measured one.
 
 That 30-day sweep is also a deadline on archival: a transcript not collected
 within the window is gone, whatever this product does.
-
-\*\*\* `SESSCLONE_DEVICE` is an override, not a requirement. A laptop is
-keyed by its machine, and a cloud environment — Claude Code Cloud or Claude
-Projects — by the account, from `CLAUDE_CODE_ACCOUNT_UUID`, which Claude Code
-sets and which outlives the container. That is what ticket 30 means by "keyed
-by account, not container", and it needs no setup.
-
-Set this when one account runs several environments that should be counted as
-separate Devices, since the account key makes them one. In a Claude Projects
-environment it goes in the environment settings on claude.ai, alongside
-`SESSCLONE_API_KEY`, rather than in a shell profile — a session cannot set it
-for itself, because the container it would set it in is the one being replaced.
-Read by ticket 76; nothing reads it today.
 
 `CLAUDE_CONFIG_DIR` is Claude Code's variable, not this product's. The
 Collector reads it — resolving `CLAUDE_CONFIG_DIR ?? ~/.claude` exactly as
