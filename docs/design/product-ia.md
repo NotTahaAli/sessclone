@@ -27,12 +27,12 @@ The signed-in navigation is Costs, Keys, Devices, Settings. Everything else
 hangs off one of those four. The dashboard shell that carries them is ticket
 45, which asks for navigation reflecting what the signed-in Role may reach.
 
-| Destination | What it holds | Ticket |
-| --- | --- | --- |
-| Costs | The four views of spend, and the date range that applies to all of them | 52, 53, 54, 55, 56 |
-| Keys | The signed-in person's own API keys | 28 |
-| Devices | The signed-in person's own machines and their nicknames | 57 |
-| Settings | Two destinations — Org settings and Your settings | see below |
+| Destination | What it holds                                                           | Ticket             |
+| ----------- | ----------------------------------------------------------------------- | ------------------ |
+| Costs       | The four views of spend, and the date range that applies to all of them | 52, 53, 54, 55, 56 |
+| Keys        | The signed-in person's own API keys                                     | 28                 |
+| Devices     | The signed-in person's own machines and their nicknames                 | 57                 |
+| Settings    | Two destinations — Org settings and Your settings                       | see below          |
 
 All four are reachable by every Role. What a Role sees inside Costs differs;
 what it may reach does not. That is deliberate: reads pass through the policies
@@ -81,17 +81,17 @@ and the four views are where a reader would otherwise forget it.
 
 ### Where everything else hangs
 
-| Thing | Where it lives | Ticket |
-| --- | --- | --- |
-| Date range control | Inside Costs, applying to all four views | 53 |
-| A Member's Log Artifacts | Your settings | 60, 72, 73 |
-| Another Member's Log Artifacts | A row in Costs → per Member | 60 |
-| Manager Scope, as assigned | Org settings → Members | 46 |
-| Manager Scope, as seen by the Manager | Your settings | 46 |
-| Tier, seats and price | Org settings → Tier | 47 |
-| Retention | Org settings, beside timezone | 61 |
-| Manual activation | Platform administration → the Org's Tier page | 48, 65 |
-| Install commands | Onboarding, and re-enterable from Keys | 66 |
+| Thing                                 | Where it lives                                | Ticket     |
+| ------------------------------------- | --------------------------------------------- | ---------- |
+| Date range control                    | Inside Costs, applying to all four views      | 53         |
+| A Member's Log Artifacts              | Your settings                                 | 60, 72, 73 |
+| Another Member's Log Artifacts        | A row in Costs → per Member                   | 60         |
+| Manager Scope, as assigned            | Org settings → Members                        | 46         |
+| Manager Scope, as seen by the Manager | Your settings                                 | 46         |
+| Tier, seats and price                 | Org settings → Tier                           | 47         |
+| Retention                             | Org settings, beside timezone                 | 61         |
+| Manual activation                     | Platform administration → the Org's Tier page | 48, 65     |
+| Install commands                      | Onboarding, and re-enterable from Keys        | 66         |
 
 Two of those are placements this file decides rather than inherits.
 
@@ -115,15 +115,15 @@ it does not keep its own page.
 Settings is Org settings and Your settings. They are separate destinations with
 separate navigation entries, not two sections of one page.
 
-| Org settings — Owner or Admin | Your settings — everyone |
-| --- | --- |
-| Timezone (51) | Your accent seed and your light, dark or system preference (77) |
-| Retention (61) | Your archival master switch and your Project exclusions (72) |
-| Default accent seed and the seed lock (77) | Your Devices and their nicknames (57) |
-| Org logo (77) | Your Log Artifacts, and their deletion (60, 73) |
-| Members, Roles, removal (49, 50) | Your Scope, if you are a Manager (46) |
-| Invitations (49) | |
-| Tier, seats and price (47) | |
+| Org settings — Owner or Admin              | Your settings — everyone                                        |
+| ------------------------------------------ | --------------------------------------------------------------- |
+| Timezone (51)                              | Your accent seed and your light, dark or system preference (77) |
+| Retention (61)                             | Your archival master switch and your Project exclusions (72)    |
+| Default accent seed and the seed lock (77) | Your Devices and their nicknames (57)                           |
+| Org logo (77)                              | Your Log Artifacts, and their deletion (60, 73)                 |
+| Members, Roles, removal (49, 50)           | Your Scope, if you are a Manager (46)                           |
+| Invitations (49)                           |                                                                 |
+| Tier, seats and price (47)                 |                                                                 |
 
 ### Why they are separate
 
@@ -217,9 +217,9 @@ From there:
 stored. The magic-link path exists for people whose employer blocks OAuth apps,
 so it is offered beside GitHub rather than behind a "more options" disclosure.
 
-- *Waiting:* after a magic link is requested, the page says the link has been
+- _Waiting:_ after a magic link is requested, the page says the link has been
   sent to that address and that it can be requested again.
-- *Failing:* an expired or already-used link returns to sign-in with a line
+- _Failing:_ an expired or already-used link returns to sign-in with a line
   saying the link has expired and the address prefilled.
 
 **2. Confirm the Org name and its timezone.** Ticket 51 requires the timezone
@@ -229,8 +229,8 @@ question asked during onboarding, and it is asked because every chart that
 buckets by day depends on it and re-bucketing later changes what every chart
 already shown meant.
 
-- *Waiting:* nothing to wait for; both values are already filled.
-- *Failing:* if the browser reports no timezone, the field falls back to UTC
+- _Waiting:_ nothing to wait for; both values are already filled.
+- _Failing:_ if the browser reports no timezone, the field falls back to UTC
   and says so, so an unnoticed default is a stated one.
 
 **3. Create the first API key.** Ticket 28 shows the key in full exactly once
@@ -239,11 +239,11 @@ before the key appears, not after, and it labels the key with the machine it is
 for, because ticket 28's labels are per machine and a key labelled on day one
 is a key that can be revoked on day ninety without guessing.
 
-- *Waiting:* the create control is disabled while the key is being issued.
-- *Failing:* if creation fails, no key is shown and none was stored; the step
+- _Waiting:_ the create control is disabled while the key is being issued.
+- _Failing:_ if creation fails, no key is shown and none was stored; the step
   says the key was not created and offers the control again. It never shows a
   partial value.
-- *Leaving this step without copying the key:* the flow does not block it. The
+- _Leaving this step without copying the key:_ the flow does not block it. The
   next step offers to create another key, because a key that cannot be shown
   again is cheaper to replace than to recover, and ticket 28 allows several
   active keys at once.
@@ -263,12 +263,11 @@ the plugin from the environment's init script, the key from the environment's
 own settings. Ticket 66 requires that path written down, and finding 74 is
 where it came from.
 
-- *Waiting:* nothing; this step is instructions.
-- *Failing:* there is no failure the product can observe here. That is the
+- _Waiting:_ nothing; this step is instructions.
+- _Failing:_ there is no failure the product can observe here. That is the
   point of step 5.
 
-**5. Restart Claude Code.** Stated as its own step, not as a line inside step
-4. Ticket 66 requires the restart requirement stated plainly and requires the
+**5. Restart Claude Code.** Stated as its own step, not as a line inside step 4. Ticket 66 requires the restart requirement stated plainly and requires the
 documentation to say that Turns from before the restart are backfilled by the
 first sweep (ticket 39). Both sentences appear here, because the second one is
 what stops a person re-running the install when their existing session reports
@@ -279,10 +278,10 @@ screen in the product. It says what should happen next: run a Claude Code turn,
 and it should appear here within a minute or so of that turn ending. It polls;
 it does not ask the person to refresh.
 
-- *Waiting:* "Waiting for the first Turn from this Device." Below it, what to
+- _Waiting:_ "Waiting for the first Turn from this Device." Below it, what to
   expect: the Collector reports when a turn ends, so nothing arrives until a
   turn ends.
-- *After a few minutes with nothing:* the surface changes rather than sitting
+- _After a few minutes with nothing:_ the surface changes rather than sitting
   still. It names the four things that are actually wrong when a Collector does
   not report, in the order they are worth checking:
   1. Claude Code was not restarted after the install. Hooks only take effect
@@ -294,12 +293,12 @@ it does not ask the person to refresh.
      this deployment expects is shown, so it can be compared rather than
      recalled.
   4. Nothing has been reported because no turn has ended yet.
-  The step also offers the two actions that resolve the remaining cases:
-  show the install commands again, and issue a fresh key.
-- *Failing at the key:* if a report arrives with an unknown or revoked key it
+     The step also offers the two actions that resolve the remaining cases:
+     show the install commands again, and issue a fresh key.
+- _Failing at the key:_ if a report arrives with an unknown or revoked key it
   writes nothing (ticket 34), so from this surface it is indistinguishable from
   silence. The list above names it; nothing else can.
-- *Partial success:* a key whose last-used time is set (tickets 28, 34) but for
+- _Partial success:_ a key whose last-used time is set (tickets 28, 34) but for
   which no Turn has landed is a different state, and the surface says so: the
   Collector has reached this deployment, and the problem is downstream of the
   key rather than in it.
@@ -327,7 +326,7 @@ accepts it from a new or existing user, landing the person in the Org with the
 Role the Owner chose. The Org logo appears on the invite email and on sign-in
 (ticket 77), so the person arriving recognises whose Org they are joining.
 
-- *Failing:* an expired invitation, a replayed one, and one that would exceed
+- _Failing:_ an expired invitation, a replayed one, and one that would exceed
   the Tier's seat limit are three different refusals with three different
   sentences. Ticket 49 requires invitations to expire, a used invitation not to
   be replayable, and a seat-limit refusal to tell the Owner why — the person
@@ -355,13 +354,13 @@ were answered when the Org was created and are not re-asked.
 The flow is state, so re-entry is not a special case — it is the same
 computation with a narrower subject.
 
-| Who | What they need | Where they get it |
-| --- | --- | --- |
-| A Member adding a second Device | A key for the new machine, and the two commands | Keys → create a key, which shows the install commands with the new key substituted, exactly as onboarding step 4 does |
-| Anyone who lost a key | A replacement, not a recovery | Keys → create a key. The old key is revoked from the same list (ticket 28), which affects only that key |
-| An Owner who wants the commands again | The commands, without a new key | Keys → the install instructions, shown with a placeholder where the key goes, since the key cannot be shown twice |
-| A Member whose new Device has not reported | The waiting surface, for that Device | Devices, which lists their Devices and when each last reported (ticket 57). A Device that has never reported is the day-one state, one machine down |
-| An Org whose subscription is inactive | To know that, rather than to debug it | The whole-surface inactive state (ticket 48), which replaces the dashboard rather than letting it render empty |
+| Who                                        | What they need                                  | Where they get it                                                                                                                                   |
+| ------------------------------------------ | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A Member adding a second Device            | A key for the new machine, and the two commands | Keys → create a key, which shows the install commands with the new key substituted, exactly as onboarding step 4 does                               |
+| Anyone who lost a key                      | A replacement, not a recovery                   | Keys → create a key. The old key is revoked from the same list (ticket 28), which affects only that key                                             |
+| An Owner who wants the commands again      | The commands, without a new key                 | Keys → the install instructions, shown with a placeholder where the key goes, since the key cannot be shown twice                                   |
+| A Member whose new Device has not reported | The waiting surface, for that Device            | Devices, which lists their Devices and when each last reported (ticket 57). A Device that has never reported is the day-one state, one machine down |
+| An Org whose subscription is inactive      | To know that, rather than to debug it           | The whole-surface inactive state (ticket 48), which replaces the dashboard rather than letting it render empty                                      |
 
 Installing on a second machine is the Devices list plus the Keys list, not a
 repeat of the whole flow: the Org exists, the timezone is set, and a Turn has
@@ -374,34 +373,34 @@ Roles are `CONTEXT.md`'s: Owner, Admin, Manager, Member. "All" means all four
 reach the surface, with the rows each Role may read decided by the policies
 (ADR 0001) and proven by ticket 44, not by the navigation.
 
-| Surface | Path | Who reaches it | Ticket | Note |
-| --- | --- | --- | --- | --- |
-| Dashboard shell and Org context | all signed-in paths | All | 45 | Navigation reflects what the Role may reach |
-| Costs — over time | `/costs?view=time` | All | 52 | Read through the policies, so each Role's totals are already correct |
-| Costs — per Member | `/costs?view=members` | All; Owner and Admin see everyone, Manager sees their Scope, Member sees only themselves | 54 | Roles stated by the ticket |
-| Costs — per Project | `/costs?view=projects` | All, scoped as above | 55 | Scoped by Role in the same way as every other view |
-| Costs — per Device | `/costs?view=devices` | All, scoped as above | 56 | Cloud containers collapse to one Device per Member |
-| Another Member's Log Artifacts | row action in `/costs?view=members` | Owner, Admin; Manager within Scope | 60 | **Inferred placement**, stated Roles |
-| Keys | `/keys` | All, own keys only | 28 | **Inferred Roles** — see below |
-| Install instructions | `/keys` | All | 66 | Re-entry point for the install commands |
-| Devices | `/devices` | All, own Devices only | 57 | A Member cannot rename another Member's Device |
-| Your settings — appearance | `/settings/you` | All | 77 | Seed editable unless the Org has locked it; mode always personal |
-| Your settings — archival | `/settings/you` | All | 72 | Master switch off by default; Project exclusions listed from the Member's own Sessions |
-| Your settings — Log Artifacts | `/settings/you` | All, own artifacts only | 60, 73 | Deletion is separate from the switch, per ADR 0005 |
-| Your settings — your Scope | `/settings/you` | Manager | 46 | **Inferred placement**; read-only |
-| Org settings — timezone | `/settings/org` | Owner, Admin | 51 | Roles stated by the ticket |
-| Org settings — retention | `/settings/org` | Owner, Admin | 61 | Settled 2026-09-20 — see below |
-| Org settings — appearance defaults and seed lock | `/settings/org` | Owner, Admin | 77 | Roles stated by the ticket |
-| Org settings — Org logo | `/settings/org` | Owner, Admin | 77 | A Member cannot remove it |
-| Org settings — Members and Roles | `/settings/org/members` | Owner, Admin | 49, 50 | Settled 2026-09-20 — see below |
-| Org settings — Manager Scope assignment | `/settings/org/members` | Owner, Admin | 46 | Roles stated by the ticket |
-| Org settings — invitations | `/settings/org/members` | Owner, Admin | 49 | Settled 2026-09-20 — see below |
-| Org settings — Tier | `/settings/org/tier` | Owner | 47 | Admin has no billing, per `CONTEXT.md`; the entry is absent for an Admin |
-| Onboarding — Org name and timezone | `/costs`, as state | Owner, Admin | 27, 51 | Shown while the Org has no key |
-| Onboarding — first key | `/costs`, as state | All | 28 | Shown while the person has no key |
-| Onboarding — install and restart | `/costs`, as state | All | 66 | Shown while the person has a key and no Turn |
-| Onboarding — waiting for the first Turn | `/costs`, as state | All | 33, 39, 66 | The failure-naming surface |
-| Inactive Org | replaces every signed-in path | All | 48 | An inactive Org is told it is inactive rather than shown a broken dashboard |
+| Surface                                          | Path                                | Who reaches it                                                                           | Ticket     | Note                                                                                   |
+| ------------------------------------------------ | ----------------------------------- | ---------------------------------------------------------------------------------------- | ---------- | -------------------------------------------------------------------------------------- |
+| Dashboard shell and Org context                  | all signed-in paths                 | All                                                                                      | 45         | Navigation reflects what the Role may reach                                            |
+| Costs — over time                                | `/costs?view=time`                  | All                                                                                      | 52         | Read through the policies, so each Role's totals are already correct                   |
+| Costs — per Member                               | `/costs?view=members`               | All; Owner and Admin see everyone, Manager sees their Scope, Member sees only themselves | 54         | Roles stated by the ticket                                                             |
+| Costs — per Project                              | `/costs?view=projects`              | All, scoped as above                                                                     | 55         | Scoped by Role in the same way as every other view                                     |
+| Costs — per Device                               | `/costs?view=devices`               | All, scoped as above                                                                     | 56         | Cloud containers collapse to one Device per Member                                     |
+| Another Member's Log Artifacts                   | row action in `/costs?view=members` | Owner, Admin; Manager within Scope                                                       | 60         | **Inferred placement**, stated Roles                                                   |
+| Keys                                             | `/keys`                             | All, own keys only                                                                       | 28         | **Inferred Roles** — see below                                                         |
+| Install instructions                             | `/keys`                             | All                                                                                      | 66         | Re-entry point for the install commands                                                |
+| Devices                                          | `/devices`                          | All, own Devices only                                                                    | 57         | A Member cannot rename another Member's Device                                         |
+| Your settings — appearance                       | `/settings/you`                     | All                                                                                      | 77         | Seed editable unless the Org has locked it; mode always personal                       |
+| Your settings — archival                         | `/settings/you`                     | All                                                                                      | 72         | Master switch off by default; Project exclusions listed from the Member's own Sessions |
+| Your settings — Log Artifacts                    | `/settings/you`                     | All, own artifacts only                                                                  | 60, 73     | Deletion is separate from the switch, per ADR 0005                                     |
+| Your settings — your Scope                       | `/settings/you`                     | Manager                                                                                  | 46         | **Inferred placement**; read-only                                                      |
+| Org settings — timezone                          | `/settings/org`                     | Owner, Admin                                                                             | 51         | Roles stated by the ticket                                                             |
+| Org settings — retention                         | `/settings/org`                     | Owner, Admin                                                                             | 61         | Settled 2026-09-20 — see below                                                         |
+| Org settings — appearance defaults and seed lock | `/settings/org`                     | Owner, Admin                                                                             | 77         | Roles stated by the ticket                                                             |
+| Org settings — Org logo                          | `/settings/org`                     | Owner, Admin                                                                             | 77         | A Member cannot remove it                                                              |
+| Org settings — Members and Roles                 | `/settings/org/members`             | Owner, Admin                                                                             | 49, 50     | Settled 2026-09-20 — see below                                                         |
+| Org settings — Manager Scope assignment          | `/settings/org/members`             | Owner, Admin                                                                             | 46         | Roles stated by the ticket                                                             |
+| Org settings — invitations                       | `/settings/org/members`             | Owner, Admin                                                                             | 49         | Settled 2026-09-20 — see below                                                         |
+| Org settings — Tier                              | `/settings/org/tier`                | Owner                                                                                    | 47         | Admin has no billing, per `CONTEXT.md`; the entry is absent for an Admin               |
+| Onboarding — Org name and timezone               | `/costs`, as state                  | Owner, Admin                                                                             | 27, 51     | Shown while the Org has no key                                                         |
+| Onboarding — first key                           | `/costs`, as state                  | All                                                                                      | 28         | Shown while the person has no key                                                      |
+| Onboarding — install and restart                 | `/costs`, as state                  | All                                                                                      | 66         | Shown while the person has a key and no Turn                                           |
+| Onboarding — waiting for the first Turn          | `/costs`, as state                  | All                                                                                      | 33, 39, 66 | The failure-naming surface                                                             |
+| Inactive Org                                     | replaces every signed-in path       | All                                                                                      | 48         | An inactive Org is told it is inactive rather than shown a broken dashboard            |
 
 ### Roles settled, and roles this file inferred
 
@@ -428,8 +427,8 @@ there.
 
 **Members, Roles and invitations (tickets 49, 50).** Ticket 49 says an Owner
 invites; ticket 50 says an Owner changes a Role and removes a Member. Neither
-names an Admin. Ticket 46, written against the same area, says an Owner *or
-Admin* assigns and removes Members from a Manager's Scope, and `CONTEXT.md`
+names an Admin. Ticket 46, written against the same area, says an Owner _or
+Admin_ assigns and removes Members from a Manager's Scope, and `CONTEXT.md`
 gives an Admin the whole Org's settings. Settled as Owner or Admin for all three.
 Read narrowly, 49 and 50 would put an Admin on a Members page where the Scope
 control works and the Role control does not, which is the split page this
@@ -437,15 +436,15 @@ document's settings decision exists to avoid.
 
 ## Signed-out surfaces
 
-| Surface | Path | Ticket | Note |
-| --- | --- | --- | --- |
-| Landing | `/` | 26 | The problem and the collection-everywhere claim; the install command is in the hero |
-| Pricing | `/pricing` | 26 | Tiers, per-seat pricing, and what each Tier includes |
-| Self-hosting | link out from `/pricing` | 26, 67 | Presented as the free path, linking to the repository |
-| Install documentation | repository, linked from both | 66, 67, 68, 69 | Includes the restart requirement, the backfill sentence, and the no-shell environments |
-| Sign-in | `/sign-in` | 27 | GitHub and magic link side by side. Carries the Org logo when reached from an invitation (77) |
-| Magic link sent | `/sign-in`, as state | 27 | Confirms the address and offers to send again |
-| Invitation acceptance | `/invite/<token>` | 49 | Accepted by a new or existing user; expiry, replay and seat-limit refusals are distinct |
+| Surface               | Path                         | Ticket         | Note                                                                                          |
+| --------------------- | ---------------------------- | -------------- | --------------------------------------------------------------------------------------------- |
+| Landing               | `/`                          | 26             | The problem and the collection-everywhere claim; the install command is in the hero           |
+| Pricing               | `/pricing`                   | 26             | Tiers, per-seat pricing, and what each Tier includes                                          |
+| Self-hosting          | link out from `/pricing`     | 26, 67         | Presented as the free path, linking to the repository                                         |
+| Install documentation | repository, linked from both | 66, 67, 68, 69 | Includes the restart requirement, the backfill sentence, and the no-shell environments        |
+| Sign-in               | `/sign-in`                   | 27             | GitHub and magic link side by side. Carries the Org logo when reached from an invitation (77) |
+| Magic link sent       | `/sign-in`, as state         | 27             | Confirms the address and offers to send again                                                 |
+| Invitation acceptance | `/invite/<token>`            | 49             | Accepted by a new or existing user; expiry, replay and seat-limit refusals are distinct       |
 
 A signed-out visitor gets the theme applied on first paint with no flash
 (ticket 77), which is why appearance is a property of these pages and not only
@@ -467,14 +466,14 @@ it. The admin area has its own navigation (ticket 62) and does not reuse the
 Org navigation, because the subjects are different — the deployment's Rates and
 Tiers, and every Org on it, rather than one Org's spend.
 
-| Surface | Path | Who reaches it | Ticket | Note |
-| --- | --- | --- | --- | --- |
-| Admin shell and navigation | `/admin` | Platform flag only | 62 | An Org Owner is refused; gate is in policy and in routing |
-| Rates | `/admin/rates` | Platform flag only | 41, 63 | Effective-dated; a price change is a new row, never an overwrite |
-| Unknown models | `/admin/rates` | Platform flag only | 43, 63 | Distinct unknown model identifiers, with how many Turns each affects |
-| Org rate overrides | `/admin/orgs/<org>/rates` | Platform flag only | 64 | Invisible to every other Org; resolution prefers the override |
-| Tiers | `/admin/tiers` | Platform flag only | 65 | Seats, price and capabilities; changes take effect without a deployment |
-| An Org's Tier and subscription | `/admin/orgs/<org>` | Platform flag only | 48, 65 | Activation and deactivation with a recorded note, writing an event each time; subscription history in one place |
+| Surface                        | Path                      | Who reaches it     | Ticket | Note                                                                                                            |
+| ------------------------------ | ------------------------- | ------------------ | ------ | --------------------------------------------------------------------------------------------------------------- |
+| Admin shell and navigation     | `/admin`                  | Platform flag only | 62     | An Org Owner is refused; gate is in policy and in routing                                                       |
+| Rates                          | `/admin/rates`            | Platform flag only | 41, 63 | Effective-dated; a price change is a new row, never an overwrite                                                |
+| Unknown models                 | `/admin/rates`            | Platform flag only | 43, 63 | Distinct unknown model identifiers, with how many Turns each affects                                            |
+| Org rate overrides             | `/admin/orgs/<org>/rates` | Platform flag only | 64     | Invisible to every other Org; resolution prefers the override                                                   |
+| Tiers                          | `/admin/tiers`            | Platform flag only | 65     | Seats, price and capabilities; changes take effect without a deployment                                         |
+| An Org's Tier and subscription | `/admin/orgs/<org>`       | Platform flag only | 48, 65 | Activation and deactivation with a recorded note, writing an event each time; subscription history in one place |
 
 **Inferred paths.** Tickets 62 to 65 name the pages and their gate but no
 routes; the paths above are this file's spelling, chosen so an Org-specific
@@ -490,27 +489,27 @@ Log Artifacts, and this is the list those variants are cut from. The deactivated
 Org uses the whole-surface variant and the neutral tokens, because deactivation
 is an ordinary state rather than a failure.
 
-| Surface | Sentence | Action |
-| --- | --- | --- |
-| Costs — over time, no Turns | "Nothing has been collected yet. The first Turn appears here within about a minute of a Claude Code turn ending." | Install the Collector — goes to the onboarding install step (66) |
-| Costs — over time, Turns outside the range | "No Turns in this period." | Widen the range to the last 30 days (53) |
-| Costs — per Member, one Member | "You are the only Member of this Org." | Invite someone (49) — Owner and Admin only; a Member sees no action |
-| Costs — per Member, Manager with an empty Scope | "Your Scope is empty, so there is nothing here to show." | Ask an Owner or Admin to add Members to your Scope (46) |
-| Costs — per Project, no Turns | "No Projects yet. A Project appears once a Session has run against it." | None — this resolves itself when Turns arrive (55) |
-| Costs — per Device, no Turns | "No Devices have reported yet." | Install the Collector (66) |
-| Keys, no key | "You have no API key yet. The Collector needs one to report." | Create a key (28) |
-| Devices, none reported | "No Device has reported for you yet. A Device appears the first time the Collector reports from it." | Show the install commands (57, 66) |
-| Your settings — Project exclusions, no Projects | "You have no Projects yet, so there is nothing to exclude. New Projects are archived unless you exclude them." | None (72) |
-| Your settings — Log Artifacts, archival off | "Archival is off, so no transcripts are stored. Turning it on stores new Sessions and does not reach back." | Turn archival on (72) |
-| Your settings — Log Artifacts, archival on and nothing uploaded | "No transcripts stored yet. A Session's transcript is uploaded after the Session ends." | None (59) |
-| Your settings — Scope, Manager with an empty Scope | "Your Scope is empty. You can see nobody's usage but your own." | None (46) |
-| Org settings — Members, only the Owner | "You are the only Member of this Org." | Invite someone (49) |
-| Org settings — invitations, none outstanding | "No invitations outstanding." | Invite someone (49) |
-| Org settings — Tier, no subscription active | "This Org has no active subscription." | None from here; activation is the Platform Admin's (47, 48) |
-| Whole product — Org inactive | "This Org's subscription is not active. Collection continues; the dashboard returns when it is reactivated." | None (48) |
-| Platform admin — unknown models, none | "Every model seen in a Turn has a Rate." | None (43, 63) |
-| Platform admin — Tiers, none defined | "No Tiers defined yet." | Create a Tier (65) |
-| Platform admin — Org rate overrides, none | "This Org uses the platform Rate table." | Add an override (64) |
+| Surface                                                         | Sentence                                                                                                          | Action                                                              |
+| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Costs — over time, no Turns                                     | "Nothing has been collected yet. The first Turn appears here within about a minute of a Claude Code turn ending." | Install the Collector — goes to the onboarding install step (66)    |
+| Costs — over time, Turns outside the range                      | "No Turns in this period."                                                                                        | Widen the range to the last 30 days (53)                            |
+| Costs — per Member, one Member                                  | "You are the only Member of this Org."                                                                            | Invite someone (49) — Owner and Admin only; a Member sees no action |
+| Costs — per Member, Manager with an empty Scope                 | "Your Scope is empty, so there is nothing here to show."                                                          | Ask an Owner or Admin to add Members to your Scope (46)             |
+| Costs — per Project, no Turns                                   | "No Projects yet. A Project appears once a Session has run against it."                                           | None — this resolves itself when Turns arrive (55)                  |
+| Costs — per Device, no Turns                                    | "No Devices have reported yet."                                                                                   | Install the Collector (66)                                          |
+| Keys, no key                                                    | "You have no API key yet. The Collector needs one to report."                                                     | Create a key (28)                                                   |
+| Devices, none reported                                          | "No Device has reported for you yet. A Device appears the first time the Collector reports from it."              | Show the install commands (57, 66)                                  |
+| Your settings — Project exclusions, no Projects                 | "You have no Projects yet, so there is nothing to exclude. New Projects are archived unless you exclude them."    | None (72)                                                           |
+| Your settings — Log Artifacts, archival off                     | "Archival is off, so no transcripts are stored. Turning it on stores new Sessions and does not reach back."       | Turn archival on (72)                                               |
+| Your settings — Log Artifacts, archival on and nothing uploaded | "No transcripts stored yet. A Session's transcript is uploaded after the Session ends."                           | None (59)                                                           |
+| Your settings — Scope, Manager with an empty Scope              | "Your Scope is empty. You can see nobody's usage but your own."                                                   | None (46)                                                           |
+| Org settings — Members, only the Owner                          | "You are the only Member of this Org."                                                                            | Invite someone (49)                                                 |
+| Org settings — invitations, none outstanding                    | "No invitations outstanding."                                                                                     | Invite someone (49)                                                 |
+| Org settings — Tier, no subscription active                     | "This Org has no active subscription."                                                                            | None from here; activation is the Platform Admin's (47, 48)         |
+| Whole product — Org inactive                                    | "This Org's subscription is not active. Collection continues; the dashboard returns when it is reactivated."      | None (48)                                                           |
+| Platform admin — unknown models, none                           | "Every model seen in a Turn has a Rate."                                                                          | None (43, 63)                                                       |
+| Platform admin — Tiers, none defined                            | "No Tiers defined yet."                                                                                           | Create a Tier (65)                                                  |
+| Platform admin — Org rate overrides, none                       | "This Org uses the platform Rate table."                                                                          | Add an override (64)                                                |
 
 Two surfaces are deliberately absent from this list. Rates is seeded at
 migration time (ticket 41), so an empty Rate table is a deployment fault rather

@@ -30,11 +30,11 @@ boundary, not a subtree: marking a layout turns every page under it into client
 code, and the rows would then have to travel as JSON to a bundle that renders
 them, which is the shape this avoids.
 
-| Client module | Why it has to be one |
-| --- | --- |
-| Each chart | One module per chart, taking its rows as props. Recharts measures and draws in the DOM. |
-| The date-range control | It is state the user changes, and it drives the query string the page reads. |
-| The theme toggle | It writes `data-theme` on `<html>`, which the design system's `dark` variant reads. |
+| Client module          | Why it has to be one                                                                    |
+| ---------------------- | --------------------------------------------------------------------------------------- |
+| Each chart             | One module per chart, taking its rows as props. Recharts measures and draws in the DOM. |
+| The date-range control | It is state the user changes, and it drives the query string the page reads.            |
+| The theme toggle       | It writes `data-theme` on `<html>`, which the design system's `dark` variant reads.     |
 
 Everything else — the shell, the nav, the figures, the tables under the charts
 — stays on the server. A table of Turns is markup and numbers; it has no reason
@@ -87,9 +87,9 @@ cannot be.
 
 `recharts`, pinned at 3.10.1.
 
-| Package | Version | Deprecated |
-| --- | --- | --- |
-| `recharts` | 3.10.1 | no |
+| Package    | Version | Deprecated |
+| ---------- | ------- | ---------- |
+| `recharts` | 3.10.1  | no         |
 
 Looked up with `pnpm view recharts version` and `pnpm view recharts deprecated`
 on 2026-09-20; the latter returns nothing, which is what a healthy package
@@ -112,14 +112,14 @@ and `legacyTheme` from its index, and a `useRechartsTheme` hook from
 
 ```ts
 export interface RechartsTheme {
-    grid: Partial<{
-        stroke: string;
-        strokeOpacity: number;
-        strokeWidth: number;
-        strokeDasharray: string | number | ReadonlyArray<number>;
-        fillOpacity: number;
-        fill: string;
-    }>;
+  grid: Partial<{
+    stroke: string
+    strokeOpacity: number
+    strokeWidth: number
+    strokeDasharray: string | number | ReadonlyArray<number>
+    fillOpacity: number
+    fill: string
+  }>
 }
 ```
 
@@ -155,7 +155,7 @@ a consequence worth a deliberate look. In the published package,
 then does:
 
 ```js
-role = hasAccessibilityLayer ? 'application' : undefined;
+role = hasAccessibilityLayer ? 'application' : undefined
 ```
 
 alongside `tabIndex = hasAccessibilityLayer ? 0 : undefined`. So every chart
@@ -181,11 +181,11 @@ This ticket adds no test infrastructure. Nothing is installed, no config file
 is added, and `apps/web/vitest.config.mts` is unchanged. The three levels the
 repo already runs are the three levels these surfaces are covered at.
 
-| What | Where | Why there |
-| --- | --- | --- |
-| Aggregation, bucketing, formatting | `packages/shared` | Pure functions over Turns and Cost. Fast Node tests already run there — `turns.test.ts`, `identity.test.ts` and the rest — and they need no browser and no database. |
-| Routes and policies | `apps/web` | Against a real Postgres with the real migrations, as `apps/web/vitest.config.mts` already sets up. A chart query is an RLS question, and this is where RLS questions are answered. |
-| Rendered surfaces | Playwright screenshots | The repo already requires a page to be run in Chromium at 1440×900 and 390×844, in both themes, and the screenshots looked at. That is the pass that covers what a chart looks like. |
+| What                               | Where                  | Why there                                                                                                                                                                            |
+| ---------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Aggregation, bucketing, formatting | `packages/shared`      | Pure functions over Turns and Cost. Fast Node tests already run there — `turns.test.ts`, `identity.test.ts` and the rest — and they need no browser and no database.                 |
+| Routes and policies                | `apps/web`             | Against a real Postgres with the real migrations, as `apps/web/vitest.config.mts` already sets up. A chart query is an RLS question, and this is where RLS questions are answered.   |
+| Rendered surfaces                  | Playwright screenshots | The repo already requires a page to be run in Chromium at 1440×900 and 390×844, in both themes, and the screenshots looked at. That is the pass that covers what a chart looks like. |
 
 The first row is where the work goes. A bucketing bug is cheapest to catch as a
 pure function, so bucketing is a pure function in `packages/shared` and the
@@ -220,13 +220,13 @@ version`, and checked with `pnpm view <pkg> deprecated`, which returned nothing
 for every one of them — **none is deprecated**. This environment is node
 v22.22.2 and pnpm 10.33.0.
 
-| Package | Version | Deprecated | For |
-| --- | --- | --- | --- |
-| `tailwindcss` | 4.3.3 | no | The design system's `@theme` block |
-| `@tailwindcss/postcss` | 4.3.3 | no | The PostCSS plugin Tailwind 4 needs |
-| `recharts` | 3.10.1 | no | Charts |
-| `@supabase/supabase-js` | 2.116.0 | no | The Supabase client |
-| `@supabase/ssr` | 0.12.7 | no | Cookie-based sessions across server and browser |
+| Package                 | Version | Deprecated | For                                             |
+| ----------------------- | ------- | ---------- | ----------------------------------------------- |
+| `tailwindcss`           | 4.3.3   | no         | The design system's `@theme` block              |
+| `@tailwindcss/postcss`  | 4.3.3   | no         | The PostCSS plugin Tailwind 4 needs             |
+| `recharts`              | 3.10.1  | no         | Charts                                          |
+| `@supabase/supabase-js` | 2.116.0 | no         | The Supabase client                             |
+| `@supabase/ssr`         | 0.12.7  | no         | Cookie-based sessions across server and browser |
 
 **Versions are pinned in the catalog.** `pnpm-workspace.yaml` carries a
 `catalog:` block — "One place to pin every shared version. Looked up from the

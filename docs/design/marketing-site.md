@@ -57,12 +57,12 @@ contrast, which also stops the whole page reading as one slab.
 Four tiers in one row on desktop, stacked on a phone, Team marked as the
 common choice with a clay border rather than a larger card.
 
-| Tier | Price | Seats |
-| --- | --- | --- |
-| Self-Hosted | Free | No limit |
-| Personal | $5 / month | One person, no seat management |
-| Team | $10 / seat / month | 2 to 10 |
-| Enterprise | Contact | 11 and up |
+| Tier        | Price              | Seats                          |
+| ----------- | ------------------ | ------------------------------ |
+| Self-Hosted | Free               | No limit                       |
+| Personal    | $5 / month         | One person, no seat management |
+| Team        | $10 / seat / month | 2 to 10                        |
+| Enterprise  | Contact            | 11 and up                      |
 
 A seat is a person, not a machine, and that sentence appears above the
 tiers, because "per seat" invites the wrong reading for a tool installed per
@@ -97,7 +97,7 @@ Three conditions appear on the card and in the FAQ:
 licence, and there is no licence yet. AGPL-style copyleft, a source-available
 licence, and a custom licence each answer this differently, and none of them
 enforces "send it back upstream" the way the sentence reads — copyleft
-obliges a distributor to offer source to *their* users, not to contribute to
+obliges a distributor to offer source to _their_ users, not to contribute to
 this project. Ticket 79 carries it.
 
 ## Responsiveness

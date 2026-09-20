@@ -14,14 +14,14 @@ get wrong.
 A chart type is a claim about what the reader should compare. One question,
 one chart.
 
-| View | Question | Chart | Why not the obvious alternative |
-| --- | --- | --- | --- |
-| Costs, over time | Is spend rising, and which model is driving it? | Stacked bars, one per day | A line implies a continuous quantity; spend is a sum over a bucket. Stacking keeps the total readable while the split stays visible. |
-| Costs, people | Who spends the most? | Horizontal bars, sorted | A pie cannot be read past four slices and cannot be sorted. |
-| Costs, models | What is the mix? | Horizontal bars, sorted, with share shown as a number | Same reason. The number carries the share; the bar carries the ranking. |
-| Costs, repos | Which work costs the most? | Horizontal bars, sorted, long names truncated from the middle | Repo names collide at the head and the tail is what distinguishes them. |
-| A member or device detail | How does this one behave over time? | Sparkline beside the total | A full chart implies a question the reader did not ask at this level. |
-| Cache efficiency | Are we re-sending context? | One number, with the previous period beside it | A chart over time invites a trend reading on a ratio that moves with workload, not with efficiency. |
+| View                      | Question                                        | Chart                                                         | Why not the obvious alternative                                                                                                      |
+| ------------------------- | ----------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Costs, over time          | Is spend rising, and which model is driving it? | Stacked bars, one per day                                     | A line implies a continuous quantity; spend is a sum over a bucket. Stacking keeps the total readable while the split stays visible. |
+| Costs, people             | Who spends the most?                            | Horizontal bars, sorted                                       | A pie cannot be read past four slices and cannot be sorted.                                                                          |
+| Costs, models             | What is the mix?                                | Horizontal bars, sorted, with share shown as a number         | Same reason. The number carries the share; the bar carries the ranking.                                                              |
+| Costs, repos              | Which work costs the most?                      | Horizontal bars, sorted, long names truncated from the middle | Repo names collide at the head and the tail is what distinguishes them.                                                              |
+| A member or device detail | How does this one behave over time?             | Sparkline beside the total                                    | A full chart implies a question the reader did not ask at this level.                                                                |
+| Cache efficiency          | Are we re-sending context?                      | One number, with the previous period beside it                | A chart over time invites a trend reading on a ratio that moves with workload, not with efficiency.                                  |
 
 Five series plus a neutral, per `design-system.md`. A sixth category is
 rolled into **Other**, which always takes the neutral and always sorts last,

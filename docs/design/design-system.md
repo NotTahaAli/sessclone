@@ -23,11 +23,11 @@ meaning.
 
 ## The shape of the system
 
-| Half | What is in it |
-| --- | --- |
-| Fixed | Ground, surfaces, rules, text and every status colour. Identical in every Org. |
-| Derived | Five painted accent tokens, computed from one seed colour through Material Color Utilities, plus the seed itself, which is stored and never painted. |
-| Per Member | Mode and seed. An Org sets the default and may lock the seed; mode is always personal. |
+| Half       | What is in it                                                                                                                                        |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fixed      | Ground, surfaces, rules, text and every status colour. Identical in every Org.                                                                       |
+| Derived    | Five painted accent tokens, computed from one seed colour through Material Color Utilities, plus the seed itself, which is stored and never painted. |
+| Per Member | Mode and seed. An Org sets the default and may lock the seed; mode is always personal.                                                               |
 
 ### Accent is interaction. Status is state.
 
@@ -54,16 +54,16 @@ Contrast ratios are the WCAG 2.x relative-luminance formula throughout.
 Anthropic's warm grey ramp. Never substitute a cool or neutral grey: the warmth
 is what makes Ivory read as paper rather than as an unstyled page.
 
-| Token | Light | Dark | Worst-bg ratio | Role |
-| --- | --- | --- | --- | --- |
-| `--color-ground` | `#FAF9F5` | `#1A1918` | — | Page. Never `#FFFFFF` in light. |
-| `--color-surface` | `#FFFFFF` | `#262624` | — | Cards, panels, table bodies. |
-| `--color-surface-hover` | `rgba(115,114,108,.10)` | `rgba(245,244,237,.08)` | — | Row hover *and* selected row. Selection is a state, so it lives here and not on the accent. |
-| `--color-rule` | `rgba(31,30,29,.15)` | `rgba(245,244,237,.12)` | — | Default 1px border and divider. Decorative, not a control boundary. |
-| `--color-rule-strong` | `rgba(31,30,29,.30)` | `rgba(245,244,237,.26)` | — | Table head underline, section edge. Not an input border: it composites to 1.90 light and 2.25 dark. |
-| `--color-control-border` | `rgba(31,30,29,.60)` | `rgba(245,244,237,.45)` | 4.31 / 3.98 | The resting border of an input, select, checkbox or secondary button. Clears the 3:1 of WCAG 1.4.11 in both themes. |
-| `--color-overlay-scrim` | `rgba(20,20,19,.45)` | `rgba(0,0,0,.62)` | — | Behind a dialog. |
-| `--shadow-overlay` | `0 8px 24px rgba(20,20,19,.16)` | `0 8px 24px rgba(0,0,0,.50)` | — | Dialogs and menus only, over `--color-overlay-scrim`. Cards, tables and banners cast nothing. |
+| Token                    | Light                           | Dark                         | Worst-bg ratio | Role                                                                                                                |
+| ------------------------ | ------------------------------- | ---------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `--color-ground`         | `#FAF9F5`                       | `#1A1918`                    | —              | Page. Never `#FFFFFF` in light.                                                                                     |
+| `--color-surface`        | `#FFFFFF`                       | `#262624`                    | —              | Cards, panels, table bodies.                                                                                        |
+| `--color-surface-hover`  | `rgba(115,114,108,.10)`         | `rgba(245,244,237,.08)`      | —              | Row hover _and_ selected row. Selection is a state, so it lives here and not on the accent.                         |
+| `--color-rule`           | `rgba(31,30,29,.15)`            | `rgba(245,244,237,.12)`      | —              | Default 1px border and divider. Decorative, not a control boundary.                                                 |
+| `--color-rule-strong`    | `rgba(31,30,29,.30)`            | `rgba(245,244,237,.26)`      | —              | Table head underline, section edge. Not an input border: it composites to 1.90 light and 2.25 dark.                 |
+| `--color-control-border` | `rgba(31,30,29,.60)`            | `rgba(245,244,237,.45)`      | 4.31 / 3.98    | The resting border of an input, select, checkbox or secondary button. Clears the 3:1 of WCAG 1.4.11 in both themes. |
+| `--color-overlay-scrim`  | `rgba(20,20,19,.45)`            | `rgba(0,0,0,.62)`            | —              | Behind a dialog.                                                                                                    |
+| `--shadow-overlay`       | `0 8px 24px rgba(20,20,19,.16)` | `0 8px 24px rgba(0,0,0,.50)` | —              | Dialogs and menus only, over `--color-overlay-scrim`. Cards, tables and banners cast nothing.                       |
 
 ## Colour — text, fixed
 
@@ -72,12 +72,12 @@ Each ratio is the worse of the token on `--color-ground` and on
 for text at 12px and above, and below 12px nothing lighter than
 `--color-text-secondary` is used.
 
-| Token | Light | Worst bg | Dark | Worst bg | Role |
-| --- | --- | --- | --- | --- | --- |
-| `--color-text` | `#141413` | 17.50 | `#F5F4ED` | 13.75 | Figures, names, headings. |
-| `--color-text-secondary` | `#4D4C48` | 8.16 | `#C2C0B6` | 8.31 | Body copy inside a banner or card; any text below 12px. |
-| `--color-text-muted` | `#73726C` | 4.58 | `#9C9A92` | 5.38 | Labels, units, column heads, unpriced rows. 12px and up only. |
-| `--color-text-inverse` | `#FAF9F5` | 17.50 | `#141413` | 16.72 | On a solid `--color-text` fill, the one non-accent fill in the system: `#FAF9F5` on `#141413` light, `#141413` on `#F5F4ED` dark. |
+| Token                    | Light     | Worst bg | Dark      | Worst bg | Role                                                                                                                              |
+| ------------------------ | --------- | -------- | --------- | -------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `--color-text`           | `#141413` | 17.50    | `#F5F4ED` | 13.75    | Figures, names, headings.                                                                                                         |
+| `--color-text-secondary` | `#4D4C48` | 8.16     | `#C2C0B6` | 8.31     | Body copy inside a banner or card; any text below 12px.                                                                           |
+| `--color-text-muted`     | `#73726C` | 4.58     | `#9C9A92` | 5.38     | Labels, units, column heads, unpriced rows. 12px and up only.                                                                     |
+| `--color-text-inverse`   | `#FAF9F5` | 17.50    | `#141413` | 16.72    | On a solid `--color-text` fill, the one non-accent fill in the system: `#FAF9F5` on `#141413` light, `#141413` on `#F5F4ED` dark. |
 
 ## Colour — accent, derived from a seed
 
@@ -91,14 +91,14 @@ within a few hundredths of each other at any given tone — but they are not
 identical, and a seed outside the preset set can fall outside the ranges below.
 Both tables give the spread.
 
-| Token | Light | Dark | Role |
-| --- | --- | --- | --- |
-| `--color-accent-fill` | tone 60 | tone 60 | Primary button, active nav underline, primary chart series, focus ring. |
-| `--color-accent-on-fill` | tone 10 | tone 10 | Text and icons on `--color-accent-fill`. |
-| `--color-accent-text` | tone 40 | tone 80 | Links and accent-coloured text on the ground. |
-| `--color-accent-border` | tone 50 | tone 50 | 1px edge on every accent fill, and the focused control's border. |
-| `--color-accent-subtle` | tone 95 | tone 20 | The quiet accent panel, and nothing else. Not selection: that is `--color-surface-hover`. |
-| `--accent-seed` | the raw hex, stored | the raw hex, stored | Shown in the settings field. Never painted, so it is not a `--color-*` token. |
+| Token                    | Light               | Dark                | Role                                                                                      |
+| ------------------------ | ------------------- | ------------------- | ----------------------------------------------------------------------------------------- |
+| `--color-accent-fill`    | tone 60             | tone 60             | Primary button, active nav underline, primary chart series, focus ring.                   |
+| `--color-accent-on-fill` | tone 10             | tone 10             | Text and icons on `--color-accent-fill`.                                                  |
+| `--color-accent-text`    | tone 40             | tone 80             | Links and accent-coloured text on the ground.                                             |
+| `--color-accent-border`  | tone 50             | tone 50             | 1px edge on every accent fill, and the focused control's border.                          |
+| `--color-accent-subtle`  | tone 95             | tone 20             | The quiet accent panel, and nothing else. Not selection: that is `--color-surface-hover`. |
+| `--accent-seed`          | the raw hex, stored | the raw hex, stored | Shown in the settings field. Never painted, so it is not a `--color-*` token.             |
 
 ### The six presets, resolved
 
@@ -107,36 +107,36 @@ default and is not a special case: its seed goes through the same call as any
 other. The last row is not a preset — it is the worst out-of-sample seed found,
 and it is here because it breaks a bound.
 
-| Preset | Seed | fill 60 | on-fill 10 | text 40 | text 80 | border 50 | subtle 95 | subtle 20 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Clay | `#D97757` | `#DA7453` | `#390B00` | `#9B4427` | `#FFB59E` | `#BA5C3D` | `#FFEDE8` | `#5D1800` |
-| Blue | `#6A9BCC` | `#4A96D8` | `#001D34` | `#00629E` | `#99CBFF` | `#287CBC` | `#E8F1FF` | `#003355` |
-| Olive | `#788C5D` | `#759C42` | `#102000` | `#456813` | `#A9D472` | `#5C822B` | `#D3FF99` | `#1F3700` |
-| Aqua | `#2E9191` | `#00A1A1` | `#002020` | `#006A6A` | `#4CDADA` | `#008585` | `#ADFFFE` | `#003737` |
-| Violet | `#6B4D9E` | `#A181D8` | `#270058` | `#6D4EA1` | `#D5BBFF` | `#8667BC` | `#F7EDFF` | `#3D1C70` |
-| Fig | `#C46686` | `#D57193` | `#3E001D` | `#984061` | `#FFB1C8` | `#B75879` | `#FFECEF` | `#5E1132` |
-| (out-of-sample) | `#FFFF00` | `#969600` | `#1D1D00` | `#626200` | `#CDCD00` | `#7B7B00` | `#F9F900` | `#323200` |
+| Preset          | Seed      | fill 60   | on-fill 10 | text 40   | text 80   | border 50 | subtle 95 | subtle 20 |
+| --------------- | --------- | --------- | ---------- | --------- | --------- | --------- | --------- | --------- |
+| Clay            | `#D97757` | `#DA7453` | `#390B00`  | `#9B4427` | `#FFB59E` | `#BA5C3D` | `#FFEDE8` | `#5D1800` |
+| Blue            | `#6A9BCC` | `#4A96D8` | `#001D34`  | `#00629E` | `#99CBFF` | `#287CBC` | `#E8F1FF` | `#003355` |
+| Olive           | `#788C5D` | `#759C42` | `#102000`  | `#456813` | `#A9D472` | `#5C822B` | `#D3FF99` | `#1F3700` |
+| Aqua            | `#2E9191` | `#00A1A1` | `#002020`  | `#006A6A` | `#4CDADA` | `#008585` | `#ADFFFE` | `#003737` |
+| Violet          | `#6B4D9E` | `#A181D8` | `#270058`  | `#6D4EA1` | `#D5BBFF` | `#8667BC` | `#F7EDFF` | `#3D1C70` |
+| Fig             | `#C46686` | `#D57193` | `#3E001D`  | `#984061` | `#FFB1C8` | `#B75879` | `#FFECEF` | `#5E1132` |
+| (out-of-sample) | `#FFFF00` | `#969600` | `#1D1D00`  | `#626200` | `#CDCD00` | `#7B7B00` | `#F9F900` | `#323200` |
 
 ### The same seeds, measured
 
 WCAG 2.x ratios. Accent tones are specified against the page, so these are
 measured against the ground: Ivory `#FAF9F5` in light, `#1A1918` in dark.
 
-| Preset | fill/on | 60 on Ivory | 60 on dark | 40 on Ivory | 80 on dark | 50 on Ivory | 50 on dark |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Clay | 5.41 | 3.02 | 5.52 | 6.13 | 10.33 | 4.25 | 3.92 |
-| Blue | 5.42 | 3.00 | 5.56 | 6.15 | 10.32 | 4.24 | 3.93 |
-| Olive | 5.36 | 3.02 | 5.51 | 6.15 | 10.32 | 4.26 | 3.92 |
-| Aqua | 5.39 | 3.01 | 5.53 | 6.10 | 10.32 | 4.25 | 3.92 |
-| Violet | 5.42 | 3.00 | 5.56 | 6.12 | 10.35 | 4.26 | 3.91 |
-| Fig | 5.41 | 3.01 | 5.53 | 6.15 | 10.35 | 4.25 | 3.92 |
-| (out-of-sample) `#FFFF00` | 5.42 | 2.99 | 5.57 | 6.10 | 10.31 | 4.26 | 3.91 |
+| Preset                    | fill/on | 60 on Ivory | 60 on dark | 40 on Ivory | 80 on dark | 50 on Ivory | 50 on dark |
+| ------------------------- | ------- | ----------- | ---------- | ----------- | ---------- | ----------- | ---------- |
+| Clay                      | 5.41    | 3.02        | 5.52       | 6.13        | 10.33      | 4.25        | 3.92       |
+| Blue                      | 5.42    | 3.00        | 5.56       | 6.15        | 10.32      | 4.24        | 3.93       |
+| Olive                     | 5.36    | 3.02        | 5.51       | 6.15        | 10.32      | 4.26        | 3.92       |
+| Aqua                      | 5.39    | 3.01        | 5.53       | 6.10        | 10.32      | 4.25        | 3.92       |
+| Violet                    | 5.42    | 3.00        | 5.56       | 6.12        | 10.35      | 4.26        | 3.91       |
+| Fig                       | 5.41    | 3.01        | 5.53       | 6.15        | 10.35      | 4.25        | 3.92       |
+| (out-of-sample) `#FFFF00` | 5.42    | 2.99        | 5.57       | 6.10        | 10.31      | 4.26        | 3.91       |
 
 ### Three numbers to know before using these
 
 **Tone 60 against the ground measures 3.00 to 3.02 across the presets, and 2.99
 for a fully saturated yellow seed.** So an accent fill never carries its own
-boundary. *Every* accent fill takes a 1px `--color-accent-border`, whatever it
+boundary. _Every_ accent fill takes a 1px `--color-accent-border`, whatever it
 sits on — not only the ones that sit on the ground.
 
 **Tone 50 measures 4.24 to 4.26 on Ivory and 3.91 to 3.93 on the dark ground**
@@ -171,28 +171,28 @@ Every `-bg` is its family's base at 12% and every `-border` is that base at 32%,
 in both themes, with no exceptions. Text ratios are the worse of ground and
 surface.
 
-| Family | Token | Light | Worst bg | Dark | Worst bg |
-| --- | --- | --- | --- | --- | --- |
-| Success | `--color-ok-base` | `#558A42` | 3.91 | `#8FBF6A` | 7.10 |
-| Success | `--color-ok-text` | `#4A7A38` | 4.82 | `#8FBF6A` | 7.10 |
-| Success | `--color-ok-bg` | ok-base / 12% | — | ok-base / 12% | — |
-| Success | `--color-ok-border` | ok-base / 32% | — | ok-base / 32% | — |
-| Warning | `--color-warn-base` | `#C9A82D` | 2.19 | `#E0C35A` | 8.75 |
-| Warning | `--color-warn-text` | `#8A6D0F` | 4.66 | `#E0C35A` | 8.75 |
-| Warning | `--color-warn-bg` | warn-base / 12% | — | warn-base / 12% | — |
-| Warning | `--color-warn-border` | warn-base / 32% | — | warn-base / 32% | — |
-| Error | `--color-bad-base` | `#B3332B` | 5.82 | `#F08A7E` | 6.24 |
-| Error | `--color-bad-text` | `#B3332B` | 5.82 | `#F08A7E` | 6.24 |
-| Error | `--color-bad-bg` | bad-base / 12% | — | bad-base / 12% | — |
-| Error | `--color-bad-border` | bad-base / 32% | — | bad-base / 32% | — |
-| Info | `--color-info-base` | `#2A78D6` | 4.19 | `#7FB0E8` | 6.70 |
-| Info | `--color-info-text` | `#1F5FAD` | 6.04 | `#7FB0E8` | 6.70 |
-| Info | `--color-info-bg` | info-base / 12% | — | info-base / 12% | — |
-| Info | `--color-info-border` | info-base / 32% | — | info-base / 32% | — |
-| Neutral | `--color-quiet-base` | `#73726C` | 4.58 | `#B0AEA5` | 6.82 |
-| Neutral | `--color-quiet-text` | `#5E5D59` | 6.26 | `#B0AEA5` | 6.82 |
-| Neutral | `--color-quiet-bg` | quiet-base / 12% | — | quiet-base / 12% | — |
-| Neutral | `--color-quiet-border` | quiet-base / 32% | — | quiet-base / 32% | — |
+| Family  | Token                  | Light            | Worst bg | Dark             | Worst bg |
+| ------- | ---------------------- | ---------------- | -------- | ---------------- | -------- |
+| Success | `--color-ok-base`      | `#558A42`        | 3.91     | `#8FBF6A`        | 7.10     |
+| Success | `--color-ok-text`      | `#4A7A38`        | 4.82     | `#8FBF6A`        | 7.10     |
+| Success | `--color-ok-bg`        | ok-base / 12%    | —        | ok-base / 12%    | —        |
+| Success | `--color-ok-border`    | ok-base / 32%    | —        | ok-base / 32%    | —        |
+| Warning | `--color-warn-base`    | `#C9A82D`        | 2.19     | `#E0C35A`        | 8.75     |
+| Warning | `--color-warn-text`    | `#8A6D0F`        | 4.66     | `#E0C35A`        | 8.75     |
+| Warning | `--color-warn-bg`      | warn-base / 12%  | —        | warn-base / 12%  | —        |
+| Warning | `--color-warn-border`  | warn-base / 32%  | —        | warn-base / 32%  | —        |
+| Error   | `--color-bad-base`     | `#B3332B`        | 5.82     | `#F08A7E`        | 6.24     |
+| Error   | `--color-bad-text`     | `#B3332B`        | 5.82     | `#F08A7E`        | 6.24     |
+| Error   | `--color-bad-bg`       | bad-base / 12%   | —        | bad-base / 12%   | —        |
+| Error   | `--color-bad-border`   | bad-base / 32%   | —        | bad-base / 32%   | —        |
+| Info    | `--color-info-base`    | `#2A78D6`        | 4.19     | `#7FB0E8`        | 6.70     |
+| Info    | `--color-info-text`    | `#1F5FAD`        | 6.04     | `#7FB0E8`        | 6.70     |
+| Info    | `--color-info-bg`      | info-base / 12%  | —        | info-base / 12%  | —        |
+| Info    | `--color-info-border`  | info-base / 32%  | —        | info-base / 32%  | —        |
+| Neutral | `--color-quiet-base`   | `#73726C`        | 4.58     | `#B0AEA5`        | 6.82     |
+| Neutral | `--color-quiet-text`   | `#5E5D59`        | 6.26     | `#B0AEA5`        | 6.82     |
+| Neutral | `--color-quiet-bg`     | quiet-base / 12% | —        | quiet-base / 12% | —        |
+| Neutral | `--color-quiet-border` | quiet-base / 32% | —        | quiet-base / 32% | —        |
 
 ### Colour is never the only carrier
 
@@ -208,11 +208,11 @@ identifier, because this is a product about machine output and a figure that
 shifts column as it changes width is a figure nobody trusts. Sans carries prose.
 Serif appears on the marketing site and nowhere in the dashboard.
 
-| Token | Stack | How it is served |
-| --- | --- | --- |
-| `--font-mono` | `'JetBrains Mono', ui-monospace, 'SF Mono', Monaco, monospace` | SIL OFL 1.1, self-hosted from the Google Fonts files. |
-| `--font-sans` | `'Instrument Sans', system-ui, 'Segoe UI', Helvetica, Arial, sans-serif` | SIL OFL 1.1, self-hosted from the Google Fonts files. |
-| `--font-serif` | `Georgia, 'Times New Roman', serif` | System faces. Nothing is served for the serif step. |
+| Token          | Stack                                                                    | How it is served                                      |
+| -------------- | ------------------------------------------------------------------------ | ----------------------------------------------------- |
+| `--font-mono`  | `'JetBrains Mono', ui-monospace, 'SF Mono', Monaco, monospace`           | SIL OFL 1.1, self-hosted from the Google Fonts files. |
+| `--font-sans`  | `'Instrument Sans', system-ui, 'Segoe UI', Helvetica, Arial, sans-serif` | SIL OFL 1.1, self-hosted from the Google Fonts files. |
+| `--font-serif` | `Georgia, 'Times New Roman', serif`                                      | System faces. Nothing is served for the serif step.   |
 
 Anthropic Mono, Anthropic Sans and Anthropic Serif may replace the first entry
 of each stack in any deployment licensed for them; no other value changes, and
@@ -220,18 +220,18 @@ the metrics of the stacks above are what the layout is built on.
 
 ### The scale
 
-| Step | Family | Size / line-height / weight | Letter-spacing | Example use |
-| --- | --- | --- | --- | --- |
-| figure-xl | mono | 34 / 1.1 / 700 | -.02em | `$1,284.60` |
-| figure-lg | mono | 20 / 1.2 / 700 | 0 | `14,802` |
-| figure | mono | 13 / 1.4 / 400 | 0 | `$418.02 · 1,204 Turns` |
-| label | mono | 11 / 1.3 / 500 | .08em, caps | `ESTIMATED COST / SEPTEMBER` |
-| micro | mono | 10 / 1.3 / 400 | .08em | `41 Turns unpriced` |
-| heading-lg | sans | 20 / 1.3 / 600 | 0 | `Members` |
-| heading | sans | 15 / 1.35 / 600 | 0 | `Org logo` |
-| body | sans | 14 / 1.5 / 400 | 0 | Prose in a banner or a card. |
-| caption | sans | 12 / 1.4 / 400 | 0 | `SVG or PNG, transparent, square, at least 128px.` |
-| display | serif | 38 / 1.15 / 400 | 0 | Marketing headline only. |
+| Step       | Family | Size / line-height / weight | Letter-spacing | Example use                                        |
+| ---------- | ------ | --------------------------- | -------------- | -------------------------------------------------- |
+| figure-xl  | mono   | 34 / 1.1 / 700              | -.02em         | `$1,284.60`                                        |
+| figure-lg  | mono   | 20 / 1.2 / 700              | 0              | `14,802`                                           |
+| figure     | mono   | 13 / 1.4 / 400              | 0              | `$418.02 · 1,204 Turns`                            |
+| label      | mono   | 11 / 1.3 / 500              | .08em, caps    | `ESTIMATED COST / SEPTEMBER`                       |
+| micro      | mono   | 10 / 1.3 / 400              | .08em          | `41 Turns unpriced`                                |
+| heading-lg | sans   | 20 / 1.3 / 600              | 0              | `Members`                                          |
+| heading    | sans   | 15 / 1.35 / 600             | 0              | `Org logo`                                         |
+| body       | sans   | 14 / 1.5 / 400              | 0              | Prose in a banner or a card.                       |
+| caption    | sans   | 12 / 1.4 / 400              | 0              | `SVG or PNG, transparent, square, at least 128px.` |
+| display    | serif  | 38 / 1.15 / 400             | 0              | Marketing headline only.                           |
 
 Letter-spacing is 0 everywhere except three steps: label and micro at .08em, and
 figure-xl at -.02em. Numerals sit on `font-variant-numeric: tabular-nums`
@@ -242,16 +242,16 @@ wherever digits stack in a column.
 A 4px base. Eight steps — 4, 8, 12, 16, 20, 24, 32, 48 — and a layout that needs
 a ninth is a layout to revisit.
 
-| Token | Value | Role |
-| --- | --- | --- |
-| `--spacing` | 0.25rem (4px) | Tailwind's base multiplier. Every step below is a multiple of it. |
-| 1 · 2 · 3 | 4px · 8px · 12px | Inside a control: icon gap, label gap, input padding. |
-| 4 · 5 · 6 | 16px · 20px · 24px | Card padding, gaps between cards, table cell padding. |
-| 8 · 12 | 32px · 48px | Between sections, and above a page heading. |
-| `--radius-sm` | 2px | Badges, chart bar caps. |
-| `--radius-md` | 4px | Everything else: buttons, inputs, cards, banners. |
-| `--radius-full` | 9999px | Avatars only. |
-| `--control-h` | 36px pointer / 44px at phone width | Every control's height. No component sets its own. Not a Tailwind namespace, so it is a plain custom property read through `var()`. |
+| Token           | Value                              | Role                                                                                                                                |
+| --------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `--spacing`     | 0.25rem (4px)                      | Tailwind's base multiplier. Every step below is a multiple of it.                                                                   |
+| 1 · 2 · 3       | 4px · 8px · 12px                   | Inside a control: icon gap, label gap, input padding.                                                                               |
+| 4 · 5 · 6       | 16px · 20px · 24px                 | Card padding, gaps between cards, table cell padding.                                                                               |
+| 8 · 12          | 32px · 48px                        | Between sections, and above a page heading.                                                                                         |
+| `--radius-sm`   | 2px                                | Badges, chart bar caps.                                                                                                             |
+| `--radius-md`   | 4px                                | Everything else: buttons, inputs, cards, banners.                                                                                   |
+| `--radius-full` | 9999px                             | Avatars only.                                                                                                                       |
+| `--control-h`   | 36px pointer / 44px at phone width | Every control's height. No component sets its own. Not a Tailwind namespace, so it is a plain custom property read through `var()`. |
 
 Focus is a 3px outline in `--color-accent-fill` at full strength with a 1px
 offset, plus `--color-accent-border` on the control itself. At full strength the
@@ -273,68 +273,75 @@ The repo has no Tailwind dependency and no such file yet. Ticket 20 adds
 need, and `apps/web/app/globals.css`, which is where the block below lands.
 
 ```css
-@import "tailwindcss";
+@import 'tailwindcss';
 
 /* dark: must follow BOTH the system preference and a forced data-theme.
    Tailwind's built-in dark: variant is prefers-color-scheme only, so a
    Member who forces light would get dark components on a light ground. */
 @custom-variant dark {
   @media (prefers-color-scheme: dark) {
-    &:where(:root:not([data-theme="light"]), :root:not([data-theme="light"]) *) { @slot; }
+    &:where(
+      :root:not([data-theme='light']),
+      :root:not([data-theme='light']) *
+    ) {
+      @slot;
+    }
   }
-  &:where([data-theme="dark"], [data-theme="dark"] *) { @slot; }
+  &:where([data-theme='dark'], [data-theme='dark'] *) {
+    @slot;
+  }
 }
 
 /* `static` because several tokens (--control-h, the accent set) are read
    through hand-written var() rather than through a generated utility, and
    Tailwind otherwise emits only the theme variables it sees used. */
 @theme static {
-  --color-ground:           #FAF9F5;
-  --color-surface:          #FFFFFF;
-  --color-text:             #141413;
-  --color-text-muted:       #73726C;
-  --color-control-border:   rgba(31,30,29,.60);
-  --color-ok-base:          #558A42;
+  --color-ground: #faf9f5;
+  --color-surface: #ffffff;
+  --color-text: #141413;
+  --color-text-muted: #73726c;
+  --color-control-border: rgba(31, 30, 29, 0.6);
+  --color-ok-base: #558a42;
   /* ...the rest of the fixed set... */
 
   /* the derived half, pointed at the properties the server writes inline */
-  --color-accent-fill:      var(--accent-fill);
-  --color-accent-on-fill:   var(--accent-on-fill);
-  --color-accent-border:    var(--accent-border);
-  --color-accent-text:      var(--accent-text);
-  --color-accent-subtle:    var(--accent-subtle);
+  --color-accent-fill: var(--accent-fill);
+  --color-accent-on-fill: var(--accent-on-fill);
+  --color-accent-border: var(--accent-border);
+  --color-accent-text: var(--accent-text);
+  --color-accent-subtle: var(--accent-subtle);
 }
 
 :root {
   color-scheme: light;
-  --accent-text:   var(--accent-text-light);
+  --accent-text: var(--accent-text-light);
   --accent-subtle: var(--accent-subtle-light);
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root:not([data-theme='light']) {
     color-scheme: dark;
-    --color-ground:         #1A1918;
-    --color-surface:        #262624;
-    --color-text:           #F5F4ED;
-    --color-text-muted:     #9C9A92;
-    --color-control-border: rgba(245,244,237,.45);
-    --color-ok-base:        #8FBF6A;
-    --accent-text:          var(--accent-text-dark);
-    --accent-subtle:        var(--accent-subtle-dark);
+    --color-ground: #1a1918;
+    --color-surface: #262624;
+    --color-text: #f5f4ed;
+    --color-text-muted: #9c9a92;
+    --color-control-border: rgba(245, 244, 237, 0.45);
+    --color-ok-base: #8fbf6a;
+    --accent-text: var(--accent-text-dark);
+    --accent-subtle: var(--accent-subtle-dark);
   }
 }
 
-:root[data-theme="dark"] {
+:root[data-theme='dark'] {
   color-scheme: dark;
-  --color-ground:         #1A1918;
-  --color-surface:        #262624;
-  --color-text:           #F5F4ED;
-  --color-text-muted:     #9C9A92;
-  --color-control-border: rgba(245,244,237,.45);
-  --color-ok-base:        #8FBF6A;
-  --accent-text:          var(--accent-text-dark);
-  --accent-subtle:        var(--accent-subtle-dark);
+  --color-ground: #1a1918;
+  --color-surface: #262624;
+  --color-text: #f5f4ed;
+  --color-text-muted: #9c9a92;
+  --color-control-border: rgba(245, 244, 237, 0.45);
+  --color-ok-base: #8fbf6a;
+  --accent-text: var(--accent-text-dark);
+  --accent-subtle: var(--accent-subtle-dark);
 }
 ```
 
@@ -352,21 +359,23 @@ themes go in under their own names and the two that differ go in twice, under a
 stylesheet above, not the inline style, picks between each pair.
 
 ```html
-<html data-theme="dark"
-      style="--accent-fill:#DA7453;
+<html
+  data-theme="dark"
+  style="--accent-fill:#DA7453;
              --accent-on-fill:#390B00;
              --accent-border:#BA5C3D;
              --accent-text-light:#9B4427;
              --accent-text-dark:#FFB59E;
              --accent-subtle-light:#FFEDE8;
-             --accent-subtle-dark:#5D1800">
+             --accent-subtle-dark:#5D1800"
+></html>
 ```
 
 The five painted values are computed once when a seed is saved and stored beside
 it, not recomputed per request and not computed in the browser. `data-theme` is
 written by the server on the `<html>` element for a signed-in Member whose
 stored preference is light or dark; for a signed-out visitor, and for the
-*system* preference, no attribute is written and the media query decides, so
+_system_ preference, no attribute is written and the media query decides, so
 nothing has to run before first paint.
 
 ## Component inventory
@@ -384,11 +393,11 @@ implements the unpriced state, and every component that renders fetched data
 implements loading, empty and error. A component that cannot be empty says so
 explicitly.
 
-| State | Rule |
-| --- | --- |
-| Loading | A skeleton in the shape of the content, never a spinner. A spinner appears in one place only: inside a button that is submitting. |
-| Empty | Headline, one sentence, and the action that ends it. A new Org's empty dashboard tells the Owner to install the Collector. |
-| Error | What failed, in the reader's terms, and a retry. Never a status code alone. |
+| State    | Rule                                                                                                                                              |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Loading  | A skeleton in the shape of the content, never a spinner. A spinner appears in one place only: inside a button that is submitting.                 |
+| Empty    | Headline, one sentence, and the action that ends it. A new Org's empty dashboard tells the Owner to install the Collector.                        |
+| Error    | What failed, in the reader's terms, and a retry. Never a status code alone.                                                                       |
 | Unpriced | Counted and labelled, wherever a Cost is rendered. A Turn whose model has no Rate is excluded from the total and said so, never rendered as zero. |
 
 **Cost never appears alone.** Tickets 18 and 52 both require token counts beside
@@ -406,64 +415,64 @@ which is what makes the derived half of the token system buildable.
 
 ### Frame — 5
 
-| Component | Parts | States and variants | First needed |
-| --- | --- | --- | --- |
-| AppBar | Org mark, divider, sessclone wordmark, nav items, account menu | Nav filtered by Role, with the Platform Admin entry gated on the platform flag rather than on any Role, since a Platform Admin holds no Role inside an Org. Active item carries an accent underline, not a fill. Collapses to a menu button under 700px. | 45 |
-| PageHeader | Title, one-line description, action slot, control slot | With and without controls. The date-range control mounts in the control slot rather than floating in the page. | 45 |
-| AccountMenu | Avatar, name, Org name, Role badge, appearance link, sign out | Open, closed. Keyboard-navigable; Escape closes and returns focus. Ticket 27 signs out from a bare page with no shell around it; the menu itself arrives with the shell at 45. | 45 |
-| AdminBar | A band above the AppBar, platform-admin navigation | Platform Admin only. Visually distinct so a Platform Admin is never unsure whether they are acting on the deployment or on an Org. Carries the nav for the admin pages ticket 62 opens. | 62 |
-| OrgMark | Uploaded logo, or the Org initial on `--color-quiet-bg` | 20px nav, 32px sign-in, 24px email, the same 20/24/32 scale as Avatar. Never recoloured, cropped or stretched. Sits on its own tile so a dark logo survives the dark theme. The invite email itself is ticket 49's; the mark is the only piece this inventory shares with it. | 77 |
+| Component   | Parts                                                          | States and variants                                                                                                                                                                                                                                                           | First needed |
+| ----------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| AppBar      | Org mark, divider, sessclone wordmark, nav items, account menu | Nav filtered by Role, with the Platform Admin entry gated on the platform flag rather than on any Role, since a Platform Admin holds no Role inside an Org. Active item carries an accent underline, not a fill. Collapses to a menu button under 700px.                      | 45           |
+| PageHeader  | Title, one-line description, action slot, control slot         | With and without controls. The date-range control mounts in the control slot rather than floating in the page.                                                                                                                                                                | 45           |
+| AccountMenu | Avatar, name, Org name, Role badge, appearance link, sign out  | Open, closed. Keyboard-navigable; Escape closes and returns focus. Ticket 27 signs out from a bare page with no shell around it; the menu itself arrives with the shell at 45.                                                                                                | 45           |
+| AdminBar    | A band above the AppBar, platform-admin navigation             | Platform Admin only. Visually distinct so a Platform Admin is never unsure whether they are acting on the deployment or on an Org. Carries the nav for the admin pages ticket 62 opens.                                                                                       | 62           |
+| OrgMark     | Uploaded logo, or the Org initial on `--color-quiet-bg`        | 20px nav, 32px sign-in, 24px email, the same 20/24/32 scale as Avatar. Never recoloured, cropped or stretched. Sits on its own tile so a dark logo survives the dark theme. The invite email itself is ticket 49's; the mark is the only piece this inventory shares with it. | 77           |
 
 ### Data display — 8
 
-| Component | Parts | States and variants | First needed |
-| --- | --- | --- | --- |
-| Figure | Label, value, footnote | Sizes xl and lg. Loading, empty and error. Renders a CostWithTokens for its value and owns no cost logic of its own, so the unpriced rule lives in exactly one place. | 52 |
-| CostWithTokens | Money, then token counts by class | Inline and stacked. Unknown-cost variant reads "unpriced" and keeps the counts. | 52 |
-| DataTable | Head, rows, numeric columns, optional selection column, bulk action, footer | Loading skeleton, empty, error, sorted, hover, row link, and row selection with one bulk action — ticket 73 deletes Log Artifacts one Session at a time or a whole Project at once. Numerics right-aligned on tabular figures. Unpriced rows use the neutral tokens, never a status colour. | 28 |
-| Pagination | Range text, previous, next | First page, last page, single page hides the control. | 28 |
-| EntityCell | Leading slot, name, secondary line | Member, Project, Device. A Member leads with an Avatar; a Project and a Device lead with a monogram tile, since only an Org has a mark. Device shows its nickname with its identity beneath. | 46 |
-| ChartFrame | Title, direct series labels, plot, axes, hover readout, caveat line | Loading, empty, error, partial-bucket, unpriced annotation. Series colours below. | 52 |
-| CodeBlock | Command text, copy button | One line and multi-line. Copied confirmation. Used by the Collector install path. | 45 |
-| SecretField | Full value at creation, prefix afterwards, copy | Ticket 28 stores only a hash and a short prefix, so the full value is shown once at creation and only the prefix exists afterwards. There is no reveal control — there is nothing to reveal. Copy is the primary action at creation, because the value will not be shown again. | 28 |
+| Component      | Parts                                                                       | States and variants                                                                                                                                                                                                                                                                         | First needed |
+| -------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| Figure         | Label, value, footnote                                                      | Sizes xl and lg. Loading, empty and error. Renders a CostWithTokens for its value and owns no cost logic of its own, so the unpriced rule lives in exactly one place.                                                                                                                       | 52           |
+| CostWithTokens | Money, then token counts by class                                           | Inline and stacked. Unknown-cost variant reads "unpriced" and keeps the counts.                                                                                                                                                                                                             | 52           |
+| DataTable      | Head, rows, numeric columns, optional selection column, bulk action, footer | Loading skeleton, empty, error, sorted, hover, row link, and row selection with one bulk action — ticket 73 deletes Log Artifacts one Session at a time or a whole Project at once. Numerics right-aligned on tabular figures. Unpriced rows use the neutral tokens, never a status colour. | 28           |
+| Pagination     | Range text, previous, next                                                  | First page, last page, single page hides the control.                                                                                                                                                                                                                                       | 28           |
+| EntityCell     | Leading slot, name, secondary line                                          | Member, Project, Device. A Member leads with an Avatar; a Project and a Device lead with a monogram tile, since only an Org has a mark. Device shows its nickname with its identity beneath.                                                                                                | 46           |
+| ChartFrame     | Title, direct series labels, plot, axes, hover readout, caveat line         | Loading, empty, error, partial-bucket, unpriced annotation. Series colours below.                                                                                                                                                                                                           | 52           |
+| CodeBlock      | Command text, copy button                                                   | One line and multi-line. Copied confirmation. Used by the Collector install path.                                                                                                                                                                                                           | 45           |
+| SecretField    | Full value at creation, prefix afterwards, copy                             | Ticket 28 stores only a hash and a short prefix, so the full value is shown once at creation and only the prefix exists afterwards. There is no reveal control — there is nothing to reveal. Copy is the primary action at creation, because the value will not be shown again.             | 28           |
 
 ### Controls — 13
 
-| Component | Parts | States and variants | First needed |
-| --- | --- | --- | --- |
-| Button | Label, optional icon | Primary, secondary, ghost, danger. Sizes sm and md. Hover, focus, disabled, submitting, icon-only with an aria-label. | 26 |
-| TextLink | Text | An `<a href>` in accent text, for anything that navigates. Named so nobody reaches for a button plus a router call. | 26 |
-| SegmentedControl | Two to four options | Light, dark or system, and nothing else. Selected segment takes the accent fill. | 77 |
-| DateRangeControl | Preset list, custom range, applied summary | Preset selected, custom open, invalid range. Reads and writes the URL so a view is shareable, and resolves in the Org's timezone. Built once; every breakdown inherits it. | 53 |
-| Select | Trigger, listbox | Open, closed, disabled, no-options. Native under the hood. First used to pick a Role when inviting, then for the retention window an Owner chooses under the Tier ceiling in ticket 61. | 49 |
-| TextField | Label, input, hint, error | Default, focused, invalid, disabled, read-only. The label is a real `<label>`; the error is announced, not merely coloured. | 27 |
-| Switch | Track, thumb, label, description | Archival opt-in, the Org's appearance lock, and ticket 65's per-Tier capability toggles. Off is always the safe value. | 72 |
-| Checkbox | Box, label | Checked, unchecked, indeterminate, disabled. Per-project archival exclusions. | 72 |
-| SeedPicker | Six preset swatches, custom swatch, hex field, live preview | Preset selected, custom seed, invalid hex, locked by the Org. Each swatch is a real button with an aria-label. | 77 |
-| FileDrop | Drop target, current file, replace | Empty, holding a file, rejected format, too small, uploading. The Org logo only. | 77 |
-| Form | Fieldset, fields, error summary, submit row | Idle, submitting, field-invalid, submission-failed. Composes TextField, Select and DateField into something submittable, so every editable surface uses one thing rather than wiring inputs by hand. | 27 |
-| DateField | Label, native date input, hint | One date, not a range: effective dates on Rates and overrides. Distinct from DateRangeControl, which also reads and writes the URL. | 63 |
-| CopyButton | Icon, confirmation | Idle, copied. Confirmation is text as well as colour. | 45 |
+| Component        | Parts                                                       | States and variants                                                                                                                                                                                  | First needed |
+| ---------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| Button           | Label, optional icon                                        | Primary, secondary, ghost, danger. Sizes sm and md. Hover, focus, disabled, submitting, icon-only with an aria-label.                                                                                | 26           |
+| TextLink         | Text                                                        | An `<a href>` in accent text, for anything that navigates. Named so nobody reaches for a button plus a router call.                                                                                  | 26           |
+| SegmentedControl | Two to four options                                         | Light, dark or system, and nothing else. Selected segment takes the accent fill.                                                                                                                     | 77           |
+| DateRangeControl | Preset list, custom range, applied summary                  | Preset selected, custom open, invalid range. Reads and writes the URL so a view is shareable, and resolves in the Org's timezone. Built once; every breakdown inherits it.                           | 53           |
+| Select           | Trigger, listbox                                            | Open, closed, disabled, no-options. Native under the hood. First used to pick a Role when inviting, then for the retention window an Owner chooses under the Tier ceiling in ticket 61.              | 49           |
+| TextField        | Label, input, hint, error                                   | Default, focused, invalid, disabled, read-only. The label is a real `<label>`; the error is announced, not merely coloured.                                                                          | 27           |
+| Switch           | Track, thumb, label, description                            | Archival opt-in, the Org's appearance lock, and ticket 65's per-Tier capability toggles. Off is always the safe value.                                                                               | 72           |
+| Checkbox         | Box, label                                                  | Checked, unchecked, indeterminate, disabled. Per-project archival exclusions.                                                                                                                        | 72           |
+| SeedPicker       | Six preset swatches, custom swatch, hex field, live preview | Preset selected, custom seed, invalid hex, locked by the Org. Each swatch is a real button with an aria-label.                                                                                       | 77           |
+| FileDrop         | Drop target, current file, replace                          | Empty, holding a file, rejected format, too small, uploading. The Org logo only.                                                                                                                     | 77           |
+| Form             | Fieldset, fields, error summary, submit row                 | Idle, submitting, field-invalid, submission-failed. Composes TextField, Select and DateField into something submittable, so every editable surface uses one thing rather than wiring inputs by hand. | 27           |
+| DateField        | Label, native date input, hint                              | One date, not a range: effective dates on Rates and overrides. Distinct from DateRangeControl, which also reads and writes the URL.                                                                  | 63           |
+| CopyButton       | Icon, confirmation                                          | Idle, copied. Confirmation is text as well as colour.                                                                                                                                                | 45           |
 
 Controls are 36px tall on a pointer and 44px at phone width, both multiples of
 the 4px base. The token is `--control-h`; no component hardcodes a height.
 
 ### Feedback — 5
 
-| Component | Parts | States and variants | First needed |
-| --- | --- | --- | --- |
-| Banner | Icon, title, body, optional action | Info, success, warning, error. Dismissible and permanent. The icon's shape carries the family independently of its colour. | 45 |
-| Badge | Text | Active, inactive, unpriced, and a neutral variant that carries a Role. No trial and no past-due: ticket 48 is manual activation with no payment rail, so nothing could ever set them. | 28 |
-| Dialog | Header, body, footer actions | Confirm, destructive-confirm, and form. A destructive dialog names the object in the button, never "Confirm". Focus trapped, Escape closes, focus returns. | 28 |
-| EmptyState | Headline, one sentence, primary action | Per surface, and a whole-surface variant that tells a deactivated Org it is inactive rather than showing it a broken dashboard (ticket 48). That variant uses the neutral tokens, not a status colour: deactivation is an ordinary state, not a failure. Day-one variants for the dashboard, Members, Projects, Devices, keys and Log Artifacts. | 45 |
-| Skeleton | Blocks matching the content | Figure, table row, chart. Respects `prefers-reduced-motion`; no shimmer when it is set. | 45 |
+| Component  | Parts                                  | States and variants                                                                                                                                                                                                                                                                                                                              | First needed |
+| ---------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------ |
+| Banner     | Icon, title, body, optional action     | Info, success, warning, error. Dismissible and permanent. The icon's shape carries the family independently of its colour.                                                                                                                                                                                                                       | 45           |
+| Badge      | Text                                   | Active, inactive, unpriced, and a neutral variant that carries a Role. No trial and no past-due: ticket 48 is manual activation with no payment rail, so nothing could ever set them.                                                                                                                                                            | 28           |
+| Dialog     | Header, body, footer actions           | Confirm, destructive-confirm, and form. A destructive dialog names the object in the button, never "Confirm". Focus trapped, Escape closes, focus returns.                                                                                                                                                                                       | 28           |
+| EmptyState | Headline, one sentence, primary action | Per surface, and a whole-surface variant that tells a deactivated Org it is inactive rather than showing it a broken dashboard (ticket 48). That variant uses the neutral tokens, not a status colour: deactivation is an ordinary state, not a failure. Day-one variants for the dashboard, Members, Projects, Devices, keys and Log Artifacts. | 45           |
+| Skeleton   | Blocks matching the content            | Figure, table row, chart. Respects `prefers-reduced-motion`; no shimmer when it is set.                                                                                                                                                                                                                                                          | 45           |
 
 ### Identity and authority — 2
 
-| Component | Parts | States and variants | First needed |
-| --- | --- | --- | --- |
-| Avatar | Initial on a warm-grey tile | Sizes 20, 24, 32. No uploaded Member photos in v1, so no image variant to build. | 45 |
-| ScopeSummary | Count, member list, empty case | A Manager's Scope, including the empty Scope that sees nobody, which is a real and confusing state worth designing. | 46 |
+| Component    | Parts                          | States and variants                                                                                                 | First needed |
+| ------------ | ------------------------------ | ------------------------------------------------------------------------------------------------------------------- | ------------ |
+| Avatar       | Initial on a warm-grey tile    | Sizes 20, 24, 32. No uploaded Member photos in v1, so no image variant to build.                                    | 45           |
+| ScopeSummary | Count, member list, empty case | A Manager's Scope, including the empty Scope that sees nobody, which is a real and confusing state worth designing. | 46           |
 
 ### Marketing — 4
 
@@ -473,12 +482,12 @@ for a signed-out visitor, who has no Org and so no seed to apply — but light a
 dark still follow the visitor's own preference, which ticket 77 requires on the
 marketing site too.
 
-| Component | Parts | States and variants | First needed |
-| --- | --- | --- | --- |
-| MarketingFrame | Nav, footer, repository link | Phone through desktop, both themes. | 26 |
-| Hero | Serif headline, sub, install command, primary action | The collection-across-environments claim is the headline, so the CodeBlock is part of the hero rather than below it. | 26 |
-| TierCard | Name, per-seat price, included list, action | Default, highlighted, self-hosted. The self-hosted card is free and says so plainly, because it is the honest path and pretending otherwise costs trust. Ticket 47 reuses it signed in, where the Owner sees the Tier the Org is on. | 26, 47 |
-| ClaimBlock | Heading, prose, supporting visual | Text-left and text-right, alternating. Never more than one accent element per block. | 26 |
+| Component      | Parts                                                | States and variants                                                                                                                                                                                                                  | First needed |
+| -------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------ |
+| MarketingFrame | Nav, footer, repository link                         | Phone through desktop, both themes.                                                                                                                                                                                                  | 26           |
+| Hero           | Serif headline, sub, install command, primary action | The collection-across-environments claim is the headline, so the CodeBlock is part of the hero rather than below it.                                                                                                                 | 26           |
+| TierCard       | Name, per-seat price, included list, action          | Default, highlighted, self-hosted. The self-hosted card is free and says so plainly, because it is the honest path and pretending otherwise costs trust. Ticket 47 reuses it signed in, where the Owner sees the Tier the Org is on. | 26, 47       |
+| ClaimBlock     | Heading, prose, supporting visual                    | Text-left and text-right, alternating. Never more than one accent element per block.                                                                                                                                                 | 26           |
 
 ### Deliberately not on this list
 
@@ -524,10 +533,10 @@ marketing site too.
 
 Two palettes, not one.
 
-| Case | Palette |
-| --- | --- |
-| One series | Uses `--color-accent-fill`. Org Cost over time, a single Member's trend. There is nothing to tell it apart from, so the Member's own accent is fine. |
-| More than one | Uses the fixed palette below and never the accent. It does not change with the seed, the Org or the Member. |
+| Case          | Palette                                                                                                                                              |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| One series    | Uses `--color-accent-fill`. Org Cost over time, a single Member's trend. There is nothing to tell it apart from, so the Member's own accent is fine. |
+| More than one | Uses the fixed palette below and never the accent. It does not change with the seed, the Org or the Member.                                          |
 
 If series colours came from each viewer's accent, two people looking at the same
 breakdown would see different charts and "the green one" would name two
@@ -542,25 +551,25 @@ ground.
 
 Light theme — ground `#FAF9F5`, panel surface `#FFFFFF`:
 
-| Slot | Hue | Value | vs ground | vs surface |
-| --- | --- | --- | --- | --- |
-| `--color-series-1` | orange | `#A98C66` | 3.01 | 3.17 |
-| `--color-series-2` | bluish green | `#15513C` | 8.77 | 9.23 |
-| `--color-series-3` | yellow | `#6A6601` | 5.67 | 5.98 |
-| `--color-series-4` | blue | `#118FDC` | 3.33 | 3.51 |
-| `--color-series-5` | reddish purple | `#B52082` | 5.71 | 6.01 |
-| `--color-series-other` | neutral | `#8F9192` | 3.01 | 3.17 |
+| Slot                   | Hue            | Value     | vs ground | vs surface |
+| ---------------------- | -------------- | --------- | --------- | ---------- |
+| `--color-series-1`     | orange         | `#A98C66` | 3.01      | 3.17       |
+| `--color-series-2`     | bluish green   | `#15513C` | 8.77      | 9.23       |
+| `--color-series-3`     | yellow         | `#6A6601` | 5.67      | 5.98       |
+| `--color-series-4`     | blue           | `#118FDC` | 3.33      | 3.51       |
+| `--color-series-5`     | reddish purple | `#B52082` | 5.71      | 6.01       |
+| `--color-series-other` | neutral        | `#8F9192` | 3.01      | 3.17       |
 
 Dark theme — ground `#1A1918`, panel surface `#262624`:
 
-| Slot | Hue | Value | vs ground | vs surface |
-| --- | --- | --- | --- | --- |
-| `--color-series-1` | sky blue | `#85CFFE` | 10.33 | 8.92 |
-| `--color-series-2` | bluish green | `#307D60` | 3.53 | 3.05 |
-| `--color-series-3` | yellow | `#979009` | 5.27 | 4.55 |
-| `--color-series-4` | vermillion | `#F9C7AB` | 11.52 | 9.95 |
-| `--color-series-5` | reddish purple | `#E511A3` | 4.13 | 3.57 |
-| `--color-series-other` | neutral | `#B3B4B8` | 8.47 | 7.32 |
+| Slot                   | Hue            | Value     | vs ground | vs surface |
+| ---------------------- | -------------- | --------- | --------- | ---------- |
+| `--color-series-1`     | sky blue       | `#85CFFE` | 10.33     | 8.92       |
+| `--color-series-2`     | bluish green   | `#307D60` | 3.53      | 3.05       |
+| `--color-series-3`     | yellow         | `#979009` | 5.27      | 4.55       |
+| `--color-series-4`     | vermillion     | `#F9C7AB` | 11.52     | 9.95       |
+| `--color-series-5`     | reddish purple | `#E511A3` | 4.13      | 3.57       |
+| `--color-series-other` | neutral        | `#B3B4B8` | 8.47      | 7.32       |
 
 A chart sits on a panel, and the panel sits on the page, so every value clears
 3:1 against both. The two backgrounds differ by only 1.05:1 in light and 1.16:1
@@ -581,11 +590,11 @@ Viénot and Mollon 1997, the two-half-plane projection, applied in linear sRGB,
 with matrices taken verbatim from libDaltonLens. Distances are CIEDE2000,
 verified against the Sharma, Wu and Dalal 2005 test data to within 1e-4.
 
-| Series | Worst pair, light | Worst pair, dark | Verdict |
-| --- | --- | --- | --- |
-| 4 | 32.18 | 28.95 | Comfortable, unbanded. |
-| 5 | 18.73 | 20.04 | Chosen. With Other included, 16.06 and 16.41. |
-| 6 | 15.29 | 17.97 | Possible, not taken. |
+| Series | Worst pair, light | Worst pair, dark | Verdict                                       |
+| ------ | ----------------- | ---------------- | --------------------------------------------- |
+| 4      | 32.18             | 28.95            | Comfortable, unbanded.                        |
+| 5      | 18.73             | 20.04            | Chosen. With Other included, 16.06 and 16.41. |
+| 6      | 15.29             | 17.97            | Possible, not taken.                          |
 
 The five-series numbers are the series against each other; the number that
 governs the product is the one with the neutral included, since Other is on the
@@ -623,15 +632,15 @@ and it is the whole claim.
 
 ### Everything in a chart that is not a series
 
-| Thing | How it is drawn |
-| --- | --- |
+| Thing          | How it is drawn                                                                                                                                                                                      |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | partial bucket | The series colour, striped with the theme's ground colour at full opacity, and the axis label says "today". Never a different colour: a bucket still filling is the same data, not another category. |
-| unpriced | The same stripe on `--color-series-other`, with the count of Turns that have no Rate named in the line under the chart, and the same count in the table. Never omitted, never drawn at zero. |
-| grid lines | `--color-rule`. Horizontal only, and only where a labelled tick sits. |
-| axis text | `--color-text-secondary` at the mono label step. |
-| baseline | `--color-rule-strong`, so zero is unambiguous. |
-| reference line | `--color-text-secondary`, dashed, labelled at its right end. |
-| hover readout | A `--color-surface` panel carrying the bucket, the Cost and the token counts. Every value in it also appears in the table under the chart, so a touch device and a screenshot lose nothing. |
+| unpriced       | The same stripe on `--color-series-other`, with the count of Turns that have no Rate named in the line under the chart, and the same count in the table. Never omitted, never drawn at zero.         |
+| grid lines     | `--color-rule`. Horizontal only, and only where a labelled tick sits.                                                                                                                                |
+| axis text      | `--color-text-secondary` at the mono label step.                                                                                                                                                     |
+| baseline       | `--color-rule-strong`, so zero is unambiguous.                                                                                                                                                       |
+| reference line | `--color-text-secondary`, dashed, labelled at its right end.                                                                                                                                         |
+| hover readout  | A `--color-surface` panel carrying the bucket, the Cost and the token counts. Every value in it also appears in the table under the chart, so a touch device and a screenshot lose nothing.          |
 
 **Why the stripe is the ground colour at full opacity.** An opaque stripe of the
 ground composited over a fill is the ground, so its contrast against that fill is
