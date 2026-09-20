@@ -3,7 +3,7 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "sessclone v1 — ticket status",
-    "subtitle": "80 tickets · 27 done · 5 ready to start · 48 blocked",
+    "subtitle": "80 tickets · 30 done · 6 ready to start · 44 blocked",
     "output": "docs/tickets/ticket-graph.html",
     "quality_profile": "showcase"
   },
@@ -68,7 +68,7 @@
       "id": "schema",
       "type": "database",
       "label": "Schema + Harness (21-25)",
-      "sublabel": "2 done · 3 ready",
+      "sublabel": "5 done",
       "pos": [
         500,
         332
@@ -82,7 +82,7 @@
       "id": "accounts",
       "type": "frontend",
       "label": "Site + Accounts (26-28)",
-      "sublabel": "1 ready · 2 blocked",
+      "sublabel": "2 ready · 1 blocked",
       "pos": [
         730,
         332
@@ -96,7 +96,7 @@
       "id": "collection",
       "type": "backend",
       "label": "Collection + Cost (29-43)",
-      "sublabel": "2 done · 13 blocked",
+      "sublabel": "2 done · 2 ready · 11 blocked",
       "pos": [
         960,
         122
@@ -110,7 +110,7 @@
       "id": "product",
       "type": "security",
       "label": "Access + Dashboard (44-57)",
-      "sublabel": "16 blocked",
+      "sublabel": "1 ready · 15 blocked",
       "pos": [
         960,
         560
@@ -180,13 +180,13 @@
       "id": "foundation_schema",
       "from": "foundation",
       "to": "schema",
-      "variant": "emphasis"
+      "variant": "default"
     },
     {
       "id": "decisions_schema",
       "from": "decisions",
       "to": "schema",
-      "variant": "emphasis"
+      "variant": "default"
     },
     {
       "id": "design_accounts",
@@ -204,7 +204,7 @@
       "id": "accounts_collection",
       "from": "accounts",
       "to": "collection",
-      "variant": "dashed"
+      "variant": "emphasis"
     },
     {
       "id": "product_archival",
@@ -228,7 +228,7 @@
       "id": "archival_product",
       "from": "archival",
       "to": "product",
-      "variant": "dashed"
+      "variant": "emphasis"
     }
   ]
 }

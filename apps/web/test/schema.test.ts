@@ -1,16 +1,16 @@
-import { readFileSync, readdirSync } from 'node:fs'
+import { describe, expect, test, beforeEach } from 'vitest'
 
-import postgres from 'postgres'
-import { afterAll, beforeAll, describe, expect, test } from 'vitest'
+import { asUser, owner as sql } from './harness'
 
 // Tickets 21 and 22, checked against a real Postgres with the real migrations.
 // A schema is the one thing a mock cannot stand in for: the unique index and
 // the policies *are* the behaviour, and an ORM's opinion about them is not
-// evidence. Ticket 25 owns turning this into a shared harness; until then it
-// sits beside the other database test.
-const sql = postgres(process.env.DATABASE_URL!)
-
-const MIGRATIONS = new URL('../../supabase/migrations/', import.meta.url)
+// evidence.
+//
+// The rig is ticket 25's: `test/harness.ts` applies the migrations once per
+// run and truncates between tests, and `asUser` reads as `sessclone_app` with
+// a viewer's claim set — the connection the dashboard actually uses, rather
+// than a probe role invented here.
 
 // Every table these two migrations create, and nothing else: a table added
 // without a policy is the failure ADR 0001 names, so the list is spelled out
@@ -23,26 +23,19 @@ const COLLECTION_TABLES = [
   'session_events',
   'member_project_archival',
 ]
-
-beforeAll(async () => {
-  const database = new URL(process.env.DATABASE_URL!).pathname.slice(1)
-  if (!database.endsWith('_test')) {
-    throw new Error(`refusing to reset ${database}: not a _test database`)
-  }
-
-  await sql.unsafe('drop schema public cascade; create schema public')
-
-  for (const file of readdirSync(MIGRATIONS)
-    .filter((name) => name.endsWith('.sql'))
-    .toSorted()) {
-    // oxlint-disable-next-line no-await-in-loop -- migrations apply in order.
-    await sql.unsafe(readFileSync(new URL(file, MIGRATIONS), 'utf8'))
-  }
-})
-
-afterAll(async () => {
-  await sql.end()
-})
+const PRICING_TABLES = ['rates', 'org_rate_overrides']
+const BILLING_TABLES = [
+  'tiers',
+  'subscriptions',
+  'subscription_events',
+  'log_artifacts',
+]
+const EVERY_TABLE = [
+  ...ACCOUNT_TABLES,
+  ...COLLECTION_TABLES,
+  ...PRICING_TABLES,
+  ...BILLING_TABLES,
+]
 
 describe('the migrations', () => {
   test('apply from empty, in order, and leave every table behind', async () => {
@@ -51,7 +44,7 @@ describe('the migrations', () => {
        where table_schema = 'public' and table_type = 'BASE TABLE'
     `
 
-    for (const name of [...ACCOUNT_TABLES, ...COLLECTION_TABLES]) {
+    for (const name of EVERY_TABLE) {
       expect(tables.map((row) => row.table_name)).toContain(name)
     }
   })
@@ -69,50 +62,123 @@ describe('the migrations', () => {
   })
 
   test('ship each table with at least one policy, in the same migration', async () => {
-    const policies = await sql<{ tablename: string; count: number }[]>`
-      select tablename, count(*)::int as count from pg_policies
-       where schemaname = 'public' group by tablename
+    // Discovered rather than listed, so a table added by a later migration is
+    // covered by this the day it lands. ADR 0001's rule is about every table,
+    // not about the ones somebody remembered to add here.
+    const unpoliced = await sql<{ relname: string }[]>`
+      select c.relname from pg_class c
+        join pg_namespace n on n.oid = c.relnamespace
+       where n.nspname = 'public' and c.relkind = 'r'
+         and not exists (
+           select 1 from pg_policies p
+            where p.schemaname = n.nspname and p.tablename = c.relname
+         )
     `
-    const counted = new Map(
-      policies.map((row) => [row.tablename, row.count] as const),
-    )
 
-    for (const name of [...ACCOUNT_TABLES, ...COLLECTION_TABLES]) {
-      expect(counted.get(name) ?? 0).toBeGreaterThan(0)
-    }
+    expect(unpoliced.map((row) => row.relname)).toEqual(['probe_rows'])
   })
 })
 
-describe('the identity index', () => {
-  const seed = async () => {
-    const [org] = await sql<{ id: string }[]>`
-      insert into orgs (name) values ('Acme') returning id
-    `
-    const [user] = await sql<{ id: string }[]>`
-      insert into users (email) values ('a@example.com') returning id
-    `
-    const [member] = await sql<{ id: string }[]>`
-      insert into members (org_id, user_id, role)
-      values (${org!.id}, ${user!.id}, 'member') returning id
-    `
-    return { orgId: org!.id, memberId: member!.id }
-  }
+const ids = {
+  acme: '11111111-1111-1111-1111-111111111111',
+  beta: '22222222-2222-2222-2222-222222222222',
+  member: 'aaaaaaaa-0000-0000-0000-000000000001',
+  admin: 'aaaaaaaa-0000-0000-0000-000000000002',
+  owner: 'aaaaaaaa-0000-0000-0000-000000000003',
+  manager: 'aaaaaaaa-0000-0000-0000-000000000004',
+  idle: 'aaaaaaaa-0000-0000-0000-000000000005',
+  gone: 'aaaaaaaa-0000-0000-0000-000000000006',
+  betaOwner: 'aaaaaaaa-0000-0000-0000-000000000007',
+  memberRow: 'cccccccc-0000-0000-0000-000000000001',
+  managerRow: 'cccccccc-0000-0000-0000-000000000004',
+  goneRow: 'cccccccc-0000-0000-0000-000000000006',
+  device: 'eeeeeeee-0000-0000-0000-000000000001',
+}
 
-  const insertTurn = async (
-    orgId: string,
-    memberId: string,
-    agentId: string | null,
-    messageId = 'msg_1',
-  ) => sql`
-    insert into turns (org_id, member_id, session_id, agent_id, message_id, occurred_at, output_tokens)
-    values (${orgId}, ${memberId}, 'session-1', ${agentId}, ${messageId}, now(), 10)
-    on conflict do nothing
+const sessionIds = async (userId: string) =>
+  (
+    await asUser(
+      userId,
+      (tx) => tx<{ session_id: string }[]>`select session_id from turns`,
+    )
+  ).map((row) => row.session_id)
+
+const seedPolicyFixture = async () => {
+  await sql`
+    insert into orgs (id, name) values (${ids.acme}, 'Acme'), (${ids.beta}, 'Beta')
   `
+  await sql`
+    insert into users (id, email) values
+      (${ids.member}, 'member@acme.test'),
+      (${ids.admin}, 'admin@acme.test'),
+      (${ids.owner}, 'owner@acme.test'),
+      (${ids.manager}, 'manager@acme.test'),
+      (${ids.idle}, 'idle-manager@acme.test'),
+      (${ids.gone}, 'gone@acme.test'),
+      (${ids.betaOwner}, 'owner@beta.test')
+  `
+  await sql`
+    insert into members (id, org_id, user_id, role, removed_at) values
+      (${ids.memberRow}, ${ids.acme}, ${ids.member}, 'member', null),
+      ('cccccccc-0000-0000-0000-000000000002', ${ids.acme}, ${ids.admin}, 'admin', null),
+      ('cccccccc-0000-0000-0000-000000000003', ${ids.acme}, ${ids.owner}, 'owner', null),
+      (${ids.managerRow}, ${ids.acme}, ${ids.manager}, 'manager', null),
+      ('cccccccc-0000-0000-0000-000000000005', ${ids.acme}, ${ids.idle}, 'manager', null),
+      (${ids.goneRow}, ${ids.acme}, ${ids.gone}, 'member', now()),
+      ('cccccccc-0000-0000-0000-000000000007', ${ids.beta}, ${ids.betaOwner}, 'owner', null)
+  `
+  await sql`
+    insert into member_scopes (org_id, manager_member_id, member_id)
+    values (${ids.acme}, ${ids.managerRow}, ${ids.memberRow})
+  `
+  await sql`
+    insert into projects (id, org_id, key) values
+      ('dddddddd-0000-0000-0000-000000000001', ${ids.acme}, 'github.com/acme/api'),
+      ('dddddddd-0000-0000-0000-000000000002', ${ids.acme}, 'local:ownerbox:/home/owner/side-project'),
+      ('dddddddd-0000-0000-0000-000000000003', ${ids.beta}, 'local:betabox:/home/beta/secret')
+  `
+  await sql`
+    insert into devices (id, member_id, key)
+    values (${ids.device}, ${ids.memberRow}, 'host:laptop')
+  `
+  await sql`
+    insert into turns (org_id, member_id, session_id, message_id, occurred_at, project_id, output_tokens) values
+      (${ids.acme}, ${ids.memberRow}, 'acme-member', 'm1', now(), 'dddddddd-0000-0000-0000-000000000001', 10),
+      (${ids.acme}, 'cccccccc-0000-0000-0000-000000000003', 'acme-owner', 'm2', now(), 'dddddddd-0000-0000-0000-000000000002', 20),
+      (${ids.beta}, 'cccccccc-0000-0000-0000-000000000007', 'beta-owner', 'm3', now(), 'dddddddd-0000-0000-0000-000000000003', 30)
+  `
+  await sql`
+    insert into api_keys (id, member_id, label, key_hash, key_prefix, revoked_at)
+    values ('ffffffff-0000-0000-0000-000000000001', ${ids.memberRow}, 'laptop', 'hash-1', 'sk_abcd', now())
+  `
+}
 
-  beforeAll(async () => {
-    await sql`truncate turns, member_scopes, api_keys, members, users, orgs cascade`
-  })
+const seed = async () => {
+  const [org] = await sql<{ id: string }[]>`
+    insert into orgs (name) values ('Acme') returning id
+  `
+  const [user] = await sql<{ id: string }[]>`
+    insert into users (email) values ('a@example.com') returning id
+  `
+  const [member] = await sql<{ id: string }[]>`
+    insert into members (org_id, user_id, role)
+    values (${org!.id}, ${user!.id}, 'member') returning id
+  `
+  return { orgId: org!.id, memberId: member!.id }
+}
 
+const insertTurn = async (
+  orgId: string,
+  memberId: string,
+  agentId: string | null,
+  messageId = 'msg_1',
+) => sql`
+  insert into turns (org_id, member_id, session_id, agent_id, message_id, occurred_at, output_tokens)
+  values (${orgId}, ${memberId}, 'session-1', ${agentId}, ${messageId}, now(), 10)
+  on conflict do nothing
+`
+
+describe('the identity index', () => {
   test('stores a re-reported Turn once, without reading first', async () => {
     const { orgId, memberId } = await seed()
 
@@ -125,31 +191,35 @@ describe('the identity index', () => {
   test('dedups a main Session, whose agent id is null', async () => {
     // Without `nulls not distinct` the index would treat every re-report of a
     // main Session as a new row — which is every Turn a person starts.
-    await sql`truncate turns cascade`
-    const [member] = await sql<{ id: string; org_id: string }[]>`
-      select id, org_id from members limit 1
-    `
+    const { orgId, memberId } = await seed()
 
-    await insertTurn(member!.org_id, member!.id, null)
-    await insertTurn(member!.org_id, member!.id, null)
+    await insertTurn(orgId, memberId, null)
+    await insertTurn(orgId, memberId, null)
 
     expect(await sql`select count(*)::int as n from turns`).toEqual([{ n: 1 }])
   })
 
   test('keeps an Agent Run apart from the Session that spawned it', async () => {
-    await sql`truncate turns cascade`
-    const [member] = await sql<{ id: string; org_id: string }[]>`
-      select id, org_id from members limit 1
-    `
+    const { orgId, memberId } = await seed()
 
-    await insertTurn(member!.org_id, member!.id, null)
-    await insertTurn(member!.org_id, member!.id, 'agent-1')
+    await insertTurn(orgId, memberId, null)
+    await insertTurn(orgId, memberId, 'agent-1')
 
     expect(await sql`select count(*)::int as n from turns`).toEqual([{ n: 2 }])
   })
 })
 
+const projectKeys = async (userId: string) =>
+  (
+    await asUser(
+      userId,
+      (tx) => tx<{ key: string }[]>`select key from projects`,
+    )
+  ).map((row) => row.key)
+
 describe('the policies, from a role that is not the owner', () => {
+  beforeEach(seedPolicyFixture)
+
   // Postgres exempts a superuser and a table's owner from policies, so a plain
   // role is what makes them observable at all. On Supabase this is
   // `authenticated`; here it is a role created for the test.
@@ -157,103 +227,6 @@ describe('the policies, from a role that is not the owner', () => {
   // This is not the Seam C suite — ticket 44 owns the full matrix. It is the
   // set of attacks a fresh-eyes review actually landed against an earlier cut
   // of these migrations, each of which passed before the guards below existed.
-  const ids = {
-    acme: '11111111-1111-1111-1111-111111111111',
-    beta: '22222222-2222-2222-2222-222222222222',
-    member: 'aaaaaaaa-0000-0000-0000-000000000001',
-    admin: 'aaaaaaaa-0000-0000-0000-000000000002',
-    owner: 'aaaaaaaa-0000-0000-0000-000000000003',
-    manager: 'aaaaaaaa-0000-0000-0000-000000000004',
-    idle: 'aaaaaaaa-0000-0000-0000-000000000005',
-    gone: 'aaaaaaaa-0000-0000-0000-000000000006',
-    betaOwner: 'aaaaaaaa-0000-0000-0000-000000000007',
-    memberRow: 'cccccccc-0000-0000-0000-000000000001',
-    managerRow: 'cccccccc-0000-0000-0000-000000000004',
-    goneRow: 'cccccccc-0000-0000-0000-000000000006',
-    device: 'eeeeeeee-0000-0000-0000-000000000001',
-  }
-
-  const asUser = async <T>(
-    userId: string,
-    query: (tx: postgres.TransactionSql) => Promise<T>,
-  ) =>
-    sql.begin(async (tx) => {
-      await tx`set local role sessclone_rls_probe`
-      await tx.unsafe(
-        `set local request.jwt.claims = '${JSON.stringify({ sub: userId })}'`,
-      )
-      return query(tx)
-    })
-
-  const sessionIds = async (userId: string) =>
-    (
-      await asUser(
-        userId,
-        (tx) => tx<{ session_id: string }[]>`select session_id from turns`,
-      )
-    ).map((row) => row.session_id)
-
-  beforeAll(async () => {
-    await sql.unsafe(`
-      do $$ begin
-        if not exists (select 1 from pg_roles where rolname = 'sessclone_rls_probe') then
-          create role sessclone_rls_probe;
-        end if;
-      end $$;
-      grant usage on schema public to sessclone_rls_probe;
-      grant select, insert, update, delete on all tables in schema public to sessclone_rls_probe;
-    `)
-    await sql`truncate turns, member_project_archival, devices, projects, member_scopes, api_keys, members, users, orgs cascade`
-
-    await sql`
-      insert into orgs (id, name) values (${ids.acme}, 'Acme'), (${ids.beta}, 'Beta')
-    `
-    await sql`
-      insert into users (id, email) values
-        (${ids.member}, 'member@acme.test'),
-        (${ids.admin}, 'admin@acme.test'),
-        (${ids.owner}, 'owner@acme.test'),
-        (${ids.manager}, 'manager@acme.test'),
-        (${ids.idle}, 'idle-manager@acme.test'),
-        (${ids.gone}, 'gone@acme.test'),
-        (${ids.betaOwner}, 'owner@beta.test')
-    `
-    await sql`
-      insert into members (id, org_id, user_id, role, removed_at) values
-        (${ids.memberRow}, ${ids.acme}, ${ids.member}, 'member', null),
-        ('cccccccc-0000-0000-0000-000000000002', ${ids.acme}, ${ids.admin}, 'admin', null),
-        ('cccccccc-0000-0000-0000-000000000003', ${ids.acme}, ${ids.owner}, 'owner', null),
-        (${ids.managerRow}, ${ids.acme}, ${ids.manager}, 'manager', null),
-        ('cccccccc-0000-0000-0000-000000000005', ${ids.acme}, ${ids.idle}, 'manager', null),
-        (${ids.goneRow}, ${ids.acme}, ${ids.gone}, 'member', now()),
-        ('cccccccc-0000-0000-0000-000000000007', ${ids.beta}, ${ids.betaOwner}, 'owner', null)
-    `
-    await sql`
-      insert into member_scopes (org_id, manager_member_id, member_id)
-      values (${ids.acme}, ${ids.managerRow}, ${ids.memberRow})
-    `
-    await sql`
-      insert into projects (id, org_id, key) values
-        ('dddddddd-0000-0000-0000-000000000001', ${ids.acme}, 'github.com/acme/api'),
-        ('dddddddd-0000-0000-0000-000000000002', ${ids.acme}, 'local:ownerbox:/home/owner/side-project'),
-        ('dddddddd-0000-0000-0000-000000000003', ${ids.beta}, 'local:betabox:/home/beta/secret')
-    `
-    await sql`
-      insert into devices (id, member_id, key)
-      values (${ids.device}, ${ids.memberRow}, 'host:laptop')
-    `
-    await sql`
-      insert into turns (org_id, member_id, session_id, message_id, occurred_at, project_id, output_tokens) values
-        (${ids.acme}, ${ids.memberRow}, 'acme-member', 'm1', now(), 'dddddddd-0000-0000-0000-000000000001', 10),
-        (${ids.acme}, 'cccccccc-0000-0000-0000-000000000003', 'acme-owner', 'm2', now(), 'dddddddd-0000-0000-0000-000000000002', 20),
-        (${ids.beta}, 'cccccccc-0000-0000-0000-000000000007', 'beta-owner', 'm3', now(), 'dddddddd-0000-0000-0000-000000000003', 30)
-    `
-    await sql`
-      insert into api_keys (id, member_id, label, key_hash, key_prefix, revoked_at)
-      values ('ffffffff-0000-0000-0000-000000000001', ${ids.memberRow}, 'laptop', 'hash-1', 'sk_abcd', now())
-    `
-  })
-
   test('each Role reads exactly the Turns its Role grants', async () => {
     expect((await sessionIds(ids.owner)).toSorted()).toEqual([
       'acme-member',
@@ -297,10 +270,10 @@ describe('the policies, from a role that is not the owner', () => {
   })
 
   test('a caller with no identity at all reads nothing', async () => {
-    const rows = await sql.begin(async (tx) => {
-      await tx`set local role sessclone_rls_probe`
-      return tx`select session_id from turns`
-    })
+    const rows = await asUser(
+      null,
+      (tx) => tx<{ session_id: string }[]>`select session_id from turns`,
+    )
 
     expect(rows).toEqual([])
   })
@@ -386,17 +359,9 @@ describe('the policies, from a role that is not the owner', () => {
     // A `local:` key is `local:<hostname>:<absolute path>`. Org-wide visibility
     // handed every Member the Owner's home directory, and showed a Manager
     // with an empty Scope something.
-    const keys = async (userId: string) =>
-      (
-        await asUser(
-          userId,
-          (tx) => tx<{ key: string }[]>`select key from projects`,
-        )
-      ).map((row) => row.key)
-
-    expect(await keys(ids.member)).toEqual(['github.com/acme/api'])
-    expect(await keys(ids.idle)).toEqual([])
-    expect((await keys(ids.owner)).toSorted()).toEqual([
+    expect(await projectKeys(ids.member)).toEqual(['github.com/acme/api'])
+    expect(await projectKeys(ids.idle)).toEqual([])
+    expect((await projectKeys(ids.owner)).toSorted()).toEqual([
       'github.com/acme/api',
       'local:ownerbox:/home/owner/side-project',
     ])
@@ -421,7 +386,10 @@ describe('the policies, from a role that is not the owner', () => {
           values (${ids.acme}, ${ids.memberRow}, 'forged', 'msg_forged', now())
         `,
       ),
-    ).rejects.toThrow(/row-level security/)
+      // Two locks, as the app-role migration says: `turns` carries no insert
+      // policy *and* `sessclone_app` is granted no insert on it, so the
+      // refusal arrives one layer earlier than row-level security.
+    ).rejects.toThrow(/permission denied|row-level security/)
   })
 
   test('and `turns` carries no update or delete policy to be granted one by', async () => {
@@ -463,6 +431,8 @@ describe('the policies, from a role that is not the owner', () => {
 })
 
 describe('constraints the policies cannot express', () => {
+  beforeEach(seedPolicyFixture)
+
   test('a Turn cannot be filed under an Org its Member is not in', async () => {
     const [beta] = await sql<{ id: string }[]>`
       select id from members where org_id = '22222222-2222-2222-2222-222222222222' limit 1
