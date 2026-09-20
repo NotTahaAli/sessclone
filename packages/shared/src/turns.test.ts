@@ -33,6 +33,7 @@ const EXPECTED = [
     usageEntries: 2,
     turns: 1,
   },
+  { file: 'projects-thread-session.jsonl', usageEntries: 9, turns: 3 },
   { file: 'resume-appends-to-one-file.jsonl', usageEntries: 4, turns: 2 },
   { file: 'slash-model-is-not-a-switch.jsonl', usageEntries: 4, turns: 2 },
   { file: 'workflow-agent-run.jsonl', usageEntries: 1, turns: 1 },
@@ -74,6 +75,21 @@ describe('one Turn per model response', () => {
 
   test('a session killed before its first response yields nothing to bill', () => {
     expect(turnsIn('killed-mid-turn.jsonl')).toEqual([])
+  })
+
+  test('three blocks to one response, which is the corpus at its worst', () => {
+    // Every other fixture repeats a response twice. A Claude Projects session
+    // writes three entries per response, so summing entries bills this file at
+    // three times its real cost — and the table above would have gone on
+    // passing if the parser only ever collapsed pairs.
+    const turns = turnsIn('projects-thread-session.jsonl')
+
+    expect(turns.map((parsed) => parsed.usage.outputTokens)).toEqual([
+      386, 297, 566,
+    ])
+    expect(turns.every((parsed) => parsed.clientVersion === '2.1.278')).toBe(
+      true,
+    )
   })
 
   test('a compaction contributes no Turn of its own', () => {

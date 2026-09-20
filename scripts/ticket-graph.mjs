@@ -103,6 +103,13 @@ const PHASES = [
     // wants a new range, not a longer list.
     also: [72, 73],
   },
+  {
+    id: 'projects',
+    label: 'Projects Source',
+    type: 'cloud',
+    pos: [1190, 341],
+    range: [74, 76],
+  },
 ]
 
 const phaseOf = (n) =>
