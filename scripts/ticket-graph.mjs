@@ -84,7 +84,6 @@ const PHASES = [
     type: 'security',
     pos: [960, 560],
     range: [44, 57],
-    also: [74],
   },
   {
     id: 'ship',
@@ -103,6 +102,13 @@ const PHASES = [
     // range, so keep this list short — a phase whose `also` outgrows its range
     // wants a new range, not a longer list.
     also: [72, 73],
+  },
+  {
+    id: 'projects',
+    label: 'Projects Source',
+    type: 'cloud',
+    pos: [1190, 341],
+    range: [74, 76],
   },
 ]
 
