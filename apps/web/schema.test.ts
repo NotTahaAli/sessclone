@@ -24,20 +24,38 @@ const COLLECTION_TABLES = [
   'member_project_archival',
 ]
 
+// The connection CI hands us is the cluster superuser, and a superuser is
+// exempt from every policy. Applying the migrations under a plain role instead
+// gives the tables an owner who is neither, which is the shape production has
+// and the only shape in which `force row level security` is observable.
+const OWNER = 'sessclone_rls_owner'
+
 beforeAll(async () => {
   const database = new URL(process.env.DATABASE_URL!).pathname.slice(1)
   if (!database.endsWith('_test')) {
     throw new Error(`refusing to reset ${database}: not a _test database`)
   }
 
-  await sql.unsafe('drop schema public cascade; create schema public')
+  await sql.unsafe(`
+    drop schema public cascade;
+    create schema public;
+    do $$ begin
+      if not exists (select 1 from pg_roles where rolname = '${OWNER}') then
+        create role ${OWNER};
+      end if;
+    end $$;
+    grant usage, create on schema public to ${OWNER};
+  `)
 
-  for (const file of readdirSync(MIGRATIONS)
-    .filter((name) => name.endsWith('.sql'))
-    .toSorted()) {
-    // oxlint-disable-next-line no-await-in-loop -- migrations apply in order.
-    await sql.unsafe(readFileSync(new URL(file, MIGRATIONS), 'utf8'))
-  }
+  await sql.begin(async (tx) => {
+    await tx.unsafe(`set local role ${OWNER}`)
+    for (const file of readdirSync(MIGRATIONS)
+      .filter((name) => name.endsWith('.sql'))
+      .toSorted()) {
+      // oxlint-disable-next-line no-await-in-loop -- migrations apply in order.
+      await tx.unsafe(readFileSync(new URL(file, MIGRATIONS), 'utf8'))
+    }
+  })
 })
 
 afterAll(async () => {
@@ -66,6 +84,20 @@ describe('the migrations', () => {
     // The probe table from ticket 02 is the exception and is expected to be
     // deleted rather than protected — it holds a session id and nothing else.
     expect(unprotected.map((row) => row.relname)).toEqual(['probe_rows'])
+  })
+
+  test('force it, so the role that owns the tables is not exempt', async () => {
+    // `enable` alone leaves a table's owner outside its own policies, which
+    // makes the policies advisory: whether an Org's data is private comes down
+    // to which role the dashboard happens to connect as (ADR 0007).
+    const unforced = await sql<{ relname: string }[]>`
+      select c.relname from pg_class c
+        join pg_namespace n on n.oid = c.relnamespace
+       where n.nspname = 'public' and c.relkind = 'r'
+         and c.relrowsecurity and not c.relforcerowsecurity
+    `
+
+    expect(unforced.map((row) => row.relname)).toEqual([])
   })
 
   test('ship each table with at least one policy, in the same migration', async () => {
@@ -294,6 +326,21 @@ describe('the policies, from a role that is not the owner', () => {
   test('nobody reads another Org, in either direction', async () => {
     expect(await sessionIds(ids.betaOwner)).toEqual(['beta-owner'])
     expect(await sessionIds(ids.owner)).not.toContain('beta-owner')
+  })
+
+  test('the role that owns the tables reads no more than a Member does', async () => {
+    // The attack the rest of this suite could not see: every test above runs
+    // as a role that owns nothing, so it proves the policies without proving
+    // they apply to the connection an application actually makes.
+    const rows = await sql.begin(async (tx) => {
+      await tx.unsafe(`set local role ${OWNER}`)
+      await tx.unsafe(
+        `set local request.jwt.claims = '${JSON.stringify({ sub: ids.member })}'`,
+      )
+      return tx<{ session_id: string }[]>`select session_id from turns`
+    })
+
+    expect(rows.map((row) => row.session_id)).toEqual(['acme-member'])
   })
 
   test('a caller with no identity at all reads nothing', async () => {

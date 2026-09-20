@@ -246,11 +246,21 @@ create trigger api_keys_guard_revocation
   before update on api_keys
   for each row execute function sessclone_guard_key_revocation();
 
+-- `force` as well as `enable`: Postgres exempts a table's owner from its own
+-- policies, and the role that applies these migrations owns every table here.
+-- Without it the policies below hold only for whichever role a caller happens
+-- to connect as, and the dashboard's own connection (ADR 0007) would read
+-- every Org.
 alter table orgs enable row level security;
+alter table orgs force row level security;
 alter table users enable row level security;
+alter table users force row level security;
 alter table members enable row level security;
+alter table members force row level security;
 alter table api_keys enable row level security;
+alter table api_keys force row level security;
 alter table member_scopes enable row level security;
+alter table member_scopes force row level security;
 
 -- No role is named on any policy below. Supabase's `authenticated` and
 -- `service_role` do not exist on a plain Postgres, and the service role
@@ -342,3 +352,33 @@ create policy member_scopes_assign on member_scopes for insert
 
 create policy member_scopes_revoke on member_scopes for delete
   using (org_id in (select sessclone_admin_org_ids()));
+
+-- The policies above apply to every role, the owner of these tables included,
+-- because they are forced. That turns the helpers into a cycle: a policy on
+-- `members` calls one, the function reads `members`, and the policy runs
+-- again. `security definer` does not break it any more — the definer is the
+-- owner, and the owner is no longer exempt.
+--
+-- So one role that bypasses row-level security owns the helpers. It cannot log
+-- in and owns nothing else, which is the point: the single exemption in this
+-- schema is a named role anyone can find in `pg_roles`, rather than whichever
+-- role an application's connection string happens to name.
+do $$ begin
+  if not exists (select 1 from pg_roles where rolname = 'sessclone_rls') then
+    create role sessclone_rls nologin bypassrls;
+  end if;
+  if not pg_has_role(current_user, 'sessclone_rls', 'member') then
+    execute 'grant sessclone_rls to current_user';
+  end if;
+end $$;
+
+grant usage on schema public to sessclone_rls;
+grant select on orgs, users, members, api_keys, member_scopes to sessclone_rls;
+
+alter function sessclone_is_platform_admin() owner to sessclone_rls;
+alter function sessclone_org_ids() owner to sessclone_rls;
+alter function sessclone_admin_org_ids() owner to sessclone_rls;
+alter function sessclone_own_member_ids() owner to sessclone_rls;
+alter function sessclone_visible_member_ids() owner to sessclone_rls;
+alter function sessclone_org_has_members(uuid) owner to sessclone_rls;
+alter function sessclone_visible_user_ids() owner to sessclone_rls;

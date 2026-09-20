@@ -189,11 +189,20 @@ create trigger devices_guard_columns
   before update on devices
   for each row execute function sessclone_guard_device_columns();
 
+-- `force` as well as `enable`, for the reason the accounts migration gives:
+-- the owner is exempt from `enable` alone, and `turns` is the table that makes
+-- that concrete — it carries no write policy at all, so an exempt owner is a
+-- forged Turn away from a wrong bill.
 alter table devices enable row level security;
+alter table devices force row level security;
 alter table projects enable row level security;
+alter table projects force row level security;
 alter table turns enable row level security;
+alter table turns force row level security;
 alter table session_events enable row level security;
+alter table session_events force row level security;
 alter table member_project_archival enable row level security;
+alter table member_project_archival force row level security;
 
 -- Every read below resolves through `sessclone_visible_member_ids()`, which is
 -- where Owner, Admin, Manager-with-a-Scope and Member are decided — once, in
@@ -243,3 +252,11 @@ create policy session_events_read on session_events for select
 create policy member_project_archival_own on member_project_archival for all
   using (member_id in (select sessclone_own_member_ids()))
   with check (member_id in (select sessclone_own_member_ids()));
+
+-- `sessclone_visible_project_ids()` reads `turns` and `projects`, both forced,
+-- so it needs the same owner and the same grants the accounts migration
+-- explains.
+grant select on devices, projects, turns, session_events, member_project_archival
+  to sessclone_rls;
+
+alter function sessclone_visible_project_ids() owner to sessclone_rls;
