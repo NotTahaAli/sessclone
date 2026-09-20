@@ -1,4 +1,4 @@
-# 74: Appearance and branding settings
+# 77: Appearance and branding settings
 
 **What to build:** The settings the design system's derived half assumes exist — an Org's accent seed and its logo, and a Member's own accent and light or dark preference. Ticket 16 defines the tokens these values feed; nothing in the product writes them today.
 
