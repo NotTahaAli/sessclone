@@ -114,6 +114,11 @@ export const projectKey = ({
 // Claude Code Cloud names the account and the environment type in the
 // environment of every session it runs; the container id sits beside them and
 // is deliberately unused, because it is the thing that changes hourly.
+// An explicit override, for the case neither rule below can see: one account
+// running several environments that should be counted separately. Taken
+// verbatim, because the point of it is to pin an identity the Collector would
+// otherwise compute differently.
+const OVERRIDE = 'SESSCLONE_DEVICE'
 const CLOUD = 'CLAUDE_CODE_REMOTE'
 const ACCOUNT = 'CLAUDE_CODE_ACCOUNT_UUID'
 const ENVIRONMENT_TYPE = 'CLAUDE_CODE_REMOTE_ENVIRONMENT_TYPE'
@@ -127,6 +132,11 @@ const DEFAULT_ENVIRONMENT = 'cloud_default'
  * The key is unique inside a Member, never globally: two Members may own a
  * machine called `build-box`, so the Device row is scoped to its Member by the
  * schema rather than by anything in this string.
+ *
+ * Resolution order: `SESSCLONE_DEVICE` when set, then the cloud account, then
+ * the machine. The Collector calls this rather than keeping its own copy —
+ * spec §Packages puts logic beyond orchestration in `shared`, and a key
+ * spelled two ways is two Devices.
  */
 export const deviceKey = ({
   hostname,
@@ -135,6 +145,9 @@ export const deviceKey = ({
   hostname: string
   environment: Record<string, string | undefined>
 }): string => {
+  const override = environment[OVERRIDE]?.trim()
+  if (override !== undefined && override !== '') return override
+
   const account = environment[ACCOUNT]?.trim()
 
   if (

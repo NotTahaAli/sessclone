@@ -293,6 +293,29 @@ describe('the Device key', () => {
     ).toBe(deviceKey({ hostname: 'BUILD-BOX', environment: { USER: 'sam' } }))
   })
 
+  test('an explicit override wins, for an account running several environments', () => {
+    // The one case neither other rule can see: the account and the machine
+    // both look identical across environments that should be counted apart.
+    expect(
+      deviceKey({
+        hostname: 'runsc-a1b2c3',
+        environment: {
+          SESSCLONE_DEVICE: 'ci-fleet-eu',
+          CLAUDE_CODE_REMOTE: 'true',
+          CLAUDE_CODE_ACCOUNT_UUID: '6c6ec04b-15a2-4eba-915f-ae53ff0e1e8d',
+        },
+      }),
+    ).toBe('ci-fleet-eu')
+  })
+
+  test('a blank override is not an override', () => {
+    // An empty assignment is set-but-empty, which must not defeat the rules
+    // below it — the same reason .env.example leaves it commented out.
+    expect(
+      deviceKey({ hostname: 'mbp-2', environment: { SESSCLONE_DEVICE: '  ' } }),
+    ).toBe('host:mbp-2')
+  })
+
   test('an unnamed machine still keys to something stable', () => {
     expect(deviceKey({ hostname: '', environment: {} })).toBe('host:unknown')
   })

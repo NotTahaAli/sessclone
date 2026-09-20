@@ -108,6 +108,7 @@ point at their own deployment without editing a vendored plugin.
 | `SESSCLONE_URL`       | in practice \* | `http://127.0.0.1:3000` | Base URL of the deployment to report to. Matches the server's `NEXT_PUBLIC_APP_URL` |
 | `SESSCLONE_API_KEY`   | yes            | —                       | The Member's API key, issued in the dashboard. Identifies the Member and the Org    |
 | `SESSCLONE_STATE_DIR` | no             | platform-dependent \*\* | Where the cursor and the retry queue are kept                                       |
+| `SESSCLONE_DEVICE`    | no             | derived \*\*\*          | Pins this environment's Device key instead of deriving one                          |
 
 \* Not required by the code — `packages/plugin/hooks/stop.mjs` falls back to
 `http://127.0.0.1:3000` — but required by anyone whose deployment is not on
@@ -121,6 +122,15 @@ where a hosted default for the URL would be set.
 `SESSCLONE_API_KEY` is never written to a log, a transcript, or an error
 message. It is read by ticket 32; nothing reads it today. The Collector sends
 Usage only — never prompts, never code.
+
+\*\*\* The Device key is normally derived: `host:<hostname>` on a machine, and
+`cloud:<account uuid>` in Claude Code Cloud, where the account outlives the
+container and every container a Member burns through collapses into one Device.
+Set this only when one account runs several environments that should be counted
+separately — a CI fleet beside a laptop, say — because the derived key would
+make them one Device. The value is used verbatim, so it is also the way to pin
+an identity across a rename. Read by `deviceKey` in `packages/shared`; ticket 32
+is where the Collector passes its environment in.
 
 \*\* The default resolves per platform, and deliberately never lands under
 `~/.claude` — Claude Code's own `cleanupPeriodDays` sweep deletes everything
