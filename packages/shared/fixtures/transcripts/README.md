@@ -1,8 +1,11 @@
 # Transcript fixtures
 
-Real Claude Code 2.1.269 transcripts, redacted, committed so that no parser or
-cost test has to invent its own idea of what Claude Code writes. Each one was
-captured from a live run by the spike it is named after.
+Real Claude Code transcripts, redacted, committed so that no parser or cost
+test has to invent its own idea of what Claude Code writes. Each one was
+captured from a live run by the spike it is named after. Everything up to
+`workflow-agent-run.jsonl` came from 2.1.269 on a laptop;
+`projects-thread-session.jsonl` came from 2.1.278 inside a Claude Projects
+environment, which is why it is the one that carries fields the others do not.
 
 | Fixture                                       | From | What it is the evidence for                                                                 |
 | --------------------------------------------- | ---- | ------------------------------------------------------------------------------------------- |
@@ -17,6 +20,7 @@ captured from a live run by the spike it is named after.
 | `agent-run.jsonl`                             | 08   | An Agent Run carrying its parent `sessionId` beside its own `agentId`, ending cleanly       |
 | `agent-run-ends-mid-turn.jsonl`               | 08   | The same, but the run died mid-stream — see below, it is the sharpest case in the corpus    |
 | `workflow-agent-run.jsonl`                    | 08   | An Agent Run spawned inside a workflow                                                      |
+| `projects-thread-session.jsonl`               | 75   | A Claude Projects session: the same format, three usage entries per response                |
 
 ## The two cases worth knowing before writing a parser
 
@@ -69,3 +73,10 @@ captured in a throwaway container — `/tmp/spike-0N`, `gitBranch: HEAD`. A
 fixture re-captured on a real machine would commit `/Users/<a real name>/…` and
 a real branch name, and nothing would fail. Read those two fields before adding
 a fixture.
+
+**The refusal is a substring check, so a session that discusses redaction
+cannot be captured.** `projects-thread-session.jsonl` was cut from its source
+at the first line containing `[redacted`, which is the line where that session
+read `redact.ts` and quoted a placeholder back. Slicing the raw file before
+redacting is the workaround; loosening the guard is not, because the failure it
+prevents is silent and this one is loud.

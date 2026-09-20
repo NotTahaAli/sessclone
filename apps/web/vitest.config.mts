@@ -6,6 +6,9 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   test: {
     name: 'web',
+    // One database, several files that each reset it. Running them in parallel
+    // has one file dropping the schema under another's feet.
+    fileParallelism: false,
     env: {
       DATABASE_URL:
         process.env.DATABASE_URL ??

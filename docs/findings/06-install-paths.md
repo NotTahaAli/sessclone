@@ -10,6 +10,10 @@ resting on documentation. Both have since been run on real hardware: macOS
 27.0 with Claude Code 2.1.275, and a Windows box's own `.claude` tree at
 2.1.220. Each row of the table below says which grade it holds.
 
+A fourth environment was added later, when ticket 30 needed it: Claude Code
+Cloud, where the question is not which directory but which field identifies a
+machine that is replaced every hour. See "Claude Code Cloud, measured" below.
+
 ## Table
 
 | Platform | Claude config dir                                   | Claude transcripts                                      | Proposed Collector state dir                              | Evidence grade                                                                                                                                                                                                                                                                                   |
@@ -191,6 +195,37 @@ files cannot be committed as-is. A Windows fixture and a depth-2 Agent Run
 fixture are both worth having, and both need the redactor extended to cover
 `cwd`, `worktreePath` and `description` first — that is ticket 08's call, not
 this spike's.
+
+## Claude Code Cloud, measured
+
+The spike's three rows are the three platforms a Member installs on. Claude
+Code Cloud is the fourth environment the spec names, and until this run nothing
+here said where its identity comes from — spec §Identity asks for
+`cloud:<account uuid>` without saying which field holds the uuid.
+
+Observed from inside a running Claude Code Cloud container, Claude Code
+**2.1.42** on the remote runner (`CLAUDE_CODE_ENTRYPOINT=remote`). Variable
+names only; the values are a real account's identifiers and are not recorded.
+
+| Variable                              | What it holds                                | Used for                                         |
+| ------------------------------------- | -------------------------------------------- | ------------------------------------------------ |
+| `CLAUDE_CODE_REMOTE`                  | `true`                                       | How the Collector knows it is not on a laptop    |
+| `CLAUDE_CODE_ACCOUNT_UUID`            | A uuid, stable across containers             | The Device key: `cloud:<account uuid>`           |
+| `CLAUDE_CODE_REMOTE_ENVIRONMENT_TYPE` | `cloud_default` here                         | The suffix, appended only when it is not default |
+| `CLAUDE_CODE_CONTAINER_ID`            | `container_<opaque id>`, new every container | **Nothing.** This is the field to avoid          |
+| `CLAUDE_CODE_ORGANIZATION_UUID`       | A uuid                                       | Not used; an Org here is a sessclone Org         |
+
+The container id is the trap the user story names: it is right there, it looks
+like a machine identity, and keying on it would give a Member a new Device
+every hour. The account uuid is what survives the container being reclaimed.
+
+**Grade: observed, once, on one environment type.** `cloud_default` is the only
+value of `CLAUDE_CODE_REMOTE_ENVIRONMENT_TYPE` seen, so the rule that a
+non-default type is appended to the key is a reading of the spec, not something
+this run exercised — a second environment type would confirm or refute it.
+Ticket 30 implements it and falls back to `host:<hostname>` when the cloud
+names no account, so a variable that disappears costs a Device split, not a
+dropped Turn.
 
 ## Runtime resolution rule for the Collector
 
