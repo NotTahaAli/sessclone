@@ -17,9 +17,8 @@ all hold unchanged. One thing is missing and one thing is unanswered:
 
 - **Needed:** a Device keyed on the account rather than the container. Claude
   Code hands one over, and ticket 30 keys on it.
-- **Unanswered:** what happens to a Session when its container is reclaimed.
-  See "The open question" — it could not be observed from inside a single
-  container's lifetime, and a second container did not settle it either.
+- **Answered, in the end:** a conversation keeps its `sessionId` and one
+  transcript across a container it lost. See "Across a lost container".
 
 ## Transcripts
 
@@ -148,23 +147,37 @@ container, but so does the transcript it was pointing into, so there is nothing
 left to re-report. Ticket 37's guarantee — a lost cursor costs bandwidth, never
 data — costs nothing at all here.
 
-## The open question
+## Across a lost container
 
-When a Projects thread continues after its container has been reclaimed, does
-the CLI keep the same `sessionId` and append, or start a new transcript for
-what the user sees as one conversation?
+Measured in this project's oldest thread, 35 minutes after it last spoke. Its
+container reported `up 0 min` — freshly booted — while:
 
-Two containers have now been looked at — this one and the coordinating
-session's — and neither has lived across a reclaim, so both are silent on it.
-The coordinating session's transcript spans 27 minutes with a largest gap of
-3.6 minutes: continuous, and no evidence either way.
+- `~/.claude/projects/-home-user/61bf47bf-….jsonl` still held all 149 lines
+  written before the gap, with new lines appended after it;
+- every one of its 158 lines carried the same `sessionId`, and that id matched
+  the container's own `CLAUDE_CODE_SESSION_ID`;
+- `installed_plugins.json` still carried its original 11:24 mtime;
+- the gap itself was 1,780 seconds, between 11:28:52 and 11:58:31.
 
-If the answer is the
-latter, one conversation becomes several Sessions and a thread's Turns scatter
-across them — which ingest can live with (each Session is internally
-consistent) but the dashboard cannot present honestly. The question is the same
-shape as finding 03's resume-and-fork work and wants the same treatment: a
-capture across a real reclaim, not an inference.
+So a conversation that outlives its container keeps its `sessionId` and keeps
+appending to one transcript. Nothing splits, and the worry this spike was
+opened on — a thread's Turns scattering across several Sessions — does not
+happen.
 
-Until it is answered, treat a Projects Session as a Session and expect a
-conversation to span more than one.
+One honest limit: from inside a container there is no way to tell "reclaimed
+and restored" from "suspended and resumed". The filesystem came back either
+way, which is what the Collector cares about. What is not established is
+whether a transcript survives a container that was destroyed rather than
+suspended, and the answer matters only for Turns that were never reported
+before the gap — with `Stop` flushing every turn, that is at most one.
+
+Practically: a Projects Session is a Session, and it is safe to treat its
+`sessionId` as the identity of the whole conversation.
+
+## What still deserves a capture
+
+Nothing that blocks collection. The one thing worth watching is the case above
+where the container is genuinely destroyed rather than paused — if a transcript
+does not come back, a Collector that had not yet flushed loses its unreported
+tail, which is the exposure finding 05 already describes for a killed
+container.
