@@ -182,6 +182,12 @@ one step.
 
 ### 2. A grace period is worth nothing to a process that is busy
 
+> **Narrowed by the real-Claude-Code run below.** The claim holds for a process
+> that blocks — which is what this writer does — but Claude Code is not one. It
+> services SIGTERM in 180 ms and exits having used 7% of the window. The grace
+> period is genuinely available to it; it simply has nothing to flush. Read
+> this section as a result about synchronous writers, not about Claude Code.
+
 This is the sharpest result, because both rows are the same `docker stop`
 against the same runtime with the same handler registered. The paced writer
 heard SIGTERM and was gone in 0.11 s with its `SessionEnd` on disk. The busy
@@ -245,6 +251,7 @@ else."), which runs 7–8.5 s end to end.
 | --------------------------- | ---- | ------------------------------------ | ---------- | ----- | ------------- | --------- |
 | clean exit (baseline, ×2)   | 0    | `SessionStart`, `Stop`, `SessionEnd` | 169,121 B  | 27    | 3 (2 ids)     | yes       |
 | `docker kill -s KILL` at 3s | 137  | **`SessionStart` only**              | 52,877 B   | 16    | **0**         | yes       |
+| `docker stop` at 3s         | 143  | `SessionStart`, **`SessionEnd`**     | 53,178 B   | 17    | **0**         | yes       |
 
 ### Every process-level finding survives the move to a container
 
@@ -259,8 +266,39 @@ else."), which runs 7–8.5 s end to end.
   is the expected pairing with the stand-in result: tearing needs the kill to
   land inside a large write, and a turn that never produced its response never
   started one.
-- **`SessionEnd`'s `reason` is still `"other"`** on the clean runs, so the
-  field distinguishes nothing even when it does fire.
+- **`SessionEnd`'s `reason` is still `"other"`** on the clean runs and on the
+  SIGTERM run, so the field distinguishes nothing even when it does fire.
+
+### The grace window is real, and it buys nothing
+
+`docker stop` sends SIGTERM with a 10-second window before SIGKILL, and this is
+where the stand-in misled. **Claude Code services the signal.** It exited 143
+(SIGTERM), not 137: `SessionEnd` fired 180 ms after the signal and the process
+was gone 0.72 s after it — **7% of the window used**. The stand-in sat out the
+whole 10 s only because it was blocking in a synchronous write loop; real
+Claude Code does async I/O and is never in that state for long.
+
+So the earlier conclusion needs narrowing. "A grace period is worth nothing to
+a busy process" is true of a process that blocks, and Claude Code is not one.
+The window is genuinely available to it.
+
+It still buys nothing, for a different reason. Against the SIGKILL run the
+graceful shutdown produced **301 more bytes and one more line, and zero extra
+usage-bearing entries**. The in-flight turn is worth exactly as much under a
+polite shutdown as under an instant one: nothing. That is finding 04's
+mechanism showing through — a turn is not streamed to the jsonl, it is written
+in one step when it completes, so at the moment of the signal there is no
+partial turn to flush. `SessionEnd` gets to run and has nothing to save.
+
+`reason` was `"other"` here too, so even the signalled path gives the Collector
+no way to tell a shutdown from an ordinary exit.
+
+**For the Collector this is the useful negative.** A platform that signals
+before reclaiming does not need special handling, because there is no
+flush-on-shutdown worth writing: the turn that would be saved does not exist in
+any form yet. What a `SessionEnd` buys is a notification that a session ended,
+which is worth having for the sweep's "not known to be complete" bookkeeping
+and worth nothing for the turn itself.
 
 ### The transcript survives the kill; it is `docker rm` that destroys it
 

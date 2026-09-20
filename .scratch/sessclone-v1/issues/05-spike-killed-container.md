@@ -71,6 +71,19 @@ from the dead container, so a killed environment is still a recovery source and
 only `docker rm` destroys it. Every process-level finding survived the move to a
 container unchanged.
 
+A `docker stop` arm was run too, and it corrected a prediction. Claude Code
+**does** service SIGTERM — exit 143, `SessionEnd` 180 ms after the signal,
+process gone in 0.72 s of a 10 s window. The stand-in had sat out the whole
+window only because it blocked in a synchronous write loop. But the graceful
+shutdown bought **301 bytes and one line over the SIGKILL run, and zero extra
+usage-bearing entries**: a turn is written in one step when it completes, so at
+signal time there is no partial turn to flush and `SessionEnd` has nothing to
+save. `reason` was `"other"` there too.
+
+That is a useful negative for the Collector. A platform that signals before
+reclaiming needs no special handling, because the turn a flush would rescue
+does not exist in any form yet.
+
 What is still open:
 
 - **Claude Code Cloud's own reclaim policy.** Whether the platform signals at
