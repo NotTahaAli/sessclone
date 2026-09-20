@@ -25,26 +25,56 @@ describe('deviceKey', () => {
     })
   })
 
-  // The whole point of the ticket: a cloud container's machine key is minted
+  // What ticket 30 asks for: a cloud environment keyed by account, not
+  // container. Claude Code supplies the account itself, so the common case
+  // needs no configuration at all.
+  it('keys an unconfigured cloud environment on the account', () => {
+    expect(
+      deviceKey(
+        {
+          CLAUDE_CODE_REMOTE: 'true',
+          CLAUDE_CODE_ACCOUNT_UUID: '00000000-0000-4000-8000-000000000000',
+        },
+        machine,
+      ),
+    ).toEqual({
+      key: 'account:00000000-0000-4000-8000-000000000000',
+      source: 'account',
+    })
+  })
+
+  it('is the same Device in a second container on the same account', () => {
+    const env = {
+      CLAUDE_CODE_REMOTE: 'true',
+      CLAUDE_CODE_ACCOUNT_UUID: '00000000-0000-4000-8000-000000000000',
+    }
+
+    expect(deviceKey(env, 'machine:container-two')).toEqual(
+      deviceKey(env, 'machine:container-one'),
+    )
+  })
+
+  // The fallback of the fallback. A cloud container's machine key is minted
   // fresh on every boot, so using it is a guess. It is still the answer — a
   // Device we cannot name is worse than one that churns — but the source says
   // so, and ingest can tell the two apart.
-  it('marks an unconfigured cloud environment as container-keyed', () => {
+  it('marks a cloud environment with no account as container-keyed', () => {
     expect(deviceKey({ CLAUDE_CODE_REMOTE: 'true' }, machine)).toEqual({
       key: machine,
       source: 'container',
     })
   })
 
-  it('is the same Device in a second container with the same configuration', () => {
-    const first = deviceKey(
-      { CLAUDE_CODE_REMOTE: 'true', SESSCLONE_DEVICE: 'env_01U4gtc7' },
-      'machine:container-one',
-    )
-    const second = deviceKey(
-      { CLAUDE_CODE_REMOTE: 'true', SESSCLONE_DEVICE: 'env_01U4gtc7' },
-      'machine:container-two',
-    )
-    expect(second).toEqual(first)
+  it('prefers a configured key over the account', () => {
+    expect(
+      deviceKey(
+        {
+          CLAUDE_CODE_REMOTE: 'true',
+          CLAUDE_CODE_ACCOUNT_UUID: '00000000-0000-4000-8000-000000000000',
+          SESSCLONE_DEVICE: 'projects-sessclone',
+        },
+        machine,
+      ),
+    ).toEqual({ key: 'projects-sessclone', source: 'configured' })
   })
 })

@@ -15,10 +15,11 @@ Projects is not a new source. It is the same CLI writing the same transcripts
 in the same place, so the parser, the schema, the ingest contract and ADR 0006
 all hold unchanged. One thing is missing and one thing is unanswered:
 
-- **Missing:** a stable Device handle. Ticket 76 covers it.
+- **Needed:** a Device keyed on the account rather than the container. Claude
+  Code hands one over; ticket 76 uses it.
 - **Unanswered:** what happens to a Session when its container is reclaimed.
   See "The open question" — it could not be observed from inside a single
-  container's lifetime.
+  container's lifetime, and a second container did not settle it either.
 
 ## Transcripts
 
@@ -68,29 +69,61 @@ variables. Ticket 32's "one setup step per machine" reads as "one setup step
 per environment" here, performed in a browser. Nothing about that breaks the
 Collector; the install documentation is what has to say it.
 
-## Device identity — the gap
+## Device identity
 
 Ticket 30 requires a cloud environment to be "keyed by account, not container".
-Nothing a hook process can read satisfies that:
+Claude Code supplies the account, and nothing else here is stable:
 
-| Candidate                                      | What it actually is                                |
-| ---------------------------------------------- | -------------------------------------------------- |
-| `/etc/machine-id`                              | Present, and minted per container                  |
-| `HOSTNAME`                                     | Empty                                              |
-| `CLAUDE_ENV_ID`, `CLAUDE_SESSION_ID`           | Empty                                              |
-| `CLAUDE_PROJECT_DIR`                           | Empty                                              |
-| `CLAUDE_CODE_REMOTE=true`, `ENTRYPOINT=remote` | The kind of environment, not which one             |
-| `environment_id`                               | Stable — and only readable from inside the session |
+| Candidate                                | What it actually is                                     |
+| ---------------------------------------- | ------------------------------------------------------- |
+| `CLAUDE_CODE_ACCOUNT_UUID`               | **The answer.** A UUID, set, and outlives the container |
+| `CLAUDE_CODE_REMOTE_ENVIRONMENT_TYPE`    | Set — `cloud_default` here. The kind, not the instance  |
+| `CLAUDE_CODE_ORGANIZATION_UUID`          | Set. Above a Device, not a Device                       |
+| `/etc/machine-id`                        | Present, and minted per container                       |
+| `HOSTNAME`, `CLAUDE_CODE_ENVIRONMENT_ID` | Empty                                                   |
+| `CLAUDE_ENV_ID`, `CLAUDE_SESSION_ID`     | Empty                                                   |
+| `CLAUDE_PROJECT_DIR`                     | Empty                                                   |
+| `environment_id`                         | Stable, and readable only from inside the session       |
 
-The last row is the whole problem. `environment_id` is exactly the handle a
-Device wants, and it is reachable only through an in-session MCP tool, not from
-the separate process a `Stop` hook runs in. So it has to arrive as
-configuration: `SESSCLONE_DEVICE`, set once in the environment's settings.
-That is ticket 76, and it is the same fix Claude Code Cloud needs.
+The account UUID is what ticket 30 asked for, in the words it asked for it, and
+it costs the Member no setup. Its one cost is granularity: one account with
+several environments is one Device. `SESSCLONE_DEVICE` (ticket 76) is the
+override for a Member who wants them counted apart — in a Projects environment,
+set in the environment settings on claude.ai, because a session cannot set a
+variable for the container that replaces it.
 
-Until it is set, every container boot mints a Device and the per-Device
-breakdown (ticket 56) is noise. Ticket 76 records that case as
-`source: 'container'` rather than hiding it, so the churn is legible as churn.
+`environment_id` is the handle that would key an environment exactly, and it is
+reachable only through an in-session MCP tool, not from the separate process a
+`Stop` hook runs in. That is why the override is configuration rather than
+something the Collector can discover.
+
+**An earlier draft of this note had this wrong**, and said nothing readable was
+stable. It checked `CLAUDE_ENV_ID` and `CLAUDE_SESSION_ID`, which are empty,
+and not `CLAUDE_CODE_ACCOUNT_UUID`, which is not. The thread working tickets 29
+and 30 found the account variable independently; the correction is theirs.
+
+## One conversation, several transcripts
+
+Observed in a second Projects container, by the session coordinating this
+project, and it matters more than the reclaim question:
+
+```
+<project>/<sessionId>.jsonl                                  329 lines
+<project>/<sessionId>/subagents/agent-<agentId>.jsonl         23 lines
+```
+
+Every subagent run writes its own transcript one level deeper, carrying the
+parent's `sessionId` beside its own `agentId`. So a conversation already maps
+to several files without any container reclaim, and **a Collector globbing
+`projects/*/*.jsonl` silently drops every one of them** — which is billed
+usage, not bookkeeping. Finding 06 recorded the same layout on macOS and
+Windows; this confirms it in Projects, and ticket 36 is where it is handled.
+
+Their records interleave in wall-clock time: that subagent's first line
+predates its parent's last by about a second. A cursor is therefore per file,
+not per Session — anything assuming one monotonic append order across a
+Session's files is wrong. Ticket 37 already stores a cursor per transcript;
+this is the reason it has to stay that way.
 
 ## Two things the existing design already handles
 
@@ -112,7 +145,12 @@ When a Projects thread continues after its container has been reclaimed, does
 the CLI keep the same `sessionId` and append, or start a new transcript for
 what the user sees as one conversation?
 
-This could not be observed from inside one container. If the answer is the
+Two containers have now been looked at — this one and the coordinating
+session's — and neither has lived across a reclaim, so both are silent on it.
+The coordinating session's transcript spans 27 minutes with a largest gap of
+3.6 minutes: continuous, and no evidence either way.
+
+If the answer is the
 latter, one conversation becomes several Sessions and a thread's Turns scatter
 across them — which ingest can live with (each Session is internally
 consistent) but the dashboard cannot present honestly. The question is the same
