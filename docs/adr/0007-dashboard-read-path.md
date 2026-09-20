@@ -69,7 +69,17 @@ The cost is that RLS enforcement now depends on the connection role, which
 Postgres does not enforce for us: the policies are `enable row level security`
 and not `force`, so a superuser or the role that owns the tables bypasses them
 silently. The application must connect as a role that is neither — the same
-care the service role key already demands, applied one layer lower.
+care the service role key already demands, applied one layer lower. That role
+is `sessclone_app`, created by `supabase/migrations/20260920120200_app_role.sql`
+with the grants the dashboard needs and nothing else. Forcing row-level
+security instead was measured and rejected: it subjects the owner to its own
+policies, which breaks ingest, since `turns` carries no insert policy by
+design, and it makes the `security definer` helpers recurse until the stack
+gives out. Repairing that needs a `bypassrls` role to own the functions, and
+only a superuser may grant `bypassrls`, which a self-hoster applying a
+migration does not have and a Supabase project does not offer.
+`apps/web/app-role.test.ts` fails if the dashboard is ever pointed back at a
+role that owns the tables or bypasses policies.
 
 Revisit if the dashboard grows realtime subscriptions the browser needs
 directly, or if a surface appears that wants generated CRUD more than it wants
