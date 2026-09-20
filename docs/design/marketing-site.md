@@ -49,8 +49,12 @@ there are numbers, no adjectives doing work a fact could do.
 
 The marketing site is **dark only**. It is a brand surface, and the warm
 terminal reading is the brand. The product, which people live in for hours,
-carries both themes. The testimonial band inverts to Ivory as the page's one
-contrast, which also stops the whole page reading as one slab.
+carries both themes.
+
+The testimonial band was drawn inverted to Ivory at first, as the page's one
+contrast. It read as a section from a different site rather than as emphasis,
+so it is dark like everything else; the page separates its sections with
+hairline rules and panel fills instead.
 
 ## Pricing presentation
 
