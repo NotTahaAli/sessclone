@@ -39,6 +39,14 @@ jobs:
       - run: pnpm lint
       - run: pnpm format
       - run: pnpm typecheck
+      # `sessclone` owns the tables and is also this image's superuser, so it
+      # is exempt from every policy twice over — which is why the policy tests
+      # read as `sessclone_app` instead. The migration creates that role if it
+      # is missing but gives it no password; this is what lets it log in.
+      - run: psql "$DATABASE_URL" -c "create role sessclone_app login password 'sessclone_app'"
+        env:
+          DATABASE_URL: postgres://sessclone:sessclone@127.0.0.1:5432/sessclone_test
       - run: pnpm test
         env:
           DATABASE_URL: postgres://sessclone:sessclone@127.0.0.1:5432/sessclone_test
+          APP_DATABASE_URL: postgres://sessclone_app:sessclone_app@127.0.0.1:5432/sessclone_test

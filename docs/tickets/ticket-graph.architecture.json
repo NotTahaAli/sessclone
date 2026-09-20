@@ -3,7 +3,7 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "sessclone v1 — ticket status",
-    "subtitle": "76 tickets · 22 done · 4 ready to start · 50 blocked",
+    "subtitle": "80 tickets · 27 done · 5 ready to start · 48 blocked",
     "output": "docs/tickets/ticket-graph.html",
     "quality_profile": "showcase"
   },
@@ -26,7 +26,7 @@
       "id": "design",
       "type": "frontend",
       "label": "Frontend Design (16-20)",
-      "sublabel": "1 ready · 4 blocked",
+      "sublabel": "5 done",
       "pos": [
         270,
         70
@@ -82,7 +82,7 @@
       "id": "accounts",
       "type": "frontend",
       "label": "Site + Accounts (26-28)",
-      "sublabel": "3 blocked",
+      "sublabel": "1 ready · 2 blocked",
       "pos": [
         730,
         332
@@ -110,7 +110,7 @@
       "id": "product",
       "type": "security",
       "label": "Access + Dashboard (44-57)",
-      "sublabel": "14 blocked",
+      "sublabel": "16 blocked",
       "pos": [
         960,
         560
@@ -124,7 +124,7 @@
       "id": "ship",
       "type": "external",
       "label": "Ship + Verify (66-71)",
-      "sublabel": "6 blocked",
+      "sublabel": "1 ready · 6 blocked",
       "pos": [
         1190,
         122
@@ -138,7 +138,7 @@
       "id": "archival",
       "type": "cloud",
       "label": "Archival + Admin (58-65)",
-      "sublabel": "10 blocked",
+      "sublabel": "11 blocked",
       "pos": [
         1190,
         560
@@ -174,7 +174,7 @@
       "id": "foundation_design",
       "from": "foundation",
       "to": "design",
-      "variant": "emphasis"
+      "variant": "default"
     },
     {
       "id": "foundation_schema",
@@ -192,24 +192,18 @@
       "id": "design_accounts",
       "from": "design",
       "to": "accounts",
-      "variant": "dashed"
+      "variant": "emphasis"
     },
     {
       "id": "schema_accounts",
       "from": "schema",
       "to": "accounts",
-      "variant": "dashed"
+      "variant": "emphasis"
     },
     {
       "id": "accounts_collection",
       "from": "accounts",
       "to": "collection",
-      "variant": "dashed"
-    },
-    {
-      "id": "collection_product",
-      "from": "collection",
-      "to": "product",
       "variant": "dashed"
     },
     {
@@ -222,13 +216,19 @@
       "id": "collection_ship",
       "from": "collection",
       "to": "ship",
-      "variant": "dashed"
+      "variant": "emphasis"
     },
     {
       "id": "collection_projects",
       "from": "collection",
       "to": "projects",
       "variant": "default"
+    },
+    {
+      "id": "archival_product",
+      "from": "archival",
+      "to": "product",
+      "variant": "dashed"
     }
   ]
 }

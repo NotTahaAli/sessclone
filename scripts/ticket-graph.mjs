@@ -84,6 +84,7 @@ const PHASES = [
     type: 'security',
     pos: [960, 560],
     range: [44, 57],
+    also: [77, 78],
   },
   {
     id: 'ship',
@@ -91,6 +92,7 @@ const PHASES = [
     type: 'external',
     pos: [1190, 122],
     range: [66, 71],
+    also: [79],
   },
   {
     id: 'archival',
@@ -101,7 +103,7 @@ const PHASES = [
     // Tickets added after the ranges were drawn. The label still reads its
     // range, so keep this list short — a phase whose `also` outgrows its range
     // wants a new range, not a longer list.
-    also: [72, 73],
+    also: [72, 73, 80],
   },
   {
     id: 'projects',

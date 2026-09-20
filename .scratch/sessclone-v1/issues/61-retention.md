@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-- [ ] Retention set by an Owner, defaulted, and capped by the Tier ceiling
+- [ ] Retention set by an Owner or Admin, defaulted, and capped by the Tier ceiling
 - [ ] Artifacts past the window removed from storage and from the record
 - [ ] Turns are never touched by retention, so spend history survives
 - [ ] Removal is idempotent and safe to re-run
