@@ -50,6 +50,14 @@ one-way. Nothing may parse a project directory name back into a working
 directory. Read `cwd` off an entry instead, which every entry carries. This
 matters to tickets 30 and 36.
 
+**1b. The sanitised name is built from the _resolved_ path.** A session run in
+`/tmp/spike-05-multiturn` landed in `projects/-private-tmp-spike-05-multiturn`,
+because macOS `/tmp` is a symlink to `/private/tmp`. So a Collector that
+sanitises its own idea of the cwd to guess a directory name will miss, wherever
+a symlink is involved — `/tmp`, `/var`, and any home directory on a linked
+volume. Resolve the real path first, or better, do what ticket 36 already
+plans and search the directories rather than computing the name.
+
 **2. Agent Run transcripts nest under the Session id, not beside it.** On this
 client the layout is:
 

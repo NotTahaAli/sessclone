@@ -219,17 +219,113 @@ will report.
 
 ### What this still does not answer
 
-- **Page-cache loss (residual 2) is untouched.** Every file above was read back
-  on a kernel that kept running. Killing the container never threatened the
-  host's page cache. Proving that an abrupt _host_ death loses acknowledged
-  writes needs the VM itself hard-killed, which on this machine would take the
-  operator's unrelated containers down with it; it was not done.
+- ~~Page-cache loss (residual 2)~~ — **measured; see the next section.**
 - **Claude Code Cloud's own policy (residual 3) is still unknown.** Docker's
   10-second SIGTERM-then-SIGKILL is Docker's, and says nothing about what the
   platform does. The finding that transfers is the shape, not the number: if a
   reclaim signals at all, only an idle session benefits.
-- **Interactive multi-turn sessions (residual 4)** are still unexercised, and
-  no stand-in can settle them — that needs real Claude Code.
+- **Multi-turn sessions (residual 4)** — the substantive half is now measured
+  with real Claude Code; see below. A genuinely _interactive_ TTY session is
+  still unexercised.
+
+## Multi-turn loss profile — residual 4, measured
+
+Every earlier run was single-turn, so "only the in-flight turn is lost" was an
+assumption the Collector's whole recovery story rests on. Measured here with
+real Claude Code 2.1.267 on macOS: one session, `--model haiku`, cwd
+`/tmp/spike-05-multiturn`, two turns completed and a third SIGKILLed ~2 s in.
+
+| stage                       | bytes   | rows | usage-bearing rows | distinct `message.id` |
+| --------------------------- | ------- | ---- | ------------------ | --------------------- |
+| after two completed turns   | 240,397 | 46   | 4                  | 2                     |
+| after SIGKILL during turn 3 | 240,743 | 48   | 4                  | 2                     |
+
+**The completed turns survive untouched, and the in-flight turn contributes
+nothing.** The kill added 346 bytes and two rows, and both are bookkeeping —
+`last-prompt`, `mode`, and two `queue-operation` entries. No `assistant` entry,
+no `usage`, not even a partial one. The prompt landed; the turn did not, which
+is the same shape `fixtures/transcripts/killed-mid-turn.jsonl` holds for a
+single-turn session.
+
+The file also ended on a clean newline with every line parseable. That is the
+expected pairing with the torn-record result above: tearing needs the kill to
+land inside a large write, and a turn that never produced its response never
+started one.
+
+So the design's assumption holds. A session that has been running for an hour
+loses one turn to a kill, not its history — and the loss is total for that turn
+rather than partial, so there is no half-priced Turn to detect or discard.
+
+**Still not exercised: a real interactive TTY session.** This was
+`claude -p --resume`, which is multi-turn but headless. An interactive session
+holds more state in memory and may flush on a different schedule; nothing here
+rules out a difference, it only removes the multi-turn question from the list.
+
+## Page-cache loss — residual 2, measured
+
+The container run could not threaten the page cache, because the host kernel
+kept running. Hard-killing the VM would have answered it and taken the
+operator's unrelated containers with it, so the question was asked a contained
+way instead: an ext4 filesystem on a **loop device** inside the colima VM, with
+the _backing file_ read directly afterwards. The backing file holds only what
+actually left the filesystem's page cache for the block device, so the gap
+between "bytes `write()` returned for" and "bytes in the backing file" is
+exactly what a sudden storage loss would take.
+
+100 entries of 200,000 bytes, one `append`-mode `write()` each, no `fsync` —
+the shape Claude Code uses when it writes a finished turn in one step.
+
+| moment                                               | entries on the device  |
+| ---------------------------------------------------- | ---------------------- |
+| immediately after 20,005,800 bytes were acknowledged | **0 / 100**            |
+| ~5 s idle, no sync                                   | **0 / 100**            |
+| ~10 s idle, no sync                                  | 100 / 100              |
+| after an explicit `sync`                             | 100 / 100              |
+| **contrast:** `fsync` per entry                      | 100 / 100, immediately |
+
+### Everything acknowledged can be nothing on disk
+
+All twenty megabytes returned from `write()` in under 10 ms, and **not one byte
+of it was on the device**. A reclaim landing in that instant loses the whole
+file while every write has already succeeded. This is not a partial loss or a
+torn tail — it is total, and the application has no way to know.
+
+The window closed between the 5-second and 10-second checks with no `sync` from
+anyone, which is ext4's journal commit doing its ordinary work
+(`dirty_writeback_centisecs` is 500 on this kernel, `dirty_expire_centisecs`
+3000). So the exposure is roughly **the last five seconds of writing**, and the
+cost of removing it is in the last row: `fsync` per entry put everything on the
+device immediately, for 0.13 s against ~0.00 s.
+
+### What this settles for the Collector
+
+**The transcript on disk is not a recovery source for a recent turn.** Ticket
+39's sweep re-reads transcripts to recover what a dying environment never
+reported; this says the sweep can only recover what is at least a few seconds
+old. A reclaim landing on a just-finished turn leaves nothing to sweep — not a
+truncated record, not a torn line, nothing.
+
+That is an argument the design already made for other reasons, now with a
+measurement behind it: **the bytes the Collector has pushed over the network
+are safer than the bytes on the member's disk.** Pushing on `Stop` rather than
+batching and trusting a later sweep is the difference between a turn surviving
+and a turn never having existed. The same goes for the cursor and the retry
+queue — a queue file that exists only in page cache is a queue a reclaim
+silently empties. If any file in this product is worth an `fsync`, it is the
+queue, and this is the number that justifies paying for it.
+
+It also explains why the earlier container runs looked so clean. Their files
+were read back through the same page cache that held the unflushed data, so
+every byte appeared present. A reader on the dying kernel cannot see this loss
+at all; only the storage can.
+
+### Scope
+
+ext4 with default `data=ordered` on a loop device in a Linux VM, not Claude
+Code Cloud's storage. The five-second figure is this kernel's writeback timing
+and nothing else. What transfers is the shape: acknowledged is not durable, the
+gap is total rather than partial, and it closes on a timer nobody in the
+application controls.
 
 ### What a future run on a reclaimable environment must check
 
