@@ -10,3 +10,4 @@
 - [ ] Turns from before the restart arrive via the first sweep
 - [ ] Every container collapses into one Device for that Member
 - [ ] A container killed mid-session is checked against what the spike predicted
+- [ ] Claude Projects covered as well as Claude Code Cloud, including a Session whose subagent transcripts live one directory deeper, and a Session that moved between repositories mid-flight (finding 74)
