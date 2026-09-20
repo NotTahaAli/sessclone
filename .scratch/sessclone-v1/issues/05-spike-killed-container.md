@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-- [ ] A container killed rather than exited cleanly, and the hook firings observed
+- [x] A container killed rather than exited cleanly, and the hook firings observed
 - [x] Findings note states what the sweep must recover and what is unrecoverable
 - [x] The documented residual gap is either confirmed or narrowed
 
@@ -61,14 +61,18 @@ Two more residuals closed since, both on this machine:
   The design's assumption holds: a long session loses one turn, not its
   history, and loses it completely rather than half-priced.
 
+**The first criterion is now met.** Real Claude Code 2.1.278, signed in with a
+`setup-token` OAuth token, inside Docker, hooks POSTing to a sink container on
+the same network, SIGKILLed 3 s into a turn. Exit 137, **`SessionStart` only** —
+no `Stop`, no `SessionEnd` — against a clean-exit baseline that fired all three.
+The transcript held 0 usage-bearing entries against the baseline's 3, every line
+parsed, and the file ended on a newline. `docker cp` recovered all 52,877 bytes
+from the dead container, so a killed environment is still a recovery source and
+only `docker rm` destroys it. Every process-level finding survived the move to a
+container unchanged.
+
 What is still open:
 
-- **Real Claude Code hooks under a container kill** — the first criterion. The
-  container run used a stand-in, and the hook firings measured earlier were a
-  process kill, not a container one. Needs Claude Code authenticated inside a
-  container, which is a credential step for the operator rather than something
-  to automate. The harness is written and ready at
-  `docs/findings/05-harness/`.
 - **Claude Code Cloud's own reclaim policy.** Whether the platform signals at
   all, with what grace, and whether `SessionEnd`'s `reason` finally
   distinguishes a reclaim. Docker's 10-second SIGTERM-then-SIGKILL is Docker's

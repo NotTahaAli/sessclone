@@ -4,11 +4,12 @@ What a `SIGTERM` and a `SIGKILL` actually cost, measured on Claude Code 2.1.269
 in a cloud environment, with `SessionStart`/`Stop`/`SessionEnd` hooks appending
 to a log file outside the dying process's control.
 
-**This is not the ticket.** Ticket 05 asks about a forcibly reclaimed
-_container_. This environment cannot reclaim itself, so what was exercised is a
-nested `claude -p` run killed at the process-group level. Everything below the
-"What was not exercised" heading is still open, and ticket 05 stays open with
-it.
+**Originally this was not the ticket.** Ticket 05 asks about a forcibly
+reclaimed _container_, and the cloud environment could not reclaim itself, so
+the first pass killed a nested `claude -p` at the process-group level. A real
+container kill has since been run — real Claude Code, signed in, inside Docker,
+killed mid-turn — and is recorded under "Container kill, real Claude Code"
+below. It agrees with the process-level result in every particular.
 
 ## What was measured
 
@@ -227,6 +228,65 @@ will report.
 - **Multi-turn sessions (residual 4)** — the substantive half is now measured
   with real Claude Code; see below. A genuinely _interactive_ TTY session is
   still unexercised.
+
+## Container kill, real Claude Code
+
+The container runs above used a stand-in writer, which could answer questions
+about the runtime but not about hooks. This one is Claude Code 2.1.278 itself,
+authenticated with a `setup-token` OAuth token, inside the image at
+`05-harness/Dockerfile`, with the five hooks POSTing to a sink container on the
+same Docker network — outside the container being killed, which is the whole
+point of the sink.
+
+Same prompt each time ("Count from 1 to 400, one number per line, nothing
+else."), which runs 7–8.5 s end to end.
+
+| run                         | exit | hooks that fired                     | transcript | lines | usage-bearing | ends `\n` |
+| --------------------------- | ---- | ------------------------------------ | ---------- | ----- | ------------- | --------- |
+| clean exit (baseline, ×2)   | 0    | `SessionStart`, `Stop`, `SessionEnd` | 169,121 B  | 27    | 3 (2 ids)     | yes       |
+| `docker kill -s KILL` at 3s | 137  | **`SessionStart` only**              | 52,877 B   | 16    | **0**         | yes       |
+
+### Every process-level finding survives the move to a container
+
+- **`SIGKILL` fires nothing.** `SessionStart` had already fired at startup;
+  after the kill there was no `Stop` and no `SessionEnd`. The sink recorded one
+  line where the clean run recorded three.
+- **The in-flight turn is worth nothing.** Zero usage-bearing entries against
+  the baseline's three. The turn was 3 seconds into generating 400 lines and
+  left no billable trace — the transcript holds the prompt and bookkeeping, and
+  stops.
+- **No torn record.** All 16 lines parsed and the file ended on a newline. That
+  is the expected pairing with the stand-in result: tearing needs the kill to
+  land inside a large write, and a turn that never produced its response never
+  started one.
+- **`SessionEnd`'s `reason` is still `"other"`** on the clean runs, so the
+  field distinguishes nothing even when it does fire.
+
+### The transcript survives the kill; it is `docker rm` that destroys it
+
+`docker cp` pulled all 52,877 bytes out of the killed container afterwards. A
+killed environment is still a recovery source — what removes the evidence is
+destroying the container, exactly as the stand-in runs showed. Combined with
+the page-cache result below, the Collector's recovery story is: everything
+older than a few seconds is recoverable from a stopped-but-present environment,
+nothing is recoverable from a removed one, and the in-flight turn never existed
+either way.
+
+### What it took to get a clean result
+
+Two false starts worth recording, because both fail silently:
+
+1. **Hook commands resolve against the session's working directory.** The
+   repo-relative paths in `settings.json` do not exist inside the image, so no
+   hook fires and nothing says why. `settings.container.json` uses
+   `/work/post.sh`.
+2. **`host.docker.internal` is not dependable under colima.** The sink runs as
+   its own container on a shared network instead, which is also a better answer
+   to "outside the environment under test".
+
+The harness was proved end to end _unauthenticated_ first — an unauthenticated
+run still fires `SessionStart` — so that an empty log during the real run would
+have been a finding rather than a broken rig.
 
 ## Multi-turn loss profile — residual 4, measured
 
