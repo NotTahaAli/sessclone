@@ -12,3 +12,5 @@
 - [ ] An Owner or Admin uploads an Org logo, which appears in the signed-in nav, on sign-in, and in invite email, and which a Member cannot remove
 - [ ] No Role can write another Member's appearance settings, proven as SQL against the policies rather than through the UI
 - [ ] Theme applies on first paint with no flash, including for a signed-out visitor on the marketing site
+
+The appearance surface is drawn in `docs/design/dashboard-wireframes.md`, under "Two surfaces drawn ahead of their tickets".

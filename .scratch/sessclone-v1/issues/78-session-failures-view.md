@@ -11,3 +11,5 @@
 - [ ] Each row names the Session, the Device, when it failed and the recorded failure type and message
 - [ ] Says plainly what a person can do about the common cases, rather than only that something failed
 - [ ] The onboarding waiting surface links here once a first Turn has arrived, since that is where a stalled Collector is first noticed
+
+The failures surface is drawn in `docs/design/dashboard-wireframes.md`, under "Two surfaces drawn ahead of their tickets".

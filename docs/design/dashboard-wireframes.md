@@ -92,3 +92,43 @@ change from a usage change.
 The canvas used for review holds Costs and Devices at 390 px, Costs at
 1440 px, and the onboarding surface at 390 px. The remaining views repeat
 these three shapes with a different breakdown, which is the point.
+
+## Two surfaces drawn ahead of their tickets
+
+Neither of these belongs to the design phase — ticket 78 owns the failures
+view and ticket 77 owns appearance — and both are blocked on build work. They
+are drawn here so that neither gets invented at implementation time.
+
+### Failures
+
+A fifth tab beside the Costs views, sharing the same date-range control,
+carrying a count badge when the range holds any. It is a tab rather than a
+destination because "why did nothing arrive" is a question about the same
+period as "what did we spend".
+
+Each row is the failure type as a monospace chip, the time, the session, the
+device and member, and then a sentence saying what to do about it. The three
+types with known advice — a rejected key, a failed transcript upload, a
+session that stopped mid-turn — each say plainly whether the costs are
+affected, because that is the reader's first worry. A type with no advice
+shows the recorded message as recorded, rather than a generic line pretending
+to be advice. A rejected key links to Keys, which is where the fix is.
+
+Red marks a failure that lost something; amber marks one that resolves
+itself; the neutral chip marks a type we have nothing to say about.
+
+### Appearance
+
+Two scopes in one page, as a segmented control: Organisation and Yours. The
+org scope holds the accent seed and the logo and is Owner or Admin; the
+personal scope holds a member's own seed and their light, dark or system
+preference.
+
+The seed field shows the six derived values beneath it as swatches, computed
+on save. This is not decoration: `CorePalette` raises the primary chroma to a
+minimum, so a near-neutral seed returns a saturated accent, and a person who
+types grey and gets cyan needs to see that before they save, not after.
+
+When the org locks the seed, the personal seed control is absent rather than
+disabled, because a control that cannot be used is a question the reader
+cannot answer.
