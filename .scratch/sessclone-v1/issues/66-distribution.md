@@ -11,3 +11,4 @@
 - [ ] Documentation states the restart requirement plainly
 - [ ] Documentation states that Turns from before the restart are backfilled by the first sweep
 - [ ] A self-hoster's fork installs by the same path
+- [ ] An environment with no shell the Member can reach — Claude Code Cloud, Claude Projects — has its own install path written down: the plugin from the environment's init script, the key from its environment settings (finding 74)
