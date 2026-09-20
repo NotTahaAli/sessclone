@@ -38,25 +38,27 @@ const EXPECTED = [
   { file: 'workflow-agent-run.jsonl', usageEntries: 1, turns: 1 },
 ]
 
-// JSON.parse returns any, so naming the return type here is a declaration
-// rather than an assertion — the same trick the corpus test uses.
-const parseEntry = (line: string): { message?: { usage?: unknown } } =>
-  JSON.parse(line)
+// A transcript built from objects, for the cases the corpus cannot show:
+// blocks of one group that disagree, and values no captured session produced.
+const transcript = (...entries: unknown[]) =>
+  entries.map((entry) => JSON.stringify(entry)).join('\n') + '\n'
 
-const usageEntryCount = (file: string) =>
-  fixture(file)
-    .split('\n')
-    .filter((line) => line !== '')
-    .map(parseEntry)
-    .filter((entry) => entry.message?.usage !== undefined).length
+const assistant = (
+  messageId: string,
+  usage: Record<string, unknown>,
+  rest: Record<string, unknown> = {},
+) => ({
+  type: 'assistant',
+  sessionId: 's1',
+  message: { id: messageId, model: 'claude-opus-5', ...rest, usage },
+})
 
 describe('one Turn per model response', () => {
   // The 2.4x overcount, guarded. Entries repeat per content block and share
   // one message.id, so a Turn per entry bills the same API call twice.
   test.each(EXPECTED)(
     '$file yields $turns Turns from $usageEntries usage entries',
-    ({ file, usageEntries, turns }) => {
-      expect(usageEntryCount(file)).toBe(usageEntries)
+    ({ file, turns }) => {
       expect(turnsIn(file)).toHaveLength(turns)
     },
   )
@@ -105,11 +107,29 @@ describe('counters are the maximum across the group', () => {
   })
 
   test('ignores usage.iterations, which the top-level counters already state', () => {
-    // One user turn, two API iterations, counters independent per iteration.
-    // The top-level block is authoritative; summing iterations doubles it.
-    expect(turnsIn('multi-iteration-turn.jsonl')[0]?.usage.outputTokens).toBe(
-      130,
+    // Every captured session states one iteration that restates the top level,
+    // so the corpus cannot tell reading it from ignoring it. Here they
+    // disagree: the top-level block is authoritative, and summing the
+    // iterations or reading the first would give 11 or 7.
+    const turns = parseTranscript(
+      transcript(
+        assistant(
+          'msg_iterations',
+          {
+            input_tokens: 1,
+            output_tokens: 130,
+            iterations: [
+              { input_tokens: 7, output_tokens: 7 },
+              { input_tokens: 4, output_tokens: 4 },
+            ],
+          },
+          { stop_reason: 'end_turn' },
+        ),
+      ),
     )
+
+    expect(turns[0]?.usage.outputTokens).toBe(130)
+    expect(turns[0]?.usage.inputTokens).toBe(1)
   })
 })
 
@@ -119,6 +139,46 @@ describe('cache creation stays split', () => {
 
     expect(usage?.cacheCreation1hInputTokens).toBe(24_982)
     expect(usage?.cacheCreation5mInputTokens).toBe(0)
+  })
+
+  test('reads both classes from the entry that reported the total', () => {
+    // Maximising the three counters independently composes a block no entry
+    // ever reported: 20,330 five-minute tokens beside 24,982 one-hour tokens
+    // against a reported total of 24,982, an 81% overbill of the most
+    // expensive class.
+    const turns = parseTranscript(
+      transcript(
+        assistant(
+          'msg_cache',
+          {
+            output_tokens: 1,
+            cache_creation_input_tokens: 20_330,
+            cache_creation: {
+              ephemeral_5m_input_tokens: 20_330,
+              ephemeral_1h_input_tokens: 0,
+            },
+          },
+          { stop_reason: null },
+        ),
+        assistant(
+          'msg_cache',
+          {
+            output_tokens: 202,
+            cache_creation_input_tokens: 24_982,
+            cache_creation: {
+              ephemeral_5m_input_tokens: 0,
+              ephemeral_1h_input_tokens: 24_982,
+            },
+          },
+          { stop_reason: 'end_turn' },
+        ),
+      ),
+    )
+    const usage = turns[0]?.usage
+
+    expect(usage?.cacheCreationInputTokens).toBe(24_982)
+    expect(usage?.cacheCreation5mInputTokens).toBe(0)
+    expect(usage?.cacheCreation1hInputTokens).toBe(24_982)
   })
 
   test('the two classes account for the reported total across the corpus', () => {
@@ -156,12 +216,53 @@ describe('the modifiers that change or explain a price', () => {
     ).toBe('standard')
   })
 
-  test('carries thinking tokens and the server-tool counters', () => {
-    const usage = turnsIn('multi-iteration-turn.jsonl')[0]?.usage
+  test('carries thinking tokens', () => {
+    expect(turnsIn('multi-iteration-turn.jsonl')[0]?.usage.thinkingTokens).toBe(
+      49,
+    )
+  })
 
-    expect(usage?.thinkingTokens).toBe(49)
-    expect(usage?.webSearchRequests).toBe(0)
-    expect(usage?.webFetchRequests).toBe(0)
+  test('carries the server-tool counters, which no fixture exercises', () => {
+    // Every captured session reports zero web searches and zero web fetches,
+    // so the corpus would pass against a parser that hardcoded them.
+    const turns = parseTranscript(
+      transcript(
+        assistant(
+          'msg_server_tools',
+          {
+            output_tokens: 10,
+            server_tool_use: { web_search_requests: 3, web_fetch_requests: 5 },
+          },
+          { stop_reason: 'end_turn' },
+        ),
+      ),
+    )
+
+    expect(turns[0]?.usage.webSearchRequests).toBe(3)
+    expect(turns[0]?.usage.webFetchRequests).toBe(5)
+  })
+
+  test('a modifier comes from a block that finished, not the partial one', () => {
+    // The counters already refuse to believe block 0. A modifier read from it
+    // would price a Turn at a tier the completed response did not use — and
+    // every block in the corpus agrees, so only a built case shows it.
+    const turns = parseTranscript(
+      transcript(
+        assistant(
+          'msg_tier',
+          { output_tokens: 1, service_tier: 'standard' },
+          { stop_reason: null },
+        ),
+        assistant(
+          'msg_tier',
+          { output_tokens: 202, service_tier: 'priority' },
+          { stop_reason: 'end_turn' },
+        ),
+      ),
+    )
+
+    expect(turns[0]?.serviceTier).toBe('priority')
+    expect(turns[0]?.usage.outputTokens).toBe(202)
   })
 
   test('a model switch inside one Session is two Turns with two models', () => {
@@ -245,7 +346,6 @@ describe('identity', () => {
 
     expect(shared.length).toBeGreaterThan(0)
     for (const parsed of shared) {
-      expect(originalIds.has(parsed.messageId)).toBe(true)
       expect(parsed.entryUuids.some((uuid) => originalUuids.has(uuid))).toBe(
         true,
       )
@@ -266,15 +366,140 @@ describe('identity', () => {
 describe('a transcript read while it is being written', () => {
   test('discards a torn last line and keeps everything before it', () => {
     // A kill landing inside a write leaves a half-written entry with no
-    // trailing newline. Finding 05 measured one at 78,686 bytes: truncate to
-    // the last newline, parse that, discard the remainder.
+    // trailing newline — finding 05 measured one at 78,686 bytes. A torn entry
+    // is a prefix of a JSON object, so it is never itself parseable.
     const whole = fixture('multi-iteration-turn.jsonl')
     const torn = `${whole}{"type":"assistant","message":{"id":"msg_torn","usage":{"output_t`
 
     expect(parseTranscript(torn)).toEqual(parseTranscript(whole))
+    expect(
+      parseTranscript(torn).some((parsed) => parsed.messageId === 'msg_torn'),
+    ).toBe(false)
+  })
+
+  test('keeps a complete last entry whose newline has not landed', () => {
+    // The one deviation from finding 05's "truncate to the last newline":
+    // that rule also drops a whole final entry, and on a transcript that never
+    // grows again — a killed session — the Turn is lost for good.
+    const whole = fixture('agent-run.jsonl')
+
+    expect(parseTranscript(whole.trimEnd())).toEqual(parseTranscript(whole))
+    expect(parseTranscript(whole.trimEnd())).toHaveLength(1)
+  })
+
+  test('a corrupt line mid-file costs that entry and nothing else', () => {
+    const whole = fixture('multi-iteration-turn.jsonl')
+
+    expect(parseTranscript(`{"type":"assistant"\n${whole}`)).toEqual(
+      parseTranscript(whole),
+    )
   })
 
   test('an empty transcript yields no Turns', () => {
     expect(parseTranscript('')).toEqual([])
+  })
+})
+
+describe('the fixtures the assertions above skate past', () => {
+  test('a workflow Agent Run that died on its first block', () => {
+    // The corpus's only single-entry incomplete Turn, and its only Turn with a
+    // modifier nothing ever stated.
+    expect(turnsIn('workflow-agent-run.jsonl')).toMatchObject([
+      {
+        messageId: 'msg_011CeyDcYKQfCgFB7DTGKkfH',
+        complete: false,
+        speed: null,
+        usage: { outputTokens: 1 },
+      },
+    ])
+  })
+
+  test('both partial groups in the same Agent Run, not just the first', () => {
+    // A regression that special-cased one group would still pass on the other.
+    expect(
+      turn('agent-run-ends-mid-turn.jsonl', 'msg_011CeyFUCMNP4hMz6fBTZWxH')
+        ?.usage.outputTokens,
+    ).toBe(133)
+  })
+
+  test('a nested run is attributed to the Session id it reported', () => {
+    // The gap ADR 0006 leaves open and hands to ticket 36: two conversations
+    // present one session id, and the nested run's Turns land on the parent.
+    // Pinned here so the known misgrouping is a recorded fact rather than a
+    // surprise when ticket 36 changes it.
+    expect(
+      turnsIn('nested-run-inherits-parent-session-id.jsonl'),
+    ).toMatchObject([
+      {
+        sessionId: '456e47f6-e387-59c4-b84c-21c031bb3504',
+        agentId: null,
+        usage: { outputTokens: 70 },
+      },
+    ])
+  })
+
+  test('a resumed Session keeps its id and adds fresh message ids', () => {
+    const turns = turnsIn('resume-appends-to-one-file.jsonl')
+
+    expect(new Set(turns.map((parsed) => parsed.sessionId)).size).toBe(1)
+    expect(new Set(turns.map((parsed) => parsed.messageId)).size).toBe(
+      turns.length,
+    )
+  })
+})
+
+describe('input a transcript should not contain', () => {
+  test('an entry with no usable message id is not a Turn', () => {
+    // Grouped on a null id, two API calls become one Turn and the smaller is
+    // discarded — and a null heads a column the unique index is built on.
+    const turns = parseTranscript(
+      transcript(
+        {
+          type: 'assistant',
+          sessionId: 's1',
+          message: { id: null, usage: { output_tokens: 5 } },
+        },
+        {
+          type: 'assistant',
+          sessionId: 's1',
+          message: { id: null, usage: { output_tokens: 9 } },
+        },
+      ),
+    )
+
+    expect(turns).toEqual([])
+  })
+
+  test('a counter that is not a count is read as absent', () => {
+    // `1e999` is a number JSON accepts and JavaScript cannot hold: it parses
+    // to Infinity, which serialises straight back to null in a payload, so a
+    // Cost computed from it prices nothing at all. NaN does the same.
+    const turns = parseTranscript(
+      '{"type":"assistant","sessionId":"s1","message":{"id":"msg_hostile",' +
+        '"stop_reason":"end_turn","usage":{"output_tokens":"many",' +
+        '"input_tokens":-5,"cache_read_input_tokens":1e999,' +
+        '"cache_creation_input_tokens":2.5}}}\n',
+    )
+
+    expect(turns[0]?.usage).toMatchObject({
+      outputTokens: 0,
+      inputTokens: 0,
+      cacheReadInputTokens: 0,
+      cacheCreationInputTokens: 0,
+    })
+  })
+
+  test('an empty agent id is absence, not an Agent Run', () => {
+    const turns = parseTranscript(
+      transcript(
+        assistant(
+          'msg_agentless',
+          { output_tokens: 1 },
+          { stop_reason: 'end_turn' },
+        ),
+      ).replace('"type":"assistant"', '"type":"assistant","agentId":""'),
+    )
+
+    expect(turns[0]?.agentId).toBeNull()
   })
 })

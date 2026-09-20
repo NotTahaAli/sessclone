@@ -3,7 +3,7 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "sessclone v1 — ticket status",
-    "subtitle": "73 tickets · 15 done · 7 ready to start · 51 blocked",
+    "subtitle": "73 tickets · 17 done · 5 ready to start · 51 blocked",
     "output": "docs/tickets/ticket-graph.html",
     "quality_profile": "showcase"
   },
@@ -96,7 +96,7 @@
       "id": "collection",
       "type": "backend",
       "label": "Collection + Cost (29-43)",
-      "sublabel": "2 ready · 13 blocked",
+      "sublabel": "2 done · 13 blocked",
       "pos": [
         960,
         122
@@ -190,7 +190,7 @@
       "id": "accounts_collection",
       "from": "accounts",
       "to": "collection",
-      "variant": "emphasis"
+      "variant": "dashed"
     },
     {
       "id": "collection_product",

@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'vitest'
 
-import { deviceKey, projectKey, normaliseRemote } from './identity.ts'
+import {
+  deviceKey,
+  normaliseRemote,
+  projectKey,
+  withoutEmbeddedCredentials,
+} from './identity.ts'
 
 // Ticket 30's acceptance criteria. These are the keys a dashboard groups by,
 // so every case here is one a Member would otherwise see split in two.
@@ -33,15 +38,42 @@ describe('a git remote names one Project however it was cloned', () => {
     ).toBe('gitlab.example.com/group/subgroup/repo')
   })
 
-  test('a remote it cannot read is not a Project key', () => {
-    expect(normaliseRemote('')).toBeNull()
-    expect(normaliseRemote('   ')).toBeNull()
-    expect(normaliseRemote('not a remote')).toBeNull()
+  test.each([
+    ['', 'nothing at all'],
+    ['   ', 'whitespace'],
+    ['not a remote', 'prose'],
+    ['TODO:fix', 'a bare word with a colon'],
+    ['https://github.com', 'a host with no repository on it'],
+    ['C:\\code\\repo', 'a Windows path'],
+    ['/srv/git/repo.git', 'a local path'],
+    ['git@github.com:22:owner/repo.git', 'a port where a path belongs'],
+  ])('%s is not a Project key — %s', (remote) => {
+    expect(normaliseRemote(remote)).toBeNull()
+  })
+
+  test('a file:// remote is not a host, whatever it looks like', () => {
+    // Read as an scp remote it would parse as the host `file`, and every
+    // machine holding a bare repo at that path would collapse into one
+    // Project — the merge the local key exists to prevent.
+    expect(normaliseRemote('file:///srv/git/repo.git')).toBeNull()
+    expect(
+      projectKey({
+        remote: 'file:///srv/git/repo.git',
+        cwd: '/a',
+        hostname: 'first',
+      }).key,
+    ).not.toBe(
+      projectKey({
+        remote: 'file:///srv/git/repo.git',
+        cwd: '/a',
+        hostname: 'second',
+      }).key,
+    )
   })
 })
 
 describe('the Project key', () => {
-  test('is the normalised remote, with the raw one kept for debugging', () => {
+  test('is the normalised remote, with the reported one kept for debugging', () => {
     expect(
       projectKey({
         remote: 'git@github.com:NotTahaAli/sessclone.git',
@@ -52,6 +84,30 @@ describe('the Project key', () => {
       key: 'github.com/nottahaali/sessclone',
       remote: 'git@github.com:NotTahaAli/sessclone.git',
     })
+  })
+
+  test('never retains a credential someone pasted into a remote', () => {
+    // The key strips it either way. This is about the copy that is shipped to
+    // ingest and shown on a dashboard: a token in a remote URL is live, and a
+    // `projects` row is not a place anyone looks for a secret.
+    const identity = projectKey({
+      remote: 'https://someone:ghp_asecret@github.com/Org/repo.git',
+      cwd: '/a',
+      hostname: 'h',
+    })
+
+    expect(identity.remote).toBe('https://github.com/Org/repo.git')
+    expect(identity.remote).not.toContain('ghp_asecret')
+    expect(identity.key).toBe('github.com/org/repo')
+  })
+
+  test('strips a credential from a remote it cannot otherwise read', () => {
+    expect(withoutEmbeddedCredentials('https://u:tok@host/only')).toBe(
+      'https://host/only',
+    )
+    expect(withoutEmbeddedCredentials('git@github.com:Org/repo.git')).toBe(
+      'git@github.com:Org/repo.git',
+    )
   })
 
   test('is the same on two machines that cloned the same repository', () => {
@@ -94,7 +150,13 @@ describe('the Project key', () => {
       }).key
 
       expect(key).toBe('local:mbp-2:/home/taha/scratch/notes')
-      expect(key).not.toBe('notes')
+      expect(key).not.toBe(
+        projectKey({
+          remote: null,
+          cwd: '/home/taha/archive/notes',
+          hostname: 'mbp-2',
+        }).key,
+      )
     })
 
     test('does not merge the same directory name on two machines', () => {
@@ -125,13 +187,11 @@ describe('the Project key', () => {
         remote: null,
         cwd: 'c:\\Users\\taha\\Documents\\BloxfruitsBot',
         hostname: 'win-box',
-        platform: 'win32',
       }).key
       const upper = projectKey({
         remote: null,
         cwd: 'C:\\Users\\taha\\Documents\\BloxfruitsBot',
         hostname: 'win-box',
-        platform: 'win32',
       }).key
 
       expect(lower).toBe(upper)
@@ -142,16 +202,24 @@ describe('the Project key', () => {
         remote: null,
         cwd: '/home/taha/notes',
         hostname: 'linux-box',
-        platform: 'linux',
       }).key
       const upper = projectKey({
         remote: null,
         cwd: '/home/taha/Notes',
         hostname: 'linux-box',
-        platform: 'linux',
       }).key
 
       expect(lower).not.toBe(upper)
+    })
+
+    test('folds a Windows path wherever the key is computed', () => {
+      // Ingest and the dashboard compute keys from a stored cwd on a Linux
+      // server, so the fold follows the path rather than the running platform.
+      expect(
+        projectKey({ remote: null, cwd: 'C:/code/App', hostname: 'w' }).key,
+      ).toBe(
+        projectKey({ remote: null, cwd: 'c:/code/app', hostname: 'w' }).key,
+      )
     })
   })
 
@@ -217,11 +285,12 @@ describe('the Device key', () => {
   })
 
   test('is the same string for two Members on one machine', () => {
-    // Which is why a Device row is scoped to its Member in the schema: the key
-    // is unique inside a Member, never globally.
-    const shared = { hostname: 'build-box', environment: {} }
-
-    expect(deviceKey(shared)).toBe(deviceKey(shared))
+    // Two Members, two Collectors, one shared build box: the key they compute
+    // is identical, which is why the Device row is scoped to its Member by the
+    // schema rather than by this string.
+    expect(
+      deviceKey({ hostname: 'build-box', environment: { USER: 'taha' } }),
+    ).toBe(deviceKey({ hostname: 'BUILD-BOX', environment: { USER: 'sam' } }))
   })
 
   test('an unnamed machine still keys to something stable', () => {

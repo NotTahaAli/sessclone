@@ -1,17 +1,21 @@
 // Device and Project keys. Both exist because the obvious key is wrong: a
 // Claude Code Cloud container is a new machine every hour, and one repository
-// is spelled several ways by the machines that cloned it. A key that follows
+// is spelled several ways by the machines that cloned it. A key that followed
 // either would split a Member's dashboard into rows that mean nothing.
 
-/** The scheme form: `https://host/path`, `ssh://git@host:22/path`, `git://…`. */
+/** Anything with a scheme: `https://host/path`, `ssh://git@host:22/path`. */
+const SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i
+
 const URL_REMOTE = /^[a-z][a-z0-9+.-]*:\/\/(?<authority>[^/]+)\/(?<path>.+)$/i
 
-// The scp form: `git@github.com:owner/repo.git`. The host is two characters or
-// more and the path may not open with a backslash, which is what keeps a
-// Windows path (`C:\code\repo`) out — it is a perfectly good git remote, but it
-// is not a `host/owner/repo` and must fall through to the local key instead.
+// The scp form: `git@github.com:owner/repo.git`. The authority must carry a
+// dot, which is what keeps a Windows path (`C:\code\repo`), a bare word
+// (`TODO:fix`) and a scheme this cannot read (`file://…`, whose authority is
+// empty) from being read as hosts — each of those is a remote no dashboard can
+// group by, so it falls through to the local key instead. The path rejects a
+// second colon, which would be a port in the wrong place.
 const SCP_REMOTE =
-  /^(?:[^@\s/]+@)?(?<authority>[^\s/:]{2,}):(?<path>[^\s\\][^\s]*)$/
+  /^(?:[^@\s/]+@)?(?<authority>[^\s/:]*\.[^\s/:]+):(?<path>[^\s\\:][^\s:]*)$/
 
 const withoutCredentials = (authority: string) =>
   authority.slice(authority.lastIndexOf('@') + 1)
@@ -28,11 +32,17 @@ export const normaliseRemote = (remote: string): string | null => {
   const trimmed = remote.trim().replace(/\/+$/, '')
   if (trimmed === '') return null
 
-  const groups = (URL_REMOTE.exec(trimmed) ?? SCP_REMOTE.exec(trimmed))?.groups
-  if (groups === undefined) return null
+  // A string that names a scheme gets exactly one reading. Letting it fall
+  // through to the scp form would read `file:///srv/git/repo` as the host
+  // `file`, and every machine with a bare repo at that path would collapse
+  // into one Project.
+  const matched = SCHEME.test(trimmed)
+    ? URL_REMOTE.exec(trimmed)
+    : SCP_REMOTE.exec(trimmed)
+  if (matched?.groups === undefined) return null
 
-  const host = withoutPort(withoutCredentials(groups.authority ?? ''))
-  const path = (groups.path ?? '')
+  const host = withoutPort(withoutCredentials(matched.groups.authority ?? ''))
+  const path = (matched.groups.path ?? '')
     .replace(/^\/+/, '')
     .replace(/\.git$/i, '')
     .replace(/\/+$/, '')
@@ -42,14 +52,31 @@ export const normaliseRemote = (remote: string): string | null => {
   return `${host}/${path}`.toLowerCase()
 }
 
-const machine = (hostname: string) =>
-  hostname.trim().toLowerCase() === ''
-    ? 'unknown'
-    : hostname.trim().toLowerCase()
+/**
+ * The remote as git reported it, minus any credential embedded in it. A token
+ * pasted into a remote URL is a live secret, and this string is shipped to
+ * ingest and shown on a dashboard to explain a key — so the credential comes
+ * out here rather than landing in a row nobody thinks of as sensitive.
+ */
+export const withoutEmbeddedCredentials = (remote: string): string =>
+  remote.replace(
+    /^(?<scheme>[a-z][a-z0-9+.-]*:\/\/)(?<userinfo>[^/@]*@)/i,
+    '$<scheme>',
+  )
+
+const machine = (hostname: string) => {
+  const named = hostname.trim().toLowerCase()
+  return named === '' ? 'unknown' : named
+}
+
+// `C:\code\repo`, `c:/code/repo`. One real Windows box spelled its own working
+// directory both ways — 1,125 entries lowercase against 281 uppercase, same
+// session, same client version — and the filesystem does not distinguish them.
+const WINDOWS_PATH = /^[a-z]:[\\/]/i
 
 export type ProjectIdentity = {
   key: string
-  /** The remote exactly as git reported it, kept so a key can be explained. */
+  /** The remote git reported, credentials removed, so a key can be explained. */
   remote: string | null
 }
 
@@ -62,26 +89,26 @@ export const projectKey = ({
   remote,
   cwd,
   hostname,
-  platform,
 }: {
   remote: string | null | undefined
   cwd: string
   hostname: string
-  platform?: string
 }): ProjectIdentity => {
-  const normalised =
-    remote === null || remote === undefined ? null : normaliseRemote(remote)
+  const reported =
+    remote === null || remote === undefined || remote.trim() === ''
+      ? null
+      : withoutEmbeddedCredentials(remote)
+  const normalised = reported === null ? null : normaliseRemote(reported)
 
-  if (normalised !== null) return { key: normalised, remote: remote ?? null }
+  if (normalised !== null) return { key: normalised, remote: reported }
 
-  // Windows spells one directory two ways: a real box reported
-  // `c:\Users\…` on 1,125 entries and `C:\Users\…` on 281, same session, same
-  // client version. The filesystem does not distinguish them and neither may
-  // the key — while a case-sensitive filesystem elsewhere genuinely can hold
-  // both `notes` and `Notes`.
-  const path = platform === 'win32' ? cwd.toLowerCase() : cwd
+  // The fold is decided by the path, not by the platform this code runs on:
+  // ingest and the dashboard compute keys from a stored `cwd` on a Linux
+  // server, and would otherwise reintroduce the split the fold exists to
+  // close.
+  const path = WINDOWS_PATH.test(cwd) ? cwd.toLowerCase() : cwd
 
-  return { key: `local:${machine(hostname)}:${path}`, remote: remote ?? null }
+  return { key: `local:${machine(hostname)}:${path}`, remote: reported }
 }
 
 // Claude Code Cloud names the account and the environment type in the
@@ -98,7 +125,8 @@ const DEFAULT_ENVIRONMENT = 'cloud_default'
  * one Device rather than filling a dashboard with hours-old machines.
  *
  * The key is unique inside a Member, never globally: two Members may own a
- * machine called `build-box`, so the Device row is scoped to its Member.
+ * machine called `build-box`, so the Device row is scoped to its Member by the
+ * schema rather than by anything in this string.
  */
 export const deviceKey = ({
   hostname,
@@ -110,7 +138,7 @@ export const deviceKey = ({
   const account = environment[ACCOUNT]?.trim()
 
   if (
-    environment[CLOUD] === 'true' &&
+    environment[CLOUD]?.trim() === 'true' &&
     account !== undefined &&
     account !== ''
   ) {
