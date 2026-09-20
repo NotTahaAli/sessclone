@@ -108,6 +108,7 @@ point at their own deployment without editing a vendored plugin.
 | `SESSCLONE_URL`       | in practice \* | `http://127.0.0.1:3000` | Base URL of the deployment to report to. Matches the server's `NEXT_PUBLIC_APP_URL` |
 | `SESSCLONE_API_KEY`   | yes            | —                       | The Member's API key, issued in the dashboard. Identifies the Member and the Org    |
 | `SESSCLONE_STATE_DIR` | no             | platform-dependent \*\* | Where the cursor and the retry queue are kept                                       |
+| `SESSCLONE_DEVICE`    | no \*\*\*      | the machine key         | Names this Device, for environments whose machine identity is not stable            |
 
 \* Not required by the code — `packages/plugin/hooks/stop.mjs` falls back to
 `http://127.0.0.1:3000` — but required by anyone whose deployment is not on
@@ -140,6 +141,17 @@ treat those two rows as the intended behaviour rather than the measured one.
 
 That 30-day sweep is also a deadline on archival: a transcript not collected
 within the window is gone, whatever this product does.
+
+\*\*\* `SESSCLONE_DEVICE` is optional on a laptop and required in practice on
+any environment that boots a fresh container per session — Claude Code Cloud
+and Claude Projects both do. There every machine identifier a hook process can
+read is minted at boot, so leaving this unset mints a new Device per container
+and the per-Device breakdown becomes noise. Set it to anything stable that
+names the environment; its environment id is the obvious choice. In a Claude
+Projects environment it is set in the environment settings on claude.ai,
+alongside `SESSCLONE_API_KEY`, rather than in a shell profile — a session
+cannot set it for itself, because the container it would set it in is the one
+being replaced. Read by ticket 76; nothing reads it today.
 
 `CLAUDE_CONFIG_DIR` is Claude Code's variable, not this product's. The
 Collector reads it — resolving `CLAUDE_CONFIG_DIR ?? ~/.claude` exactly as

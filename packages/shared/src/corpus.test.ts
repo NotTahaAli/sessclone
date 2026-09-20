@@ -179,3 +179,44 @@ test('an agent run is attributed to the session that spawned it', () => {
     expect([...session]).toEqual([parent])
   }
 })
+
+// Ticket 75. Claude Projects runs the same CLI in a container it builds per
+// session, so the question is not whether it writes transcripts but whether it
+// writes the same ones. These two assertions are what would fail if that ever
+// stopped being true.
+const PROJECTS = 'projects-thread-session.jsonl'
+
+test('a Projects session splits one response across several usage entries', () => {
+  const entries = corpus.find((entry) => entry.file === PROJECTS)!.entries
+  const usage = entries.filter((entry) => entry.message?.usage)
+  const ids = new Set(usage.map((entry) => entry.message!.id))
+
+  // The overcount ADR 0006 exists for, measured in a live Projects session:
+  // three usage-bearing entries per response, split by apiBlockIndex. A parser
+  // keying on the entry rather than the response bills three times here.
+  expect(usage.length).toBe(9)
+  expect(ids.size).toBe(3)
+  expect(new Set(usage.map((entry) => entry.apiBlockIndex))).toEqual(
+    new Set([0, 1, 2]),
+  )
+})
+
+test('a Projects session carries fields the other fixtures do not', () => {
+  const keysIn = (file: string) =>
+    new Set(
+      corpus
+        .find((entry) => entry.file === file)!
+        .entries.flatMap((entry) => Object.keys(entry)),
+    )
+
+  const projectsOnly = [...keysIn(PROJECTS)].filter(
+    (key) => !keysIn('resume-appends-to-one-file.jsonl').has(key),
+  )
+
+  // Not an exhaustive list — the point is that they are here, redacted to
+  // placeholders but present, so a parser that chokes on an unknown entry
+  // field fails against this fixture rather than in production.
+  expect(projectsOnly).toEqual(
+    expect.arrayContaining(['projectsUserTurn', 'turnOrigin', 'advisorModel']),
+  )
+})
