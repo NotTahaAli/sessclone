@@ -131,6 +131,106 @@ A reclaim differs in at least four ways that this spike could not touch:
    already flushed has a different loss profile — only the last turn is at risk
    — and that shape was not measured.
 
+## Container run — three of the four residuals, measured
+
+Docker on this Mac (colima, macOS 27.0, `node:22-alpine`) can kill a container
+outright and then destroy its filesystem, which is the part the cloud
+environment could not do to itself. It is **not** a Claude Code Cloud reclaim
+and nothing here is Claude Code — the writer is a stand-in that appends
+200KB JSON lines with one `appendFileSync` each and no `fsync`, the same
+syscall shape finding 04 observed (a whole turn written in one step, one
+attachment entry of 167,470 bytes among them). What is being tested is the
+container runtime and the filesystem, not the model.
+
+Two writers, identical but for one thing: the **busy** one appends in a tight
+synchronous `for(;;)` loop, the **paced** one appends from a 50 ms interval and
+so returns to the event loop between writes. Both register a SIGTERM handler
+that writes a `SessionEnd` line — the stand-in for the hook whose firing this
+spike measured above.
+
+| case                        | how it died                   | wall time  | exit | `SessionEnd` written | final byte | torn record         |
+| --------------------------- | ----------------------------- | ---------- | ---- | -------------------- | ---------- | ------------------- |
+| busy writer, `docker stop`  | SIGTERM ignored, then SIGKILL | **10.56s** | 137  | **no**               | `x`        | **yes**             |
+| paced writer, `docker stop` | SIGTERM handled               | 0.11s      | 0    | yes, at +3028 ms     | `\n`       | no                  |
+| paced writer, `docker kill` | SIGKILL, no grace             | 0.10s      | 137  | **no**               | `\n`       | no                  |
+| `docker rm` after the kill  | filesystem destroyed          | —          | —    | —                    | —          | writable layer gone |
+
+### 1. A torn record is real, and this is what one looks like
+
+The busy writer's file ended **mid-entry**. Its last complete line parses
+(`type: assistant`, `n: 20372`, 200,063 bytes). After that newline sit
+**78,686 bytes** of entry 20373 — a JSON object cut off inside its `filler`
+string, with no terminating newline:
+
+```
+{"type":"assistant","n":20373,"msSinceStart":13449,"filler":"xxxx…   ← ends here
+```
+
+So an append large enough to need more than one `write()` can be cut in half by
+a kill, and finding 04's precaution — _"the collector should still refuse to
+parse a tail that does not end in `\n`"_ — is no longer a precaution. It is the
+recovery rule, and it is sufficient: everything before the final newline was
+intact and parseable in every case. **Truncate to the last `\n`, parse that,
+discard the remainder.**
+
+Note which case produced it. The two paced runs both ended on a clean `\n`
+despite one of them being SIGKILLed with no warning at all. Tearing needs the
+kill to land _inside_ a write, which is likelier the bigger the entry — and
+Claude Code writes its biggest entries, whole turns and 167KB attachments, in
+one step.
+
+### 2. A grace period is worth nothing to a process that is busy
+
+This is the sharpest result, because both rows are the same `docker stop`
+against the same runtime with the same handler registered. The paced writer
+heard SIGTERM and was gone in 0.11 s with its `SessionEnd` on disk. The busy
+writer never ran its handler, sat through the full **10-second** default grace
+window, and was SIGKILLed — exit 137, no `SessionEnd`, and a torn tail.
+
+The signal was delivered both times. Servicing it requires reaching the event
+loop, and a process in the middle of writing a turn has not reached it. That is
+exactly the moment a reclaim is most likely to hurt, so the honest reading is:
+**a graceful-shutdown window is not a mechanism the Collector may depend on.**
+It is a bonus that arrives only when nothing is happening, which is when there
+was nothing to flush anyway.
+
+It also means "did `SessionEnd` fire?" does not answer "was the container
+signalled?". Both `docker kill` and a busy `docker stop` look identical from
+the log: nothing.
+
+### 3. Destroying the container destroys the transcript; a volume survives
+
+Each writer wrote the same lines twice — once to a named volume, once to the
+container's own writable layer.
+
+- While the killed container still existed, the writable-layer copy was fully
+  recoverable: `docker cp` pulled back all 11,603,450 bytes from a dead
+  container.
+- After `docker rm`, that path was gone — `No such container` — while the
+  volume copy was byte-identical at 11,603,450 bytes.
+
+So residual 1 splits in two. A _stopped_ environment is still a recovery
+source; a _removed_ one is not, and nothing on its filesystem is a recovery
+source at any price. For a self-hosted Collector in Docker — which ticket 67
+ships a compose file for — the state directory must be a named volume or a bind
+mount. On the default writable layer, a `docker rm` silently discards the
+cursor and every queued report, and that is a configuration mistake nothing
+will report.
+
+### What this still does not answer
+
+- **Page-cache loss (residual 2) is untouched.** Every file above was read back
+  on a kernel that kept running. Killing the container never threatened the
+  host's page cache. Proving that an abrupt _host_ death loses acknowledged
+  writes needs the VM itself hard-killed, which on this machine would take the
+  operator's unrelated containers down with it; it was not done.
+- **Claude Code Cloud's own policy (residual 3) is still unknown.** Docker's
+  10-second SIGTERM-then-SIGKILL is Docker's, and says nothing about what the
+  platform does. The finding that transfers is the shape, not the number: if a
+  reclaim signals at all, only an idle session benefits.
+- **Interactive multi-turn sessions (residual 4)** are still unexercised, and
+  no stand-in can settle them — that needs real Claude Code.
+
 ### What a future run on a reclaimable environment must check
 
 - Install the same three-hook settings file, start a session, force a reclaim

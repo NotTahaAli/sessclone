@@ -3,7 +3,7 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "sessclone v1 — ticket status",
-    "subtitle": "73 tickets · 13 done · 9 ready to start · 51 blocked",
+    "subtitle": "73 tickets · 14 done · 8 ready to start · 51 blocked",
     "output": "docs/tickets/ticket-graph.html",
     "quality_profile": "showcase"
   },
@@ -40,7 +40,7 @@
       "id": "spikes",
       "type": "security",
       "label": "Spikes + Fixtures (3-8)",
-      "sublabel": "4 done · 2 ready",
+      "sublabel": "5 done · 1 ready",
       "pos": [
         40,
         578
