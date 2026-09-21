@@ -4,10 +4,10 @@
 
 **Blocked by:** 20, 21.
 
-**Status:** needs-verification
+**Status:** done
 
 - [x] GitHub sign-in works end to end
-- [ ] Magic-link sign-in works end to end, for people whose employer blocks OAuth apps
+- [x] Magic-link sign-in works end to end, for people whose employer blocks OAuth apps
 - [x] First sign-in creates an Org and makes the signer its Owner
 - [x] Signing out and back in returns to the same Org
 - [x] No password is ever created or stored
@@ -45,12 +45,15 @@ actually in force — which is how the bootstrap's `returning` clauses were foun
 to fail their own select policies, and why the ids are generated in the
 application instead.
 
-**Not verified here, and the two boxes are left unticked for it:** the live
-click-through. This container reaches no Supabase project and no GitHub OAuth
-app, so a real GitHub sign-in and a real emailed link are the one thing the
-tests stand in for. Everything either flow reaches after Supabase hands over a
-verified id and email is covered; the hand-over itself is not. Tick them when
-somebody has signed in both ways against a real project.
+**Verified against a real project**, 2026-09-21, which is what the last two
+boxes were waiting on. A GitHub sign-in landed on `/` with an Org named after
+the address and the signer as its Owner; signing out and back in returned the
+same Org rather than a second one; and an emailed link signed the same person
+in. Three configuration traps cost more time than the code did, and are written
+down where the next person meets them: the provider must be a GitHub **OAuth
+App** and not a GitHub App, `apps/web/.env` is where Next reads the
+environment, and the migrations create `sessclone_app` as `nologin` so a
+deployment that applies them first must `alter role` rather than `create role`.
 
 **Found by review, after the first pass:**
 
