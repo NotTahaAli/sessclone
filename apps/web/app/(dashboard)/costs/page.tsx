@@ -1,3 +1,4 @@
+import { RangeControl } from './range-control'
 import { SpendChart } from './spend-chart'
 import { EmptyState } from '../empty-state'
 import { InstallCollector } from '../install-collector'
@@ -9,13 +10,8 @@ import {
   onboardingState,
   type OnboardingFacts,
 } from '../../../lib/onboarding'
-import {
-  currentMonth,
-  dailySpend,
-  spendSeries,
-  type LocalRange,
-  type SpendSeries,
-} from '../../../lib/series'
+import { resolveRange, type RangeParams } from '../../../lib/range'
+import { dailySpend, spendSeries, type SpendSeries } from '../../../lib/series'
 import { currentViewer } from '../../../lib/viewer'
 
 // Costs. Ticket 45 owns the frame and the states before there is anything to
@@ -23,11 +19,12 @@ import { currentViewer } from '../../../lib/viewer'
 // The breakdowns by Member, Project and Device are 54 to 56 and hang from the
 // same range.
 //
-// The range is the current calendar month in the Org's timezone, which
+// The range is ticket 53's: read from the URL, defaulting to the current
+// calendar month in the Org's timezone, which
 // `docs/design/dashboard-wireframes.md` chose because it is the period a bill
-// is drawn on. Ticket 53 puts it in the URL and gives it presets; until then
-// it is the default and nothing else, and every piece below already takes it
-// as an argument rather than deciding for itself.
+// is drawn on. It is resolved once here and passed down — the control renders
+// it, the read takes it, and the breakdowns in 54 to 56 will take the same
+// object rather than parsing the URL again.
 
 const money = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -36,11 +33,6 @@ const money = new Intl.NumberFormat('en-US', {
 })
 const compact = new Intl.NumberFormat('en-US', { notation: 'compact' })
 const whole = new Intl.NumberFormat('en-US')
-const monthName = new Intl.DateTimeFormat('en-GB', {
-  month: 'long',
-  year: 'numeric',
-  timeZone: 'UTC',
-})
 
 /**
  * Spend over time, and the four figures that say what the bars are made of.
@@ -50,21 +42,13 @@ const monthName = new Intl.DateTimeFormat('en-GB', {
  * floor whenever that count is not zero, and a reader who cannot see it reads
  * the floor as the answer (ADR 0002).
  */
-function OverTime({
-  series,
-  range,
-}: {
-  series: SpendSeries
-  range: LocalRange
-}) {
-  const month = monthName.format(new Date(`${range.from}T00:00:00Z`))
-
+function OverTime({ series }: { series: SpendSeries }) {
   if (series.turns === 0) {
     // Not the onboarding state: Turns exist, this window has none of them.
     return (
-      <EmptyState headline={`Nothing in ${month}`}>
-        Turns have arrived, but none of them fall in this period. Choosing a
-        wider one arrives with the date-range control.
+      <EmptyState headline="Nothing in this period">
+        Turns have arrived, but none of them fall between these dates. Pick a
+        wider period above.
       </EmptyState>
     )
   }
@@ -73,8 +57,7 @@ function OverTime({
     <div className="flex flex-col gap-6">
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Tile label="Cost" value={money.format(series.costUsd)}>
-          {month}
-          {series.unpricedTurns > 0 ? ', priced Turns only' : ''}
+          {series.unpricedTurns > 0 ? 'priced Turns only' : 'this period'}
         </Tile>
         <Tile label="Tokens" value={compact.format(series.tokens)}>
           input, output and cache
@@ -127,13 +110,21 @@ function Tile({
 /** The one action an empty Costs offers, hoisted so it is one object. */
 const CREATE_A_KEY = { href: '/keys', label: 'Create a key' }
 
-export default async function Costs() {
+export default async function Costs({
+  searchParams,
+}: {
+  searchParams: Promise<RangeParams>
+}) {
   const viewer = await currentViewer()
   // The layout above has already refused this case; the narrowing is for the
   // type checker rather than for a reader.
   if (!viewer) return null
 
-  const range = currentMonth(viewer.orgTimezone)
+  // Ticket 53: the period comes from the URL, so a link to this page is a link
+  // to a period. Anything the URL cannot mean falls back to the default rather
+  // than failing the page.
+  const resolved = resolveRange(await searchParams, viewer.orgTimezone)
+  const { range } = resolved
 
   // One transaction, two independent reads. The spend read is wasted on a
   // deployment with no Turns at all, which is one index probe that finds
@@ -151,7 +142,10 @@ export default async function Costs() {
         title="Costs"
         description={`What ${viewer.orgName} is spending, estimated from usage and published prices.`}
       />
-      <Body facts={facts} series={spendSeries(rows, range)} range={range} />
+      {onboardingState(facts) === 'collecting' ? (
+        <RangeControl path="/costs" resolved={resolved} />
+      ) : null}
+      <Body facts={facts} series={spendSeries(rows, range)} />
     </div>
   )
 }
@@ -159,15 +153,13 @@ export default async function Costs() {
 function Body({
   facts,
   series,
-  range,
 }: {
   facts: OnboardingFacts
   series: SpendSeries
-  range: LocalRange
 }) {
   switch (onboardingState(facts)) {
     case 'collecting':
-      return <OverTime series={series} range={range} />
+      return <OverTime series={series} />
 
     case 'waiting':
       return <Waiting keyUsed={facts.key_used} />
