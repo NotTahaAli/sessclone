@@ -5,7 +5,9 @@ import {
   type ArchivalMembership,
   type ArchivalProject,
 } from '../../../../lib/archival'
+import { storedProjects, storedSessions } from '../../../../lib/artifacts'
 import { ownScopes, type OwnScope } from '../../../../lib/scopes'
+import { StoredTranscripts } from './stored-transcripts'
 import { PageHeader } from '../../page-header'
 import { asViewer } from '../../../../lib/db'
 import { signedInUser } from '../../../../lib/supabase/server'
@@ -33,12 +35,16 @@ export default async function YourSettings() {
 
   // One transaction, which is what `asViewer` opens and what carries the
   // viewer's claim. The two statements are independent, so they go together.
-  const [memberships, projects, scopes] = await asViewer(user.id, (tx) =>
-    Promise.all([
-      listArchivalMemberships(tx),
-      listArchivalProjects(tx),
-      ownScopes(tx),
-    ]),
+  const [memberships, projects, scopes, stored, sessions] = await asViewer(
+    user.id,
+    (tx) =>
+      Promise.all([
+        listArchivalMemberships(tx),
+        listArchivalProjects(tx),
+        ownScopes(tx),
+        storedProjects(tx),
+        storedSessions(tx),
+      ]),
   )
 
   // Grouped once here rather than filtered inside the render, which would be
@@ -89,6 +95,24 @@ export default async function YourSettings() {
           ))
         )}
       </section>
+
+      <StoredTranscripts
+        projects={stored}
+        sessions={sessions.sessions}
+        more={sessions.more}
+        // Named only when there is more than one Org to tell apart, as the
+        // archival section above names them only then.
+        orgNames={
+          new Map(
+            memberships.length > 1
+              ? memberships.map((membership) => [
+                  membership.member_id,
+                  membership.org_name,
+                ])
+              : [],
+          )
+        }
+      />
     </div>
   )
 }

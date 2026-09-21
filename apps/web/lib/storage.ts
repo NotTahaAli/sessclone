@@ -1,4 +1,9 @@
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import {
+  DeleteObjectsCommand,
+  ListObjectsV2Command,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 // ADR 0003: the bytes never pass through this application. The Collector PUTs
@@ -60,6 +65,22 @@ export const storageConfigured = () =>
       process.env.STORAGE_ACCESS_KEY_ID &&
       process.env.STORAGE_SECRET_ACCESS_KEY,
   )
+
+/**
+ * The prefix every one of a Member's objects for one Project sits under.
+ *
+ * ADR 0005 says the Project sweep of ticket 73 is a prefix sweep, and this is
+ * why the key is shaped as it is (ADR 0003): one `list` and one `delete`
+ * rather than a request per object.
+ */
+export const projectPrefix = (artifact: {
+  orgId: string
+  memberId: string
+  projectKey: string | null
+}) =>
+  `orgs/${artifact.orgId}/members/${artifact.memberId}/projects/${encodeURIComponent(
+    artifact.projectKey ?? 'none',
+  )}/`
 
 /**
  * The object key for one Session's transcript, from ADR 0003.
@@ -133,4 +154,63 @@ export const ttl = () => {
   return Number.isFinite(configured) && configured > 0
     ? Math.min(configured, MAX_TTL_SECONDS)
     : PRESIGN_TTL_SECONDS
+}
+
+/** S3 takes at most a thousand keys in one delete. */
+const DELETE_BATCH = 1000
+
+/**
+ * Deletes the named objects, in batches of a thousand.
+ *
+ * Deleting an object that is not there succeeds, which is what makes ticket
+ * 73's deletion safe to re-run: the failure mode worth avoiding is a row
+ * whose bytes are gone, and a second sweep that raises on a missing key would
+ * create exactly that.
+ */
+export const deleteObjects = async (keys: string[]) => {
+  const bucket = required('STORAGE_BUCKET')
+  for (let from = 0; from < keys.length; from += DELETE_BATCH) {
+    const batch = keys.slice(from, from + DELETE_BATCH)
+    // Sequential on purpose: a thousand keys a round trip is already one
+    // request per thousand objects, and firing every batch at once is how a
+    // sweep of a large Project rate-limits itself.
+    // eslint-disable-next-line no-await-in-loop
+    await storage().send(
+      new DeleteObjectsCommand({
+        Bucket: bucket,
+        Delete: { Objects: batch.map((Key) => ({ Key })), Quiet: true },
+      }),
+    )
+  }
+}
+
+/**
+ * Every key under a prefix.
+ *
+ * Paginated, because a Member with a long-running Project has more than a
+ * thousand Sessions and `ListObjectsV2` stops there.
+ */
+export const keysUnder = async (prefix: string) => {
+  const bucket = required('STORAGE_BUCKET')
+  const keys: string[] = []
+  let token: string | undefined
+
+  do {
+    // Sequential on purpose: each page needs the continuation token the page
+    // before it returned.
+    // eslint-disable-next-line no-await-in-loop
+    const page = await storage().send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix,
+        ContinuationToken: token,
+      }),
+    )
+    for (const object of page.Contents ?? []) {
+      if (object.Key) keys.push(object.Key)
+    }
+    token = page.NextContinuationToken
+  } while (token)
+
+  return keys
 }

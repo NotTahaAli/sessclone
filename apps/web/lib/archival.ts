@@ -63,23 +63,35 @@ export const listArchivalMemberships = (tx: postgres.TransactionSql) =>
  * of why the list exists at all: those keys carry a hostname and an absolute
  * path that nobody would type correctly from memory.
  *
- * Derived from the Member's own Turns, and only from them. That is also what
- * `sessclone_visible_project_ids()` will show a Member, so a list built any
- * other way would name rows the join then drops. It leaves no setting
- * stranded: nothing deletes a Turn — Retention ages out Log Artifacts, and a
- * deleted Project cascades its exceptions away with it — so a Project with an
- * exception row is a Project with Turns.
+ * Derived from the Member's own Turns and their own stored transcripts. The
+ * Turns alone were not enough: a Session that reported a transcript and no
+ * Turn — the first Session on a new repository, or every Session once Turns
+ * have aged out — left the Member looking at "No Projects yet" with uploads
+ * from that Project already stored, and no way to exclude it short of turning
+ * the whole switch off. Both sources are what
+ * `sessclone_visible_project_ids()` shows a Member (ticket 73), so the list
+ * names no row the join then drops.
  */
 export const listArchivalProjects = (tx: postgres.TransactionSql) =>
   tx<ArchivalProject[]>`
-    select distinct turn.member_id, project.id as project_id,
+    with seen as (
+      -- union rather than union all: the pair is what matters, and a Member
+      -- with a thousand Turns on one Project is one row either way.
+      select member_id, project_id from turns
+       where member_id in (select sessclone_own_member_ids())
+         and project_id is not null
+      union
+      select member_id, project_id from log_artifacts
+       where member_id in (select sessclone_own_member_ids())
+         and project_id is not null
+    )
+    select seen.member_id, project.id as project_id,
            project.key, project.remote, exception.archival_enabled
-      from turns turn
-      join projects project on project.id = turn.project_id
+      from seen
+      join projects project on project.id = seen.project_id
       left join member_project_archival exception
-        on exception.member_id = turn.member_id
+        on exception.member_id = seen.member_id
        and exception.project_id = project.id
-     where turn.member_id in (select sessclone_own_member_ids())
      order by project.key
   `
 

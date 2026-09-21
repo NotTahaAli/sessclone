@@ -4,11 +4,11 @@
 
 **Blocked by:** 12, 14, 24, 58.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A Member deletes their own Log Artifacts, one Session at a time or a whole Project at once
-- [ ] The Project sweep uses the object key's prefix rather than a per-object query
-- [ ] Deletion removes the stored object and its `log_artifacts` row together; neither may outlive the other
-- [ ] No Role deletes another Member's artifacts, Owner included
-- [ ] Deleting a Session's artifact leaves that Session's Turns and every Cost untouched
-- [ ] A later Session on an unexcluded Project uploads again — deletion is not an opt-out
+- [x] A Member deletes their own Log Artifacts, one Session at a time or a whole Project at once
+- [x] The Project sweep uses the object key's prefix rather than a per-object query
+- [x] Deletion removes the stored object and its `log_artifacts` row together; neither may outlive the other
+- [x] No Role deletes another Member's artifacts, Owner included
+- [x] Deleting a Session's artifact leaves that Session's Turns and every Cost untouched
+- [x] A later Session on an unexcluded Project uploads again — deletion is not an opt-out
