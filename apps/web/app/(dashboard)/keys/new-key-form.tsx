@@ -3,7 +3,7 @@
 import { useActionState, useCallback, useState } from 'react'
 
 import { createKey } from './actions'
-import type { Membership } from '../../lib/api-keys'
+import type { Membership } from '../../../lib/api-keys'
 
 // The one client component on this page, and it is client-side for exactly one
 // reason: the new key lives in `useActionState`'s return value and nowhere

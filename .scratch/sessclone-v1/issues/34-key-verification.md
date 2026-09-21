@@ -4,9 +4,9 @@
 
 **Blocked by:** 28, 31.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Key verified by hash; the Member and Org resolved from it
-- [ ] An unknown or revoked key is rejected and writes nothing
-- [ ] Last-used time written on each accepted report, surfacing in the key list
-- [ ] Route tests extended with the rejection cases
+- [x] Key verified by hash; the Member and Org resolved from it
+- [x] An unknown or revoked key is rejected and writes nothing
+- [x] Last-used time written on each accepted report, surfacing in the key list
+- [x] Route tests extended with the rejection cases

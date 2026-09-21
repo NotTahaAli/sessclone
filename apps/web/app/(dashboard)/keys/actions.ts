@@ -3,9 +3,9 @@
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 
-import { createApiKey, revokeApiKey } from '../../lib/api-keys'
-import { asViewer } from '../../lib/db'
-import { signedInUser } from '../../lib/supabase/server'
+import { createApiKey, revokeApiKey } from '../../../lib/api-keys'
+import { asViewer } from '../../../lib/db'
+import { signedInUser } from '../../../lib/supabase/server'
 
 // A Server Action is a POST endpoint that anyone can reach, whether or not the
 // page rendered a form for them — so identity is taken from the session here

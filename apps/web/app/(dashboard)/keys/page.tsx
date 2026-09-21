@@ -1,22 +1,27 @@
 import { revokeKey } from './actions'
 import { NewKeyForm } from './new-key-form'
-import { signOut } from '../sign-in/actions'
+import { EmptyState } from '../empty-state'
+import { InstallCollector } from '../install-collector'
+import { PageHeader } from '../page-header'
 import {
   listApiKeys,
   listMemberships,
   type ApiKeyRow,
-} from '../../lib/api-keys'
-import { asViewer } from '../../lib/db'
-import { signedInUser } from '../../lib/supabase/server'
+} from '../../../lib/api-keys'
+import { appUrl } from '../../../lib/auth/app-url'
+import { asViewer } from '../../../lib/db'
+import { signedInUser } from '../../../lib/supabase/server'
 
 // Ticket 28's surface: `/keys`, reachable by every Role, showing own keys only
 // (`docs/design/product-ia.md`, "Signed-in surfaces"). "Own keys only" is not
 // enforced here — `api_keys_own` enforces it, and this page has no `where`
 // clause to get wrong.
 //
-// The signed-in header is the stub that used to sit on `/` before ticket 26
-// made that the marketing page. The real shell is ticket 45; until then it
-// lives here so "who am I signed in as" is still answerable.
+// The stub header this page used to carry is gone: ticket 45's shell is above
+// it now, and the Org name, the Role and sign out live there. What ticket 45
+// added here instead is the install path, which the product IA requires be
+// re-enterable from Keys — for a second machine, and for an Owner who wants
+// the commands again without a new key.
 
 // Ticket 51 gives the Org a timezone. Until then a date is shown in UTC and
 // said to be, rather than in whatever zone the server happens to run in.
@@ -26,11 +31,9 @@ const when = (at: Date | null) =>
 export default async function Keys() {
   const user = await signedInUser()
 
-  // The Proxy redirects a signed-out visitor before this renders. Unconfigured
-  // — no Supabase, no database — it does not, so say so plainly.
-  if (!user) {
-    return <main className="text-text p-6">Not signed in.</main>
-  }
+  // The shell above has already said so for every page under it, so this is
+  // narrowing for the type checker rather than a second message.
+  if (!user) return null
 
   // One round trip: two statements on the one transaction `asViewer` opens,
   // rather than two connections' worth of work for one page.
@@ -40,40 +43,32 @@ export default async function Keys() {
   }))
 
   return (
-    <main className="bg-ground text-text mx-auto max-w-3xl p-6">
-      <header className="border-rule flex flex-wrap items-baseline justify-between gap-3 border-b pb-4">
-        <p className="text-text-secondary text-sm">
-          Signed in as {user.email}
-          {memberships.length > 0 ? (
-            <> · {memberships.map((m) => m.org_name).join(', ')}</>
-          ) : null}
-        </p>
-        <form action={signOut}>
-          <button
-            type="submit"
-            className="border-control-border text-text rounded border px-2 py-1 text-sm"
-          >
-            Sign out
-          </button>
-        </form>
-      </header>
-
-      <h1 className="mt-6 text-2xl font-medium">Keys</h1>
-      <p className="text-text-secondary mt-2 text-sm">
-        A key lets a Collector report this machine&apos;s usage. Give each
-        machine its own, so losing one costs you that machine and no other.
-      </p>
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        title="Keys"
+        description="A key lets a Collector report this machine's usage. Give each machine its own, so losing one costs you that machine and no other."
+      />
 
       {keys.length === 0 ? (
-        <p className="border-rule text-text-muted mt-6 rounded border border-dashed p-6 text-sm">
-          No keys yet. Create one below, then install the Collector with it.
-        </p>
+        <EmptyState headline="No keys yet">
+          You have no API key yet. The Collector needs one to report.
+        </EmptyState>
       ) : (
         <KeyList keys={keys} />
       )}
 
       <NewKeyForm memberships={memberships} />
-    </main>
+
+      <section className="border-rule border-t pt-6">
+        <h2 className="text-heading">Installing the Collector</h2>
+        <p className="text-text-secondary mt-1 text-body">
+          The same two commands, whether this is your first machine or your
+          fourth. A key is shown once at creation and never again, so the step
+          below has a placeholder where yours goes.
+        </p>
+        <InstallCollector appUrl={appUrl()} />
+      </section>
+    </div>
   )
 }
 

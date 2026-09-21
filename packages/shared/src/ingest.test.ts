@@ -16,7 +16,6 @@ const turnsOf = (file: string) =>
   parseTranscript(readFileSync(new URL(file, FIXTURES), 'utf8'))
 
 const payload = (turns: readonly ReportedTurn[]) => ({
-  memberId: '00000000-0000-4000-8000-000000000001',
   device: { key: 'host:build-box' },
   reports: [
     {
@@ -59,13 +58,20 @@ test('refuses a negative counter', () => {
   expect(IngestPayload.safeParse(broken).success).toBe(false)
 })
 
-test('refuses a member id that is not a uuid', () => {
+test('names no member, because the key names one (ticket 34)', () => {
+  // The Member and the Org come from the API key in the `Authorization`
+  // header, so a payload that asserts one is asserting something the route
+  // does not read. An extra key is ignored rather than refused — zod strips
+  // what the schema does not declare — and what matters is that it reaches
+  // nothing: a payload carrying somebody else's id parses to a payload
+  // carrying no id at all.
   const turns = turnsOf('multi-iteration-turn.jsonl')
+  const parsed = IngestPayload.parse({
+    ...payload(turns),
+    memberId: '00000000-0000-4000-8000-00000000dead',
+  })
 
-  expect(
-    IngestPayload.safeParse({ ...payload(turns), memberId: 'member-1' })
-      .success,
-  ).toBe(false)
+  expect(parsed).not.toHaveProperty('memberId')
 })
 
 test('refuses a report with no cursor to acknowledge', () => {
