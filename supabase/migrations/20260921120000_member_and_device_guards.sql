@@ -74,23 +74,28 @@ $$;
 -- could move the Device's last-seen time in either direction, which is the
 -- column the Collector's liveness surface reads.
 --
--- The guard now has to say who it is guarding against, which it did not have
--- to before: ingest moves `last_seen_at` on every report, and it writes as the
--- service role with no claim set (ADR 0001), while every write from the
--- dashboard carries one. So the pin applies to a caller with a claim — the
--- Member at their keyboard — and the Collector's upsert passes through.
+-- `last_seen_at` is the one column here that a legitimate writer moves:
+-- ingest touches it on every report, writing as the service role with no
+-- claim set (ADR 0001), while every write from the dashboard carries one. So
+-- the claim test belongs on that column's branch alone. Putting it at the top
+-- of the function instead would unpin `member_id`, `key` and `first_seen_at`
+-- for every claimless caller — widening the hole this migration is here to
+-- close, in exchange for two fewer lines.
 create or replace function sessclone_guard_device_columns() returns trigger
   language plpgsql as $$
 begin
-  if sessclone_user_id() is null then return new; end if;
-
   if new.id is distinct from old.id
      or new.member_id is distinct from old.member_id
      or new.key is distinct from old.key
-     or new.first_seen_at is distinct from old.first_seen_at
-     or new.last_seen_at is distinct from old.last_seen_at then
+     or new.first_seen_at is distinct from old.first_seen_at then
     raise exception 'only the nickname is the member''s to change';
   end if;
+
+  if new.last_seen_at is distinct from old.last_seen_at
+     and sessclone_user_id() is not null then
+    raise exception 'only the nickname is the member''s to change';
+  end if;
+
   return new;
 end
 $$;

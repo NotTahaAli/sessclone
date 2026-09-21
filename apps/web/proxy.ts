@@ -23,9 +23,13 @@ import { NextResponse, type NextRequest } from 'next/server'
 //
 // `/` and `/pricing` are the marketing site (ticket 26). They are the pages a
 // visitor arrives on before they have an account at all, so sending them to
-// the sign-in page is sending them away. `'/'` matches only the root here:
-// the test below is an exact match or the prefix followed by a slash, and no
-// path starts with `//`.
+// the sign-in page is sending them away.
+//
+// `'/'` is an exact match below rather than a prefix, which matters: read as
+// a prefix it would make every path public. `//keys` would slip past the
+// redirect, and it is worth knowing that costs nothing — this file is a
+// convenience for the person, and the rows are kept apart by the policies
+// (ADR 0001), not by a redirect.
 const PUBLIC_PATHS = ['/', '/pricing', '/sign-in', '/auth', '/api']
 
 export async function proxy(request: NextRequest) {

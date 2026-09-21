@@ -87,3 +87,48 @@ test('an empty agent id is absence spelled differently, and is refused', () => {
     IngestPayload.safeParse(payload([{ ...turn!, agentId: '' }])).success,
   ).toBe(false)
 })
+
+test('a whitespace-only session id is refused, as the table would refuse it', () => {
+  const [turn] = turnsOf('multi-iteration-turn.jsonl')
+  const body = payload([{ ...turn!, sessionId: '   ' }])
+  body.reports[0]!.sessionId = '   '
+
+  expect(IngestPayload.safeParse(body).success).toBe(false)
+})
+
+test('a whitespace-only message id, agent id or key is refused too', () => {
+  const [turn] = turnsOf('multi-iteration-turn.jsonl')
+
+  expect(
+    IngestPayload.safeParse(payload([{ ...turn!, messageId: ' ' }])).success,
+  ).toBe(false)
+  expect(
+    IngestPayload.safeParse(payload([{ ...turn!, agentId: '\t' }])).success,
+  ).toBe(false)
+
+  const blankProject = payload([turn!])
+  blankProject.reports[0]!.project.key = '  '
+  expect(IngestPayload.safeParse(blankProject).success).toBe(false)
+
+  const blankDevice = payload([turn!])
+  blankDevice.device.key = '  '
+  expect(IngestPayload.safeParse(blankDevice).success).toBe(false)
+})
+
+test('a batch past the documented limits is refused, and says which', () => {
+  const [turn] = turnsOf('multi-iteration-turn.jsonl')
+
+  const tooManyTurns = IngestPayload.safeParse(
+    payload(Array.from({ length: 5001 }, () => turn!)),
+  )
+  expect(tooManyTurns.success).toBe(false)
+  expect(tooManyTurns.error?.issues[0]?.message).toMatch(/5000/)
+
+  const one = payload([turn!])
+  const tooManyReports = IngestPayload.safeParse({
+    ...one,
+    reports: Array.from({ length: 101 }, () => one.reports[0]!),
+  })
+  expect(tooManyReports.success).toBe(false)
+  expect(tooManyReports.error?.issues[0]?.message).toMatch(/100/)
+})

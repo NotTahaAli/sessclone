@@ -13,10 +13,11 @@ if the two ever disagree — a variable added to one and not the other, or a
 default written differently in each, is a test failure rather than a support
 ticket.
 
-> **Most of this is not wired up yet.** v1 is mid-build. Five variables are
+> **Most of this is not wired up yet.** v1 is mid-build. Six variables are
 > read by code today: `DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`,
 > `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `NEXT_PUBLIC_APP_URL` in `apps/web` since
-> ticket 27 wired sign-in, and `SESSCLONE_URL` in
+> ticket 27 wired sign-in, `INGEST_DATABASE_URL` in `apps/web/app/api/ingest/route.ts`
+> since ticket 31, and `SESSCLONE_URL` in
 > `packages/plugin/hooks/stop.mjs`. Every other row below is
 > a commitment this build is working towards, and each section names the ticket
 > that wires it. Setting one today does nothing — which is worth knowing before
@@ -35,14 +36,16 @@ root `.env` is loaded by nothing and the first page that needs one fails with
 
 ### Database
 
-| Variable       | Required | Default | What it is                                                              |
-| -------------- | -------- | ------- | ----------------------------------------------------------------------- |
-| `DATABASE_URL` | yes      | — \*    | Postgres connection string. Any Postgres; Supabase is not a requirement |
+| Variable              | Required | Default | What it is                                                                  |
+| --------------------- | -------- | ------- | --------------------------------------------------------------------------- |
+| `DATABASE_URL`        | yes      | — \*    | Everything the dashboard reads. Any Postgres; Supabase is not a requirement |
+| `INGEST_DATABASE_URL` | yes      | — \*    | What the ingest route writes as. The owning role, **not** `sessclone_app`   |
 
-\* **No default, deliberately.** `apps/web/vitest.config.mts` supplies
-`postgres://sessclone:sessclone@127.0.0.1:5432/sessclone_test` to the test
-harness, and that is the only place a fallback exists. The application itself
-throws `DATABASE_URL is not set` on the first request that needs a connection,
+\* **No default, deliberately, for either.** `apps/web/vitest.config.mts`
+supplies both `sessclone_test` URLs to the test harness, and that is the only
+place a fallback exists. The application itself throws
+`DATABASE_URL is not set` — or `INGEST_DATABASE_URL is not set` — on the first
+request that needs that connection,
 because `postgres(undefined)` silently connects to localhost as the OS user and
 surfaces a forgotten variable as `role "..." does not exist` three layers down.
 The throw is per-request rather than at startup: the client is built lazily so
@@ -59,15 +62,37 @@ put _that_ in `DATABASE_URL`. ADR 0007 has the reasoning, and
 `apps/web/test/app-role.test.ts` fails if the dashboard is pointed back at a
 privileged role.
 
-**One variable, two jobs, and the split is not done.** `sessclone_app` is the
-right role for everything the dashboard reads, and the wrong one for ingest:
-ingest writes `turns` and `log_artifacts`, which carry no insert policy by
-design, and `apps/web/app/api/probe/route.ts` writes `probe_rows`, which
-`sessclone_app` is granted nothing on at all. So a deployment that follows the
-paragraph above has a working dashboard and a probe route that answers
-`permission denied for table probe_rows`. That route is ticket 02's tracer
-bullet and is expected to be deleted; ticket 31 is where the real ingest route
-lands and where its connection gets named separately from this one.
+**Two variables, because they are two roles.** `sessclone_app` is the right
+role for everything the dashboard reads, and the wrong one for ingest: ingest
+writes `turns` and `log_artifacts`, which carry no insert policy by design and
+which `sessclone_app` is granted no insert on at all. So ticket 31 gave ingest
+its own variable. `INGEST_DATABASE_URL` is the migrating, owning role — the one
+`DATABASE_URL` must not be — and `apps/web/app/api/ingest/route.ts` is the only
+code that reads it, which is what keeps a privileged connection to one named
+purpose instead of letting it leak into a page.
+
+**There is deliberately no fallback between them.** A missing
+`INGEST_DATABASE_URL` throws `INGEST_DATABASE_URL is not set` on the first
+report rather than quietly borrowing `DATABASE_URL`: a silent fallback would
+make a correct deployment fail on every report and a misconfigured one — both
+pointed at the owning role, row-level security off — appear to work, which is
+the whole failure this split exists to prevent.
+
+(`apps/web/app/api/probe/route.ts` writes `probe_rows`, which `sessclone_app`
+is granted nothing on either, so it answers `permission denied for table
+probe_rows` on a correct deployment. That route is ticket 02's tracer bullet
+and is expected to be deleted.)
+
+**What one report may carry.** The ingest route bounds the batch at the
+boundary, so an absurd payload is a 400 naming the limit rather than a request
+that times out: at most **100 reports** in a payload and **5000 turns** in a
+report (`packages/shared/src/ingest.ts`). A Collector draining a queue larger
+than that splits it across requests, which it can do safely because the cursor
+travels per report and re-reporting is absorbed by the identity index (ADR
+0006). A batch the database itself refuses is a 400 with the reason — retrying
+it unchanged would stall the cursor forever — while a database that is merely
+unavailable is a 503, which is the Collector's signal to queue and retry. Both
+roll back whole: a refused report writes no Device and no Project row.
 
 Authorisation lives in row-level security (ADR 0001), so the policies travel in
 `supabase/migrations/` and a self-hoster gets the same enforcement by applying

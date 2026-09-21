@@ -1,20 +1,35 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 // A client module because it is a control the visitor operates, and for no
 // other reason: `'use client'` sits on the leaf and nowhere above it, so the
 // hero around this stays server-rendered markup.
 export function InstallCommand({ commands }: { commands: string[] }) {
   const [copied, setCopied] = useState(false)
+  const reset = useRef<ReturnType<typeof setTimeout>>(undefined)
 
-  // Memoised because the button would otherwise take a new function on every
-  // render, which the lint rule this repo runs refuses. The commands are the
-  // only thing it closes over and they never change after mount.
-  const copy = useCallback(async () => {
-    await navigator.clipboard.writeText(commands.join('\n'))
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  // Cleared on unmount, because a timer that outlives its component sets
+  // state on a dead one — and because this page is the first surface anybody
+  // sees, so its leak is the one that compounds.
+  useEffect(() => () => clearTimeout(reset.current), [])
+
+  // Memoised so the button does not take a new function on every render.
+  //
+  // `navigator.clipboard` is undefined outside a secure context — a LAN
+  // preview, or a self-hosted deployment on plain HTTP, which is a tier this
+  // very page sells. Optional chaining rather than a bare call, so the click
+  // is a no-op with the commands still on screen to select by hand instead of
+  // an unhandled rejection and a button that never answers.
+  const copy = useCallback(() => {
+    navigator.clipboard
+      ?.writeText(commands.join('\n'))
+      .then(() => {
+        setCopied(true)
+        reset.current = setTimeout(() => setCopied(false), 2000)
+        return true
+      })
+      .catch(() => setCopied(false))
   }, [commands])
 
   return (

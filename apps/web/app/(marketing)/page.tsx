@@ -1,7 +1,7 @@
 import Link from 'next/link'
 
 import { InstallCommand } from './install-command'
-import { REPOSITORY } from './layout'
+import { CONTACT_EMAIL, REPOSITORY } from './constants'
 import { TierCard } from './tier-card'
 import { marketingTiers } from '../../lib/tiers'
 
@@ -47,23 +47,26 @@ const STEPS = [
   },
 ]
 
+// Placeholders, and they say so in their own text rather than only in the
+// byline: this page is publicly routable, and a fabricated result that reads
+// as real is a liability the moment anything points DNS at it.
 const TESTIMONIALS = [
   {
     quote:
-      'We found 40% of our spend was one nightly CI job re-reading the same repository. It took a morning, not a quarter.',
-    person: 'Placeholder — a real quote replaces this before launch',
+      'PLACEHOLDER — the shape of the quote we are looking for: one specific thing the team found in their own spend, and how long it took to find.',
+    person: 'Placeholder, not a real customer',
     role: 'Platform lead, 30 engineers',
   },
   {
     quote:
-      'Finance stopped asking me to guess. The number on the dashboard is the number on the invoice, give or take the models we have not priced yet.',
-    person: 'Placeholder — a real quote replaces this before launch',
+      'PLACEHOLDER — the shape of the quote we are looking for: what changed in the conversation with finance once the number existed.',
+    person: 'Placeholder, not a real customer',
     role: 'Engineering manager',
   },
   {
     quote:
-      'We self-host it next to our own Postgres. No seats to count, no vendor in the path of our transcripts.',
-    person: 'Placeholder — a real quote replaces this before launch',
+      'PLACEHOLDER — the shape of the quote we are looking for: why a regulated team chose to run it themselves.',
+    person: 'Placeholder, not a real customer',
     role: 'Staff engineer, regulated industry',
   },
 ]
@@ -235,7 +238,10 @@ export default function Landing() {
         <div className="mx-auto w-full max-w-[1120px] px-5 py-14">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <h2 className="text-display font-serif">Pricing</h2>
-            <Link href="/pricing" className="text-body text-accent-text">
+            <Link
+              href="/pricing"
+              className="text-body text-accent-text flex h-[var(--control-h)] items-center"
+            >
               What each tier includes →
             </Link>
           </div>
@@ -279,10 +285,10 @@ export default function Landing() {
             own are all a conversation rather than a form.
           </p>
           <a
-            href="mailto:hello@sessclone.dev"
+            href={`mailto:${CONTACT_EMAIL}`}
             className="bg-accent-fill text-accent-on-fill border-accent-border text-body flex h-[var(--control-h)] w-fit items-center border px-5"
           >
-            hello@sessclone.dev
+            {CONTACT_EMAIL}
           </a>
         </div>
       </section>

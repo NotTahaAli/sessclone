@@ -6,6 +6,8 @@ export { deviceKey, normaliseRemote, projectKey } from './identity.ts'
 export type { ProjectIdentity } from './identity.ts'
 export {
   IngestPayload,
+  REPORTS_PER_PAYLOAD,
+  TURNS_PER_REPORT,
   ReportedCursor,
   ReportedTurn,
   ReportedUsage,

@@ -21,10 +21,30 @@ import { z } from 'zod'
 // refused batch impossible to mistake for a whole one: a 400 acknowledges
 // nothing at all.
 
+/**
+ * What one request may carry, documented in `docs/configuration.md` because a
+ * Collector author is who has to split a drain across requests. Generous
+ * rather than tight: the point is that an absurd batch is refused in
+ * microseconds with a message that says the limit, not that a real drain is.
+ */
+export const REPORTS_PER_PAYLOAD = 100
+export const TURNS_PER_REPORT = 5000
+
 /** A token count: a non-negative safe integer, or the payload is not one. */
 const counter = z.int().min(0)
 
-const text = z.string().min(1)
+/**
+ * A non-blank string. `min(1)` alone is not that: `"   "` is one character and
+ * the tables this feeds — `devices.key`, `projects.key`, `turns.session_id`,
+ * `turns.message_id`, `turns.agent_id` — all check `length(btrim(…)) > 0`, so
+ * a whitespace-only id passed the boundary and failed at the bottom of the
+ * batch instead. The value is not trimmed, only refused: what is stored stays
+ * exactly what the Collector reported.
+ */
+const text = z
+  .string()
+  .min(1)
+  .refine((value) => value.trim() !== '', { error: 'must not be blank' })
 
 /** Present-but-empty is absence spelled differently; both arrive as null. */
 const optionalText = z.string().nullable()
@@ -82,7 +102,18 @@ export const TranscriptReport = z.object({
    * remote and the working directory live on the reporting machine. */
   project: z.object({ key: text, remote: z.string().nullable() }),
   cursor: ReportedCursor,
-  turns: z.array(ReportedTurn),
+  /**
+   * Bounded so an absurd report is a 400 naming the limit rather than a
+   * request that runs until something times out. The route inserts in chunks,
+   * so this ceiling is about the work one request may ask for, not about what
+   * a single statement can carry.
+   */
+  turns: z
+    .array(ReportedTurn)
+    .max(
+      TURNS_PER_REPORT,
+      `a report carries at most ${TURNS_PER_REPORT} turns`,
+    ),
 })
 
 export const IngestPayload = z.object({
@@ -94,7 +125,13 @@ export const IngestPayload = z.object({
   memberId: z.uuid(),
   /** `deviceKey` from this package; the nickname is the Member's to change. */
   device: z.object({ key: text, nickname: text.nullable().optional() }),
-  reports: z.array(TranscriptReport).min(1),
+  reports: z
+    .array(TranscriptReport)
+    .min(1)
+    .max(
+      REPORTS_PER_PAYLOAD,
+      `a batch carries at most ${REPORTS_PER_PAYLOAD} reports`,
+    ),
 })
 
 export type ReportedUsage = z.infer<typeof ReportedUsage>

@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 
-export const REPOSITORY = 'https://github.com/NotTahaAli/sessclone'
+import { CONTACT_EMAIL, REPOSITORY } from './constants'
 
 // MarketingFrame. Nav, footer, repository link — the two public pages hang
 // from it, and both themes and every width are its job rather than each
@@ -18,16 +18,22 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
         <nav className="mx-auto flex h-16 w-full max-w-[1120px] items-center justify-between gap-4 px-5">
           <Link
             href="/"
-            className="text-heading font-semibold tracking-tight"
+            className="text-heading flex h-[var(--control-h)] items-center font-semibold tracking-tight"
             aria-label="sessclone home"
           >
             sessclone
           </Link>
           <div className="text-body flex items-center gap-5">
-            <Link href="/pricing" className="hover:text-accent-text">
+            <Link
+              href="/pricing"
+              className="hover:text-accent-text flex h-[var(--control-h)] items-center"
+            >
               Pricing
             </Link>
-            <a href={REPOSITORY} className="hover:text-accent-text">
+            <a
+              href={REPOSITORY}
+              className="hover:text-accent-text flex h-[var(--control-h)] items-center"
+            >
               Repository
             </a>
             <Link
@@ -49,15 +55,21 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
             Self-hostable, free at any size.
           </p>
           <div className="flex flex-wrap gap-5">
-            <Link href="/pricing" className="hover:text-accent-text">
+            <Link
+              href="/pricing"
+              className="hover:text-accent-text flex h-[var(--control-h)] items-center"
+            >
               Pricing
             </Link>
-            <a href={REPOSITORY} className="hover:text-accent-text">
+            <a
+              href={REPOSITORY}
+              className="hover:text-accent-text flex h-[var(--control-h)] items-center"
+            >
               Repository
             </a>
             <a
-              href="mailto:hello@sessclone.dev"
-              className="hover:text-accent-text"
+              href={`mailto:${CONTACT_EMAIL}`}
+              className="hover:text-accent-text flex h-[var(--control-h)] items-center"
             >
               Contact
             </a>

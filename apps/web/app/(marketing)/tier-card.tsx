@@ -1,6 +1,6 @@
 import Link from 'next/link'
 
-import { REPOSITORY } from './layout'
+import { CONTACT_EMAIL, REPOSITORY } from './constants'
 import { tierPrice, tierSeats, type MarketingTier } from '../../lib/tiers'
 
 // TierCard. Three variants — default, highlighted, self-hosted — and the
@@ -82,7 +82,7 @@ export function TierCard({
         </a>
       ) : contact ? (
         <a
-          href="mailto:hello@sessclone.dev?subject=sessclone%20Enterprise"
+          href={`mailto:${CONTACT_EMAIL}?subject=sessclone%20Enterprise`}
           className="border-control-border text-body hover:bg-surface-hover mt-auto flex h-[var(--control-h)] items-center justify-center border px-4"
         >
           Contact us

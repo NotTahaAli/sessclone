@@ -10,7 +10,14 @@ import { defineConfig } from 'vitest/config'
 // nothing and is what the dashboard connects as, so it is the only connection
 // a policy test proves anything on.
 //
-// The two URLs are written here and nowhere else. `test.env` reaches the
+// `INGEST_DATABASE_URL` is the third, and it is a separate variable rather
+// than a reuse of the first: ingest writes `turns` and `log_artifacts`, which
+// `sessclone_app` is granted no insert on by design, so a deployment points it
+// at the owning role and a deployment that confuses the two finds out here
+// rather than in production. It is the owning role for the same reason the
+// application's is not.
+//
+// The three URLs are written here and nowhere else. `test.env` reaches the
 // workers, which is where both the tests and the route code under test read
 // them; `test/global-setup.ts` copies them into its own process, which
 // `test.env` does not reach.
@@ -33,6 +40,9 @@ export default defineConfig({
       APP_DATABASE_URL:
         process.env.APP_DATABASE_URL ??
         'postgres://sessclone_app:sessclone_app@127.0.0.1:5432/sessclone_test',
+      INGEST_DATABASE_URL:
+        process.env.INGEST_DATABASE_URL ??
+        'postgres://sessclone:sessclone@127.0.0.1:5432/sessclone_test',
     },
   },
 })

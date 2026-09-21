@@ -1,4 +1,4 @@
-import { REPOSITORY } from '../layout'
+import { CONTACT_EMAIL, REPOSITORY } from '../constants'
 import { TierCard } from '../tier-card'
 import { marketingTiers } from '../../../lib/tiers'
 
@@ -32,14 +32,17 @@ export default function Pricing() {
       </section>
 
       <section className="border-rule border-b">
-        <div className="mx-auto grid w-full max-w-[1120px] gap-6 px-5 py-14 md:grid-cols-2 xl:grid-cols-4">
-          {tiers.map((tier) => (
-            <TierCard
-              key={tier.key}
-              tier={tier}
-              highlighted={tier.key === 'team'}
-            />
-          ))}
+        <div className="mx-auto w-full max-w-[1120px] px-5 py-14">
+          <h2 className="text-display font-serif">Four tiers</h2>
+          <div className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+            {tiers.map((tier) => (
+              <TierCard
+                key={tier.key}
+                tier={tier}
+                highlighted={tier.key === 'team'}
+              />
+            ))}
+          </div>
         </div>
       </section>
 
@@ -81,7 +84,7 @@ export default function Pricing() {
             conversation rather than a form.
           </p>
           <a
-            href="mailto:hello@sessclone.dev?subject=sessclone%20Enterprise"
+            href={`mailto:${CONTACT_EMAIL}?subject=sessclone%20Enterprise`}
             className="bg-accent-fill text-accent-on-fill border-accent-border text-body flex h-[var(--control-h)] w-fit items-center border px-5"
           >
             hello@sessclone.dev

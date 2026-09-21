@@ -1,5 +1,5 @@
 import type { ReportedTurn } from '@sessclone/shared'
-import { beforeEach, expect, test } from 'vitest'
+import { beforeEach, expect, test, vi } from 'vitest'
 
 import { POST } from '../app/api/ingest/route'
 import { owner as sql, seedFixture, type Fixture } from './harness'
@@ -66,8 +66,8 @@ const payload = (memberId: string, over: Record<string, unknown> = {}) => ({
   ...over,
 })
 
-const post = (body: unknown) =>
-  POST(
+const post = (body: unknown, handler: typeof POST = POST) =>
+  handler(
     new Request('http://localhost/api/ingest', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -241,4 +241,60 @@ test('a turn cannot be filed across the Org boundary', async () => {
 
   // Two Members, two machines: the Device key is unique per Member by schema.
   expect(await sql`select count(*)::int as n from devices`).toEqual([{ n: 2 }])
+})
+
+test('ingest reads its own connection variable and never falls back', async () => {
+  // A correct deployment points DATABASE_URL at `sessclone_app`, which has no
+  // insert grant on `turns`. A fallback here would write as the dashboard's
+  // role in tests and as nothing at all in production, so there is none: the
+  // route says what is missing instead.
+  const before = process.env.INGEST_DATABASE_URL
+  delete process.env.INGEST_DATABASE_URL
+  vi.resetModules()
+  try {
+    const fresh = await import('../app/api/ingest/route')
+    await expect(
+      post(payload(fixture.acme.members.member), fresh.POST),
+    ).rejects.toThrow('INGEST_DATABASE_URL is not set')
+  } finally {
+    process.env.INGEST_DATABASE_URL = before
+    vi.resetModules()
+  }
+})
+
+test('a batch the database refuses leaves the database exactly as it was', async () => {
+  // Past zod (a counter has no upper bound on the wire) and into `integer out
+  // of range`, after the Device and the Project rows would have been written.
+  const response = await post(
+    payload(fixture.acme.members.member, {
+      reports: [
+        report({
+          turns: [turn({ usage: { ...usage, inputTokens: 2 ** 31 } })],
+        }),
+      ],
+    }),
+  )
+
+  expect(response.status).toBe(400)
+  expect(await response.json()).toMatchObject({ error: expect.any(String) })
+  expect(await sql`select 1 from turns`).toEqual([])
+  expect(await sql`select 1 from devices`).toEqual([])
+  expect(await sql`select 1 from projects`).toEqual([])
+})
+
+test('a batch larger than one insert chunk lands every row', async () => {
+  // Past Postgres's 65534 bind parameters at 23 columns a row (2849 rows),
+  // which is what one statement per batch could never send.
+  const turns = Array.from({ length: 3000 }, (_, index) =>
+    turn({ messageId: `msg_${index}` }),
+  )
+
+  const response = await post(
+    payload(fixture.acme.members.member, { reports: [report({ turns })] }),
+  )
+
+  expect(response.status).toBe(200)
+  expect(await sql`select count(*)::int as n from turns`).toEqual([
+    { n: turns.length },
+  ])
 })
