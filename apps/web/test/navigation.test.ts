@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+
 import { expect, test } from 'vitest'
 
 import { DESTINATIONS, settingsFor } from '../app/(dashboard)/navigation'
@@ -46,4 +48,38 @@ test('the Tier page is the Owner, and not the Admin', () => {
   // `CONTEXT.md` gives an Admin the whole Org's settings and no billing.
   expect(reachesTier('owner')).toBe(true)
   expect(reachesTier('admin')).toBe(false)
+})
+
+test('every Role-gated page checks the Role on the server too', () => {
+  // The nav is not a check: `/settings/org` is a typeable URL, and hiding the
+  // link from a Manager leaves the surface reachable. ADR 0001 keeps the
+  // *data* safe either way, because every read there will be policy-scoped;
+  // what a missing guard leaks is the page.
+  //
+  // A file read, for the reason `panel-credit.test.ts` gives: the page is an
+  // async Server Component, and the thing worth proving is that the guard is
+  // in the file at all rather than what it renders.
+  const page = readFileSync(
+    new URL('../app/(dashboard)/settings/org/page.tsx', import.meta.url),
+    'utf8',
+  )
+
+  expect(page).toContain('reachesOrgSettings(viewer.role)')
+  expect(page).toContain('notFound()')
+})
+
+test('the viewer is read once per request, not once per component', () => {
+  // The shell and the page it wraps both call `currentViewer()` while
+  // rendering one request. Unmemoised that is two `signedInUser()` round trips
+  // and two `asViewer` transactions per navigation, each opening a `begin`, a
+  // `set_config`, the select and a `commit`. React's `cache` deduplicates them
+  // for the life of the request and no longer, which is the pattern Next's own
+  // authentication guide gives for a function like this one.
+  const viewer = readFileSync(
+    new URL('../lib/viewer.ts', import.meta.url),
+    'utf8',
+  )
+
+  expect(viewer).toContain("import { cache } from 'react'")
+  expect(viewer).toMatch(/export const currentViewer = cache\(/)
 })

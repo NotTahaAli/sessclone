@@ -10,15 +10,17 @@
 // report that a deployment is down; a notice once, at startup, naming the
 // variable to fix, is the loud failure this ticket asks for.
 //
-// Exit 2, which on this event is both non-blocking and the only code that
-// shows the whole message. The hooks reference is explicit on each half: a
-// non-zero, non-2 exit surfaces only the *first line* of stderr, behind a
-// generic error notice, with the rest available solely under `claude --debug`
-// — which would drop every `- SESSCLONE_API_KEY is …` line, the one part of
-// this that tells somebody what to fix. And `SessionStart` is one of the
-// events that cannot be blocked, so 2 shows the message and execution
-// continues; it stops nobody working. The key itself never appears either way
-// (see `ConfigurationError`).
+// Exit 2, and everything worth reading on the first line of stderr.
+//
+// The hooks reference documents `SessionStart` as an event that cannot be
+// blocked — "shows stderr to user only", and the session proceeds — so 2 stops
+// nobody working, which is what exit 1 was chosen for. What 1 also did was
+// hide the message: a non-zero, non-2 exit renders a generic notice and then
+// the *first line* of stderr, with the rest only under `claude --debug`. The
+// reference describes the exit-2 rendering on this event the same way, so
+// rather than depend on which of them shows more, the problems are joined into
+// that first line. The key itself never appears either way (see
+// `ConfigurationError`).
 //
 // Later tickets grow this hook into the sweep the spec describes (§5.2): drain
 // the retry queue and re-send unfinished sessions. Both need the configuration
@@ -33,9 +35,9 @@ try {
   if (!(error instanceof ConfigurationError)) throw error
 
   process.stderr.write(
-    `sessclone is installed but not configured, so nothing will be collected from this machine.\n${error.problems
-      .map((problem) => `  - ${problem}`)
-      .join('\n')}\nSee docs/configuration.md for the full list.\n`,
+    `sessclone is installed but not configured, so nothing will be collected from this machine: ${error.problems.join(
+      '; ',
+    )}. See docs/configuration.md.\n`,
   )
   process.exit(2)
 }

@@ -194,6 +194,9 @@ test('the batch tier halves the tokens and leaves the server tools alone', async
 })
 
 test('the modifiers never reach the model-independent server-tool rates', async () => {
+  // Verified against the published page: the batch discount is "50% on both
+  // input and output tokens", and US inference is "a 1.1x multiplier on all
+  // token pricing categories". Both are token-scoped.
   // The rate seed prices a web search at $10 per 1,000 "whoever answered", so
   // it is not a per-model rate and the three per-model modifiers have nothing
   // to say about it. Applied anyway, this Turn's searches would cost $11 —
@@ -209,11 +212,13 @@ test('the modifiers never reach the model-independent server-tool rates', async 
   expect((await costOf(turn)).cost).toBe(10)
 })
 
-test('a Vertex model id carries the same generation as its plain form', async () => {
-  // Vertex spells the snapshot with an `@` rather than a `-`. Read as a bare
-  // major, a fast-mode US Opus 4.8 loses both modifiers and is understated by
-  // 55% — silently, and reported as priced. A rate row naming the Vertex id
-  // (an Org override, say) would then be multiplied by 1 instead of 2.2.
+test('fast mode and US inference are first-party only', async () => {
+  // Read from the published pricing page on 2026-09-21: fast mode "is not
+  // available on Claude Platform on AWS or partner-operated cloud platforms",
+  // and for data residency "partner-operated platforms (Bedrock and Google
+  // Cloud) have independent regional pricing". `claude-opus-4-8@20260101` is a
+  // Vertex id, so it takes neither modifier — while the same model on the
+  // first-party API takes both.
   //
   // Tested through the function rather than a Turn because a rate matches a
   // model id exactly, so a Vertex id with no row of its own is unpriced for
@@ -227,8 +232,62 @@ test('a Vertex model id carries the same generation as its plain form', async ()
            )::float8 as plain
   `
 
-  expect(row!.vertex).toBeCloseTo(2.2, 10)
-  expect(row!.vertex).toBe(row!.plain)
+  expect(row!.vertex).toBe(1)
+  expect(row!.plain).toBeCloseTo(2.2, 10)
+})
+
+test('the batch discount is not first-party only', async () => {
+  // The Batch API and its 50% discount exist on the partner platforms too, so
+  // the gate above is on the two modifiers the page restricts and not on all
+  // three.
+  const [row] = await sql<{ vertex: number }[]>`
+    select sessclone_price_multiplier(
+             'claude-opus-4-8@20260101', 'standard', 'global', 'batch'
+           )::float8 as vertex
+  `
+
+  expect(row!.vertex).toBe(0.5)
+})
+
+test('a snapshot or a context-window suffix does not hide the generation', async () => {
+  // Three spellings of one model. The separator after the major and the minor
+  // is a character class because of the last two: an `@` snapshot is Vertex's,
+  // and `[1m]` is the 1M context window. Parsed as a bare major or as null,
+  // each silently loses whatever modifier its platform does allow.
+  const [row] = await sql<{ dated: number; vertex: number; wide: number }[]>`
+    select sessclone_model_generation('claude-opus-4-8-20260101')::float8
+             as dated,
+           sessclone_model_generation('claude-opus-4-8@20260101')::float8
+             as vertex,
+           sessclone_model_generation('claude-opus-4-8[1m]')::float8 as wide
+  `
+
+  expect(row!.dated).toBeCloseTo(4.08, 10)
+  expect(row!.vertex).toBeCloseTo(4.08, 10)
+  expect(row!.wide).toBeCloseTo(4.08, 10)
+})
+
+test('the divisors in turn_costs agree with sessclone_rate_unit', async () => {
+  // `turn_costs` spells the unit out in its `values` list rather than calling
+  // the function, because the function is `parallel unsafe` and carries a
+  // `SET` clause, either of which costs the query its parallel plan. The
+  // function stays the definition of record, so the two must not drift: a
+  // class added with a different unit would otherwise be priced 1000x wrong
+  // and nothing would say so.
+  const rows = await sql<{ class: string; unit: string }[]>`
+    select unnest(enum_range(null::rate_class))::text as class,
+           sessclone_rate_unit(unnest(enum_range(null::rate_class)))::text
+             as unit
+  `
+  const perThousand = rows
+    .filter((row) => row.unit === 'per_krequests')
+    .map((row) => row.class)
+    .toSorted()
+
+  // The two classes the view divides by 1,000 rather than 1,000,000, and the
+  // two it does not apply the per-model modifiers to.
+  expect(perThousand).toEqual(['web_fetch_request', 'web_search_request'])
+  expect(rows).toHaveLength(7)
 })
 
 test('a two-digit minor version is a later generation, not an earlier one', async () => {

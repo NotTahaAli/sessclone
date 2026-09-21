@@ -467,3 +467,28 @@ test('a refused batch still records that the Collector reached us', async () => 
   const [turns] = await sql<{ count: string }[]>`select count(*) from turns`
   expect(turns!.count).toBe('0')
 })
+
+test('a batch this version cannot parse still records that the Collector reached us', async () => {
+  // The same rule, one step earlier. A Collector too new or too old for this
+  // deployment's schema is the clearest case of "reaching us and being
+  // refused", so the last-used time is written above the schema check and not
+  // below it.
+  const response = await post({ version: 99, device: {}, reports: [] })
+  expect(response.status).toBe(400)
+
+  const [key] = await sql<{ last_used_at: Date | null }[]>`
+    select last_used_at from api_keys where key_prefix = ${acmeKey.slice(0, 12)}
+  `
+  expect(key!.last_used_at).not.toBeNull()
+})
+
+test('an unauthenticated report writes nothing at all', async () => {
+  // The last-used time is written after verification, never before it, so a
+  // caller who never proved anything leaves no trace on anybody's key.
+  await post(payload(), 'sk_not_a_key_that_exists_anywhere_in_this_database')
+
+  const [keys] = await sql<{ used: string }[]>`
+    select count(*) as used from api_keys where last_used_at is not null
+  `
+  expect(keys!.used).toBe('0')
+})

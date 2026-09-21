@@ -20,9 +20,13 @@
 -- Claude model ids are `claude-<family>-<major>[-<minor>][-<snapshot>]`, and
 -- every id in the seed parses: `claude-sonnet-5` is 5.00, `claude-fable-5-1`
 -- is 5.01, and `claude-opus-4-5-20251101` is 4.05 with the dated snapshot
--- ignored. A Vertex id spells its snapshot with an `@` rather than a `-`, so
--- both separators are a character class: `claude-opus-4-8@20260101` is 4.08
--- and not, as it was, a bare 4 that quietly lost both modifiers.
+-- ignored. The separator after the major and the minor is a character class
+-- because two shapes spell it differently: a Vertex id ends `@20260101`, and
+-- a context-window suffix is `claude-opus-5[1m]`. Both used to fall out as a
+-- bare major or as null, which is a *generation* this reads wrong; whether a
+-- given platform's Turns take a modifier is a separate question, settled in
+-- `sessclone_price_multiplier` rather than by failing to parse.
+--
 -- Anything else — a Bedrock id, `<synthetic>`, null — is null, and a null
 -- generation fails every comparison below, so an id this cannot read is an id
 -- that gets no modifier rather than the wrong one.
@@ -44,10 +48,10 @@
 create or replace function sessclone_model_generation(model_id text)
   returns numeric
   language sql immutable parallel safe as $$
-  select substring(model_id from '^claude-[a-z]+-(\d+)(?:[-@]|$)')::numeric
+  select substring(model_id from '^claude-[a-z]+-(\d+)(?:[-@[]|$)')::numeric
        + coalesce(
            substring(
-             model_id from '^claude-[a-z]+-\d+-(\d{1,2})(?:$|[-@])'
+             model_id from '^claude-[a-z]+-\d+-(\d{1,2})(?:$|[-@[])'
            )::numeric,
            0
          ) / 100
@@ -55,12 +59,23 @@ $$;
 
 -- What the three modifiers in ADR 0002 multiply a resolved rate by, together.
 --
---   - **Fast mode** doubles the rate, on Opus 4.8 and later. The ADR names
---     "Opus 5 and Opus 4.8", which is that comparison; written as a
---     comparison, an Opus released next month is covered without a migration.
---     A fast-mode session priced at standard rates is understated by half.
---   - **US-only inference** is 1.1x across every class, on 4.6 and later.
---   - **The batch tier** is the Batch API's 50% discount.
+--   - **Fast mode** doubles the rate, on Opus 4.8 and later, on the
+--     first-party API only. The ADR names "Opus 5 and Opus 4.8", which is that
+--     comparison; written as a comparison, an Opus released next month is
+--     covered without a migration. A fast-mode session priced at standard
+--     rates is understated by half.
+--   - **US-only inference** is 1.1x across every token class, on 4.6 and
+--     later, on the first-party API only.
+--   - **The batch tier** is the Batch API's 50% discount, which every platform
+--     that offers the Batch API offers.
+--
+-- "First-party only" is the published page, read 2026-09-21: fast mode "is not
+-- available on Claude Platform on AWS or partner-operated cloud platforms",
+-- and for data residency "partner-operated platforms (Bedrock and Google
+-- Cloud) have independent regional pricing". A Vertex id is a partner id —
+-- `claude-opus-4-8@20260101` — so neither modifier applies to it, whatever its
+-- generation parses to, and `@` in the id is what says so. Bedrock ids do not
+-- start `claude-` at all and have no generation to compare.
 --
 -- "Every class" means every class the rate table prices *per model*. The two
 -- server-tool classes are priced per thousand requests and model-independent
@@ -88,11 +103,13 @@ create or replace function sessclone_price_multiplier(
   select case
            when speed = 'fast'
             and model_id like 'claude-opus-%'
+            and model_id not like '%@%'
             and sessclone_model_generation(model_id) >= 4.08 then 2
            else 1
          end
        * case
            when inference_geo = 'us'
+            and model_id not like '%@%'
             and sessclone_model_generation(model_id) >= 4.06 then 1.1
            else 1
          end
@@ -216,7 +233,10 @@ with quantities as (
   from turns turn
   -- The class, its quantity, the unit its Rate is quoted in, and whether the
   -- three modifiers apply to it — spelled out here rather than derived per
-  -- row. `sessclone_rate_unit` would answer the third, but it is
+  -- row. `sessclone_rate_unit` in `…_rates.sql` remains the definition of
+  -- record for the unit, and `apps/web/test/costs.test.ts` fails if this list
+  -- and that function ever disagree. It would answer the third column, but it
+  -- is
   -- `parallel unsafe` and carries a `SET` clause, so calling it in the select
   -- list below would cost the whole query its parallel plan for a fact this
   -- list already knows.

@@ -164,9 +164,34 @@ export async function POST(request: Request) {
 
   const sql = db()
   const caller = await resolveCaller(sql, presented)
-  // Nothing is written, and nothing about this request reached a table: the
-  // Device and Project upserts are below the verification, not beside it.
+  // Nothing about this request reaches a table until it has: the Device and
+  // Project upserts are below the verification, not beside it.
   if (!caller) return unauthenticated()
+
+  // All three from the key, none from the payload. Everything below takes the
+  // Org from the resolved Member rather than from anything the caller said,
+  // which is why ticket 34 changed the top of this route and nothing under it.
+  const { keyId, memberId, orgId } = caller
+
+  // The one write that is evidence of a *request* rather than of a batch, so
+  // it is the one write outside the transaction — and it is here, above the
+  // schema check, because a Collector whose payloads this version refuses is
+  // precisely a Collector that is reaching the deployment. It surfaces in the
+  // key list (ticket 28) and, more importantly, in onboarding, where it is the
+  // only evidence that a Collector has ever reached this deployment at all: a
+  // key that has been used but has landed no Turn is a different failure from
+  // one that has never been used (`docs/design/product-ia.md`, step 6). Rolled
+  // back with the batch it would be absent in exactly the case somebody needs
+  // it to diagnose, and the Owner would be told nothing had ever arrived.
+  //
+  // Inside the `try` because `databaseFailure` is this route's contract for
+  // every statement it sends: an exhausted pool here is a 503 the Collector
+  // queues and retries, not a bare 500 out of the handler.
+  try {
+    await sql`update api_keys set last_used_at = now() where id = ${keyId}`
+  } catch (error) {
+    return databaseFailure(error)
+  }
 
   const body = await request.json().catch(() => null)
   const parsed = IngestPayload.safeParse(body)
@@ -182,21 +207,6 @@ export async function POST(request: Request) {
   }
 
   const { device, reports } = parsed.data
-  // Both from the key, neither from the payload. Everything below already
-  // took the Org from the resolved Member rather than from anything the
-  // caller said, which is why ticket 34 changed the top of this route and
-  // nothing under it.
-  const { keyId, memberId, orgId } = caller
-
-  // Outside the transaction below, and before it, because it is evidence of a
-  // *request* rather than of a write. It surfaces in the key list (ticket 28)
-  // and, more importantly, in onboarding, where it is the one piece of
-  // evidence that a Collector has ever reached this deployment: a key that has
-  // been used but has landed no Turn is a different failure from one that has
-  // never been used at all (`docs/design/product-ia.md`, step 6). Rolled back
-  // with a refused batch it would be absent in exactly the case somebody needs
-  // it to diagnose, and the Owner would be told nothing had ever arrived.
-  await sql`update api_keys set last_used_at = now() where id = ${keyId}`
 
   // One transaction around every write. Without it a batch that passes the
   // schema and fails a database check — a constraint the schema does not
