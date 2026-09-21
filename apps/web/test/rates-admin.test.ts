@@ -172,7 +172,7 @@ test('the unknown models are the operator’s list and nobody else’s', async (
   await seedTurn('claude-unreleased-9', 'msg_2')
 
   const operatorSees = await asOperator((tx) => unknownModels(tx))
-  expect(operatorSees).toMatchObject([
+  expect(operatorSees.models).toMatchObject([
     { model: 'claude-unreleased-9', turns: 2 },
   ])
 
@@ -180,7 +180,7 @@ test('the unknown models are the operator’s list and nobody else’s', async (
   // deployment-wide, and the flag is not a Role.
   expect(
     await asUser(fixture.acme.users.owner, (tx) => unknownModels(tx)),
-  ).toEqual([])
+  ).toMatchObject({ models: [], more: false })
 })
 
 test('deleting a Rate unprices the Turns it was pricing', async () => {
@@ -222,4 +222,43 @@ test('an Org Owner cannot delete a published price', async () => {
   expect(await asOperator((tx) => listRates(tx))).toMatchObject({
     rates: expect.arrayContaining([expect.objectContaining({ id })]),
   })
+})
+
+test('the price list can be filtered by model, and says when it is cut', async () => {
+  // The cap is reachable: a deployment pricing twenty models across seven
+  // classes crosses 200 rows in two price revisions, and this page is the
+  // only place a Rate can be deleted — so a row the cut hides is a row nobody
+  // can correct.
+  await asOperator(async (tx) => {
+    for (const model of ['claude-opus-9', 'claude-haiku-9']) {
+      await addRate(tx, {
+        model,
+        class: 'input',
+        priceUsd: 5,
+        effectiveFrom: '2026-01-01',
+        source: null,
+      })
+    }
+  })
+
+  const { rates } = await asOperator((tx) =>
+    listRates(tx, { model: 'haiku-9' }),
+  )
+  expect(rates.map((rate) => rate.model)).toEqual(['claude-haiku-9'])
+
+  const cut = await asOperator((tx) => listRates(tx, { limit: 1 }))
+  expect(cut.rates).toHaveLength(1)
+  expect(cut.more).toBe(true)
+})
+
+test('the unknown-model list is bounded, because a Collector sends the string', async () => {
+  await Promise.all(
+    ['alpha', 'beta', 'gamma'].map((model, index) =>
+      seedTurn(`claude-${model}`, `msg_unknown_${index}`),
+    ),
+  )
+
+  const { models, more } = await asOperator((tx) => unknownModels(tx, 2))
+  expect(models).toHaveLength(2)
+  expect(more).toBe(true)
 })

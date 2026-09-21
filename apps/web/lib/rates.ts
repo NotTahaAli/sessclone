@@ -70,20 +70,30 @@ export const rateUnit = (rateClass: RateClass) =>
  */
 export const listRates = async (
   tx: TransactionSql,
-  limit = 200,
+  options: { model?: string | null; limit?: number } = {},
 ): Promise<{ rates: Rate[]; more: boolean }> => {
+  const { model = null, limit = 200 } = options
+
   const rows = await tx<RateRow[]>`
     select id, model, class, price_usd, source,
            -- As text, so a date the operator typed comes back the day they
            -- typed rather than shifted by the reader's timezone.
            to_char(effective_from, 'YYYY-MM-DD') as effective_from,
-           -- The winner for this (model, class) as of today, decided the same
-           -- way sessclone_resolve_rate decides it: the latest row whose
-           -- date has arrived.
-           effective_from = max(effective_from) filter (
+           -- The latest row for this (model, class) whose date has arrived.
+           -- Not the same question as which Rate prices a Turn:
+           -- sessclone_resolve_rate prefers a row naming the model over a
+           -- model-independent one, and an Org's override over both. The page
+           -- says "latest", not "in force", for that reason.
+           -- coalesce, because the aggregate is null for a (model, class)
+           -- whose rows are all future-dated, and the flag is a boolean.
+           coalesce(effective_from = max(effective_from) filter (
              where effective_from <= current_date
-           ) over (partition by model, class) as current
+           ) over (partition by model, class), false) as current
       from rates
+     -- The filter is what makes the cap liveable: a deployment that prices
+     -- twenty models across seven classes crosses 200 rows in two price
+     -- revisions, and this page is the only place a rate can be deleted.
+     ${model ? tx`where model ilike ${`%${model}%`}` : tx``}
      order by model nulls first, class, effective_from desc
      limit ${limit + 1}
   `

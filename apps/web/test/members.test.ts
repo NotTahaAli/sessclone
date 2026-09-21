@@ -153,3 +153,34 @@ test('a write refused by the policy reports it rather than looking done', async 
     ),
   ).toBe(false)
 })
+
+test('re-admitting a Member cannot take the Org over its Tier’s ceiling', async () => {
+  // The other way a Member becomes live. The ceiling lives in one trigger, so
+  // both this and `sessclone_accept_invitation` are bound by it — the
+  // Members page counting nothing was how an Org on a five-Seat Tier held six.
+  const [tier] = await sql<{ id: string }[]>`
+    insert into tiers (key, name, seat_price_usd, max_seats, sort_order)
+    values ('capped', 'Capped', 10, ${await seats(fixture.acme.id)}, 1)
+    returning id
+  `
+  await sql`
+    insert into subscriptions (org_id, tier_id, status)
+    values (${fixture.acme.id}, ${tier!.id}, 'active')
+  `
+
+  await expect(
+    asRole(fixture.acme, 'owner', (tx) =>
+      setMemberRemoved(tx, fixture.acme.members.removed, false),
+    ),
+  ).rejects.toThrow(/no seat free/)
+
+  // Freeing one makes room, and the same write then goes through.
+  await asRole(fixture.acme, 'owner', (tx) =>
+    setMemberRemoved(tx, fixture.acme.members.manager, true),
+  )
+  expect(
+    await asRole(fixture.acme, 'owner', (tx) =>
+      setMemberRemoved(tx, fixture.acme.members.removed, false),
+    ),
+  ).toBe(true)
+})

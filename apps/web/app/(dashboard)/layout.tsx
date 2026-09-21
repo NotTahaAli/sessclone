@@ -4,6 +4,8 @@ import { AccountMenu } from './account'
 import { PanelCredit } from './credit'
 import { BottomBarLinks, SidebarLinks } from './nav-links'
 import { DESTINATIONS } from './navigation'
+import { asViewer } from '../../lib/db'
+import { subscriptionStatus } from '../../lib/subscriptions'
 import { currentViewer } from '../../lib/viewer'
 
 // Ticket 45: the signed-in frame every later page hangs from.
@@ -57,6 +59,37 @@ function WithoutOrg() {
   )
 }
 
+/**
+ * What a non-active subscription says, in the reader's terms.
+ *
+ * Neutral tokens and not an alarm: nothing is broken and nothing has been
+ * lost. The three states differ in why, so each says its own why rather than
+ * one sentence covering all of them badly.
+ */
+function Inactive({
+  status,
+}: {
+  status: 'inactive' | 'past_due' | 'cancelled'
+}) {
+  const said = {
+    inactive:
+      'This Org is not activated yet. Collection works and nothing is lost; whoever operates this deployment turns it on.',
+    past_due:
+      'This Org’s subscription is past due. Collection works and nothing is lost; whoever operates this deployment can sort it out.',
+    cancelled:
+      'This Org’s subscription has been cancelled. Collection works and nothing is lost, and whoever operates this deployment can turn it back on.',
+  }[status]
+
+  return (
+    <p
+      role="status"
+      className="border-rule bg-surface text-text-secondary mb-6 rounded-md border p-3 text-caption"
+    >
+      {said}
+    </p>
+  )
+}
+
 export default async function DashboardLayout({
   children,
 }: {
@@ -64,6 +97,15 @@ export default async function DashboardLayout({
 }) {
   const viewer = await currentViewer()
   if (!viewer) return <WithoutOrg />
+
+  // Ticket 48: an Org whose subscription is not active is told so, on every
+  // page, rather than shown a dashboard that quietly means less than it looks
+  // like it does. Collection keeps working either way — nothing here refuses a
+  // page, because refusing the Org's own history would be a worse answer than
+  // saying what is true.
+  const status = await asViewer(viewer.userId, (tx) =>
+    subscriptionStatus(tx, viewer.orgId),
+  )
 
   return (
     <div className="bg-ground text-text min-h-dvh lg:flex">
@@ -107,6 +149,7 @@ export default async function DashboardLayout({
       {/* The bottom bar is fixed, so the content column reserves room for it
           rather than ending underneath it. */}
       <main className="grow px-4 py-6 pb-28 lg:px-8 lg:pb-8">
+        {status && status !== 'active' ? <Inactive status={status} /> : null}
         {children}
         {/* At phone width the sidebar is not rendered at all, so the notices
             go under the content instead. One of the two is visible at a

@@ -1,5 +1,6 @@
-import { deleteRateAction } from './actions'
 import { AddRateForm } from './add-rate-form'
+import { DeleteRate } from './delete-rate'
+import { RateFilter } from './rate-filter'
 import { PageHeader } from '../../(dashboard)/page-header'
 import { asOperator } from '../../../lib/platform-admin'
 import { listRates, rateUnit, type Rate } from '../../../lib/rates'
@@ -26,14 +27,25 @@ const money = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 6,
 })
 
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ model?: string }>
+}) {
+  const { model } = await searchParams
+  const filter = model?.trim() ?? ''
+
   // One transaction, two statements: the page is one read of the deployment's
   // pricing as it stands at one moment. The gate is the layout's; this is the
   // identity the transaction runs as.
   const { rates, more, unknown } = await asOperator(async (tx) => ({
-    ...(await listRates(tx)),
+    ...(await listRates(tx, { model: filter || null })),
     unknown: await unknownModels(tx),
   }))
+
+  // Once for the page rather than once per row: two rows read either side of
+  // midnight would otherwise disagree about what today is.
+  const now = today()
 
   return (
     <div className="flex max-w-3xl flex-col gap-8">
@@ -45,16 +57,24 @@ export default async function Page() {
       <section>
         <h2 className="text-heading">Publish a price</h2>
         <div className="mt-3">
-          <AddRateForm today={today()} unknown={unknown} />
+          <AddRateForm
+            today={now}
+            unknown={unknown.models}
+            moreUnknown={unknown.more}
+          />
         </div>
       </section>
 
       <section>
         <h2 className="text-heading">Price list</h2>
+        <div className="mt-3">
+          <RateFilter model={filter} />
+        </div>
         {rates.length === 0 ? (
-          <p className="text-text-secondary mt-2 text-body">
-            Nothing is priced yet, so every Turn collected so far reads as
-            unpriced rather than as free.
+          <p className="text-text-secondary mt-3 text-body">
+            {filter
+              ? `No price names a model matching “${filter}”.`
+              : 'Nothing is priced yet, so every Turn collected so far reads as unpriced rather than as free.'}
           </p>
         ) : (
           <>
@@ -62,19 +82,20 @@ export default async function Page() {
                 one model's classes together, and its superseded rows under
                 the price in force. A flat list of every class of every model
                 is the same rows in an order nobody asks a question in. */}
-            {byModel(rates).map(([model, group]) => (
-              <section key={model ?? 'any'} className="mt-5">
-                <h3 className="font-mono text-body">{model ?? 'any model'}</h3>
+            {byModel(rates).map(([name, group]) => (
+              <section key={name ?? 'any'} className="mt-5">
+                <h3 className="font-mono text-body">{name ?? 'any model'}</h3>
                 <ul className="mt-2 flex flex-col gap-2">
                   {group.map((rate) => (
-                    <RateRow key={rate.id} rate={rate} />
+                    <RateRow key={rate.id} rate={rate} today={now} />
                   ))}
                 </ul>
               </section>
             ))}
             {more ? (
               <p className="text-text-muted mt-3 text-caption">
-                Only the first 200 rates are shown.
+                Only the first 200 rates are shown. Filter by model to reach the
+                rest.
               </p>
             ) : null}
           </>
@@ -84,7 +105,11 @@ export default async function Page() {
   )
 }
 
-function RateRow({ rate }: { rate: Rate }) {
+function RateRow({ rate, today: now }: { rate: Rate; today: string }) {
+  const said = `${rate.class.replaceAll('_', ' ')} price for ${
+    rate.model ?? 'any model'
+  } from ${rate.effectiveFrom}`
+
   return (
     <li className="border-rule bg-surface flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 rounded-md border p-3">
       <div>
@@ -101,33 +126,19 @@ function RateRow({ rate }: { rate: Rate }) {
             {rateUnit(rate.class)}
           </span>
         </p>
-        {/* Superseded rather than deleted: it is still what last month cost,
-            and the page says which row today resolves to so an operator can
-            see at a glance that a correction actually took effect. */}
+        {/* Superseded rather than deleted: it is still what last month cost.
+            "Latest" rather than "in force", because which Rate actually prices
+            a Turn is `sessclone_resolve_rate`'s answer — a row naming the
+            model beats a model-independent one, and an Org's negotiated
+            override beats both. */}
         <p className="text-text-muted text-caption">
           {rate.current
-            ? 'in force today'
-            : rate.effectiveFrom > today()
+            ? 'latest for this model and class'
+            : rate.effectiveFrom > now
               ? 'scheduled'
               : 'superseded'}
         </p>
-        {/* The only correction there is: a Rate is never edited, so a price
-            published by mistake is removed and every Turn that resolved to it
-            reprices on the next read. */}
-        <form action={deleteRateAction} className="mt-1">
-          <input type="hidden" name="rateId" value={rate.id} />
-          <button
-            type="submit"
-            className="text-text-muted text-caption underline"
-          >
-            Delete
-            <span className="sr-only">
-              {' '}
-              the {rate.class} price for {rate.model ?? 'any model'} from{' '}
-              {rate.effectiveFrom}
-            </span>
-          </button>
-        </form>
+        <DeleteRate rateId={rate.id} said={said} />
       </div>
     </li>
   )

@@ -4,9 +4,9 @@
 
 **Blocked by:** 48, 62.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Tiers created and edited, including seats, price, and capabilities
-- [ ] An Org's subscription activated or deactivated, writing an event each time
-- [ ] Capability changes take effect without a deployment
-- [ ] Subscription history for an Org visible in one place
+- [x] Tiers created and edited, including seats, price, and capabilities
+- [x] An Org's subscription activated or deactivated, writing an event each time
+- [x] Capability changes take effect without a deployment
+- [x] Subscription history for an Org visible in one place

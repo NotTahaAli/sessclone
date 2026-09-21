@@ -26,11 +26,14 @@ const FIELD = 'border-control-border text-text rounded border px-3 py-1 text-sm'
 export function AddRateForm({
   today,
   unknown,
+  moreUnknown,
 }: {
   /** The operator's default effective date, resolved on the server so the form
    * does not render one date and hydrate another. */
   today: string
   unknown: { model: string | null; turns: number }[]
+  /** The list is cut: a Collector sends whatever model string it likes. */
+  moreUnknown: boolean
 }) {
   const [state, formAction, pending] = useActionState(addRateAction, null)
   const model = useRef<HTMLInputElement>(null)
@@ -71,6 +74,11 @@ export function AddRateForm({
               </li>
             ))}
           </ul>
+          {moreUnknown ? (
+            <p className="text-text-muted mt-2 text-caption">
+              Only the 50 most-collected are shown.
+            </p>
+          ) : null}
         </div>
       ) : null}
 

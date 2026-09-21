@@ -100,14 +100,25 @@ export type UnknownModel = {
  */
 export const unknownModels = async (
   tx: TransactionSql,
-): Promise<UnknownModel[]> => {
+  limit = 50,
+): Promise<{ models: UnknownModel[]; more: boolean }> => {
+  // Bounded, because `turns.model` is free-form text a Collector sends: the
+  // number of distinct unpriced identifiers is whatever arrives, not whatever
+  // this deployment has heard of. The function already orders by Turns
+  // descending, so the cut keeps the ones worth pricing first.
   const rows = await tx<
     { model: string | null; turns: string; last_seen_at: Date }[]
-  >`select model, turns, last_seen_at from sessclone_unknown_models()`
+  >`
+    select model, turns, last_seen_at from sessclone_unknown_models()
+     limit ${limit + 1}
+  `
 
-  return rows.map((row) => ({
-    model: row.model,
-    turns: Number(row.turns),
-    lastSeenAt: row.last_seen_at,
-  }))
+  return {
+    models: rows.slice(0, limit).map((row) => ({
+      model: row.model,
+      turns: Number(row.turns),
+      lastSeenAt: row.last_seen_at,
+    })),
+    more: rows.length > limit,
+  }
 }

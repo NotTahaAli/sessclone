@@ -161,23 +161,23 @@ test('the unknown models are the operator’s to see and nobody else’s', async
   await seedTurn({ model: 'claude-unreleased-9', input_tokens: MILLION })
   await seedTurn({ input_tokens: MILLION })
 
-  const operator = await asUser(fixture.platformAdmin.userId, (tx) =>
+  const { models } = await asUser(fixture.platformAdmin.userId, (tx) =>
     unknownModels(tx),
   )
 
-  expect(operator).toHaveLength(1)
-  expect(operator[0]!.model).toBe('claude-unreleased-9')
-  expect(operator[0]!.turns).toBe(2)
+  expect(models).toHaveLength(1)
+  expect(models[0]!.model).toBe('claude-unreleased-9')
+  expect(models[0]!.turns).toBe(2)
 
   // An Owner owns an Org; pricing is global and is not theirs. An empty list
   // rather than an error, because "nothing to price" and "not yours" should
   // look the same from outside.
   expect(
     await asRole(fixture.acme, 'owner', (tx) => unknownModels(tx)),
-  ).toEqual([])
+  ).toMatchObject({ models: [], more: false })
   expect(
     await asUser(fixture.stranger.userId, (tx) => unknownModels(tx)),
-  ).toEqual([])
+  ).toMatchObject({ models: [], more: false })
 })
 
 test('the operator sees the model and not whose it is', async () => {
@@ -200,18 +200,19 @@ test('the operator sees the model and not whose it is', async () => {
 test('a Turn that names no model at all is listed rather than filtered away', async () => {
   await seedTurn({ model: null, input_tokens: MILLION })
 
-  const operator = await asUser(fixture.platformAdmin.userId, (tx) =>
+  const { models } = await asUser(fixture.platformAdmin.userId, (tx) =>
     unknownModels(tx),
   )
 
-  expect(operator.map((row) => row.model)).toEqual([null])
+  expect(models.map((row) => row.model)).toEqual([null])
 })
 
 test('adding the missing Rate takes the model off the list', async () => {
   await seedTurn({ model: 'claude-unreleased-9', input_tokens: MILLION })
 
   expect(
-    await asUser(fixture.platformAdmin.userId, (tx) => unknownModels(tx)),
+    (await asUser(fixture.platformAdmin.userId, (tx) => unknownModels(tx)))
+      .models,
   ).toHaveLength(1)
 
   await sql`
@@ -221,5 +222,5 @@ test('adding the missing Rate takes the model off the list', async () => {
 
   expect(
     await asUser(fixture.platformAdmin.userId, (tx) => unknownModels(tx)),
-  ).toEqual([])
+  ).toMatchObject({ models: [], more: false })
 })
