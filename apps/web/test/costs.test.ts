@@ -453,18 +453,123 @@ test('the view reads as the viewer, so a Cost is only visible where the Turn is'
 })
 
 test("an Org's override is not readable from another Org, even through the view", async () => {
+  // The view reads `org_rate_overrides` directly, so this is the assertion
+  // that the row-level security on that table is still what decides who sees
+  // a negotiated price. An Org cannot read another's override, and cannot
+  // learn it exists by watching a Cost change either — which is why the Cost
+  // is asserted here as well as the refusal.
+  const acme = await seedTurn({ input_tokens: MILLION })
+  const globex = await seedTurn({
+    org_id: fixture.globex.id,
+    member_id: fixture.globex.members.member,
+    input_tokens: MILLION,
+  })
+
   await sql`
     insert into org_rate_overrides (org_id, model, class, price_usd, effective_from)
     values (${fixture.acme.id}, 'claude-opus-4-6', 'input', 2, date '2026-01-01')
   `
 
+  expect(
+    await asRole(
+      fixture.globex,
+      'owner',
+      (tx) => tx`select price_usd from org_rate_overrides`,
+    ),
+  ).toEqual([])
+
+  // Globex prices its own Turn off the platform table, unaffected by a
+  // negotiation it cannot see; Acme sees its own.
   const seenByGlobex = await asRole(
     fixture.globex,
     'owner',
-    (tx) => tx`select price_usd from rate_periods where org_id is not null`,
+    (tx) => tx`select cost_usd from turn_costs where turn_id = ${globex}`,
+  )
+  const seenByAcme = await asRole(
+    fixture.acme,
+    'owner',
+    (tx) => tx`select cost_usd from turn_costs where turn_id = ${acme}`,
   )
 
-  expect(seenByGlobex).toEqual([])
+  expect(Number(seenByGlobex[0]!.cost_usd)).toBe(5)
+  expect(Number(seenByAcme[0]!.cost_usd)).toBe(2)
+})
+
+test('the same Turn costs the same to every viewer who may see it', async () => {
+  // The failure this rules out: the view resolves rates through a table with
+  // its own policy, so a Cost that depended on who was asking would be a
+  // number two people in one Org could argue about. An override is readable
+  // to the whole Org that has it, so every Role in it reads the same figure.
+  const turn = await seedTurn({ input_tokens: MILLION })
+  await sql`
+    insert into org_rate_overrides (org_id, model, class, price_usd, effective_from)
+    values (${fixture.acme.id}, 'claude-opus-4-6', 'input', 2, date '2026-01-01')
+  `
+
+  const costFor = async (role: 'owner' | 'admin' | 'manager' | 'member') => {
+    const rows = await asRole(
+      fixture.acme,
+      role,
+      (tx) =>
+        tx<
+          { cost_usd: string }[]
+        >`select cost_usd from turn_costs where turn_id = ${turn}`,
+    )
+    return rows.length === 0 ? null : Number(rows[0]!.cost_usd)
+  }
+
+  expect(await costFor('owner')).toBe(2)
+  expect(await costFor('admin')).toBe(2)
+  // The Manager whose Scope holds this Member, and the Member themselves.
+  expect(await costFor('manager')).toBe(2)
+  expect(await costFor('member')).toBe(2)
+})
+
+test('an override and a platform rate interleaved in time still resolve in order', async () => {
+  // The precedence rule has three keys and the rewrite re-derives it by sort
+  // rather than by the half-open periods ticket 42 used. This is the case
+  // that tells the two apart: an override that is *older* than the platform
+  // rate still wins, because source beats date, and a later override
+  // supersedes it while a later platform rate does not.
+  const turn = await seedTurn({
+    input_tokens: MILLION,
+    occurred_at: '2026-09-20T08:00:00Z',
+  })
+
+  await sql`
+    insert into org_rate_overrides (org_id, model, class, price_usd, effective_from)
+    values (${fixture.acme.id}, 'claude-opus-4-6', 'input', 2, date '2026-02-01')
+  `
+  expect((await costOf(turn)).cost).toBe(2)
+
+  // A later platform rate does not reach past an Org's own price.
+  await sql`
+    insert into rates (model, class, price_usd, effective_from, source)
+    values ('claude-opus-4-6', 'input', 50, date '2026-07-01', 'test')
+  `
+  expect((await costOf(turn)).cost).toBe(2)
+
+  // A model-independent override loses to the Org's model-specific one, even
+  // though it is newer.
+  await sql`
+    insert into org_rate_overrides (org_id, model, class, price_usd, effective_from)
+    values (${fixture.acme.id}, null, 'input', 9, date '2026-08-01')
+  `
+  expect((await costOf(turn)).cost).toBe(2)
+
+  // A newer override for the same model does supersede it.
+  await sql`
+    insert into org_rate_overrides (org_id, model, class, price_usd, effective_from)
+    values (${fixture.acme.id}, 'claude-opus-4-6', 'input', 3, date '2026-09-01')
+  `
+  expect((await costOf(turn)).cost).toBe(3)
+
+  // And one that has not taken effect yet does not.
+  await sql`
+    insert into org_rate_overrides (org_id, model, class, price_usd, effective_from)
+    values (${fixture.acme.id}, 'claude-opus-4-6', 'input', 99, date '2027-01-01')
+  `
+  expect((await costOf(turn)).cost).toBe(3)
 })
 
 // Ticket 81: the same numbers, at a shape a chart can filter.
@@ -541,10 +646,35 @@ test('the filtered view reaches the Turn index rather than every Turn', async ()
 
   expect(text).toMatch(/turns_org_occurred_at_idx/)
   expect(text).not.toMatch(/Seq Scan on turns/)
+  // The rate lookup is cached per (Org, model, *day*) rather than repeated per
+  // Turn, which is the other half of the fix and the half the `offset 0` fence
+  // buys: unfenced, the cache key is the raw `occurred_at` and every Turn is a
+  // miss. Asserting the key mentions the date is what keeps the fence.
+  expect(text).toMatch(/Memoize/)
+  expect(text).toMatch(/Cache Key:[^\n]*date/)
   // No `Group Key` anywhere: the aggregate ticket 42 folded seven rows per
   // Turn back together is the barrier that made the view unfilterable. The
   // `Aggregate` inside the rate lateral is ungrouped and is not that.
   expect(text).not.toMatch(/Group Key/)
+})
+
+test('a Turn that consumed nothing costs nothing even with no rate table', async () => {
+  // The one place the rewrite deliberately answers differently from ticket
+  // 42's view, pinned so it is a decision and not a drift. With no Rate
+  // matching at all — an empty price list, or a Turn dated before every
+  // `effective_from` — the old shape summed seven rows of `0 * null` and
+  // returned null while reporting `unpriced` false. That pair means nothing:
+  // a cost that is unknown and also not unpriced. Zero is what `unpriced`
+  // false has always claimed, and a Turn that consumed nothing did cost zero.
+  await sql`delete from rates`
+  const empty = await seedTurn()
+
+  expect(await costOf(empty)).toEqual({ cost: 0, unpriced: false })
+
+  // And the Turn beside it, which did consume something, is still unpriced
+  // rather than free — the distinction the whole of ADR 0002 rests on.
+  const used = await seedTurn({ input_tokens: MILLION })
+  expect(await costOf(used)).toEqual({ cost: null, unpriced: true })
 })
 
 test('the filterable view still reads as the viewer, not as its owner', async () => {

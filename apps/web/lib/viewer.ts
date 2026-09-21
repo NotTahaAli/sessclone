@@ -25,6 +25,13 @@ export type Viewer = {
   memberId: string
   orgId: string
   orgName: string
+  /**
+   * The Org's timezone (ticket 51). Carried here because every surface that
+   * cuts Turns into days needs it and this row is already being read once per
+   * request — the alternative is each chart asking again for a fact that
+   * cannot change mid-render.
+   */
+  orgTimezone: string
   role: Role
 }
 
@@ -32,6 +39,7 @@ type MembershipRow = {
   member_id: string
   org_id: string
   org_name: string
+  org_timezone: string
   role: Role
 }
 
@@ -60,6 +68,7 @@ export const currentViewer = cache(async (): Promise<Viewer | null> => {
       select member.id as member_id,
              member.org_id,
              org.name as org_name,
+             org.timezone as org_timezone,
              member.role
         from members member
         join orgs org on org.id = member.org_id
@@ -77,6 +86,7 @@ export const currentViewer = cache(async (): Promise<Viewer | null> => {
     memberId: membership.member_id,
     orgId: membership.org_id,
     orgName: membership.org_name,
+    orgTimezone: membership.org_timezone,
     role: membership.role,
   }
 })

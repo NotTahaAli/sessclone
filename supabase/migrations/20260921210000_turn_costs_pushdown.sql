@@ -18,17 +18,27 @@
 -- join over `turns`, so a qual on `org_id` or `occurred_at` lands on
 -- `turns_org_occurred_at_idx` exactly as it would in a hand-written query.
 --
--- Every number this produces is the number ticket 42 produced. The costs suite
--- is unchanged and is the evidence; the per-class division order is preserved
--- for the same reason, since `sum(q * p * m / 1e6)` and `sum(q * p * m) / 1e6`
--- are not the same numeric.
+-- Every number this produces is the number ticket 42 produced, with one
+-- deliberate exception. The per-class division order is preserved so that
+-- stays true, since `sum(q * p * m / 1e6)` and `sum(q * p * m) / 1e6` are not
+-- the same numeric.
 --
--- `rate_periods` stays. It is the half-open view of the rate table and the
--- policy test reads it; this view no longer uses it, because the `lead()`
--- windows cannot be pushed under a correlated lateral and the ordering rule
--- they encode is the same three-key sort spelled below.
-
+-- The exception: a Turn that consumed nothing, on a deployment where *no*
+-- Rate matches its model and date at all — a Turn dated before every
+-- `effective_from`, or a database with an empty rate table. Ticket 42's view
+-- summed seven rows of `0 * null` and returned null while reporting
+-- `unpriced` false, which is the one combination that means nothing: a cost
+-- that is unknown and also not unpriced. This returns 0, which is what
+-- `unpriced` false has always claimed. `costs.test.ts` pins it.
+--
+-- `rate_periods` is dropped below. It was the half-open view the old shape
+-- joined, and with that shape gone it is a second, unread statement of the
+-- rate precedence rule — the drift ADR 0002 spent its length avoiding. The
+-- precedence now lives in `sessclone_resolve_rate` (one lookup) and in the
+-- lateral here (a set), and nowhere else.
+--
 drop view turn_costs;
+drop view rate_periods;
 
 create view turn_costs with (security_invoker = true) as
 select
@@ -75,8 +85,16 @@ select
   -- What the dashboard counts and labels rather than hiding (ticket 43).
   flag.unpriced
 from turns turn
--- The day the Turn is priced on. In UTC: bucketing into the Org's own day is
--- ticket 51's to apply, here, once the column exists.
+-- The day the Turn is priced on, in the Org's own timezone (ticket 51).
+--
+-- A Rate is effective from a date, and which date a 23:40 Turn falls on
+-- depends on where the Org measures its days from. Reading `orgs.timezone`
+-- here is what makes changing that setting re-bucket what is already
+-- collected: `occurred_at` is an instant and nothing stored moves.
+--
+-- `left join` and a `coalesce`, so a Turn whose Org row is not readable prices
+-- in UTC rather than vanishing. The column is `not null`, so the fallback is
+-- about the policy on `orgs` and not about a missing value.
 --
 -- `offset 0` is an optimisation fence, and it is doing two jobs. Without it
 -- Postgres flattens this into the target list, so `on_date` is recomputed for
@@ -84,8 +102,10 @@ from turns turn
 -- `occurred_at` rather than on the date, which turns 30 distinct cache keys
 -- into one per hour. Measured at 200k Turns it was the difference between 720
 -- cache misses and 30.
+left join orgs org on org.id = turn.org_id
 cross join lateral (
-  select (turn.occurred_at at time zone 'UTC')::date as on_date,
+  select (turn.occurred_at at time zone coalesce(org.timezone, 'UTC'))::date
+           as on_date,
          sessclone_price_multiplier(
            turn.model, turn.speed, turn.inference_geo, turn.service_tier
          ) as multiplier
@@ -132,10 +152,18 @@ cross join lateral (
        as web_fetch_usd
   from (
     -- Read straight from the two tables rather than through `rate_periods`,
-    -- so `org_rate_overrides_resolution_idx` and `rates_resolution_idx` are
-    -- available to a parameterised scan. Both tables carry row-level security
-    -- and this view is `security_invoker`, so an Org's negotiated pricing is
-    -- no more readable through here than it is directly.
+    -- whose `lead()` windows cannot be pushed under a correlated lateral.
+    -- `org_rate_overrides_resolution_idx` is reachable on its leading
+    -- `org_id`; `rates_resolution_idx` is not, because there is no `class`
+    -- qual here — the class is consumed by the seven `filter`s above, so each
+    -- Memoize miss scans `rates` whole. That is 82 rows on a seeded
+    -- deployment and grows as models times classes times price revisions; the
+    -- fix, when it matters, is to split this union per class rather than to
+    -- add an index the `model is null` branch would defeat anyway.
+    --
+    -- Both tables carry row-level security and this view is
+    -- `security_invoker`, so an Org's negotiated pricing is no more readable
+    -- through here than it is directly.
     select override.class, override.price_usd, 1 as source_rank,
            (override.model is not null) as model_rank, override.effective_from
       from org_rate_overrides override
