@@ -1,9 +1,7 @@
 import Link from 'next/link'
-import { redirect } from 'next/navigation'
 
+import { AcceptForm } from './accept-form'
 import { PanelCredit } from '../../(dashboard)/credit'
-import { asViewer } from '../../../lib/db'
-import { acceptFailure, acceptInvitation } from '../../../lib/invitations'
 import { signedInUser } from '../../../lib/supabase/server'
 
 // Ticket 49: where an invitation is accepted.
@@ -14,7 +12,8 @@ import { signedInUser } from '../../../lib/supabase/server'
 // The acceptance runs on the viewer's own connection, and every rule — expiry,
 // replay, the address it was sent to, the Seat — lives in
 // `sessclone_accept_invitation`, because the person accepting may read none of
-// the rows those rules are about.
+// the rows those rules are about. It runs from the Server Action in
+// `actions.ts`, never from this render: see the note there.
 
 export default async function Join({
   params,
@@ -45,34 +44,16 @@ export default async function Join({
     )
   }
 
-  let failure: string
-  try {
-    await asViewer(user.id, (tx) => acceptInvitation(tx, token))
-    // Accepted. Straight to Costs, which is where a new Member starts.
-    // Outside the `try`, because `redirect` throws by design and catching it
-    // here would report a successful join as a failed one.
-    failure = ''
-  } catch (error) {
-    // Caught here rather than inside the transaction: a raise aborts it, so
-    // the error surfaces again when the transaction ends however carefully the
-    // failing statement was wrapped.
-    failure = acceptFailure(error)
-  }
-
-  if (!failure) redirect('/costs')
-
+  // Nothing is read or written by rendering this page. The acceptance is the
+  // button below, because joining an Org is a write and a write that happens
+  // by loading a URL is one anything can trigger on the visitor's behalf.
   return (
-    <Shell headline="This invitation cannot be used">
-      <p className="text-text-secondary text-sm">{failure}</p>
-      <p className="text-text-muted mt-2 text-sm">
-        Whoever invited you can send another one.
+    <Shell headline="Accept this invitation">
+      <p className="text-text-secondary text-sm">
+        You are signed in as {user.email}. An invitation only works for the
+        address it was sent to, and only once.
       </p>
-      <Link
-        href="/costs"
-        className="border-control-border text-text mt-4 inline-block rounded border px-3 py-1 text-sm"
-      >
-        Go to the dashboard
-      </Link>
+      <AcceptForm token={token} />
     </Shell>
   )
 }

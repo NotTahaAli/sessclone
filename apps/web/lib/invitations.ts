@@ -128,8 +128,9 @@ export const listInvitations = async (
  * Withdraws an invitation that has not been used.
  *
  * Returns whether a row was written: refused by the policy, already accepted
- * or already revoked all touch nothing, and the page says so rather than
- * claiming a withdrawal that did not happen.
+ * or already revoked all touch nothing. The Members page does not surface the
+ * answer — it re-renders the list, which is where a withdrawal that did not
+ * happen is visible as the invitation still being there.
  */
 export const revokeInvitation = async (
   tx: TransactionSql,
@@ -172,9 +173,32 @@ export const acceptInvitation = async (
  */
 export const acceptFailure = (error: unknown) => {
   const message = error instanceof Error ? error.message : ''
-  // Every raise in the function is a sentence for the person holding the
-  // link; anything else is a fault and must not reach them verbatim.
-  return /invitation|seat|sign in/i.test(message)
-    ? `${message.charAt(0).toUpperCase()}${message.slice(1)}.`
-    : 'This invitation could not be accepted.'
+  // An allowlist of the sentences the function actually raises, not a test
+  // for words that might appear in one. A driver or permission error can say
+  // "invitation" too — `permission denied for function
+  // sessclone_accept_invitation` does — and that is exactly the internal
+  // detail this page must not hand to a stranger.
+  return (
+    ACCEPT_FAILURES.find(([raised]) => message.startsWith(raised))?.[1] ??
+    'This invitation could not be accepted.'
+  )
 }
+
+const ACCEPT_FAILURES: [raised: string, shown: string][] = [
+  ['sign in before', 'Sign in as the person this invitation was sent to.'],
+  ['this invitation is not valid', 'This invitation is not valid.'],
+  [
+    'this invitation has expired',
+    'This invitation has expired. Ask for another.',
+  ],
+  [
+    'this invitation was sent to a different address',
+    'This invitation was sent to a different address.',
+  ],
+  // Without the counts the raise carries: the person reading this is not in
+  // the Org, and its headcount is not theirs to know.
+  [
+    'this Org has no seat free',
+    'This Org has no seat free. Whoever invited you can free one.',
+  ],
+]

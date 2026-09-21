@@ -4,9 +4,9 @@
 
 **Blocked by:** 41, 43, 62.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Rates viewable and editable, with effective dates
-- [ ] Unknown model identifiers seen in Turns listed, with how many Turns each affects
-- [ ] Adding the missing rate fills in the affected history
-- [ ] A price change is recorded as a new effective-dated row, never an overwrite
+- [x] Rates viewable and editable, with effective dates
+- [x] Unknown model identifiers seen in Turns listed, with how many Turns each affects
+- [x] Adding the missing rate fills in the affected history
+- [x] A price change is recorded as a new effective-dated row, never an overwrite

@@ -1,3 +1,4 @@
+import type { TransactionSql } from 'postgres'
 import { cache } from 'react'
 
 import { asViewer } from './db'
@@ -41,3 +42,20 @@ export const currentOperator = cache(async (): Promise<Operator | null> => {
 
   return row?.admin ? { userId: user.id, email: user.email } : null
 })
+
+/**
+ * Runs `query` as the signed-in operator.
+ *
+ * An admin page needs an identity to open a transaction with, which is not the
+ * same thing as a gate: the gate is the layout's, and `rates_write` refuses
+ * every statement independently. This exists so a page can get the identity
+ * without writing `currentOperator()` next to its own `notFound()` — the rule
+ * ticket 62 set, and the one `test/navigation.test.ts` enforces.
+ */
+export const asOperator = async <T>(
+  query: (tx: TransactionSql) => Promise<T>,
+) => {
+  const operator = await currentOperator()
+  if (!operator) throw new Error('not a platform administrator')
+  return asViewer(operator.userId, query)
+}

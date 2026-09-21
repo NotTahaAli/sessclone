@@ -144,6 +144,16 @@ self-hoster's team is told to report to the self-hoster's deployment. It is not
 derived from request headers: a forwarded `Host` is attacker-controllable, and
 an invite link is a credential.
 
+An invite link is a credential that travels in a URL, which is worth knowing
+when you decide how invitations are delivered. Somebody who opens one while
+signed out is sent to sign in and back, so the token passes through the auth
+provider's `redirect_to` — and, for GitHub sign-in, through GitHub — and it
+lands in whatever request logs sit in front of the deployment. It is still only
+usable by the address it names, which the database checks against the account's
+own verified address, and accepting it takes a deliberate press rather than a
+page load. Treat a link in a chat message the way you would treat a password
+reset link, and revoke one you think has been seen.
+
 ### Storage
 
 Log Artifacts go straight to storage through a presigned PUT; the application

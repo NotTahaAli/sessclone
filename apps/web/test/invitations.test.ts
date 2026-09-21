@@ -133,7 +133,7 @@ test('an expired invitation is refused', async () => {
   const result = await accept(fixture.stranger.userId, token)
 
   expect(result).toEqual({
-    error: 'This invitation has expired; ask for another.',
+    error: 'This invitation has expired. Ask for another.',
   })
 })
 
@@ -149,16 +149,17 @@ test('a withdrawn invitation is refused', async () => {
   })
 })
 
-test('a full Org refuses the acceptance, and says what the ceiling is', async () => {
-  // Five Members are seeded and one of them is removed, so four Seats are in
-  // use — the ceiling is set to exactly that.
+test('a full Org refuses the acceptance, without telling a stranger its size', async () => {
+  // The ceiling is set to exactly the Seats already in use.
   await capSeats(fixture.acme.id, await seatsUsed(fixture.acme.id))
   const { token } = await invited()
 
   const result = await accept(fixture.stranger.userId, token)
 
   expect(result).toEqual({
-    error: expect.stringMatching(/no seat free \(5 of 5 in use\)/),
+    // The raise names the count; the sentence shown to somebody who is not in
+    // the Org does not.
+    error: 'This Org has no seat free. Whoever invited you can free one.',
   })
 
   const rows =
@@ -283,4 +284,107 @@ test('an invitation cannot be re-pointed after it is sent', async () => {
       (tx) => tx`update invitations set role = 'admin' where id = ${id}`,
     ),
   ).rejects.toThrow(/fixed once sent/)
+})
+
+test('an account cannot rename itself onto somebody else’s invitation', async () => {
+  // The whole design rests on matching the invited address against the
+  // signed-in person's own, and `users_write_self` lets a person write their
+  // own row. Without the column guard, this is how an invitation becomes a
+  // bearer token for any account.
+  const { token } = await invited('victim@corp.example')
+
+  await expect(
+    asUser(
+      fixture.stranger.userId,
+      (tx) =>
+        tx`update users set email = 'victim@corp.example'
+            where id = ${fixture.stranger.userId}`,
+    ),
+  ).rejects.toThrow(/identity provider/)
+
+  expect(await accept(fixture.stranger.userId, token)).toEqual({
+    error: expect.stringMatching(/different address/),
+  })
+})
+
+test('somebody invited back comes back at the Role the invitation granted', async () => {
+  // The conflicting row is a tombstone, so there is no incumbent Role to
+  // protect: an Admin who left and is invited back as a Member is a Member.
+  await asRole(
+    fixture.acme,
+    'owner',
+    (tx) =>
+      tx`update members set role = 'admin'
+          where id = ${fixture.acme.members.removed}`,
+  )
+  const [account] = await sql<{ email: string }[]>`
+    select email from users where id = ${fixture.acme.users.removed}
+  `
+  const { token } = await invited(account!.email)
+
+  expect(await accept(fixture.acme.users.removed, token)).toEqual({
+    orgId: fixture.acme.id,
+  })
+
+  const [member] = await sql<
+    { role: string; archival_enabled: boolean; removed_at: Date | null }[]
+  >`
+    select role, archival_enabled, removed_at from members
+     where id = ${fixture.acme.members.removed}
+  `
+  expect(member).toMatchObject({
+    role: 'member',
+    // Consent given by a membership that ended does not carry over.
+    archival_enabled: false,
+    removed_at: null,
+  })
+})
+
+test('a spent invitation cannot be made live again', async () => {
+  const { id, token } = await invited()
+  await accept(fixture.stranger.userId, token)
+
+  await expect(
+    asRole(
+      fixture.acme,
+      'owner',
+      (tx) => tx`update invitations set accepted_at = null where id = ${id}`,
+    ),
+  ).rejects.toThrow(/stays accepted/)
+
+  const { id: withdrawn } = await invited('other@nowhere.test')
+  await asRole(fixture.acme, 'owner', (tx) => revokeInvitation(tx, withdrawn))
+  await expect(
+    asRole(
+      fixture.acme,
+      'owner',
+      (tx) =>
+        tx`update invitations set revoked_at = null where id = ${withdrawn}`,
+    ),
+  ).rejects.toThrow(/stays withdrawn/)
+})
+
+test('two people accepting at once cannot both take the last Seat', async () => {
+  // The row lock serialises two acceptances of the *same* invitation. Two
+  // different invitations lock two different rows, so without a lock on the
+  // Org both count the seats before either insert commits.
+  const before = await seatsUsed(fixture.acme.id)
+  await capSeats(fixture.acme.id, before + 1)
+
+  const [first, second] = await sql<{ id: string; email: string }[]>`
+    select id, email from users
+     where id in (${fixture.stranger.userId}, ${fixture.platformAdmin.userId})
+  `
+  const tokens = await Promise.all([
+    invited(first!.email),
+    invited(second!.email),
+  ])
+
+  const results = await Promise.all([
+    accept(first!.id, tokens[0]!.token),
+    accept(second!.id, tokens[1]!.token),
+  ])
+
+  expect(results.filter((result) => 'orgId' in result)).toHaveLength(1)
+  expect(await seatsUsed(fixture.acme.id)).toBe(before + 1)
 })
