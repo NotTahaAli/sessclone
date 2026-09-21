@@ -203,10 +203,7 @@ describe('a Member of more than one Org', () => {
   test('sees both memberships, and each key says which Org it reports to', async () => {
     const second = await alsoInGlobex()
 
-    const memberships = await asUser(
-      fixture.acme.users.member,
-      listMemberships,
-    )
+    const memberships = await asUser(fixture.acme.users.member, listMemberships)
     expect(memberships).toEqual([
       { member_id: fixture.acme.members.member, org_name: 'Acme' },
       { member_id: second, org_name: 'Globex' },
