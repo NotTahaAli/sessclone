@@ -1,9 +1,13 @@
 import { IngestPayload, type IngestResponse } from '@sessclone/shared'
 import postgres from 'postgres'
 
+import { hashApiKey } from '../../../lib/api-keys'
+
 // Ticket 31: the endpoint the Collector reports to.
 //
-// Three rules from the ADRs shape everything below.
+// Ticket 34: and the endpoint that verifies who is reporting.
+//
+// Four rules from the ADRs shape everything below.
 //
 // 1. The payload is validated against the shared zod schema *before any
 //    write* (AGENTS.md: validate at trust boundaries). A malformed report is
@@ -27,6 +31,14 @@ import postgres from 'postgres'
 //    `sessclone_app`, which owns nothing and has no insert grant on `turns` or
 //    `log_artifacts`, so reusing it here answers every report with
 //    `permission denied for table turns` (docs/configuration.md § Database).
+// 4. The caller proves who it is with an API key, and nothing else decides
+//    where a Turn is filed (ticket 34). The key arrives as
+//    `Authorization: Bearer sk_…`, is hashed and looked up against the unique
+//    index on `api_keys.key_hash`, and yields the Member and the Org. It is
+//    checked *before the body is even parsed*, so an unknown caller costs a
+//    hash and an indexed lookup rather than the validation of a 5000-turn
+//    batch — and the key never appears in a response, a log line or a stored
+//    row, only its hash.
 //
 // The whole batch is a handful of round trips regardless of its size: resolve
 // the Member, upsert the Device, upsert every Project at once, then the Turns
@@ -53,6 +65,62 @@ const db = () => {
 
 const refused = (error: string, detail?: string) =>
   Response.json({ error, detail }, { status: 400 })
+
+// One sentence for every way a key can fail to identify a live Member:
+// absent, malformed, unknown, revoked, or belonging to somebody who has been
+// removed from their Org. They are one answer on purpose. Telling an
+// unauthenticated caller which of those it hit turns this route into an oracle
+// for probing which keys exist, and the Collector's response is the same in
+// every case: stop, and tell the person to check their key.
+//
+// `WWW-Authenticate` because this is what 401 means, and it is what tells a
+// generic HTTP client not to retry the same credential forever.
+const unauthenticated = () =>
+  Response.json(
+    { error: 'no live API key was presented' },
+    { status: 401, headers: { 'www-authenticate': 'Bearer' } },
+  )
+
+/** `Authorization: Bearer sk_…`, or nothing. The scheme is case-insensitive
+ * per RFC 9110; the key is not touched beyond having its whitespace trimmed,
+ * because a hash of a key with a stray newline is simply a hash that does not
+ * match. */
+const presentedKey = (request: Request) => {
+  const header = request.headers.get('authorization')
+  const [scheme, ...rest] = header?.trim().split(/\s+/) ?? []
+  if (scheme?.toLowerCase() !== 'bearer') return undefined
+  return rest.join(' ') || undefined
+}
+
+type Caller = { keyId: string; memberId: string; orgId: string }
+
+/**
+ * The Member and Org a presented key resolves to, or `undefined`.
+ *
+ * One indexed lookup, which is what `hashApiKey`'s choice of a plain SHA-256
+ * buys: a salted slow hash could not be looked up at all, and verification
+ * would become a scan over every key in the deployment on the hottest path in
+ * the product.
+ *
+ * Three conditions, and all three are the database's rather than this route's.
+ * `revoked_at is null` is what makes revocation immediate — ingest reads it on
+ * the next request rather than caching a verdict — and `removed_at is null`
+ * keeps a removed Member's forgotten key from carrying on reporting spend into
+ * an Org they left.
+ */
+const resolveCaller = async (sql: postgres.Sql, presented: string) => {
+  const [caller] = await sql<Caller[]>`
+    select api_key.id as "keyId",
+           member.id as "memberId",
+           member.org_id as "orgId"
+      from api_keys api_key
+      join members member on member.id = api_key.member_id
+     where api_key.key_hash = ${hashApiKey(presented)}
+       and api_key.revoked_at is null
+       and member.removed_at is null
+  `
+  return caller
+}
 
 // What the database refused, and what the Collector should do about it. The
 // two cases want opposite behaviour, so they get different statuses:
@@ -91,6 +159,40 @@ const databaseFailure = (error: unknown) => {
 const TURNS_PER_STATEMENT = 1000
 
 export async function POST(request: Request) {
+  const presented = presentedKey(request)
+  if (!presented) return unauthenticated()
+
+  const sql = db()
+  const caller = await resolveCaller(sql, presented)
+  // Nothing about this request reaches a table until it has: the Device and
+  // Project upserts are below the verification, not beside it.
+  if (!caller) return unauthenticated()
+
+  // All three from the key, none from the payload. Everything below takes the
+  // Org from the resolved Member rather than from anything the caller said,
+  // which is why ticket 34 changed the top of this route and nothing under it.
+  const { keyId, memberId, orgId } = caller
+
+  // The one write that is evidence of a *request* rather than of a batch, so
+  // it is the one write outside the transaction — and it is here, above the
+  // schema check, because a Collector whose payloads this version refuses is
+  // precisely a Collector that is reaching the deployment. It surfaces in the
+  // key list (ticket 28) and, more importantly, in onboarding, where it is the
+  // only evidence that a Collector has ever reached this deployment at all: a
+  // key that has been used but has landed no Turn is a different failure from
+  // one that has never been used (`docs/design/product-ia.md`, step 6). Rolled
+  // back with the batch it would be absent in exactly the case somebody needs
+  // it to diagnose, and the Owner would be told nothing had ever arrived.
+  //
+  // Inside the `try` because `databaseFailure` is this route's contract for
+  // every statement it sends: an exhausted pool here is a 503 the Collector
+  // queues and retries, not a bare 500 out of the handler.
+  try {
+    await sql`update api_keys set last_used_at = now() where id = ${keyId}`
+  } catch (error) {
+    return databaseFailure(error)
+  }
+
   const body = await request.json().catch(() => null)
   const parsed = IngestPayload.safeParse(body)
   if (!parsed.success) {
@@ -104,23 +206,7 @@ export async function POST(request: Request) {
     )
   }
 
-  const { memberId, device, reports } = parsed.data
-  const sql = db()
-
-  // ticket 34 — the seam. The Member arrives in the payload and is only
-  // *resolved* here, never trusted: this is explicitly not authentication and
-  // does not pretend to be. Ticket 34 replaces this lookup with one that
-  // verifies an API key by hash, and the rest of this route does not change,
-  // because everything below already takes the Org from the resolved Member
-  // rather than from anything the caller said. A revoked key, a removed
-  // Member and a rate limit are all that ticket's; an unknown id is refused
-  // here only so a bad report fails as a 400 rather than as a foreign key
-  // violation.
-  const [member] = await sql<{ org_id: string }[]>`
-    select org_id from members where id = ${memberId}
-  `
-  if (!member) return refused('unknown member')
-  const orgId = member.org_id
+  const { device, reports } = parsed.data
 
   // One transaction around every write. Without it a batch that passes the
   // schema and fails a database check — a constraint the schema does not

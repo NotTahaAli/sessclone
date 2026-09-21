@@ -4,9 +4,9 @@
 
 **Blocked by:** 18, 27, 44.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Navigation reflecting what the signed-in Role may reach
-- [ ] Org context established and visible
-- [ ] Empty state telling a new Owner how to install the Collector
-- [ ] Loading and error states drawn from the design, not improvised
+- [x] Navigation reflecting what the signed-in Role may reach
+- [x] Org context established and visible
+- [x] Empty state telling a new Owner how to install the Collector
+- [x] Loading and error states drawn from the design, not improvised

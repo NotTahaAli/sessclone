@@ -1,15 +1,14 @@
-import type { ReactNode } from 'react'
+import { REPOSITORY } from '../(marketing)/constants'
 
-import { REPOSITORY } from './(marketing)/constants'
-import { signOut } from './sign-in/actions'
-
-// The frame every signed-in page hangs from until ticket 45 builds the real
-// shell. It started as a header copied into `/keys`; ticket 72 needed the same
-// header and ticket 79 needed the same footer on both, and two copies of a
-// frame is how two pages stop looking like one product.
+// Ticket 79's Appropriate Legal Notices, which ticket 45 moved out of the
+// `Panel` frame and into the shell.
 //
-// Nothing here is the navigation ticket 45 owns. It answers "who am I signed
-// in as", gives a way out, and carries the credit.
+// `Panel` was the stand-in every signed-in page wrapped in until this shell
+// existed: a header saying who was signed in, a way out, and this credit. The
+// header and the sign-out are the shell's now — the Org name and the Role are
+// in the frame and sign out is in the account menu — and what is left is the
+// part the licence turns on, rendered once by `layout.tsx` so that it is on
+// every signed-in page by construction rather than by each page remembering.
 
 /** Where the licence, its additional term and the source all live. */
 export const LICENSE_URL = `${REPOSITORY}/blob/main/LICENSE`
@@ -17,7 +16,8 @@ export const NOTICE_URL = `${REPOSITORY}/blob/main/NOTICE.md`
 
 /**
  * The panel's Appropriate Legal Notices, and the sessclone credit with them
- * (ticket 79).
+ * (ticket 79). "The panel" is now the dashboard shell; the term in
+ * `NOTICE.md` is about what a person sees, not about which file renders it.
  *
  * This is deliberately not a "Powered by" line on its own. AGPL-3.0 section
  * 7(b) permits an additional term requiring preservation of "legal notices or
@@ -40,7 +40,7 @@ export const NOTICE_URL = `${REPOSITORY}/blob/main/NOTICE.md`
  */
 export function PanelCredit() {
   return (
-    <footer className="border-rule text-caption text-text-muted mt-10 flex flex-col gap-1 border-t pt-4">
+    <footer className="border-rule text-caption text-text-muted mt-10 flex flex-col gap-1 border-t pt-4 lg:mt-0 lg:border-t-0 lg:pt-0">
       <p>
         Powered by{' '}
         <a href={REPOSITORY} className="hover:text-accent-text underline">
@@ -61,48 +61,5 @@ export function PanelCredit() {
         that keeps this notice visible.
       </p>
     </footer>
-  )
-}
-
-/**
- * One signed-in page: the header, the page, and the credit under it.
- *
- * `email` and `memberships` are passed in rather than read here, so the page's
- * one `asViewer` transaction stays the page's one transaction. The rows go in
- * as the query returned them, and the Org names are joined here — a page that
- * mapped them first would hand this a fresh array on every render.
- */
-export function Panel({
-  email,
-  memberships,
-  children,
-}: {
-  email: string | undefined
-  memberships: readonly { org_name: string }[]
-  children: ReactNode
-}) {
-  return (
-    <main className="bg-ground text-text mx-auto max-w-3xl p-6">
-      <header className="border-rule flex flex-wrap items-baseline justify-between gap-3 border-b pb-4">
-        <p className="text-text-secondary text-sm">
-          Signed in as {email}
-          {memberships.length > 0 ? (
-            <> · {memberships.map((m) => m.org_name).join(', ')}</>
-          ) : null}
-        </p>
-        <form action={signOut}>
-          <button
-            type="submit"
-            className="border-control-border text-text rounded border px-2 py-1 text-sm"
-          >
-            Sign out
-          </button>
-        </form>
-      </header>
-
-      {children}
-
-      <PanelCredit />
-    </main>
   )
 }

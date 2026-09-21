@@ -3,9 +3,12 @@
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 
-import { setArchivalEnabled, setProjectArchival } from '../../../lib/archival'
-import { asViewer } from '../../../lib/db'
-import { signedInUser } from '../../../lib/supabase/server'
+import {
+  setArchivalEnabled,
+  setProjectArchival,
+} from '../../../../lib/archival'
+import { asViewer } from '../../../../lib/db'
+import { signedInUser } from '../../../../lib/supabase/server'
 
 // Ticket 72's two writes. A Server Action is a POST endpoint anybody can
 // reach, whether or not the page rendered a form for them, so identity comes

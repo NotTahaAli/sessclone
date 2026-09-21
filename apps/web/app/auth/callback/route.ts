@@ -57,7 +57,10 @@ export async function GET(request: NextRequest) {
   // the query string: an open redirect on the sign-in callback hands a
   // freshly-minted session to wherever the link says.
   const requested = params.get('next')
-  const next = requested?.startsWith('/') ? requested : '/'
+  // `/costs` and not `/`: `/` is the marketing page (ticket 26), and landing
+  // somebody there the moment they sign in is landing them where they already
+  // decided to leave. The dashboard's home is Costs (ticket 45).
+  const next = requested?.startsWith('/') ? requested : '/costs'
 
   // The provider refused before we ever got a code. Distinguished from a link
   // that arrived with nothing, which is what this route used to call it: the

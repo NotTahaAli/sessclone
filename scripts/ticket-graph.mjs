@@ -77,6 +77,8 @@ const PHASES = [
     type: 'backend',
     pos: [960, 122],
     range: [29, 43],
+    // Ticket added after the ranges were drawn; see the note on `archival`.
+    also: [81],
   },
   {
     id: 'product',

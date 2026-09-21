@@ -4,10 +4,10 @@ import {
   listArchivalProjects,
   type ArchivalMembership,
   type ArchivalProject,
-} from '../../../lib/archival'
-import { asViewer } from '../../../lib/db'
-import { signedInUser } from '../../../lib/supabase/server'
-import { Panel } from '../../panel'
+} from '../../../../lib/archival'
+import { PageHeader } from '../../page-header'
+import { asViewer } from '../../../../lib/db'
+import { signedInUser } from '../../../../lib/supabase/server'
 
 // Ticket 72: `/settings/you`, the destination `docs/design/product-ia.md`
 // gives every Role, carrying the settings that are the Member's own. Archival
@@ -25,11 +25,9 @@ const EMPTY: ArchivalProject[] = []
 export default async function YourSettings() {
   const user = await signedInUser()
 
-  // The Proxy redirects a signed-out visitor before this renders.
-  // Unconfigured — no Supabase, no database — it does not, so say so plainly.
-  if (!user) {
-    return <main className="text-text p-6">Not signed in.</main>
-  }
+  // The shell above has already said so for every page under it, so this is
+  // narrowing for the type checker rather than a second message.
+  if (!user) return null
 
   // One transaction, which is what `asViewer` opens and what carries the
   // viewer's claim. The two statements are independent, so they go together.
@@ -48,8 +46,11 @@ export default async function YourSettings() {
   }
 
   return (
-    <Panel email={user.email} memberships={memberships}>
-      <h1 className="mt-6 text-2xl font-medium">Your settings</h1>
+    // Capped at a readable measure. Inside `Panel` this page sat in a 3xl
+    // column; the shell's content column is 1208px at 1440, which is right for
+    // a chart and far past a measure anybody wants to read a paragraph at.
+    <div className="flex max-w-3xl flex-col gap-6">
+      <PageHeader title="Your settings" />
 
       <section aria-labelledby="archival" className="mt-8">
         <h2 id="archival" className="text-heading-lg">
@@ -80,7 +81,7 @@ export default async function YourSettings() {
           ))
         )}
       </section>
-    </Panel>
+    </div>
   )
 }
 

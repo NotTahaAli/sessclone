@@ -1,0 +1,43 @@
+// Ticket 32: the Collector checks its configuration once, at the start of a
+// session, and says so where a person will see it.
+//
+// `SessionStart` is the right moment for two reasons. It is the first thing
+// that runs after the restart the install instructions ask for, so a key
+// pasted wrong is reported before the Member has written a single turn — and
+// it fires once per session rather than once per turn, which is what makes a
+// non-zero exit tolerable here and not in `stop.mjs`. That hook swallows every
+// failure precisely because a hook error notice on every turn is a poor way to
+// report that a deployment is down; a notice once, at startup, naming the
+// variable to fix, is the loud failure this ticket asks for.
+//
+// Exit 2, and everything worth reading on the first line of stderr.
+//
+// The hooks reference documents `SessionStart` as an event that cannot be
+// blocked — "shows stderr to user only", and the session proceeds — so 2 stops
+// nobody working, which is what exit 1 was chosen for. What 1 also did was
+// hide the message: a non-zero, non-2 exit renders a generic notice and then
+// the *first line* of stderr, with the rest only under `claude --debug`. The
+// reference describes the exit-2 rendering on this event the same way, so
+// rather than depend on which of them shows more, the problems are joined into
+// that first line. The key itself never appears either way (see
+// `ConfigurationError`).
+//
+// Later tickets grow this hook into the sweep the spec describes (§5.2): drain
+// the retry queue and re-send unfinished sessions. Both need the configuration
+// this reads, which is why the check lands here rather than in a hook of its
+// own.
+
+import { ConfigurationError, readConfiguration } from '../src/configuration.mjs'
+
+try {
+  readConfiguration()
+} catch (error) {
+  if (!(error instanceof ConfigurationError)) throw error
+
+  process.stderr.write(
+    `sessclone is installed but not configured, so nothing will be collected from this machine: ${error.problems.join(
+      '; ',
+    )}. See docs/configuration.md.\n`,
+  )
+  process.exit(2)
+}

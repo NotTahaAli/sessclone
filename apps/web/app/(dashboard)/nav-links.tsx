@@ -1,0 +1,83 @@
+'use client'
+
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+
+import type { NavItem } from './navigation'
+
+// The only client module in the shell, and it is one because of a single
+// fact: which destination is current. A layout cannot read the path on the
+// server — there is no request path in a Server Component — so the active
+// state is computed here, from `usePathname`, and nothing else in this module
+// needs the browser.
+//
+// The items themselves arrive as props, already filtered by Role on the
+// server. What a Role may reach is not a decision that ships to the browser.
+
+/** `/costs` is current on `/costs?view=members`, and on nothing else. */
+const isCurrent = (pathname: string, href: string) =>
+  pathname === href || pathname.startsWith(`${href}/`)
+
+export function SidebarLinks({ items }: { items: NavItem[] }) {
+  const pathname = usePathname()
+
+  return (
+    <ul className="flex flex-col gap-1">
+      {items.map((item) => {
+        const current = isCurrent(pathname, item.href)
+        return (
+          <li key={item.href}>
+            <Link
+              href={item.href}
+              aria-current={current ? 'page' : undefined}
+              // An accent edge and accent text, and deliberately no fill: the
+              // design system says the active item carries an underline rather
+              // than a fill, because the accent fill is the one primary action
+              // on a surface and a filled nav item competes with it. Dark is
+              // where that matters most — `--accent-subtle` there is a deep
+              // saturated brown, and a nav item painted in it reads as the
+              // loudest thing on the page.
+              className={`hover:bg-surface-hover flex h-[var(--control-h)] items-center rounded-md border-l-2 px-3 text-body ${
+                current
+                  ? 'border-accent-border text-accent-text'
+                  : 'text-text-secondary border-transparent'
+              }`}
+            >
+              {item.label}
+            </Link>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+export function BottomBarLinks({ items }: { items: NavItem[] }) {
+  const pathname = usePathname()
+
+  return (
+    <ul className="grid grid-cols-4">
+      {items.map((item) => {
+        const current = isCurrent(pathname, item.href)
+        return (
+          <li key={item.href}>
+            <Link
+              href={item.href}
+              aria-current={current ? 'page' : undefined}
+              // The 2px rule above the label is the same accent edge the
+              // sidebar draws down the side of its item, turned through ninety
+              // degrees: one idea, two widths.
+              className={`flex flex-col items-center justify-center gap-1 border-t-2 py-3 text-caption ${
+                current
+                  ? 'border-accent-border text-accent-text'
+                  : 'text-text-secondary border-transparent'
+              }`}
+            >
+              {item.label}
+            </Link>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}

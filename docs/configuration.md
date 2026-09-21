@@ -13,12 +13,14 @@ if the two ever disagree — a variable added to one and not the other, or a
 default written differently in each, is a test failure rather than a support
 ticket.
 
-> **Most of this is not wired up yet.** v1 is mid-build. Six variables are
+> **Most of this is not wired up yet.** v1 is mid-build. Nine variables are
 > read by code today: `DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`,
 > `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `NEXT_PUBLIC_APP_URL` in `apps/web` since
 > ticket 27 wired sign-in, `INGEST_DATABASE_URL` in `apps/web/app/api/ingest/route.ts`
-> since ticket 31, and `SESSCLONE_URL` in
-> `packages/plugin/hooks/stop.mjs`. Every other row below is
+> since ticket 31, and — since ticket 32 —
+> `SESSCLONE_API_KEY`, `SESSCLONE_URL`, `SESSCLONE_STATE_DIR` and
+> `SESSCLONE_DEVICE` in `packages/plugin/src/configuration.mjs`. Every other
+> row below is
 > a commitment this build is working towards, and each section names the ticket
 > that wires it. Setting one today does nothing — which is worth knowing before
 > wondering why a bucket stays empty.
@@ -173,18 +175,31 @@ point at their own deployment without editing a vendored plugin.
 | `SESSCLONE_STATE_DIR` | no             | platform-dependent \*\* | Where the cursor and the retry queue are kept                                       |
 | `SESSCLONE_DEVICE`    | no             | derived \*\*\*          | Pins this environment's Device key instead of deriving one                          |
 
-\* Not required by the code — `packages/plugin/hooks/stop.mjs` falls back to
+\* Not required by the code — `readConfiguration` falls back to
 `http://127.0.0.1:3000` — but required by anyone whose deployment is not on
 their own laptop, which is everyone. The fallback is a development
 convenience, and the table says "in practice" rather than "yes" because
 claiming the code enforces something it does not is how a contract stops being
-one. Ticket 32 is where a missing or malformed **key** fails loudly at setup
-rather than silently at report time, and ticket 66's marketplace manifest is
-where a hosted default for the URL would be set.
+one. Ticket 66's marketplace manifest is where a hosted default for the URL
+would be set. A value that is not an `http` or `https` URL is refused with the
+rest, because a `fetch` against one fails per report with a message about a
+protocol rather than once with a message about a variable.
+
+**A bad key fails at setup, not at report time (ticket 32).**
+`packages/plugin/src/configuration.mjs` reads every variable in this table and
+checks it; `hooks/session-start.mjs` runs that check when a session starts —
+which is the first thing to run after the restart the install instructions ask
+for — and writes every problem it found, at once, where the person will see
+it. A key that is absent, or that is not `sk_` and 43 base64url characters, is
+one of those problems. Whether a well-formed key is _live_ is ingest's question
+(ticket 34) and is not answerable from a machine.
 
 `SESSCLONE_API_KEY` is never written to a log, a transcript, or an error
-message. It is read by ticket 32; nothing reads it today. The Collector sends
-Usage only — never prompts, never code.
+message — the check reports the first three characters and the length, and
+`configuration.test.mjs` fails if a message ever carries more. That matters
+more than it looks: a hook's stderr is shown inside a session, and a session is
+a transcript this product then uploads. The Collector sends Usage only — never
+prompts, never code.
 
 \*\*\* The Device key is normally derived: `host:<hostname>` on a machine, and
 `cloud:<account uuid>` in Claude Code Cloud, where the account outlives the
@@ -192,8 +207,8 @@ container and every container a Member burns through collapses into one Device.
 Set this only when one account runs several environments that should be counted
 separately — a CI fleet beside a laptop, say — because the derived key would
 make them one Device. The value is used verbatim, so it is also the way to pin
-an identity across a rename. Read by `deviceKey` in `packages/shared`; ticket 32
-is where the Collector passes its environment in.
+an identity across a rename. Read by `deviceKey` in `packages/shared`, and
+passed through by the Collector's own configuration.
 
 \*\* The default resolves per platform, and deliberately never lands under
 `~/.claude` — Claude Code's own `cleanupPeriodDays` sweep deletes everything

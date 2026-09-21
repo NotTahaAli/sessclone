@@ -11,6 +11,10 @@ import { z } from 'zod'
 // transcript carrying that transcript's Project, its Turns, and the position
 // the Collector wants acknowledged.
 //
+// The credential does not travel in the body. `Authorization: Bearer sk_…` is
+// where the key goes, which keeps it out of anything that logs a request body
+// and lets the route refuse an unauthenticated caller before it parses one.
+//
 // The position travels with the report rather than being computed here,
 // because only the Collector knows it: the cursor is a `message.id` **and** a
 // byte offset into an append-only file (spec §Collector), and the byte offset
@@ -116,13 +120,16 @@ export const TranscriptReport = z.object({
     ),
 })
 
+/**
+ * A payload names no Member and no Org.
+ *
+ * Ticket 34 removed the `memberId` this used to carry: both are resolved from
+ * the API key in the `Authorization` header, by hash, so the only thing that
+ * decides where a Turn is filed is a credential the caller had to hold. A
+ * field the caller fills in cannot be that, however carefully it is
+ * validated — somebody else's id is a valid id.
+ */
 export const IngestPayload = z.object({
-  /**
-   * ticket 34 replaces this with the API key, verified by hash, which is what
-   * resolves the Member and the Org. It is named for what it is — an
-   * unauthenticated assertion — rather than dressed up as a credential.
-   */
-  memberId: z.uuid(),
   /** `deviceKey` from this package; the nickname is the Member's to change. */
   device: z.object({ key: text, nickname: text.nullable().optional() }),
   reports: z
