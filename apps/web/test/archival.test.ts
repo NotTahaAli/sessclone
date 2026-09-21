@@ -258,19 +258,33 @@ describe('excluding a Project', () => {
     expect(row!.archival_enabled).toBe(false)
   })
 
-  test('refuses a Project from another Org', async () => {
+  test('writes nothing for a Project the Member cannot see, near or far', async () => {
     const foreign = await seedProject(
       fixture.globex,
       fixture.globex.members.member,
       'github.com/globex/api',
     )
+    // Same Org, somebody else's: `projects_read` hides it from a plain Member,
+    // which is the point of `sessclone_visible_project_ids()`.
+    const neighbour = await seedProject(
+      fixture.acme,
+      fixture.acme.members.owner,
+      'github.com/acme/private',
+    )
 
-    // The `(org_id, project_id)` foreign key: the row names the Member's own
-    // Org, so a Project from another one has nothing to point at.
-    await expect(
-      asUser(fixture.acme.users.member, (tx) =>
-        setProjectArchival(tx, fixture.acme.members.member, foreign, false),
-      ),
-    ).rejects.toThrow(/member_project_archival_org_id_project_id_fkey/)
+    for (const projectId of [foreign, neighbour]) {
+      // A no-op, not a raised foreign-key violation: the join runs under
+      // `projects_read`, so an id the viewer cannot see matches no row. A
+      // thrown error would take a hand-posted form to an error boundary and
+      // would answer "does this Project exist" on the way.
+      // oxlint-disable-next-line no-await-in-loop -- two ids, order is clearer.
+      const written = await asUser(fixture.acme.users.member, (tx) =>
+        setProjectArchival(tx, fixture.acme.members.member, projectId, false),
+      )
+      expect(written).toBe(0)
+    }
+
+    const rows = await sql`select 1 from member_project_archival`
+    expect(rows).toHaveLength(0)
   })
 })

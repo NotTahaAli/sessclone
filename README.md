@@ -76,11 +76,12 @@ people's setups; copyleft there would be a tax on installing it, not a
 protection.
 
 One additional term rides with the AGPL, under its section 7(b): a deployment
-keeps the "Powered by sessclone" credit visible in the panel. `NOTICE.md` is
-where that term is written out, along with what the marketing site's three
-self-hosting promises each actually are — two are licence conditions and the
-third, sending features back as a pull request, is an ask that no open licence
-enforces.
+keeps the panel's Appropriate Legal Notices — copyright, no warranty, the
+licence and how to read it — and the sessclone credit displayed with them.
+`NOTICE.md` is where that term is written out, along with what the marketing
+site's three self-hosting promises each actually are: one is that term, one is
+narrower than it sounds, and sending features back as a pull request is an ask
+that no open licence enforces.
 
 ## Contributing
 

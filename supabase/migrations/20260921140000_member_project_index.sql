@@ -1,0 +1,12 @@
+-- Ticket 72: the index behind "which Projects has this Member run Sessions in".
+--
+-- The settings surface asks that on every render and after every toggle, and
+-- it is an O(Projects) question — a few dozen rows. Without this index the
+-- planner answers it from `turns_member_occurred_at_idx`, which does not carry
+-- `project_id`, so it visits the heap once per Turn to find one and then
+-- aggregates nearly all of them away. A Member with a year of Claude Code
+-- behind them has six figures of Turns; the page would pay for all of them.
+--
+-- With `(member_id, project_id)` the same `select distinct` is an index-only
+-- scan: no heap at all, and the entries for one Member arrive already grouped.
+create index turns_member_project_idx on turns (member_id, project_id);

@@ -114,9 +114,15 @@ export const setArchivalEnabled = async (
  * to agree.
  *
  * `org_id` comes from the `members` row rather than from the caller, and the
- * table's `(org_id, project_id)` foreign key is what refuses a Project from
- * another Org — so a guessed id inserts nothing rather than proving the
- * Project exists.
+ * Project is joined rather than named — so it has to satisfy `projects_read`
+ * as well as being in that Org. An id the viewer cannot see matches no row and
+ * the statement writes nothing, whether it belongs to another Org or to
+ * somebody else in this one.
+ *
+ * The join is there rather than left to the `(org_id, project_id)` foreign
+ * key, which would refuse the same write as an error that aborts the
+ * transaction. That would take a hand-posted form to an error boundary instead
+ * of to a no-op, and would answer "is this a Project in my Org" on the way.
  */
 export const setProjectArchival = async (
   tx: postgres.TransactionSql,
@@ -127,8 +133,10 @@ export const setProjectArchival = async (
   const written = await tx`
     insert into member_project_archival
       (org_id, member_id, project_id, archival_enabled)
-    select member.org_id, member.id, ${projectId}, ${enabled}
+    select member.org_id, member.id, project.id, ${enabled}
       from members member
+      join projects project
+        on project.id = ${projectId} and project.org_id = member.org_id
      where member.id = ${memberId}
        and member.id in (select sessclone_own_member_ids())
     on conflict (member_id, project_id) do update

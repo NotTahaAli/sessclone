@@ -2,10 +2,17 @@
 
 ## Licence of what you send
 
-Contributions are accepted under **AGPL-3.0-only**, the licence this project
-ships under ([`NOTICE.md`](NOTICE.md)). Opening a pull request is an offer of
-your work under that licence, and nothing else — you keep the copyright in what
-you wrote.
+Contributions are accepted under **AGPL-3.0-only together with the additional
+term in [`NOTICE.md`](NOTICE.md)** — the section 7(b) term that keeps the
+panel's legal notices and the sessclone credit visible. Opening a pull request
+is an offer of your work under those terms. You keep the copyright in what you
+wrote.
+
+Both halves matter. Section 7 permits an additional term "for material you add
+to a covered work, if authorized by the copyright holders of that material", so
+an inbound licence of bare AGPL-3.0-only would leave the project unable to
+apply its own attribution term to contributed code — which is the one term this
+project actually depends on.
 
 ## Sign your commits off (DCO)
 

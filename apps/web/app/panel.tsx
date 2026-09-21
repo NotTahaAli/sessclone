@@ -11,27 +11,54 @@ import { signOut } from './sign-in/actions'
 // Nothing here is the navigation ticket 45 owns. It answers "who am I signed
 // in as", gives a way out, and carries the credit.
 
+/** Where the licence, its additional term and the source all live. */
+export const LICENSE_URL = `${REPOSITORY}/blob/main/LICENSE`
+export const NOTICE_URL = `${REPOSITORY}/blob/main/NOTICE.md`
+
 /**
- * The sessclone credit a self-hosted deployment keeps (ticket 79).
+ * The panel's Appropriate Legal Notices, and the sessclone credit with them
+ * (ticket 79).
  *
- * The licence is AGPL-3.0-only with one additional term under section 7(b),
- * written out in `NOTICE.md`: this line, and the link on it, stay visible on
- * the panel. Section 7(b) is the single hook copyleft offers for attribution,
- * so the credit is a condition of the licence rather than something the code
- * tries to stop anybody editing. It is ordinary markup in an open repository —
- * of course it can be deleted. Deleting it and running the result for other
- * people is a licence breach, which is a different kind of problem from a
- * technical one, and the honest place to put it.
+ * This is deliberately not a "Powered by" line on its own. AGPL-3.0 section
+ * 7(b) permits an additional term requiring preservation of "legal notices or
+ * author attributions in that material or in the Appropriate Legal Notices
+ * displayed by works containing it" — so a term hung on a marketing sentence
+ * is not a 7(b) term at all, and section 7 hands a recipient the right to
+ * strip any non-permissive term that is not one of (a) to (f).
+ *
+ * Section 0 says what an interactive interface has to show to be displaying
+ * Appropriate Legal Notices: a copyright notice, that there is no warranty,
+ * that licensees may convey the work under this licence, and how to read it.
+ * All four are below, which is what the additional term in `NOTICE.md`
+ * actually requires be preserved.
+ *
+ * It is ordinary markup in an open repository — of course it can be deleted.
+ * Nothing checks for it at runtime and nothing will: a tamper check would make
+ * a worse promise than the licence already makes. Deleting it and conveying or
+ * network-deploying the result is a licence breach, which is a different kind
+ * of problem from a technical one, and the honest place to put it.
  */
 export function PanelCredit() {
   return (
-    <footer className="border-rule text-caption text-text-muted mt-10 border-t pt-4">
+    <footer className="border-rule text-caption text-text-muted mt-10 flex flex-col gap-1 border-t pt-4">
       <p>
         Powered by{' '}
         <a href={REPOSITORY} className="hover:text-accent-text underline">
           sessclone
         </a>{' '}
-        — open source, self-hostable, free at any size.
+        · Copyright © 2026 sessclone contributors
+      </p>
+      <p>
+        No warranty, to the extent permitted by law. You may convey this work
+        under the{' '}
+        <a href={LICENSE_URL} className="hover:text-accent-text underline">
+          GNU AGPL v3
+        </a>
+        , with the{' '}
+        <a href={NOTICE_URL} className="hover:text-accent-text underline">
+          additional term
+        </a>{' '}
+        that keeps this notice visible.
       </p>
     </footer>
   )

@@ -31,20 +31,20 @@ export default async function YourSettings() {
     return <main className="text-text p-6">Not signed in.</main>
   }
 
-  // One round trip: two statements on the one transaction `asViewer` opens.
-  const { memberships, projects } = await asViewer(user.id, async (tx) => ({
-    memberships: await listArchivalMemberships(tx),
-    projects: await listArchivalProjects(tx),
-  }))
+  // One transaction, which is what `asViewer` opens and what carries the
+  // viewer's claim. The two statements are independent, so they go together.
+  const [memberships, projects] = await asViewer(user.id, (tx) =>
+    Promise.all([listArchivalMemberships(tx), listArchivalProjects(tx)]),
+  )
 
-  // Grouped once here rather than filtered inside the render: one pass over
-  // the page's only project list, and one array per membership.
+  // Grouped once here rather than filtered inside the render, which would be
+  // a pass over the whole list per membership. One pass, one array each, and
+  // each array is pushed into rather than rebuilt.
   const byMember = new Map<string, ArchivalProject[]>()
   for (const project of projects) {
-    byMember.set(project.member_id, [
-      ...(byMember.get(project.member_id) ?? []),
-      project,
-    ])
+    let group = byMember.get(project.member_id)
+    if (!group) byMember.set(project.member_id, (group = []))
+    group.push(project)
   }
 
   return (

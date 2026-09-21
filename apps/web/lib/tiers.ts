@@ -46,8 +46,8 @@ export const marketingTiers = (): MarketingTier[] => [
     includes: [
       'Every feature, no seat limit',
       'Your database, your storage, your network',
-      'The sessclone credit stays visible in the panel',
-      'AGPL: run it for other people, offer them the source',
+      "The panel's licence notice and sessclone credit stay visible",
+      'AGPL: run a modified copy for others, offer them its source',
     ],
     sortOrder: 0,
   },
