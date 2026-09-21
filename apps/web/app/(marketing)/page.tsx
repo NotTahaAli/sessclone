@@ -95,7 +95,7 @@ const FAQ = [
   {
     question: 'Can we run it ourselves?',
     answer:
-      'Yes, free, at any size. Self-hosting is a tier and not a footnote: your database, your storage, your network. Keep the sessclone credit visible in the panel and send features built on top back as a pull request.',
+      'Yes, free, at any size. Self-hosting is a tier and not a footnote: your database, your storage, your network. It is AGPL-3.0, so keep the sessclone credit visible in the panel and offer your own users the source of whatever you run for them. Sending features built on top back as a pull request is an ask rather than a condition.',
   },
   {
     question: 'What does a seat mean?',

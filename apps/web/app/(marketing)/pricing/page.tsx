@@ -57,12 +57,18 @@ export default function Pricing() {
           </p>
           <ul className="text-body text-text-secondary flex max-w-[60ch] flex-col gap-2">
             <li>The sessclone credit stays visible in the panel.</li>
-            <li>Features built on top come back as a pull request.</li>
             <li>No closed-source forks.</li>
+            <li>
+              Run it for other people and you offer them the source of what you
+              run.
+            </li>
           </ul>
           <p className="text-caption text-text-muted max-w-[60ch]">
-            Those three conditions are a licence, and the licence is still open
-            — see the repository for where it lands.
+            Those three are the licence: AGPL-3.0-only, with the panel credit as
+            an additional term under its section 7(b). Sending features built on
+            top back as a pull request is an ask and not a condition — no open
+            licence enforces that one, and the repository says so rather than
+            implying otherwise.
           </p>
           <a
             href={REPOSITORY}

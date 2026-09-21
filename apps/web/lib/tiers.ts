@@ -47,7 +47,7 @@ export const marketingTiers = (): MarketingTier[] => [
       'Every feature, no seat limit',
       'Your database, your storage, your network',
       'The sessclone credit stays visible in the panel',
-      'Features built on top come back as a pull request',
+      'AGPL: run it for other people, offer them the source',
     ],
     sortOrder: 0,
   },
