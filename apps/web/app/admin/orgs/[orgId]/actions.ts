@@ -27,7 +27,7 @@ const Form = z.object({
 export const activateAction = async (
   _previous: unknown,
   formData: FormData,
-): Promise<{ error: string } | { saved: true } | null> => {
+): Promise<{ error: string } | { saved: 'recorded' | 'unchanged' } | null> => {
   if (!(await currentOperator())) {
     return { error: 'Only a platform administrator may activate an Org.' }
   }
@@ -41,14 +41,27 @@ export const activateAction = async (
   if (!parsed.success) return { error: 'Pick a Tier and a status.' }
 
   const { orgId, ...subscription } = parsed.data
+  let result
   try {
-    await asOperator((tx) => setSubscription(tx, { orgId, ...subscription }))
+    result = await asOperator((tx) =>
+      setSubscription(tx, { orgId, ...subscription }),
+    )
   } catch {
+    return { error: 'That subscription could not be saved.' }
+  }
+
+  // `subscriptions_write` refuses a caller who is not a Platform Admin by
+  // writing nothing, so a page that assumed success would report an
+  // activation that did not happen.
+  if (!result.saved) {
     return { error: 'That subscription could not be saved.' }
   }
 
   // Not just this page: status decides what the Org's own dashboard says on
   // every page of it.
   revalidatePath('/', 'layout')
-  return { saved: true }
+  // An event lands only when the Tier or the status changed, so a note typed
+  // beside an unchanged subscription is not written down — and the form says
+  // that rather than pointing at a history it did not add to.
+  return { saved: result.recorded ? 'recorded' : 'unchanged' }
 }

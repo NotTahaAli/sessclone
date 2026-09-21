@@ -1,6 +1,6 @@
 import { AddRateForm } from './add-rate-form'
 import { DeleteRate } from './delete-rate'
-import { RateFilter } from './rate-filter'
+import { TextFilter } from '../text-filter'
 import { PageHeader } from '../../(dashboard)/page-header'
 import { asOperator } from '../../../lib/platform-admin'
 import { listRates, rateUnit, type Rate } from '../../../lib/rates'
@@ -68,7 +68,13 @@ export default async function Page({
       <section>
         <h2 className="text-heading">Price list</h2>
         <div className="mt-3">
-          <RateFilter model={filter} />
+          <TextFilter
+            name="model"
+            label="Filter by model"
+            value={filter}
+            placeholder="opus"
+            clearHref="/admin/rates"
+          />
         </div>
         {rates.length === 0 ? (
           <p className="text-text-secondary mt-3 text-body">

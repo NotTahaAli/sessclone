@@ -264,3 +264,23 @@ test('the unknown-model list is bounded, because a Collector sends the string', 
   expect(models).toHaveLength(2)
   expect(more).toBe(true)
 })
+
+test('filtering by model keeps the rows that price every model', async () => {
+  // `null ilike '%opus%'` is null, so an unqualified filter hides exactly the
+  // rows a named model falls back to — a web search costs the same whatever
+  // the Turn's model is.
+  await asOperator((tx) =>
+    addRate(tx, {
+      model: null,
+      class: 'web_search_request',
+      priceUsd: 10,
+      effectiveFrom: '2026-01-01',
+      source: 'published pricing',
+    }),
+  )
+
+  const { rates } = await asOperator((tx) =>
+    listRates(tx, { model: 'opus' }),
+  )
+  expect(rates.some((rate) => rate.model === null)).toBe(true)
+})

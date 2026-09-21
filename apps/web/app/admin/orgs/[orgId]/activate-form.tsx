@@ -24,7 +24,7 @@ export function ActivateForm({
   status,
 }: {
   orgId: string
-  tiers: { id: string; name: string }[]
+  tiers: { id: string; name: string; available: boolean }[]
   /** What the Org is on now, as two scalars: the form is a control, not a
    * copy of the row. */
   tierId: string | null
@@ -49,7 +49,7 @@ export function ActivateForm({
             </option>
             {tiers.map((tier) => (
               <option key={tier.id} value={tier.id}>
-                {tier.name}
+                {tier.available ? tier.name : `${tier.name} (withdrawn)`}
               </option>
             ))}
           </select>
@@ -88,7 +88,9 @@ export function ActivateForm({
         ) : null}
         {state && 'saved' in state ? (
           <span className="text-text-secondary">
-            Saved. The history below is the record.
+            {state.saved === 'recorded'
+              ? 'Saved. The history below is the record.'
+              : 'Nothing changed, so nothing was recorded — and the note went nowhere.'}
           </span>
         ) : null}
       </p>

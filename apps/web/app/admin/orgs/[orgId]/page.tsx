@@ -3,8 +3,12 @@ import { notFound } from 'next/navigation'
 import { ActivateForm } from './activate-form'
 import { PageHeader } from '../../../(dashboard)/page-header'
 import { asOperator } from '../../../../lib/platform-admin'
-import { listTiers } from '../../../../lib/tier-admin'
-import { adminOrg, subscriptionHistory } from '../../../../lib/subscriptions'
+import { tierChoices } from '../../../../lib/tier-admin'
+import {
+  adminOrg,
+  HISTORY_PAGE,
+  subscriptionHistory,
+} from '../../../../lib/subscriptions'
 
 // Tickets 48 and 65: one Org's subscription, and everything that has happened
 // to it.
@@ -30,7 +34,7 @@ export default async function Page({
   // at all, so an Org this caller may not read is a 404 rather than a refusal.
   const { org, tiers, history } = await asOperator(async (tx) => ({
     org: await adminOrg(tx, orgId),
-    tiers: await listTiers(tx),
+    tiers: await tierChoices(tx),
     history: await subscriptionHistory(tx, orgId),
   }))
 
@@ -93,6 +97,11 @@ export default async function Page({
             ))}
           </ul>
         )}
+        {history.length >= HISTORY_PAGE ? (
+          <p className="text-text-muted mt-2 text-caption">
+            Only the {HISTORY_PAGE} most recent changes are shown.
+          </p>
+        ) : null}
       </section>
     </div>
   )

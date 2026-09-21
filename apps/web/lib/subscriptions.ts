@@ -24,6 +24,9 @@ import type { SubscriptionStatus } from './tier'
 
 export const ORG_PAGE = 50
 
+/** How many events one Org's history shows; the page says so when it is cut. */
+export const HISTORY_PAGE = 20
+
 export type AdminOrg = {
   id: string
   name: string
@@ -56,6 +59,10 @@ type OrgRow = {
  * the Tier a left join, because a page that lists Orgs and then asks about
  * each one is the query-in-a-loop AGENTS.md calls a bug.
  *
+ * The name filter is a URL on the page, because the list is capped and sorted
+ * newest-first: without it the Org that has been waiting on activation the
+ * longest is the first one to fall off the end.
+ *
  * `orgs_read` is what makes this the operator's list — it returns an Org the
  * caller is a Member of, or every Org when they are a Platform Admin — so this
  * is not an admin-only query with an admin-only name, it is the same statement
@@ -63,8 +70,9 @@ type OrgRow = {
  */
 export const listOrgs = async (
   tx: TransactionSql,
-  limit = ORG_PAGE,
+  options: { name?: string | null; limit?: number } = {},
 ): Promise<{ orgs: AdminOrg[]; more: boolean }> => {
+  const { name = null, limit = ORG_PAGE } = options
   const rows = await tx<OrgRow[]>`
     select org.id,
            org.name,
@@ -82,6 +90,7 @@ export const listOrgs = async (
         select count(*) from members
          where members.org_id = org.id and members.removed_at is null
       ) seats on true
+     ${name ? tx`where org.name ilike ${`%${name}%`}` : tx``}
      order by org.created_at desc
      limit ${limit + 1}
   `
@@ -169,7 +178,7 @@ export type SubscriptionEvent = {
 export const subscriptionHistory = async (
   tx: TransactionSql,
   orgId: string,
-  limit = 20,
+  limit = HISTORY_PAGE,
 ): Promise<SubscriptionEvent[]> => {
   const rows = await tx<
     {
@@ -220,8 +229,13 @@ export const subscriptionHistory = async (
  * note that explains it. `true` makes the setting transaction-local, so it
  * does not leak onto the next query this pooled connection serves.
  *
- * `provider` stays `manual`, which is the value a v2 webhook will not use —
- * so the history says plainly which rows a person wrote by hand.
+ * `provider` becomes `manual`, which is the value a v2 webhook will not use —
+ * so the history says plainly which rows a person wrote by hand, including a
+ * hand-made change to a row some provider created.
+ *
+ * `recorded` is false when the write changed neither Tier nor status:
+ * `sessclone_write_subscription_event` returns early on that, so a note typed
+ * beside it goes nowhere and the page must not claim it was written down.
  */
 export const setSubscription = async (
   tx: TransactionSql,
@@ -231,7 +245,12 @@ export const setSubscription = async (
     status: SubscriptionStatus
     note: string | null
   },
-): Promise<boolean> => {
+): Promise<{ saved: boolean; recorded: boolean }> => {
+  const [before] = await tx<{ tier_id: string; status: string }[]>`
+    select tier_id, status from subscriptions
+     where org_id = ${subscription.orgId}
+  `
+
   await tx`
     select set_config('sessclone.subscription_note',
                       ${subscription.note ?? ''}, true)
@@ -244,6 +263,7 @@ export const setSubscription = async (
     on conflict (org_id) do update
        set tier_id = excluded.tier_id,
            status = excluded.status,
+           provider = excluded.provider,
            updated_at = now()
     returning id
   `
@@ -251,24 +271,12 @@ export const setSubscription = async (
   // Refused by `subscriptions_write`, which is the Platform Admin flag and
   // nothing else: nothing was written, and the page says so rather than
   // claiming an activation.
-  return rows.length > 0
-}
-
-/**
- * The Org's subscription status, or null when it has no subscription row.
- *
- * Separate from `orgTier` and deliberately small: the dashboard shell asks
- * this on every page so an Org whose subscription is not active is told so,
- * rather than being shown a dashboard that quietly means less than it looks
- * like it does (ticket 48). `orgTier` joins the Tier and counts Seats, which
- * is a page's question, not a frame's.
- */
-export const subscriptionStatus = async (
-  tx: TransactionSql,
-  orgId: string,
-): Promise<SubscriptionStatus | null> => {
-  const [row] = await tx<{ status: SubscriptionStatus }[]>`
-    select status from subscriptions where org_id = ${orgId}
-  `
-  return row?.status ?? null
+  return {
+    saved: rows.length > 0,
+    recorded:
+      rows.length > 0 &&
+      (!before ||
+        before.tier_id !== subscription.tierId ||
+        before.status !== subscription.status),
+  }
 }

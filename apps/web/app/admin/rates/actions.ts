@@ -23,8 +23,11 @@ const Form = z.object({
   // '' into 0, and a zero price is worse than no price — the Turn then reads
   // as priced at nothing rather than as unpriced, and understates every
   // invoice that touches the model (ADR 0002).
+  // `.trim()` before `.min(1)`: '   ' has length 3, and `Number('   ')` is 0,
+  // so an untrimmed guard admits a whitespace price as $0.00.
   priceUsd: z
     .string()
+    .trim()
     .min(1)
     .transform(Number)
     .refine(

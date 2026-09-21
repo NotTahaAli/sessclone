@@ -54,9 +54,16 @@ test('a blank price is refused rather than published as free', async () => {
   // model (ADR 0002).
   const { addRateAction } = await actAs(fixture.platformAdmin.userId)
 
-  expect(
-    await addRateAction(null, form({ ...FILLED, priceUsd: '' })),
-  ).toMatchObject({ error: expect.stringContaining('Check') })
+  // A Server Action is a POST endpoint whether or not a form was rendered, so
+  // `<input type="number">` is not the guard — and `Number('  ')` is 0.
+  const refusals = await Promise.all(
+    ['', '   ', '\t'].map((priceUsd) =>
+      addRateAction(null, form({ ...FILLED, priceUsd })),
+    ),
+  )
+  for (const refusal of refusals) {
+    expect(refusal).toMatchObject({ error: expect.stringContaining('Check') })
+  }
 
   expect(await ratesFor('claude-opus-9')).toEqual([])
 })

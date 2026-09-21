@@ -4,8 +4,6 @@ import { AccountMenu } from './account'
 import { PanelCredit } from './credit'
 import { BottomBarLinks, SidebarLinks } from './nav-links'
 import { DESTINATIONS } from './navigation'
-import { asViewer } from '../../lib/db'
-import { subscriptionStatus } from '../../lib/subscriptions'
 import { currentViewer } from '../../lib/viewer'
 
 // Ticket 45: the signed-in frame every later page hangs from.
@@ -98,15 +96,6 @@ export default async function DashboardLayout({
   const viewer = await currentViewer()
   if (!viewer) return <WithoutOrg />
 
-  // Ticket 48: an Org whose subscription is not active is told so, on every
-  // page, rather than shown a dashboard that quietly means less than it looks
-  // like it does. Collection keeps working either way — nothing here refuses a
-  // page, because refusing the Org's own history would be a worse answer than
-  // saying what is true.
-  const status = await asViewer(viewer.userId, (tx) =>
-    subscriptionStatus(tx, viewer.orgId),
-  )
-
   return (
     <div className="bg-ground text-text min-h-dvh lg:flex">
       {/* Desktop: the 232px sidebar, holding the same four destinations and
@@ -149,7 +138,16 @@ export default async function DashboardLayout({
       {/* The bottom bar is fixed, so the content column reserves room for it
           rather than ending underneath it. */}
       <main className="grow px-4 py-6 pb-28 lg:px-8 lg:pb-8">
-        {status && status !== 'active' ? <Inactive status={status} /> : null}
+        {/* Ticket 48: an Org whose subscription is not active is told so, on
+            every page, rather than shown a dashboard that quietly means less
+            than it looks like it does. No subscription row is the same answer
+            as an inactive one — it is the state every Org starts in, and the
+            commonest reason a person is reading this notice. Collection keeps
+            working either way: refusing the Org's own history would be a
+            worse answer than saying what is true. */}
+        {viewer.subscriptionStatus === 'active' ? null : (
+          <Inactive status={viewer.subscriptionStatus ?? 'inactive'} />
+        )}
         {children}
         {/* At phone width the sidebar is not rendered at all, so the notices
             go under the content instead. One of the two is visible at a

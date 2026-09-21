@@ -1,5 +1,6 @@
 import { cache } from 'react'
 import { asViewer } from './db'
+import type { SubscriptionStatus } from './tier'
 import { signedInUser } from './supabase/server'
 
 // Ticket 45: the Org context the shell establishes, read once per request.
@@ -32,6 +33,14 @@ export type Viewer = {
    * cannot change mid-render.
    */
   orgTimezone: string
+  /**
+   * The Org's subscription status, or `null` when it has no subscription row
+   * at all — which is every Org until an operator activates it (ticket 48).
+   * Carried here for the same reason as the timezone: the shell shows the
+   * inactive notice on every page, and reading one enum in a second
+   * `asViewer` transaction is a second connection checkout per navigation.
+   */
+  subscriptionStatus: SubscriptionStatus | null
   role: Role
 }
 
@@ -40,6 +49,7 @@ type MembershipRow = {
   org_id: string
   org_name: string
   org_timezone: string
+  subscription_status: SubscriptionStatus | null
   role: Role
 }
 
@@ -69,9 +79,12 @@ export const currentViewer = cache(async (): Promise<Viewer | null> => {
              member.org_id,
              org.name as org_name,
              org.timezone as org_timezone,
+             subscription.status as subscription_status,
              member.role
         from members member
         join orgs org on org.id = member.org_id
+        left join subscriptions subscription
+               on subscription.org_id = member.org_id
        where member.id in (select sessclone_own_member_ids())
        order by member.created_at
        limit 1
@@ -87,6 +100,7 @@ export const currentViewer = cache(async (): Promise<Viewer | null> => {
     orgId: membership.org_id,
     orgName: membership.org_name,
     orgTimezone: membership.org_timezone,
+    subscriptionStatus: membership.subscription_status,
     role: membership.role,
   }
 })

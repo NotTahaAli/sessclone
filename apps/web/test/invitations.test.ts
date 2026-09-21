@@ -388,3 +388,38 @@ test('two people accepting at once cannot both take the last Seat', async () => 
   expect(results.filter((result) => 'orgId' in result)).toHaveLength(1)
   expect(await seatsUsed(fixture.acme.id)).toBe(before + 1)
 })
+
+test('a platform admin cannot rename themselves onto a pending invitation', async () => {
+  // The exemption on `users.email` exists so an operator can correct an
+  // address the identity provider changed. Their own row is the one case it
+  // must not cover: the acceptance matches on the address, so renaming
+  // yourself onto a live invitation is a way into any Org.
+  const { token } = await invited()
+
+  await expect(
+    asUser(
+      fixture.platformAdmin.userId,
+      (tx) =>
+        tx`update users set email = ${STRANGER}
+            where id = ${fixture.platformAdmin.userId}`,
+    ),
+  ).rejects.toThrow(/comes from the identity provider/)
+
+  expect(await accept(fixture.platformAdmin.userId, token)).toEqual({
+    error: 'This invitation was sent to a different address.',
+  })
+})
+
+test('a platform admin can correct somebody else’s address', async () => {
+  await asUser(
+    fixture.platformAdmin.userId,
+    (tx) =>
+      tx`update users set email = 'corrected@nowhere.test'
+          where id = ${fixture.stranger.userId}`,
+  )
+
+  const [account] = await sql<{ email: string }[]>`
+    select email from users where id = ${fixture.stranger.userId}
+  `
+  expect(account!.email).toBe('corrected@nowhere.test')
+})

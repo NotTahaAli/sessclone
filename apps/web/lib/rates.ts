@@ -93,7 +93,14 @@ export const listRates = async (
      -- The filter is what makes the cap liveable: a deployment that prices
      -- twenty models across seven classes crosses 200 rows in two price
      -- revisions, and this page is the only place a rate can be deleted.
-     ${model ? tx`where model ilike ${`%${model}%`}` : tx``}
+     ${
+          // `null ilike …` is null, so an unqualified filter hides the rows
+          // that price every model — the ones a filtered list most needs to
+          // show, since they are what a named model falls back to.
+          model
+            ? tx`where model ilike ${`%${model}%`} or model is null`
+            : tx``
+        }
      order by model nulls first, class, effective_from desc
      limit ${limit + 1}
   `

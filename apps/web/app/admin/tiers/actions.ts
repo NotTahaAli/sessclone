@@ -50,7 +50,11 @@ const Form = z.object({
   archivalAvailable: z.literal(['on', null]).transform((v) => v === 'on'),
   available: z.literal(['on', null]).transform((v) => v === 'on'),
   sortOrder: z.coerce.number().int().min(0).max(1000),
-  features: z.string().trim(),
+  // Which form this came from. A create that collides with an existing key is
+  // refused rather than silently replacing the definition every Org on that
+  // Tier is entitled by.
+  mode: z.enum(['create', 'edit']),
+  features: z.string().trim().max(4000),
 })
 
 export const saveTierAction = async (
@@ -75,6 +79,7 @@ export const saveTierAction = async (
     available: formData.get('available'),
     sortOrder: formData.get('sortOrder') ?? 0,
     features: formData.get('features') ?? '',
+    mode: formData.get('mode') ?? 'create',
   })
   if (!parsed.success) {
     return { error: 'Check the key, the name, the prices and the seats.' }
@@ -85,8 +90,9 @@ export const saveTierAction = async (
     return { error: 'Features is a JSON object, or empty.' }
   }
 
+  let saved: boolean
   try {
-    await asOperator((tx) => saveTier(tx, { ...parsed.data, features }))
+    saved = await asOperator((tx) => saveTier(tx, { ...parsed.data, features }))
   } catch (error) {
     const message = error instanceof Error ? error.message : ''
     // The check constraints are the rules an operator can act on: a maximum
@@ -95,6 +101,15 @@ export const saveTierAction = async (
       error: /violates check constraint/i.test(message)
         ? 'Those numbers contradict each other — check seats and prices.'
         : 'That Tier could not be saved.',
+    }
+  }
+
+  if (!saved) {
+    return {
+      error:
+        parsed.data.mode === 'create'
+          ? 'A Tier with that key already exists — edit it below.'
+          : 'That Tier could not be saved.',
     }
   }
 

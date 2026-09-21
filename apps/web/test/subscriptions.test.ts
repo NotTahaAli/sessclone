@@ -50,7 +50,7 @@ test('an operator activates an Org, and the event says who and why', async () =>
         note: 'invoice INV-2026-014 paid by transfer',
       }),
     ),
-  ).toBe(true)
+  ).toEqual({ saved: true, recorded: true })
 
   const [event] = await asOperator((tx) =>
     subscriptionHistory(tx, fixture.acme.id),
@@ -217,7 +217,70 @@ test('the operator sees every Org with its Tier and Seats; an Owner sees one', a
 })
 
 test('the Org list is cut rather than unbounded', async () => {
-  const { orgs, more } = await asOperator((tx) => listOrgs(tx, 1))
+  const { orgs, more } = await asOperator((tx) => listOrgs(tx, { limit: 1 }))
   expect(orgs).toHaveLength(1)
   expect(more).toBe(true)
+})
+
+test('a save that changes nothing says so instead of claiming a record', async () => {
+  const tierId = await seedTier('team')
+  const set = (note: string) =>
+    asOperator((tx) =>
+      setSubscription(tx, {
+        orgId: fixture.acme.id,
+        tierId,
+        status: 'active',
+        note,
+      }),
+    )
+
+  expect(await set('invoice INV-2026-014')).toEqual({
+    saved: true,
+    recorded: true,
+  })
+
+  // `sessclone_write_subscription_event` returns early when neither the Tier
+  // nor the status moved, so a note typed beside an unchanged subscription
+  // goes nowhere — and the page must not say the history below is the record.
+  expect(await set('meant to correct the note')).toEqual({
+    saved: true,
+    recorded: false,
+  })
+
+  const history = await asOperator((tx) =>
+    subscriptionHistory(tx, fixture.acme.id),
+  )
+  expect(history.map((event) => event.note)).toEqual(['invoice INV-2026-014'])
+})
+
+test('the Org list can be filtered by name, so a capped list is reachable', async () => {
+  const { orgs } = await asOperator((tx) => listOrgs(tx, { name: 'cme' }))
+  expect(orgs.map((org) => org.id)).toEqual([fixture.acme.id])
+
+  expect(
+    (await asOperator((tx) => listOrgs(tx, { name: 'nobody' }))).orgs,
+  ).toEqual([])
+})
+
+test('a hand-made change to a provider’s row is recorded as manual', async () => {
+  const tierId = await seedTier('team')
+  await sql`
+    insert into subscriptions (org_id, tier_id, status, provider)
+    values (${fixture.globex.id}, ${tierId}, 'active', 'stripe')
+  `
+
+  await asOperator((tx) =>
+    setSubscription(tx, {
+      orgId: fixture.globex.id,
+      tierId,
+      status: 'past_due',
+      note: 'transfer never arrived',
+    }),
+  )
+
+  const [event] = await asOperator((tx) =>
+    subscriptionHistory(tx, fixture.globex.id),
+  )
+  // Otherwise the history attributes a person's decision to Stripe.
+  expect(event).toMatchObject({ status: 'past_due', provider: 'manual' })
 })

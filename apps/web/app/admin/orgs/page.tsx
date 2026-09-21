@@ -2,7 +2,8 @@ import Link from 'next/link'
 
 import { PageHeader } from '../../(dashboard)/page-header'
 import { asOperator } from '../../../lib/platform-admin'
-import { listOrgs } from '../../../lib/subscriptions'
+import { listOrgs, ORG_PAGE } from '../../../lib/subscriptions'
+import { TextFilter } from '../text-filter'
 
 // Tickets 48 and 65: every Org in the deployment, and what it is on.
 //
@@ -11,8 +12,16 @@ import { listOrgs } from '../../../lib/subscriptions'
 // its own page, because it takes a Tier, a status and a note, and because the
 // record it writes deserves the page that shows the history beside it.
 
-export default async function Page() {
-  const { orgs, more } = await asOperator((tx) => listOrgs(tx))
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ name?: string }>
+}) {
+  const { name } = await searchParams
+  const filter = name?.trim() ?? ''
+  const { orgs, more } = await asOperator((tx) =>
+    listOrgs(tx, { name: filter || null }),
+  )
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
@@ -20,6 +29,18 @@ export default async function Page() {
         title="Orgs"
         description="Every Org on this deployment, newest first."
       />
+
+      <TextFilter
+        name="name"
+        label="Filter by name"
+        value={filter}
+        placeholder="acme"
+        clearHref="/admin/orgs"
+      />
+
+      {orgs.length === 0 ? (
+        <p className="text-text-secondary text-body">No Org matches that.</p>
+      ) : null}
 
       <ul className="flex flex-col gap-2">
         {orgs.map((org) => (
@@ -48,7 +69,7 @@ export default async function Page() {
 
       {more ? (
         <p className="text-text-muted text-caption">
-          Only the first 50 Orgs are shown.
+          Only the first {ORG_PAGE} Orgs are shown — narrow the filter.
         </p>
       ) : null}
     </div>

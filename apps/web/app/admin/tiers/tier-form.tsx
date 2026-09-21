@@ -46,6 +46,9 @@ export function TierForm({
       action={formAction}
       className="border-rule bg-surface flex flex-col gap-3 rounded-md border p-4"
     >
+      {/* Which form this is. The action refuses a create whose key is taken,
+          rather than replacing a Tier every Org on it is entitled by. */}
+      <input type="hidden" name="mode" value={tier ? 'edit' : 'create'} />
       <div className="flex flex-wrap items-end gap-3">
         <Field label="Key" hint="stable across renames">
           <input

@@ -32,6 +32,7 @@ const TEAM: TierInput = {
   features: { manager_scopes: true },
   sortOrder: 2,
   available: true,
+  mode: 'create',
 }
 
 test('a capability change reaches the Org on the next read', async () => {
@@ -52,7 +53,7 @@ test('a capability change reaches the Org on the next read', async () => {
 
   // The edit is a row, not a release.
   await asOperator((tx) =>
-    saveTier(tx, { ...TEAM, archivalAvailable: true, maxSeats: 25 }),
+    saveTier(tx, { ...TEAM, mode: 'edit', archivalAvailable: true, maxSeats: 25 }),
   )
 
   expect(
@@ -72,7 +73,7 @@ test('editing a Tier keeps its id, so the Orgs on it stay on it', async () => {
     }),
   )
 
-  await asOperator((tx) => saveTier(tx, { ...TEAM, name: 'Team (renamed)' }))
+  await asOperator((tx) => saveTier(tx, { ...TEAM, mode: 'edit', name: 'Team (renamed)' }))
 
   const [after] = await asOperator((tx) => listTiers(tx))
   expect(after).toMatchObject({
@@ -126,4 +127,27 @@ test('an Org Owner reads the Tiers and writes none of them', async () => {
 
   const [tier] = await asOperator((tx) => listTiers(tx))
   expect(tier!.seatPriceUsd).toBe(10)
+})
+
+test('creating a Tier cannot quietly replace one Orgs are on', async () => {
+  await asOperator((tx) => saveTier(tx, TEAM))
+
+  // The New Tier form sends `create`: a key already taken is refused, rather
+  // than replacing the definition every Org on it is entitled by.
+  const created = await asOperator((tx) =>
+    saveTier(tx, { ...TEAM, name: 'Squatter', seatPriceUsd: 1 }),
+  )
+  expect(created).toBe(false)
+
+  const [tier] = await asOperator((tx) => listTiers(tx))
+  expect(tier).toMatchObject({ name: 'Team' })
+
+  // The edit form sends `edit`, and that one does replace it.
+  expect(
+    await asOperator((tx) =>
+      saveTier(tx, { ...TEAM, mode: 'edit', name: 'Team plus' }),
+    ),
+  ).toBe(true)
+  const [edited] = await asOperator((tx) => listTiers(tx))
+  expect(edited).toMatchObject({ name: 'Team plus' })
 })

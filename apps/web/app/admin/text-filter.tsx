@@ -4,15 +4,29 @@ import Link from 'next/link'
 // reloaded and gone back to. No client component and no state — the server
 // already re-renders with what the query names.
 
-export function RateFilter({ model }: { model: string }) {
+export function TextFilter({
+  name,
+  label,
+  value,
+  placeholder,
+  clearHref,
+}: {
+  /** The query parameter, which is also the field's name. */
+  name: string
+  label: string
+  value: string
+  placeholder: string
+  /** Where "Clear" goes: the same page with no query. */
+  clearHref: string
+}) {
   return (
     <form className="flex flex-wrap items-end gap-2">
       <label className="flex flex-col gap-1 text-caption">
-        Filter by model
+        {label}
         <input
-          name="model"
-          defaultValue={model}
-          placeholder="opus"
+          name={name}
+          defaultValue={value}
+          placeholder={placeholder}
           className="border-control-border text-text rounded border px-3 py-1 font-mono text-sm"
         />
       </label>
@@ -22,9 +36,9 @@ export function RateFilter({ model }: { model: string }) {
       >
         Filter
       </button>
-      {model ? (
+      {value ? (
         <Link
-          href="/admin/rates"
+          href={clearHref}
           className="text-text-muted text-caption underline"
         >
           Clear

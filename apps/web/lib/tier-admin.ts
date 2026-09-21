@@ -55,6 +55,19 @@ type TierRow = Omit<
 }
 
 /**
+ * The Tiers an Org can be put on, for a picker.
+ *
+ * `listTiers` counts the Orgs on every Tier, which is a page's question and
+ * not a `<select>`'s: two columns in sort order is the whole of what a picker
+ * needs, and `available` is here so an operator can see which Tier has been
+ * withdrawn before putting somebody on it.
+ */
+export const tierChoices = (tx: TransactionSql) =>
+  tx<{ id: string; name: string; available: boolean }[]>`
+    select id, name, available from tiers order by sort_order, name
+  `
+
+/**
  * Every Tier, in the order the pricing page shows them.
  *
  * The Org count is a lateral aggregate rather than a second query per Tier:
@@ -120,10 +133,20 @@ export type TierInput = {
   features: Record<string, FeatureValue>
   sortOrder: number
   available: boolean
+  /**
+   * `create` refuses a key that already exists; `edit` replaces that
+   * definition. Same statement either way, because the conflict is the only
+   * difference — but an operator typing an existing key into the New Tier
+   * form is not asking to replace the Tier every Org is already on.
+   */
+  mode: 'create' | 'edit'
 }
 
 /**
  * Creates a Tier, or replaces the definition of the one with that key.
+ *
+ * Returns false when nothing was written: a `create` whose key is taken, or a
+ * caller `tiers_write` refuses.
  *
  * Keyed on `key` rather than on an id because the key is what an operator
  * types and what `CONTEXT.md` says is stable across renames. An edit is an
@@ -149,7 +172,10 @@ export const saveTier = async (
             ${tier.minSeats}, ${tier.maxSeats}, ${tier.retentionMaxDays},
             ${tier.archivalAvailable}, ${tx.json(tier.features)},
             ${tier.sortOrder}, ${tier.available})
-    on conflict (key) do update
+    ${
+      tier.mode === 'create'
+        ? tx`on conflict (key) do nothing`
+        : tx`on conflict (key) do update
        set name = excluded.name,
            description = excluded.description,
            base_price_usd = excluded.base_price_usd,
@@ -161,9 +187,11 @@ export const saveTier = async (
            archival_available = excluded.archival_available,
            features = excluded.features,
            sort_order = excluded.sort_order,
-           available = excluded.available
+           available = excluded.available`
+    }
     returning id
   `
-  // Refused by `tiers_write`: nothing was written, and the page says so.
+  // Refused by `tiers_write`, or a key already taken: nothing was written,
+  // and the page says so.
   return rows.length > 0
 }
