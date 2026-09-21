@@ -42,9 +42,17 @@ const said = (range: LocalRange) => {
 export function RangeControl({
   path,
   resolved,
+  view,
 }: {
   path: string
   resolved: ResolvedRange
+  /**
+   * The view the reader is on, when it is not the default. The period does
+   * not own it, so both ways of changing the period — the presets and the
+   * custom form — carry it, or changing the month throws the reader off the
+   * breakdown they were reading.
+   */
+  view?: string
 }) {
   const { range, preset } = resolved
 
@@ -65,7 +73,7 @@ export function RangeControl({
           {PRESETS.map((item) => (
             <li key={item.key}>
               <Choice
-                href={presetHref(path, item.key)}
+                href={presetHref(path, item.key, view)}
                 label={item.label}
                 current={preset === item.key}
               />
@@ -81,6 +89,7 @@ export function RangeControl({
           className="flex flex-wrap items-end gap-2"
           aria-label="Custom period"
         >
+          {view ? <input type="hidden" name="view" value={view} /> : null}
           <Field name="from" label="From" value={range.from} />
           <Field name="to" label="To" value={addDays(range.to, -1)} />
           <button

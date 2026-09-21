@@ -60,10 +60,14 @@ describe('the URL', () => {
     })
   })
 
-  test('a named preset is used', () => {
-    expect(resolveRange({ range: 'last-30' }, 'UTC', NOW).preset).toBe(
-      'last-30',
-    )
+  test('a named preset is used, and it is the dates it names', () => {
+    // The dates, not only the echoed name: the name coming back is
+    // `PRESETS.find` working, which says nothing about the period read.
+    expect(resolveRange({ range: 'last-30' }, 'UTC', NOW)).toEqual({
+      // 30 days ending today, today included, from `NOW` of 21 September.
+      range: { from: '2026-08-23', to: '2026-09-22' },
+      preset: 'last-30',
+    })
   })
 
   test('two dates are a custom range, and no preset is current', () => {
@@ -113,5 +117,16 @@ describe('the URL', () => {
   test('the default preset has no query string, so the page has one URL', () => {
     expect(presetHref('/costs', 'this-month')).toBe('/costs')
     expect(presetHref('/costs', 'last-90')).toBe('/costs?range=last-90')
+  })
+
+  test('a preset link keeps the view, so the period does not change the cut', () => {
+    // Ticket 53's control sits above tickets 54 to 56, and changing the month
+    // from the People tab must not answer a different question.
+    expect(presetHref('/costs', 'last-90', 'members')).toBe(
+      '/costs?view=members&range=last-90',
+    )
+    expect(presetHref('/costs', 'this-month', 'devices')).toBe(
+      '/costs?view=devices',
+    )
   })
 })

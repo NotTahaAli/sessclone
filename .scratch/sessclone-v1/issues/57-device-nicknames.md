@@ -4,9 +4,9 @@
 
 **Blocked by:** 44, 45, 56.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Member sees their own Devices, with when each last reported
-- [ ] Nickname editable and used everywhere the Device is displayed
-- [ ] The underlying key never changes, so history stays attached
-- [ ] A Member cannot rename another Member's Device
+- [x] Member sees their own Devices, with when each last reported
+- [x] Nickname editable and used everywhere the Device is displayed
+- [x] The underlying key never changes, so history stays attached
+- [x] A Member cannot rename another Member's Device

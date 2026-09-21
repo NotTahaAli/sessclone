@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 
 import { beforeEach, describe, expect, test } from 'vitest'
 
-import { breakdown } from '../lib/breakdown'
+import { breakdown, BREAKDOWN_LIMIT } from '../lib/breakdown'
 import { asRole, owner as sql, seedFixture, type Fixture } from './harness'
 
 // Tickets 54, 55 and 56. What each of them adds over ticket 52 is a grouping
@@ -70,7 +70,9 @@ describe('per Member (54)', () => {
     await seedTurn({ member_id: fixture.acme.members.member })
 
     const rows = await asRole(fixture.acme, 'owner', (tx) =>
-      breakdown(tx, fixture.acme.id, 'UTC', september, 'members'),
+      breakdown(tx, fixture.acme.id, 'UTC', september, 'members').then(
+        (result) => result.rows,
+      ),
     )
 
     expect(rows.map((row) => [row.turns, row.costUsd])).toEqual([
@@ -85,7 +87,9 @@ describe('per Member (54)', () => {
     await seedTurn({ member_id: fixture.acme.members.member })
 
     const rows = await asRole(fixture.acme, 'member', (tx) =>
-      breakdown(tx, fixture.acme.id, 'UTC', september, 'members'),
+      breakdown(tx, fixture.acme.id, 'UTC', september, 'members').then(
+        (result) => result.rows,
+      ),
     )
 
     expect(rows).toHaveLength(1)
@@ -97,7 +101,9 @@ describe('per Member (54)', () => {
     await seedTurn({ member_id: fixture.acme.members.member })
 
     const rows = await asRole(fixture.acme, 'manager', (tx) =>
-      breakdown(tx, fixture.acme.id, 'UTC', september, 'members'),
+      breakdown(tx, fixture.acme.id, 'UTC', september, 'members').then(
+        (result) => result.rows,
+      ),
     )
 
     // The fixture's Scope holds the Member and not the Owner.
@@ -110,7 +116,9 @@ describe('per Member (54)', () => {
     await seedTurn({ member_id: fixture.acme.members.removed })
 
     const rows = await asRole(fixture.acme, 'owner', (tx) =>
-      breakdown(tx, fixture.acme.id, 'UTC', september, 'members'),
+      breakdown(tx, fixture.acme.id, 'UTC', september, 'members').then(
+        (result) => result.rows,
+      ),
     )
 
     expect(rows[0]!.note).toBe('removed')
@@ -122,7 +130,9 @@ describe('per Member (54)', () => {
     await seedTurn({ model: 'claude-unreleased-9' })
 
     const rows = await asRole(fixture.acme, 'owner', (tx) =>
-      breakdown(tx, fixture.acme.id, 'UTC', september, 'members'),
+      breakdown(tx, fixture.acme.id, 'UTC', september, 'members').then(
+        (result) => result.rows,
+      ),
     )
 
     expect(rows[0]).toMatchObject({ costUsd: 5, turns: 2, unpricedTurns: 1 })
@@ -142,11 +152,20 @@ describe('per Project (55)', () => {
     await seedTurn({ project_id: repo, device_id: null })
 
     const rows = await asRole(fixture.acme, 'owner', (tx) =>
-      breakdown(tx, fixture.acme.id, 'UTC', september, 'projects'),
+      breakdown(tx, fixture.acme.id, 'UTC', september, 'projects').then(
+        (result) => result.rows,
+      ),
     )
 
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({ label: 'github.com/acme/api', turns: 2 })
+
+    // And it is one row because the identity says so, not because the test
+    // pointed both Turns at one row: the second machine reporting the same
+    // remote resolves to the same Project.
+    await expect(
+      project('github.com/acme/api', 'https://github.com/acme/api'),
+    ).rejects.toThrow(/duplicate key|unique/i)
   })
 
   test('work with no repository is attributed, not dropped', async () => {
@@ -155,7 +174,9 @@ describe('per Project (55)', () => {
     await seedTurn({ project_id: null })
 
     const rows = await asRole(fixture.acme, 'owner', (tx) =>
-      breakdown(tx, fixture.acme.id, 'UTC', september, 'projects'),
+      breakdown(tx, fixture.acme.id, 'UTC', september, 'projects').then(
+        (result) => result.rows,
+      ),
     )
 
     expect(rows.map((row) => row.label).toSorted()).toEqual([
@@ -170,7 +191,9 @@ describe('per Project (55)', () => {
     await seedTurn({ project_id: repo, member_id: fixture.acme.members.owner })
 
     const rows = await asRole(fixture.acme, 'member', (tx) =>
-      breakdown(tx, fixture.acme.id, 'UTC', september, 'projects'),
+      breakdown(tx, fixture.acme.id, 'UTC', september, 'projects').then(
+        (result) => result.rows,
+      ),
     )
 
     expect(rows).toEqual([])
@@ -187,7 +210,9 @@ describe('per Device (56)', () => {
     await seedTurn({ device_id: id })
 
     const rows = await asRole(fixture.acme, 'owner', (tx) =>
-      breakdown(tx, fixture.acme.id, 'UTC', september, 'devices'),
+      breakdown(tx, fixture.acme.id, 'UTC', september, 'devices').then(
+        (result) => result.rows,
+      ),
     )
 
     expect(rows[0]).toMatchObject({
@@ -201,7 +226,9 @@ describe('per Device (56)', () => {
     await seedTurn({ device_id: id })
 
     const rows = await asRole(fixture.acme, 'owner', (tx) =>
-      breakdown(tx, fixture.acme.id, 'UTC', september, 'devices'),
+      breakdown(tx, fixture.acme.id, 'UTC', september, 'devices').then(
+        (result) => result.rows,
+      ),
     )
 
     expect(rows[0]).toMatchObject({ label: 'host:thinkpad', note: null })
@@ -217,18 +244,28 @@ describe('per Device (56)', () => {
     await seedTurn({ device_id: id })
 
     const rows = await asRole(fixture.acme, 'owner', (tx) =>
-      breakdown(tx, fixture.acme.id, 'UTC', september, 'devices'),
+      breakdown(tx, fixture.acme.id, 'UTC', september, 'devices').then(
+        (result) => result.rows,
+      ),
     )
 
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({ label: 'cloud:acct-1:web', turns: 3 })
+
+    // One row because `(member_id, key)` is unique, not because the seed only
+    // made one: the hundred-and-first container reports the same key.
+    await expect(
+      device(fixture.acme.members.member, 'cloud:acct-1:web'),
+    ).rejects.toThrow(/duplicate key|unique/i)
   })
 
   test('a Turn with no Device is named rather than dropped', async () => {
     await seedTurn({ device_id: null })
 
     const rows = await asRole(fixture.acme, 'owner', (tx) =>
-      breakdown(tx, fixture.acme.id, 'UTC', september, 'devices'),
+      breakdown(tx, fixture.acme.id, 'UTC', september, 'devices').then(
+        (result) => result.rows,
+      ),
     )
 
     expect(rows[0]!.label).toBe('No device reported')
@@ -240,7 +277,9 @@ test('another Org sees nothing, whatever id is passed', async () => {
 
   const reads = (['members', 'projects', 'devices'] as const).map((dimension) =>
     asRole(fixture.globex, 'owner', (tx) =>
-      breakdown(tx, fixture.acme.id, 'UTC', september, dimension),
+      breakdown(tx, fixture.acme.id, 'UTC', september, dimension).then(
+        (result) => result.rows,
+      ),
     ),
   )
 
@@ -254,8 +293,53 @@ test('the range is half-open, in the Org timezone', async () => {
   await seedTurn({ occurred_at: '2026-09-30T20:00:00Z' })
 
   const rows = await asRole(fixture.acme, 'owner', (tx) =>
-    breakdown(tx, fixture.acme.id, 'Asia/Karachi', september, 'members'),
+    breakdown(tx, fixture.acme.id, 'Asia/Karachi', september, 'members').then(
+      (result) => result.rows,
+    ),
   )
 
   expect(rows).toEqual([])
+
+  // The positive control: an hour earlier is inside, so the empty answer above
+  // is the boundary and not a dropped join or a wrong Org.
+  await seedTurn({ occurred_at: '2026-09-30T18:00:00Z' })
+  const inside = await asRole(fixture.acme, 'owner', (tx) =>
+    breakdown(tx, fixture.acme.id, 'Asia/Karachi', september, 'members').then(
+      (result) => result.rows,
+    ),
+  )
+  expect(inside).toHaveLength(1)
+})
+
+test('a group with nothing priced reads as unknown, never as zero', async () => {
+  await seedTurn({ model: 'claude-unreleased-9' })
+
+  const { rows, totals } = await asRole(fixture.acme, 'owner', (tx) =>
+    breakdown(tx, fixture.acme.id, 'UTC', september, 'members'),
+  )
+
+  // ADR 0002: unpriced resolves to null, and a null that becomes 0 on the way
+  // to the page is a figure that understates while looking authoritative.
+  expect(rows[0]!.costUsd).toBeNull()
+  expect(rows[0]).toMatchObject({ turns: 1, unpricedTurns: 1 })
+  expect(totals.costUsd).toBe(0)
+  expect(totals.unpricedTurns).toBe(1)
+})
+
+test('the list is capped, and the totals still count what it left out', async () => {
+  const devices = await Promise.all(
+    Array.from({ length: BREAKDOWN_LIMIT + 2 }, (_, index) =>
+      device(fixture.acme.members.member, `host:box-${index}`),
+    ),
+  )
+  await Promise.all(devices.map((id) => seedTurn({ device_id: id })))
+
+  const { rows, totals, more } = await asRole(fixture.acme, 'owner', (tx) =>
+    breakdown(tx, fixture.acme.id, 'UTC', september, 'devices'),
+  )
+
+  expect(rows).toHaveLength(BREAKDOWN_LIMIT)
+  expect(more).toBe(2)
+  expect(totals.turns).toBe(BREAKDOWN_LIMIT + 2)
+  expect(totals.costUsd).toBe(5 * (BREAKDOWN_LIMIT + 2))
 })

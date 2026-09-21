@@ -65,8 +65,11 @@ export function SpendChart({ series }: { series: SpendSeries }) {
   const { days } = series
   const peak = Math.max(...days.map((day) => day.costUsd), 0)
   // The cap sits above the tallest bar rather than overlapping it, so the
-  // money axis keeps the room it needs even on the busiest day.
-  const scale = peak > 0 ? (HEIGHT - CAP.height - CAP.gap) / peak : 0
+  // money axis keeps the room it needs even on the busiest day. With nothing
+  // unpriced no cap is drawn, and reserving its room anyway would float the
+  // top axis label a few percent above the bar it labels.
+  const headroom = series.unpricedTurns > 0 ? CAP.height + CAP.gap : 0
+  const scale = peak > 0 ? (HEIGHT - headroom) / peak : 0
   const step = WIDTH / days.length
   // A day is a column with a hairline of air either side, and never narrower
   // than a line: a year of days at 600 units is under two units each.
@@ -313,7 +316,12 @@ function DayTable({ days }: { days: Day[] }) {
             <th scope="row" className="py-1 text-left font-normal">
               {shortDate(day.date)}
             </th>
-            <td className="py-1 text-right">{money.format(day.costUsd)}</td>
+            {/* A day whose every Turn is unpriced is unknown, not zero. */}
+            <td className="py-1 text-right">
+              {day.unpricedTurns === day.turns
+                ? '—'
+                : money.format(day.costUsd)}
+            </td>
             <td className="text-text-secondary py-1 text-right">
               {tokens.format(day.tokens)}
             </td>

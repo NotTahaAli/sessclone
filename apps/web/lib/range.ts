@@ -164,6 +164,18 @@ export const resolveRange = (
   return { range: presetRange(preset, timezone, now), preset }
 }
 
-/** The query string for a preset, kept in one place so links agree. */
-export const presetHref = (path: string, key: PresetKey) =>
-  key === DEFAULT_PRESET ? path : `${path}?range=${key}`
+/**
+ * The query string for a preset, kept in one place so links agree.
+ *
+ * `view` is the other thing in this URL, and the period does not own it
+ * (tickets 54 to 56). Without carrying it, changing the period from a
+ * breakdown tab silently answers a different question: the reader lands back
+ * on Over time having asked only for a different month.
+ */
+export const presetHref = (path: string, key: PresetKey, view?: string) => {
+  const query = new URLSearchParams()
+  if (view) query.set('view', view)
+  if (key !== DEFAULT_PRESET) query.set('range', key)
+  const search = query.toString()
+  return search ? `${path}?${search}` : path
+}

@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs'
 
+import postgres from 'postgres'
+
 import { beforeEach, describe, expect, test } from 'vitest'
 
 import {
@@ -165,21 +167,39 @@ describe('the read', () => {
     await seedTurn({ input_tokens: MILLION })
     await sql`analyze turns`
 
-    const plan = await asRole(fixture.acme, 'owner', async (tx) => {
-      const explained = await tx<{ 'QUERY PLAN': string }[]>`
-        explain
-        select count(*)
-          from turn_costs cost
-          join turns turn on turn.id = cost.turn_id
-         where cost.org_id = ${fixture.acme.id}
-           and turn.org_id = ${fixture.acme.id}
-           and cost.occurred_at >= '2026-09-01'::timestamptz
-           and turn.occurred_at >= '2026-09-01'::timestamptz
-      `
-      return explained.map((line) => line['QUERY PLAN']).join('\n')
+    // Explained as the statement `dailySpend` actually issues, captured from
+    // the driver rather than retyped here — a hand-written copy proves only
+    // that the copy is indexed, and stays green when the real query loses its
+    // range.
+    // Typed as the driver hands them over, so the captured statement goes
+    // back into `explain` with no cast in between.
+    const seen: { query: string; params: postgres.ParameterOrJSON<never>[] }[] =
+      []
+    const watched = postgres(process.env.APP_DATABASE_URL!, {
+      debug: (_connection, query, params) => seen.push({ query, params }),
     })
 
-    expect(plan).toMatch(/turns_org_occurred_at_idx/)
+    try {
+      await watched.begin(async (tx) => {
+        await tx`select set_config('request.jwt.claims', ${JSON.stringify({ sub: fixture.acme.users.owner })}, true)`
+        await dailySpend(tx, fixture.acme.id, 'UTC', september)
+      })
+
+      const issued = seen.find((entry) => entry.query.includes('turn_costs'))
+      expect(issued).toBeDefined()
+
+      const plan = await asRole(fixture.acme, 'owner', async (tx) => {
+        const explained = await tx.unsafe<{ 'QUERY PLAN': string }[]>(
+          `explain ${issued!.query}`,
+          issued!.params,
+        )
+        return explained.map((line) => line['QUERY PLAN']).join('\n')
+      })
+
+      expect(plan).toMatch(/turns_org_occurred_at_idx/)
+    } finally {
+      await watched.end()
+    }
   })
 })
 
@@ -195,6 +215,22 @@ const row = (over: Partial<SpendRow> = {}): SpendRow => ({
 })
 
 describe('the roll-up', () => {
+  test('the totals count every row, including one outside the drawn days', () => {
+    // The bars are drawn from the range's dates and the totals are summed
+    // from the rows, because the two boundaries are different expressions for
+    // one edge — `at time zone` in SQL against date strings here — and they
+    // can disagree in a zone whose DST transition lands on midnight. Money
+    // that fell out of the loop would vanish from the four figures.
+    const series = spendSeries(
+      [row({ date: '2026-09-01' }), row({ date: '2026-08-31', costUsd: 4 })],
+      { from: '2026-09-01', to: '2026-09-03' },
+    )
+
+    expect(series.days).toHaveLength(2)
+    expect(series.costUsd).toBe(5)
+    expect(series.turns).toBe(2)
+  })
+
   test('draws every day in the range, including the empty ones', () => {
     const series = spendSeries([row({ date: '2026-09-03' })], {
       from: '2026-09-01',

@@ -1,7 +1,7 @@
 import { RangeControl } from './range-control'
 import { RankedList } from './ranked-list'
 import { SpendChart } from './spend-chart'
-import { resolveView, viewHref, VIEWS, type View } from './views'
+import { DEFAULT_VIEW, resolveView, viewHref, VIEWS, type View } from './views'
 import { EmptyState } from '../empty-state'
 import { InstallCollector } from '../install-collector'
 import { PageHeader } from '../page-header'
@@ -14,7 +14,7 @@ import {
 } from '../../../lib/onboarding'
 import {
   breakdown,
-  type BreakdownRow,
+  type Breakdown,
   type Dimension,
 } from '../../../lib/breakdown'
 import { resolveRange, type RangeParams } from '../../../lib/range'
@@ -84,33 +84,16 @@ function OverTime({ series }: { series: SpendSeries }) {
 /**
  * A breakdown, with the same four figures above it as the chart has.
  *
- * The tiles are computed from the rows rather than read again: the rows are
- * the period's Turns cut a different way, so their sums are the period's sums,
- * and a second query would be a second chance to disagree with the list under
- * it.
+ * The tiles come from the same statement as the list, over every group rather
+ * than the ones shown: the list is capped and a total summed from a capped
+ * list drops the tail without saying so.
  */
-function Ranked({
-  rows,
-  dimension,
-}: {
-  rows: BreakdownRow[]
-  dimension: Dimension
-}) {
-  const totals = rows.reduce(
-    (sum, row) => ({
-      costUsd: sum.costUsd + row.costUsd,
-      tokens: sum.tokens + row.tokens,
-      turns: sum.turns + row.turns,
-      unpricedTurns: sum.unpricedTurns + row.unpricedTurns,
-    }),
-    { costUsd: 0, tokens: 0, turns: 0, unpricedTurns: 0 },
-  )
-
+function Ranked({ cut, dimension }: { cut: Breakdown; dimension: Dimension }) {
   return (
     <div className="flex flex-col gap-6">
-      <Totals {...totals} />
+      <Totals {...cut.totals} />
       <div className="border-rule bg-surface rounded-md border p-4">
-        <RankedList rows={rows} dimension={dimension} />
+        <RankedList rows={cut.rows} more={cut.more} dimension={dimension} />
       </div>
     </div>
   )
@@ -263,7 +246,11 @@ export default async function Costs({
       {onboardingState(facts) === 'collecting' ? (
         <>
           <ViewTabs current={view} params={params} />
-          <RangeControl path="/costs" resolved={resolved} />
+          <RangeControl
+            path="/costs"
+            resolved={resolved}
+            view={view === DEFAULT_VIEW ? undefined : view}
+          />
         </>
       ) : null}
       <Body facts={facts} view={view} spend={spend} ranked={ranked} />
@@ -280,7 +267,7 @@ function Body({
   facts: OnboardingFacts
   view: View
   spend: SpendSeries | null
-  ranked: BreakdownRow[] | null
+  ranked: Breakdown | null
 }) {
   switch (onboardingState(facts)) {
     case 'collecting':
@@ -289,7 +276,7 @@ function Body({
       return view === 'time' || ranked === null ? (
         <OverTime series={spend!} />
       ) : (
-        <Ranked rows={ranked} dimension={view} />
+        <Ranked cut={ranked} dimension={view} />
       )
 
     case 'waiting':

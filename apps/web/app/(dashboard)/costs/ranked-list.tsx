@@ -16,9 +16,12 @@ const money = new Intl.NumberFormat('en-US', {
 })
 const tokens = new Intl.NumberFormat('en-US', { notation: 'compact' })
 const whole = new Intl.NumberFormat('en-US')
+// One decimal: whole percentages on five rows visibly sum to 101%, and a
+// reader checking the arithmetic on a page about money is the reader this
+// page is for.
 const share = new Intl.NumberFormat('en-US', {
   style: 'percent',
-  maximumFractionDigits: 0,
+  maximumFractionDigits: 1,
 })
 
 /**
@@ -42,9 +45,12 @@ const EMPTY: Record<Dimension, string> = {
 export function RankedList({
   rows,
   dimension,
+  more = 0,
 }: {
   rows: BreakdownRow[]
   dimension: Dimension
+  /** Groups the read left out, so the list says so rather than looking whole. */
+  more?: number
 }) {
   if (rows.length === 0) {
     return (
@@ -57,8 +63,8 @@ export function RankedList({
   // The bar is a share of the largest row rather than of the total: at twenty
   // rows every bar would otherwise be a sliver, and the comparison the reader
   // is making is with the row above.
-  const peak = Math.max(...rows.map((row) => row.costUsd))
-  const total = rows.reduce((sum, row) => sum + row.costUsd, 0)
+  const peak = Math.max(...rows.map((row) => row.costUsd ?? 0))
+  const total = rows.reduce((sum, row) => sum + (row.costUsd ?? 0), 0)
 
   return (
     <ol className="flex flex-col">
@@ -68,16 +74,23 @@ export function RankedList({
           className="border-rule flex flex-col gap-1 border-b py-3"
         >
           <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-            <span className="font-mono text-sm break-all">
+            <span className="font-mono text-sm break-all" title={row.label}>
               {middleTruncate(row.label)}
               {row.note ? (
                 <span className="text-text-muted"> — {row.note}</span>
               ) : null}
             </span>
+            {/* A row with nothing priced shows a dash, never $0.00: the
+                money is not zero, it is unknown, and the caption below says
+                how many Turns are waiting on a rate. */}
             <span className="flex items-baseline gap-3 font-mono text-sm">
-              <span>{money.format(row.costUsd)}</span>
+              <span>
+                {row.costUsd === null ? '—' : money.format(row.costUsd)}
+              </span>
               <span className="text-text-muted text-caption">
-                {total > 0 ? share.format(row.costUsd / total) : '—'}
+                {row.costUsd !== null && total > 0
+                  ? share.format(row.costUsd / total)
+                  : '—'}
               </span>
             </span>
           </div>
@@ -85,7 +98,7 @@ export function RankedList({
           {/* The bar itself. A `div` at a percentage width, not an SVG: one
               rectangle per row does not need a coordinate system. */}
           <div className="bg-surface-hover h-2 w-full rounded-sm">
-            <Bar fraction={peak > 0 ? row.costUsd / peak : 0} />
+            <Bar fraction={peak > 0 ? (row.costUsd ?? 0) / peak : 0} />
           </div>
 
           <p className="text-text-muted text-caption">
@@ -97,6 +110,12 @@ export function RankedList({
           </p>
         </li>
       ))}
+      {more > 0 ? (
+        <li className="text-text-muted py-3 text-caption">
+          {whole.format(more)} more, below the {whole.format(rows.length)}{' '}
+          largest. The totals above count all of them.
+        </li>
+      ) : null}
     </ol>
   )
 }
@@ -110,7 +129,9 @@ export function RankedList({
  * and at 5% steps nobody can see the difference on a 200px bar.
  */
 function Bar({ fraction }: { fraction: number }) {
-  const step = Math.max(1, Math.round(fraction * 20))
+  // No floor: a row with nothing priced, or genuinely nothing spent, draws no
+  // bar rather than a sliver that reads as a small amount.
+  const step = Math.round(fraction * 20)
   return (
     <div
       className="bg-accent-fill h-2 rounded-sm"

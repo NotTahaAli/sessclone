@@ -295,9 +295,15 @@ export const spendSeries = (
   return {
     days,
     series,
-    costUsd: days.reduce((sum, day) => sum + day.costUsd, 0),
-    tokens: days.reduce((sum, day) => sum + day.tokens, 0),
-    turns: days.reduce((sum, day) => sum + day.turns, 0),
-    unpricedTurns: days.reduce((sum, day) => sum + day.unpricedTurns, 0),
+    // Summed over the rows rather than over `days`. The two agree only while
+    // every row's bucket falls inside the loop's dates, and those are two
+    // expressions for one boundary: `at time zone` in SQL against date
+    // strings here. In a zone whose DST transition lands on midnight they can
+    // disagree, and a row outside the loop would drop out of the totals while
+    // still being a Turn the reader spent money on.
+    costUsd: rows.reduce((sum, row) => sum + (row.costUsd ?? 0), 0),
+    tokens: rows.reduce((sum, row) => sum + row.tokens, 0),
+    turns: rows.reduce((sum, row) => sum + row.turns, 0),
+    unpricedTurns: rows.reduce((sum, row) => sum + row.unpricedTurns, 0),
   }
 }
