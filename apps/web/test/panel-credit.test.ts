@@ -36,7 +36,17 @@ const SHELL = SHELLS[0]!
  * how somebody arrives, and `api` renders nothing. Everything else under
  * `app/` is a signed-in page and belongs under the shell.
  */
-const NOT_SIGNED_IN = new Set(['(marketing)', 'sign-in', 'auth', 'api'])
+const NOT_SIGNED_IN = new Set([
+  '(marketing)',
+  'sign-in',
+  'auth',
+  'api',
+  // `join` is ticket 49's: whoever opens an invitation may have no account
+  // yet, so it is an arrival path like `sign-in` rather than a signed-in page.
+  // It is outside every shell and renders `PanelCredit` itself, which the case
+  // below checks rather than taking on trust.
+  'join',
+])
 
 /** Every `page.tsx` under `app/`, as a path relative to it. */
 const pages = (dir: URL, prefix = ''): string[] =>
@@ -77,6 +87,12 @@ describe('the panel credit', () => {
       expect(layout.match(/<PanelCredit \/>/g)).toHaveLength(2)
     },
   )
+
+  test('the invitation page carries the notices itself, being outside the shell', () => {
+    const source = readFileSync(new URL('join/[token]/page.tsx', APP), 'utf8')
+
+    expect(source).toContain('PanelCredit')
+  })
 
   test('is on every signed-in page, because every one of them is in the shell', () => {
     const found = pages(APP)

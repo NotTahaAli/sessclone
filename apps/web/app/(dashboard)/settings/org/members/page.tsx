@@ -1,6 +1,8 @@
 import { notFound } from 'next/navigation'
 
 import { setScopeMember } from './actions'
+import { withdrawInvite } from './invite-actions'
+import { InviteForm } from './invite-form'
 import { PageHeader } from '../../../page-header'
 import { asViewer } from '../../../../../lib/db'
 import {
@@ -8,6 +10,11 @@ import {
   listScopes,
   type OrgMember,
 } from '../../../../../lib/scopes'
+import { appUrl } from '../../../../../lib/auth/app-url'
+import {
+  listInvitations,
+  type Invitation,
+} from '../../../../../lib/invitations'
 import { currentViewer, reachesOrgSettings } from '../../../../../lib/viewer'
 
 // Ticket 46: an Owner or Admin assigns which Members a Manager may see.
@@ -32,11 +39,14 @@ export default async function Members() {
   // One transaction, two independent statements — and `listScopes` is one
   // query for the whole Org rather than one per Manager, which on a page with
   // five Managers would be the query-in-a-loop this repo calls a bug.
-  const [{ members, more }, scopes] = await asViewer(viewer.userId, (tx) =>
-    Promise.all([
-      listOrgMembers(tx, viewer.orgId),
-      listScopes(tx, viewer.orgId),
-    ]),
+  const [{ members, more }, scopes, invitations] = await asViewer(
+    viewer.userId,
+    (tx) =>
+      Promise.all([
+        listOrgMembers(tx, viewer.orgId),
+        listScopes(tx, viewer.orgId),
+        listInvitations(tx, viewer.orgId),
+      ]),
   )
 
   const managers = members.filter(
@@ -49,6 +59,33 @@ export default async function Members() {
         title="Members"
         description={`Who is in ${viewer.orgName}, and what each Manager may see.`}
       />
+
+      <section aria-labelledby="invitations">
+        <h2 id="invitations" className="text-heading-lg">
+          Invitations
+        </h2>
+        <p className="text-text-secondary mt-2 text-sm">
+          An invitation is a link for one address. It works once, for seven
+          days, and the Seat is taken when the person accepts rather than when
+          you send it — so an invitation you send today can still be refused if
+          the Org fills up first.
+        </p>
+
+        <InviteForm origin={appUrl()} />
+
+        {invitations.invitations.length > 0 ? (
+          <ul className="mt-4">
+            {invitations.invitations.map((invitation) => (
+              <InvitationRow key={invitation.id} invitation={invitation} />
+            ))}
+          </ul>
+        ) : null}
+        {invitations.more ? (
+          <p className="text-text-muted mt-2 text-sm">
+            Showing the most recent invitations.
+          </p>
+        ) : null}
+      </section>
 
       <section aria-labelledby="scopes">
         <h2 id="scopes" className="text-heading-lg">
@@ -164,3 +201,44 @@ function Scope({
     </div>
   )
 }
+
+/** One invitation, and the one thing that can still be done to it. */
+function InvitationRow({ invitation }: { invitation: Invitation }) {
+  const state = invitation.acceptedAt
+    ? 'Accepted'
+    : invitation.revokedAt
+      ? 'Withdrawn'
+      : invitation.live
+        ? `Waiting, until ${when.format(invitation.expiresAt)}`
+        : 'Expired'
+
+  return (
+    <li className="border-rule flex flex-wrap items-center justify-between gap-3 border-b py-3">
+      <div className="min-w-0">
+        <p className="text-sm break-all">{invitation.email}</p>
+        <p className="text-text-muted text-sm">
+          {invitation.role} — {state}
+        </p>
+      </div>
+      {invitation.live ? (
+        <form action={withdrawInvite}>
+          <input type="hidden" name="invitationId" value={invitation.id} />
+          <button
+            type="submit"
+            className="border-control-border text-text rounded border px-3 py-1 text-sm whitespace-nowrap"
+          >
+            Withdraw
+            <span className="sr-only">
+              {' '}
+              the invitation to {invitation.email}
+            </span>
+          </button>
+        </form>
+      ) : null}
+    </li>
+  )
+}
+
+// The Org's timezone is not read here: an expiry is a date on a link, not a
+// figure cut into the Org's days, and this page has no other dates on it.
+const when = new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' })

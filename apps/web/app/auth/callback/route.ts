@@ -1,4 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
+
+import { safeNext } from '../../../lib/auth/next-path'
 import { z } from 'zod'
 
 import {
@@ -60,7 +62,7 @@ export async function GET(request: NextRequest) {
   // `/costs` and not `/`: `/` is the marketing page (ticket 26), and landing
   // somebody there the moment they sign in is landing them where they already
   // decided to leave. The dashboard's home is Costs (ticket 45).
-  const next = requested?.startsWith('/') ? requested : '/costs'
+  const next = safeNext(requested) ?? '/costs'
 
   // The provider refused before we ever got a code. Distinguished from a link
   // that arrived with nothing, which is what this route used to call it: the

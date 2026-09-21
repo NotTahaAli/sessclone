@@ -93,7 +93,13 @@ function Ranked({ cut, dimension }: { cut: Breakdown; dimension: Dimension }) {
     <div className="flex flex-col gap-6">
       <Totals {...cut.totals} />
       <div className="border-rule bg-surface rounded-md border p-4">
-        <RankedList rows={cut.rows} more={cut.more} dimension={dimension} />
+        <RankedList
+          rows={cut.rows}
+          total={cut.totals.costUsd}
+          more={cut.more}
+          moreUnpriced={cut.moreUnpriced}
+          dimension={dimension}
+        />
       </div>
     </div>
   )
@@ -106,15 +112,20 @@ function Totals({
   turns,
   unpricedTurns,
 }: {
-  costUsd: number
+  costUsd: number | null
   tokens: number
   turns: number
   unpricedTurns: number
 }) {
   return (
     <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      <Tile label="Cost" value={money.format(costUsd)}>
-        {unpricedTurns > 0 ? 'priced Turns only' : 'this period'}
+      {/* A period with nothing priced is unknown, not free. */}
+      <Tile label="Cost" value={costUsd === null ? '—' : money.format(costUsd)}>
+        {costUsd === null
+          ? 'nothing priced yet'
+          : unpricedTurns > 0
+            ? 'priced Turns only'
+            : 'this period'}
       </Tile>
       <Tile label="Tokens" value={compact.format(tokens)}>
         input, output and cache

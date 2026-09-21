@@ -28,7 +28,17 @@ export const rename = async (
   const deviceId = DeviceId.safeParse(formData.get('deviceId'))
   const nickname = Nickname.safeParse(formData.get('nickname'))
   if (!deviceId.success) return { error: 'That machine is not one of yours.' }
-  if (!nickname.success) return { error: 'A name is 60 characters or fewer.' }
+  if (!nickname.success) {
+    // A name that is too long is the only way a rendered form reaches this;
+    // a missing field is a malformed post, and says so rather than blaming
+    // the length of something that was never sent.
+    return {
+      error:
+        typeof formData.get('nickname') === 'string'
+          ? 'A name is 60 characters or fewer.'
+          : 'That request was missing the name.',
+    }
+  }
 
   // An empty box is "no nickname", not a Device called "". The column is null
   // when unnamed and every surface falls back to the key on null, so clearing

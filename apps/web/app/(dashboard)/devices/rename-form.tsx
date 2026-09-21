@@ -45,16 +45,25 @@ export function RenameForm({
         </button>
       </form>
 
-      {state && 'error' in state ? (
-        <p className="text-bad-text mt-2 text-sm">{state.error}</p>
-      ) : null}
-      {state && 'saved' in state ? (
-        <p className="text-ok-text mt-2 text-sm">
-          {state.saved === null
-            ? 'Name cleared. This machine shows as its key again.'
-            : `Saved. This machine is “${state.saved}” everywhere it appears.`}
-        </p>
-      ) : null}
+      {/* One region, always in the DOM, so a screen reader is told what
+          happened rather than having the sentence appear silently. */}
+      <p
+        role="status"
+        aria-live="polite"
+        className={
+          state && 'error' in state
+            ? 'text-bad-text mt-2 text-sm'
+            : 'text-ok-text mt-2 text-sm'
+        }
+      >
+        {state === null
+          ? ''
+          : 'error' in state
+            ? state.error
+            : state.saved === null
+              ? 'Name cleared. This machine shows as its key again.'
+              : `Saved. This machine is “${state.saved}” everywhere it appears.`}
+      </p>
     </>
   )
 }

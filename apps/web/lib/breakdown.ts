@@ -52,6 +52,7 @@ type RawRow = {
   total_turns: string
   total_unpriced_turns: string
   groups: string
+  unpriced_groups: string
 }
 
 /**
@@ -66,13 +67,16 @@ export type Breakdown = {
   rows: BreakdownRow[]
   /** Every group, not only the ones above: see the window in `AGGREGATES`. */
   totals: {
-    costUsd: number
+    /** Null when nothing in the period is priced: never a confident zero. */
+    costUsd: number | null
     tokens: number
     turns: number
     unpricedTurns: number
   }
   /** Groups beyond the cap, or zero. */
   more: number
+  /** Of those, how many have nothing priced. */
+  moreUnpriced: number
 }
 
 /**
@@ -101,7 +105,14 @@ const AGGREGATES = (tx: TransactionSql) => tx`
   )) over () as total_tokens,
   sum(count(*)) over () as total_turns,
   sum(count(*) filter (where cost.unpriced)) over () as total_unpriced_turns,
-  count(*) over () as groups
+  count(*) over () as groups,
+  -- Groups whose every Turn is unpriced. They rank last by cost, so they are
+  -- the ones the cap hides, and the footer says how many rather than leaving
+  -- a reader to wonder where their unpriced Turns went.
+  -- count(x) skips nulls, so the difference is the groups whose every Turn is
+  -- unpriced. A filter clause cannot hold an aggregate, which is what the
+  -- obvious spelling of this would need.
+  (count(*) over () - count(sum(cost.cost_usd)) over ()) as unpriced_groups
 `
 
 /**
@@ -185,24 +196,36 @@ export const breakdown = async (
   return {
     rows: ranked(rows, dimension),
     totals: {
-      costUsd: Number(first?.total_cost_usd ?? 0),
+      costUsd:
+        first?.total_cost_usd == null ? null : Number(first.total_cost_usd),
       tokens: Number(first?.total_tokens ?? 0),
       turns: Number(first?.total_turns ?? 0),
       unpricedTurns: Number(first?.total_unpriced_turns ?? 0),
     },
     more: Math.max(0, Number(first?.groups ?? 0) - BREAKDOWN_LIMIT),
+    // Every unpriced group that did not fit: they sort last by cost, so the
+    // ones cut are unpriced before they are anything else.
+    moreUnpriced: Math.min(
+      Number(first?.unpriced_groups ?? 0),
+      Math.max(0, Number(first?.groups ?? 0) - BREAKDOWN_LIMIT),
+    ),
   }
 }
 
-/** Biggest first, and one more than the page shows so the cap is detectable. */
+/**
+ * Biggest first, and only the page's worth.
+ *
+ * How many groups there are in total does not come from reading one more row:
+ * `count(*) over ()` is evaluated before the limit, so the window already
+ * knows, and the extra row would detect nothing.
+ */
 const RANK = (tx: TransactionSql) => tx`
   order by sum(cost.cost_usd) desc nulls last, count(*) desc
-  limit ${BREAKDOWN_LIMIT + 1}
+  limit ${BREAKDOWN_LIMIT}
 `
 
 const ranked = (rows: RawRow[], dimension: Dimension): BreakdownRow[] =>
   rows
-    .slice(0, BREAKDOWN_LIMIT)
     .map((row) => ({
       id: row.id,
       label: row.label ?? unnamed(dimension),

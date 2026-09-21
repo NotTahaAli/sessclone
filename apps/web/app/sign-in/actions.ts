@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
 import { appUrl } from '../../lib/auth/app-url'
+import { safeNext } from '../../lib/auth/next-path'
 import { supabaseServer } from '../../lib/supabase/server'
 
 // The two ways in, and the way out. Both ways in are passwordless: there is no
@@ -20,13 +21,26 @@ const CALLBACK = '/auth/callback'
 
 const Email = z.email().max(320)
 
+/**
+ * The query to hang on the callback URL, so a visitor who arrived from an
+ * invitation link comes back to it (ticket 49).
+ *
+ * `safeNext` is the check, and the callback runs it again on the way back:
+ * this one is a convenience, that one is the rule.
+ */
+const destination = (formData: FormData) => {
+  const next = safeNext(formData.get('next'))
+  return next ? `?next=${encodeURIComponent(next)}` : ''
+}
+
 /** Sends the visitor to GitHub. Returns only by redirecting. */
-export const signInWithGitHub = async () => {
+export const signInWithGitHub = async (formData: FormData) => {
   const supabase = await supabaseServer()
+  const next = destination(formData)
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'github',
-    options: { redirectTo: `${appUrl()}${CALLBACK}` },
+    options: { redirectTo: `${appUrl()}${CALLBACK}${next}` },
   })
 
   if (error || !data.url) {
@@ -48,7 +62,9 @@ export const sendMagicLink = async (formData: FormData) => {
 
   const { error } = await supabase.auth.signInWithOtp({
     email: email.data,
-    options: { emailRedirectTo: `${appUrl()}${CALLBACK}` },
+    options: {
+      emailRedirectTo: `${appUrl()}${CALLBACK}${destination(formData)}`,
+    },
   })
 
   // Deliberately the same answer either way. Telling a visitor that an address

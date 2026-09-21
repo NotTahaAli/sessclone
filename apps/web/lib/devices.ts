@@ -20,7 +20,7 @@ export type Device = {
   nickname: string | null
   firstSeenAt: Date
   lastSeenAt: Date
-  /** Null until something has reported, which is not the same as zero. */
+  /** Turns reported in the last 30 days: the window the page asks about. */
   turns: number
 }
 
@@ -34,37 +34,52 @@ type DeviceRow = {
 }
 
 /**
+ * A page's worth of machines. A cloud account makes a Device per type and CI
+ * containers make more, so the list is capped rather than trusted to stay
+ * short; `docs/design/dashboard-wireframes.md` puts no pager on this screen.
+ */
+export const DEVICE_LIMIT = 50
+
+/**
  * The signed-in Member's own Devices, most recently seen first.
  *
- * The Turn count is a correlated aggregate rather than a join and a group by:
- * a Member has a handful of machines, and `turns_member_occurred_at_idx`
- * answers each count from the index. It is here because "is this machine
- * actually reporting" is the question the page exists to answer, and a
- * last-seen time alone does not distinguish a machine that reported once from
- * one that reports all day.
+ * The Turn count is a correlated aggregate rather than a join and a group by,
+ * and it is bounded to the last 30 days on both counts: bounded, it reaches
+ * `turns_device_occurred_at_idx` by its leading columns instead of counting a
+ * machine's whole history, and thirty days is the question the page asks —
+ * "is this machine still reporting", which a last-seen time alone does not
+ * answer for a machine that reported once.
  */
-export const listOwnDevices = async (tx: TransactionSql): Promise<Device[]> => {
+export const listOwnDevices = async (
+  tx: TransactionSql,
+  limit = DEVICE_LIMIT,
+): Promise<{ devices: Device[]; more: boolean }> => {
   const rows = await tx<DeviceRow[]>`
     select device.id,
            device.key,
            device.nickname,
            device.first_seen_at,
            device.last_seen_at,
-           (select count(*) from turns turn where turn.device_id = device.id)
-             as turns
+           (select count(*) from turns turn
+             where turn.device_id = device.id
+               and turn.occurred_at >= now() - interval '30 days') as turns
       from devices device
      where device.member_id in (select sessclone_own_member_ids())
      order by device.last_seen_at desc
+     limit ${limit + 1}
   `
 
-  return rows.map((row) => ({
-    id: row.id,
-    key: row.key,
-    nickname: row.nickname,
-    firstSeenAt: row.first_seen_at,
-    lastSeenAt: row.last_seen_at,
-    turns: Number(row.turns),
-  }))
+  return {
+    devices: rows.slice(0, limit).map((row) => ({
+      id: row.id,
+      key: row.key,
+      nickname: row.nickname,
+      firstSeenAt: row.first_seen_at,
+      lastSeenAt: row.last_seen_at,
+      turns: Number(row.turns),
+    })),
+    more: rows.length > limit,
+  }
 }
 
 /**

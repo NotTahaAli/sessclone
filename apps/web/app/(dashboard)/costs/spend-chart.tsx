@@ -68,7 +68,13 @@ export function SpendChart({ series }: { series: SpendSeries }) {
   // money axis keeps the room it needs even on the busiest day. With nothing
   // unpriced no cap is drawn, and reserving its room anyway would float the
   // top axis label a few percent above the bar it labels.
-  const headroom = series.unpricedTurns > 0 ? CAP.height + CAP.gap : 0
+  // Reserved for the cap above the *tallest* bar, which is the only one that
+  // can push the top axis label off its own bar. A day with unpriced Turns
+  // somewhere else in the range draws its cap inside the room it already has.
+  const capped = days.some(
+    (day) => day.costUsd === peak && day.unpricedTurns > 0,
+  )
+  const headroom = capped ? CAP.height + CAP.gap : 0
   const scale = peak > 0 ? (HEIGHT - headroom) / peak : 0
   const step = WIDTH / days.length
   // A day is a column with a hairline of air either side, and never narrower
@@ -94,7 +100,11 @@ export function SpendChart({ series }: { series: SpendSeries }) {
           role="img"
           aria-label={`Spend per day, ${shortDate(days[0]!.date)} to ${shortDate(
             days.at(-1)!.date,
-          )}, ${money.format(series.costUsd)} in total`}
+          )}, ${
+            series.costUsd === null
+              ? 'nothing priced yet'
+              : `${money.format(series.costUsd)} in total`
+          }`}
         >
           <defs>
             {/* A stripe of the ground at full opacity over the neutral, which

@@ -1,4 +1,5 @@
 import { sendMagicLink, signInWithGitHub } from './actions'
+import { safeNext } from '../../lib/auth/next-path'
 import { ProviderError } from './provider-error'
 
 // Deliberately unstyled. The design system (ticket 16) is documented and not
@@ -25,9 +26,18 @@ const PROVIDER_CODE = /^[a-z_]{1,64}$/
 export default async function SignIn({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; sent?: string; code?: string }>
+  searchParams: Promise<{
+    error?: string
+    sent?: string
+    code?: string
+    next?: string
+  }>
 }) {
-  const { error, sent, code } = await searchParams
+  const { error, sent, code, next } = await searchParams
+
+  // Carried through both forms so an invitation link survives the round trip
+  // to GitHub or to an inbox.
+  const returnTo = safeNext(next)
 
   return (
     <main>
@@ -55,10 +65,12 @@ export default async function SignIn({
       ) : null}
 
       <form action={signInWithGitHub}>
+        {returnTo ? <input type="hidden" name="next" value={returnTo} /> : null}
         <button type="submit">Continue with GitHub</button>
       </form>
 
       <form action={sendMagicLink}>
+        {returnTo ? <input type="hidden" name="next" value={returnTo} /> : null}
         <label htmlFor="email">Or get a sign-in link by email</label>
         <input
           id="email"

@@ -45,12 +45,22 @@ const EMPTY: Record<Dimension, string> = {
 export function RankedList({
   rows,
   dimension,
+  total,
   more = 0,
+  moreUnpriced = 0,
 }: {
   rows: BreakdownRow[]
   dimension: Dimension
+  /**
+   * The period's cost across every group, which is the figure in the Cost tile
+   * above. The shares are of that rather than of the rows shown, or past the
+   * cap a share times the headline total would be the wrong number of dollars.
+   */
+  total: number | null
   /** Groups the read left out, so the list says so rather than looking whole. */
   more?: number
+  /** Of those, how many have nothing priced: they sort last, so they go first. */
+  moreUnpriced?: number
 }) {
   if (rows.length === 0) {
     return (
@@ -63,8 +73,10 @@ export function RankedList({
   // The bar is a share of the largest row rather than of the total: at twenty
   // rows every bar would otherwise be a sliver, and the comparison the reader
   // is making is with the row above.
+  // The bar is a share of the largest row shown; the percentage is a share of
+  // the period. The two answer different questions and only one of them has to
+  // agree with the tile above.
   const peak = Math.max(...rows.map((row) => row.costUsd ?? 0))
-  const total = rows.reduce((sum, row) => sum + (row.costUsd ?? 0), 0)
 
   return (
     <ol className="flex flex-col">
@@ -88,7 +100,7 @@ export function RankedList({
                 {row.costUsd === null ? '—' : money.format(row.costUsd)}
               </span>
               <span className="text-text-muted text-caption">
-                {row.costUsd !== null && total > 0
+                {row.costUsd !== null && total !== null && total > 0
                   ? share.format(row.costUsd / total)
                   : '—'}
               </span>
@@ -113,7 +125,11 @@ export function RankedList({
       {more > 0 ? (
         <li className="text-text-muted py-3 text-caption">
           {whole.format(more)} more, below the {whole.format(rows.length)}{' '}
-          largest. The totals above count all of them.
+          largest
+          {moreUnpriced > 0
+            ? `, ${whole.format(moreUnpriced)} of them with nothing priced`
+            : ''}
+          . The totals above count all of them.
         </li>
       ) : null}
     </ol>
@@ -129,9 +145,10 @@ export function RankedList({
  * and at 5% steps nobody can see the difference on a 200px bar.
  */
 function Bar({ fraction }: { fraction: number }) {
-  // No floor: a row with nothing priced, or genuinely nothing spent, draws no
-  // bar rather than a sliver that reads as a small amount.
-  const step = Math.round(fraction * 20)
+  // A floor of one step so a small row is still visible, but only for a row
+  // that spent something: nothing priced, or nothing spent, draws no bar
+  // rather than a sliver that reads as a small amount.
+  const step = fraction > 0 ? Math.max(1, Math.round(fraction * 20)) : 0
   return (
     <div
       className="bg-accent-fill h-2 rounded-sm"

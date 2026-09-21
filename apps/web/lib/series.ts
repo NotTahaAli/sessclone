@@ -174,7 +174,8 @@ export type SpendSeries = {
   days: Day[]
   /** The legend, in slot order. */
   series: Series[]
-  costUsd: number
+  /** Null when nothing in the period is priced: never a confident zero. */
+  costUsd: number | null
   tokens: number
   turns: number
   unpricedTurns: number
@@ -301,7 +302,9 @@ export const spendSeries = (
     // strings here. In a zone whose DST transition lands on midnight they can
     // disagree, and a row outside the loop would drop out of the totals while
     // still being a Turn the reader spent money on.
-    costUsd: rows.reduce((sum, row) => sum + (row.costUsd ?? 0), 0),
+    costUsd: rows.every((row) => row.costUsd === null)
+      ? null
+      : rows.reduce((sum, row) => sum + (row.costUsd ?? 0), 0),
     tokens: rows.reduce((sum, row) => sum + row.tokens, 0),
     turns: rows.reduce((sum, row) => sum + row.turns, 0),
     unpricedTurns: rows.reduce((sum, row) => sum + row.unpricedTurns, 0),

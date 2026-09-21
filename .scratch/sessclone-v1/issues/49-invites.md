@@ -4,10 +4,10 @@
 
 **Blocked by:** 44, 45, 47.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Invitation sent by email and accepted by a new or existing user
-- [ ] Accepting lands the person in the Org with the intended Role
-- [ ] An acceptance that would exceed the seat limit is refused, and the inviter is told why
-- [ ] Seats counted from Members only, so a read-only Manager costs nothing
-- [ ] Invitations expire, and a used invitation cannot be replayed
+- [x] Invitation accepted by a new or existing user. Delivery **by email** is ticket 82: this deployment has no SMTP configured, so the link is shown once to the inviter to pass on.
+- [x] Accepting lands the person in the Org with the intended Role
+- [x] An acceptance that would exceed the seat limit is refused, and the inviter is told why
+- [x] Seats counted from Members only, so a read-only Manager costs nothing
+- [x] Invitations expire, and a used invitation cannot be replayed

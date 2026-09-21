@@ -30,7 +30,10 @@ import { NextResponse, type NextRequest } from 'next/server'
 // redirect, and it is worth knowing that costs nothing — this file is a
 // convenience for the person, and the rows are kept apart by the policies
 // (ADR 0001), not by a redirect.
-const PUBLIC_PATHS = ['/', '/pricing', '/sign-in', '/auth', '/api']
+// `/join` is ticket 49's: whoever opens an invitation may have no account at
+// all, and that page says so and sends them to sign in with the link kept, so
+// the invitation survives the round trip. Redirecting from here would drop it.
+const PUBLIC_PATHS = ['/', '/pricing', '/sign-in', '/auth', '/api', '/join']
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request })

@@ -322,7 +322,7 @@ test('a group with nothing priced reads as unknown, never as zero', async () => 
   // to the page is a figure that understates while looking authoritative.
   expect(rows[0]!.costUsd).toBeNull()
   expect(rows[0]).toMatchObject({ turns: 1, unpricedTurns: 1 })
-  expect(totals.costUsd).toBe(0)
+  expect(totals.costUsd).toBeNull()
   expect(totals.unpricedTurns).toBe(1)
 })
 

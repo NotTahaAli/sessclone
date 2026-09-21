@@ -86,7 +86,7 @@ const PHASES = [
     type: 'security',
     pos: [960, 560],
     range: [44, 57],
-    also: [77, 78],
+    also: [77, 78, 82],
   },
   {
     id: 'ship',

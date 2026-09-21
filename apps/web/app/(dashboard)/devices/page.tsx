@@ -21,7 +21,9 @@ export default async function Page() {
   const viewer = await currentViewer()
   if (!viewer) notFound()
 
-  const devices = await asViewer(viewer.userId, (tx) => listOwnDevices(tx))
+  const { devices, more } = await asViewer(viewer.userId, (tx) =>
+    listOwnDevices(tx),
+  )
 
   // In the Org's timezone, like every other date on the dashboard: a Turn is
   // counted on the Org's day, so a machine's last-reported time is read
@@ -54,6 +56,11 @@ export default async function Page() {
               <DeviceCard key={device.id} device={device} when={when} />
             ))}
           </ul>
+          {more ? (
+            <p className="text-text-muted text-caption">
+              Only your {devices.length} most recently seen machines are shown.
+            </p>
+          ) : null}
         </>
       )}
     </div>
@@ -82,7 +89,7 @@ function DeviceCard({
       <p className="text-text-secondary mt-2 text-sm">
         Last reported {when.format(device.lastSeenAt)} · first seen{' '}
         {when.format(device.firstSeenAt)} · {whole.format(device.turns)}{' '}
-        {device.turns === 1 ? 'turn' : 'turns'}
+        {device.turns === 1 ? 'turn' : 'turns'} in the last 30 days
       </p>
 
       <RenameForm
