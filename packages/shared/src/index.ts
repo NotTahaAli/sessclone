@@ -14,3 +14,5 @@ export {
   TranscriptReport,
 } from './ingest.ts'
 export type { IngestResponse } from './ingest.ts'
+export { PresignRequest } from './presign.ts'
+export type { PresignRefusal, PresignResponse } from './presign.ts'

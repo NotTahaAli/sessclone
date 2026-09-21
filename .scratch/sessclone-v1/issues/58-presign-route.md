@@ -4,13 +4,13 @@
 
 **Blocked by:** 12, 14, 22, 24, 44, 47.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Issues a short-lived upload URL for the Member's own Session only
-- [ ] Refuses when the submitted hash matches what is already stored
-- [ ] Resolves the Session to its Project server-side, ignoring the Project the request claims
-- [ ] Refuses when the Member's archival master switch is off
-- [ ] Refuses when the Member has excluded that Session's Project, with a reason distinguishable from the master switch being off
-- [ ] Refuses when the Tier excludes archival, with a reason distinguishable from both
-- [ ] Refuses when the Session has no ingested Turns to resolve a Project from
-- [ ] All five refusals covered by route tests
+- [x] Issues a short-lived upload URL for the Member's own Session only
+- [x] Refuses when the submitted hash matches what is already stored
+- [x] Resolves the Session to its Project server-side, ignoring the Project the request claims
+- [x] Refuses when the Member's archival master switch is off
+- [x] Refuses when the Member has excluded that Session's Project, with a reason distinguishable from the master switch being off
+- [x] Refuses when the Tier excludes archival, with a reason distinguishable from both
+- [x] Refuses when the Session has no ingested Turns to resolve a Project from
+- [x] All five refusals covered by route tests

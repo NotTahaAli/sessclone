@@ -1,0 +1,111 @@
+import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+
+// ADR 0003: the bytes never pass through this application. The Collector PUTs
+// straight to storage with a URL issued here, which is why this module knows
+// how to sign a request and nothing about transcripts.
+//
+// Only the S3 API is used, and no code path knows the provider: Supabase
+// Storage, Cloudflare R2, AWS, Oracle Cloud and MinIO are the same five
+// environment variables (`docs/configuration.md` § Storage). `forcePathStyle`
+// defaults to true because MinIO and Supabase require it and AWS accepts it —
+// the opposite default would break a self-hoster and work for us, which is the
+// wrong way round.
+
+export const PRESIGN_TTL_SECONDS = 300
+
+let client: S3Client | undefined
+
+const storage = () => {
+  // As in `lib/db.ts`: name what is missing rather than failing inside the
+  // client with something about an invalid URL. A deployment without storage
+  // configured has archival switched off, not half-working.
+  const endpoint = required('STORAGE_ENDPOINT')
+  const accessKeyId = required('STORAGE_ACCESS_KEY_ID')
+  const secretAccessKey = required('STORAGE_SECRET_ACCESS_KEY')
+
+  return (client ??= new S3Client({
+    endpoint,
+    region: process.env.STORAGE_REGION ?? 'auto',
+    forcePathStyle: process.env.STORAGE_FORCE_PATH_STYLE !== 'false',
+    credentials: { accessKeyId, secretAccessKey },
+  }))
+}
+
+const required = (name: string) => {
+  const value = process.env[name]
+  if (!value) throw new Error(`${name} is not set`)
+  return value
+}
+
+/** Whether this deployment can archive at all. */
+export const storageConfigured = () =>
+  Boolean(
+    process.env.STORAGE_ENDPOINT &&
+      process.env.STORAGE_BUCKET &&
+      process.env.STORAGE_ACCESS_KEY_ID &&
+      process.env.STORAGE_SECRET_ACCESS_KEY,
+  )
+
+/**
+ * The object key for one Session's transcript, from ADR 0003.
+ *
+ * ```
+ * orgs/<org>/members/<member>/projects/<project key>/<session>.jsonl
+ * ```
+ *
+ * The Project key contains slashes — `host/owner/repo`, or a `local:` key
+ * carrying an absolute path — so it is percent-encoded into one segment.
+ * Raw, it would both break the prefix a per-Project sweep depends on (ADR
+ * 0005) and let a key escape its own prefix. The Session and Agent ids are
+ * encoded for the same reason: they arrive from a Collector.
+ */
+export const artifactKey = (artifact: {
+  orgId: string
+  memberId: string
+  projectKey: string | null
+  sessionId: string
+  agentId: string | null
+}) => {
+  const name = artifact.agentId
+    ? `${encodeURIComponent(artifact.sessionId)}/agents/${encodeURIComponent(artifact.agentId)}.jsonl`
+    : `${encodeURIComponent(artifact.sessionId)}.jsonl`
+
+  // A Session outside any repository still has a transcript, and it needs a
+  // segment of its own rather than an empty one — two slashes in a row is a
+  // different key to some providers and the same to others.
+  const project = encodeURIComponent(artifact.projectKey ?? 'none')
+
+  return `orgs/${artifact.orgId}/members/${artifact.memberId}/projects/${project}/${name}`
+}
+
+/**
+ * A short-lived PUT URL for one object.
+ *
+ * A presigned URL is a bearer credential, so its life is short and
+ * configurable — five minutes by default, which is long enough to upload a
+ * transcript on a bad connection and short enough that a leaked URL is a
+ * window rather than a grant.
+ *
+ * `ChecksumSHA256` is deliberately not set: the Collector's hash is base16 and
+ * S3 wants base64, and signing the checksum would make the URL refuse an
+ * upload whose bytes changed between the hash and the PUT — which is exactly
+ * what happens to a transcript that grows while it is being read.
+ */
+export const presignUpload = async (key: string) =>
+  getSignedUrl(
+    storage(),
+    new PutObjectCommand({
+      Bucket: required('STORAGE_BUCKET'),
+      Key: key,
+      ContentType: 'application/x-ndjson',
+    }),
+    { expiresIn: ttl() },
+  )
+
+const ttl = () => {
+  const configured = Number(process.env.STORAGE_PRESIGN_TTL_SECONDS)
+  return Number.isFinite(configured) && configured > 0
+    ? configured
+    : PRESIGN_TTL_SECONDS
+}

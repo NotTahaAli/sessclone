@@ -229,17 +229,19 @@ test('the price list can be filtered by model, and says when it is cut', async (
   // classes crosses 200 rows in two price revisions, and this page is the
   // only place a Rate can be deleted — so a row the cut hides is a row nobody
   // can correct.
-  await asOperator(async (tx) => {
-    for (const model of ['claude-opus-9', 'claude-haiku-9']) {
-      await addRate(tx, {
-        model,
-        class: 'input',
-        priceUsd: 5,
-        effectiveFrom: '2026-01-01',
-        source: null,
-      })
-    }
-  })
+  await asOperator((tx) =>
+    Promise.all(
+      ['claude-opus-9', 'claude-haiku-9'].map((model) =>
+        addRate(tx, {
+          model,
+          class: 'input',
+          priceUsd: 5,
+          effectiveFrom: '2026-01-01',
+          source: null,
+        }),
+      ),
+    ),
+  )
 
   const { rates } = await asOperator((tx) =>
     listRates(tx, { model: 'haiku-9' }),
