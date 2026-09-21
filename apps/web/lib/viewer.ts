@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { asViewer } from './db'
 import { signedInUser } from './supabase/server'
 
@@ -42,8 +43,14 @@ type MembershipRow = {
  * The *first* membership when they belong to several, matching
  * `ensureOrgForSigner`: v1 has one Org per person and no Org switcher, so the
  * ticket that adds a second Org is the one that decides which is current.
+ *
+ * `cache` is what makes "read once per request" true rather than aspirational:
+ * the layout and the page it wraps both call this while rendering the same
+ * request, and without it that is two `signedInUser()` round trips and two
+ * `asViewer` transactions for one navigation. React deduplicates them for the
+ * life of the request and no longer.
  */
-export const currentViewer = async (): Promise<Viewer | null> => {
+export const currentViewer = cache(async (): Promise<Viewer | null> => {
   const user = await signedInUser()
   if (!user) return null
 
@@ -72,7 +79,7 @@ export const currentViewer = async (): Promise<Viewer | null> => {
     orgName: membership.org_name,
     role: membership.role,
   }
-}
+})
 
 /**
  * Whether this Role reaches Org settings.

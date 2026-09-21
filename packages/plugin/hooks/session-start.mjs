@@ -10,10 +10,15 @@
 // report that a deployment is down; a notice once, at startup, naming the
 // variable to fix, is the loud failure this ticket asks for.
 //
-// Exit 1 and not 2: 2 is the blocking code, and a Collector that cannot report
-// is no reason to stop somebody working. The message goes to stderr, which
-// Claude Code shows to the person rather than adding to the transcript — the
-// key itself never appears in it either way (see `ConfigurationError`).
+// Exit 2, which on this event is both non-blocking and the only code that
+// shows the whole message. The hooks reference is explicit on each half: a
+// non-zero, non-2 exit surfaces only the *first line* of stderr, behind a
+// generic error notice, with the rest available solely under `claude --debug`
+// — which would drop every `- SESSCLONE_API_KEY is …` line, the one part of
+// this that tells somebody what to fix. And `SessionStart` is one of the
+// events that cannot be blocked, so 2 shows the message and execution
+// continues; it stops nobody working. The key itself never appears either way
+// (see `ConfigurationError`).
 //
 // Later tickets grow this hook into the sweep the spec describes (§5.2): drain
 // the retry queue and re-send unfinished sessions. Both need the configuration
@@ -32,5 +37,5 @@ try {
       .map((problem) => `  - ${problem}`)
       .join('\n')}\nSee docs/configuration.md for the full list.\n`,
   )
-  process.exit(1)
+  process.exit(2)
 }

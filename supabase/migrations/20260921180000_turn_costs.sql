@@ -18,24 +18,39 @@
 -- rather than a list somebody has to remember to extend.
 --
 -- Claude model ids are `claude-<family>-<major>[-<minor>][-<snapshot>]`, and
--- every id in the seed parses: `claude-sonnet-5` is 5, `claude-fable-5-1` is
--- 5.1, and `claude-opus-4-5-20251101` is 4.5 with the dated snapshot ignored.
--- Anything else — a Bedrock id, a Vertex id, `<synthetic>`, null — is null,
--- and a null generation fails every comparison below, so an id this cannot
--- read is an id that gets no modifier rather than the wrong one.
+-- every id in the seed parses: `claude-sonnet-5` is 5.00, `claude-fable-5-1`
+-- is 5.01, and `claude-opus-4-5-20251101` is 4.05 with the dated snapshot
+-- ignored. A Vertex id spells its snapshot with an `@` rather than a `-`, so
+-- both separators are a character class: `claude-opus-4-8@20260101` is 4.08
+-- and not, as it was, a bare 4 that quietly lost both modifiers.
+-- Anything else — a Bedrock id, `<synthetic>`, null — is null, and a null
+-- generation fails every comparison below, so an id this cannot read is an id
+-- that gets no modifier rather than the wrong one.
+--
+-- The minor is hundredths rather than tenths, which is why the thresholds
+-- below read 4.08 and 4.06. A minor is a counter and not a decimal: at tenths
+-- a two-digit minor overflows into the next generation (`claude-opus-4-10`
+-- would be 5.0), and at hundredths it orders correctly against 4.08 — which
+-- is the comparison, and the only thing this number is for.
 --
 -- Two `substring`s and no `from` clause, deliberately: Postgres inlines a
 -- scalar SQL function only when its body has none, and this one is called per
 -- Turn. `sessclone_resolve_rate` is the counter-example — it cannot inline,
--- which is why it is not what the view below uses.
+-- which is why it is not what the view below uses. That is also why neither
+-- function here carries the `set search_path = public` that
+-- `20260920120600_search_path.sql` pins on the rest: a `SET` clause blocks
+-- inlining outright, and neither of these two reads a relation, so there is
+-- nothing for a `pg_temp` table to shadow.
 create or replace function sessclone_model_generation(model_id text)
   returns numeric
   language sql immutable parallel safe as $$
-  select substring(model_id from '^claude-[a-z]+-(\d+)')::numeric
+  select substring(model_id from '^claude-[a-z]+-(\d+)(?:[-@]|$)')::numeric
        + coalesce(
-           substring(model_id from '^claude-[a-z]+-\d+-(\d{1,2})(?:$|-)')::numeric,
+           substring(
+             model_id from '^claude-[a-z]+-\d+-(\d{1,2})(?:$|[-@])'
+           )::numeric,
            0
-         ) / 10
+         ) / 100
 $$;
 
 -- What the three modifiers in ADR 0002 multiply a resolved rate by, together.
@@ -46,6 +61,13 @@ $$;
 --     A fast-mode session priced at standard rates is understated by half.
 --   - **US-only inference** is 1.1x across every class, on 4.6 and later.
 --   - **The batch tier** is the Batch API's 50% discount.
+--
+-- "Every class" means every class the rate table prices *per model*. The two
+-- server-tool classes are priced per thousand requests and model-independent
+-- — the rate seed says $10 per 1,000 searches "whoever answered" — so a fast
+-- Opus session must not turn a $10 search into a $20 one. The view below
+-- applies this to the token classes only, which is where the values list says
+-- so.
 --
 -- They multiply rather than being classes in the rate table: as classes they
 -- would need a row per combination per model, which is the same price written
@@ -66,12 +88,12 @@ create or replace function sessclone_price_multiplier(
   select case
            when speed = 'fast'
             and model_id like 'claude-opus-%'
-            and sessclone_model_generation(model_id) >= 4.8 then 2
+            and sessclone_model_generation(model_id) >= 4.08 then 2
            else 1
          end
        * case
            when inference_geo = 'us'
-            and sessclone_model_generation(model_id) >= 4.6 then 1.1
+            and sessclone_model_generation(model_id) >= 4.06 then 1.1
            else 1
          end
        * case when service_tier = 'batch' then 0.5 else 1 end
@@ -143,6 +165,15 @@ comment on view rate_periods is
 -- (tickets 43 and 52 onwards) are already selecting from `turns` — they join
 -- this to it.
 --
+-- That narrowness has a cost the charts will have to pay: the `group by` here
+-- means a caller's `org_id` and date range cannot push into the view, so a
+-- join from a filtered `turns` prices the whole deployment first. Measured on
+-- one box at 200k Turns, a 30-day org chart takes 21.9s against 39ms for the
+-- same arithmetic written inline. Ticket 81 carries the fix — one row per Turn
+-- throughout, with the rates resolved into columns rather than into a
+-- `distinct on` over seven rows per Turn — and is blocking ticket 52, which is
+-- the first thing that would read this at that size.
+--
 -- `security_invoker` again, and here it is load-bearing twice over: `turns`
 -- carries the read policy that decides whose usage a Member may see, and a
 -- view that bypassed it would hand every Org's spend to anyone signed in.
@@ -158,10 +189,19 @@ with quantities as (
   -- `cache_creation_input_tokens` because it is the reported *total* whose
   -- split is already priced above it — counting either would bill the same
   -- tokens twice.
+  --
+  -- The split is not always reported, though. `packages/shared/src/turns.ts`
+  -- says so: an entry that states no split at all is zero against a non-zero
+  -- total. Pricing that at the 5m rate would be a guess and pricing it at
+  -- nothing is the $0-that-looks-authoritative ADR 0002 forbids, so the
+  -- shortfall makes the Turn unpriced — `cache_split_missing` below.
   select
     turn.id,
     turn.org_id,
     turn.model,
+    turn.cache_creation_input_tokens
+      > turn.cache_creation_5m_input_tokens
+      + turn.cache_creation_1h_input_tokens as cache_split_missing,
     -- The day the Turn ran, which is what a Rate is effective from. In UTC:
     -- the Org timezone is ticket 51, and bucketing a Turn into the Org's own
     -- day is that ticket's to apply here once it exists.
@@ -170,17 +210,25 @@ with quantities as (
       turn.model, turn.speed, turn.inference_geo, turn.service_tier
     ) as multiplier,
     priced.class,
-    priced.quantity
+    priced.quantity,
+    priced.per_unit,
+    priced.modified
   from turns turn
+  -- The class, its quantity, the unit its Rate is quoted in, and whether the
+  -- three modifiers apply to it — spelled out here rather than derived per
+  -- row. `sessclone_rate_unit` would answer the third, but it is
+  -- `parallel unsafe` and carries a `SET` clause, so calling it in the select
+  -- list below would cost the whole query its parallel plan for a fact this
+  -- list already knows.
   cross join lateral (values
-    ('input'::rate_class, turn.input_tokens),
-    ('output', turn.output_tokens),
-    ('cache_read', turn.cache_read_input_tokens),
-    ('cache_write_5m', turn.cache_creation_5m_input_tokens),
-    ('cache_write_1h', turn.cache_creation_1h_input_tokens),
-    ('web_search_request', turn.web_search_requests),
-    ('web_fetch_request', turn.web_fetch_requests)
-  ) as priced (class, quantity)
+    ('input'::rate_class, turn.input_tokens, 1000000, true),
+    ('output', turn.output_tokens, 1000000, true),
+    ('cache_read', turn.cache_read_input_tokens, 1000000, true),
+    ('cache_write_5m', turn.cache_creation_5m_input_tokens, 1000000, true),
+    ('cache_write_1h', turn.cache_creation_1h_input_tokens, 1000000, true),
+    ('web_search_request', turn.web_search_requests, 1000, false),
+    ('web_fetch_request', turn.web_fetch_requests, 1000, false)
+  ) as priced (class, quantity, per_unit, modified)
 ),
 resolved as (
   -- The winning Rate for each (Turn, class), by the precedence the rates
@@ -196,7 +244,10 @@ resolved as (
     quantities.id,
     quantities.class,
     quantities.quantity,
-    quantities.multiplier,
+    quantities.per_unit,
+    quantities.cache_split_missing,
+    case when quantities.modified then quantities.multiplier else 1 end
+      as multiplier,
     rate.price_usd
   from quantities
   left join rate_periods rate
@@ -221,25 +272,19 @@ select
   -- contributes nothing either way.
   case
     when bool_or(resolved.price_usd is null and resolved.quantity > 0)
+      or bool_or(resolved.cache_split_missing)
       then null
     else sum(
-      resolved.quantity
-      * resolved.price_usd
-      * resolved.multiplier
-      -- The unit follows from the class, as `sessclone_rate_unit` says: the
-      -- five token classes are per million tokens, the two request classes per
-      -- thousand requests.
-      / case
-          when sessclone_rate_unit(resolved.class) = 'per_krequests'
-            then 1000
-          else 1000000
-        end
+      resolved.quantity * resolved.price_usd * resolved.multiplier
+        / resolved.per_unit
     )
   end as cost_usd,
   -- What the dashboard counts and labels rather than hiding: a Turn that is
   -- real usage with an unknown cost (`docs/design/dashboard-wireframes.md`,
-  -- "Unpriced turns").
-  bool_or(resolved.price_usd is null and resolved.quantity > 0) as unpriced
+  -- "Unpriced turns"). A reported cache-write total with no split is that
+  -- same thing: usage that happened, at a price this cannot name.
+  bool_or(resolved.price_usd is null and resolved.quantity > 0)
+    or bool_or(resolved.cache_split_missing) as unpriced
 from resolved
 group by resolved.id;
 

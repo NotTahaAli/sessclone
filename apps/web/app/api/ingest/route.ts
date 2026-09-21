@@ -188,6 +188,16 @@ export async function POST(request: Request) {
   // nothing under it.
   const { keyId, memberId, orgId } = caller
 
+  // Outside the transaction below, and before it, because it is evidence of a
+  // *request* rather than of a write. It surfaces in the key list (ticket 28)
+  // and, more importantly, in onboarding, where it is the one piece of
+  // evidence that a Collector has ever reached this deployment: a key that has
+  // been used but has landed no Turn is a different failure from one that has
+  // never been used at all (`docs/design/product-ia.md`, step 6). Rolled back
+  // with a refused batch it would be absent in exactly the case somebody needs
+  // it to diagnose, and the Owner would be told nothing had ever arrived.
+  await sql`update api_keys set last_used_at = now() where id = ${keyId}`
+
   // One transaction around every write. Without it a batch that passes the
   // schema and fails a database check — a constraint the schema does not
   // mirror, a counter past `integer` — leaves the Device and the Project rows
@@ -286,15 +296,6 @@ export async function POST(request: Request) {
           on conflict (member_id, session_id, agent_id, message_id) do nothing
         `
       }
-
-      // Last inside the transaction, so a batch the database refuses leaves
-      // no trace of having been tried — the same rule as the Device and
-      // Project rows. It surfaces in the key list (ticket 28), where it is the
-      // one piece of evidence that a Collector has ever reached this
-      // deployment: onboarding reads a key that has been used but has landed
-      // no Turn as a different failure from one that has never been used at
-      // all (`docs/design/product-ia.md`, step 6).
-      await tx`update api_keys set last_used_at = now() where id = ${keyId}`
     })
   } catch (error) {
     return databaseFailure(error)

@@ -183,14 +183,78 @@ test('US-only inference does not reach back before 4.6', async () => {
   expect((await costOf(older)).cost).toBe(1)
 })
 
-test('the batch tier halves the whole Turn', async () => {
+test('the batch tier halves the tokens and leaves the server tools alone', async () => {
   const batch = await seedTurn({
     service_tier: 'batch',
     input_tokens: MILLION,
     web_search_requests: 1000,
   })
 
-  expect((await costOf(batch)).cost).toBe((5 + 10) / 2)
+  expect((await costOf(batch)).cost).toBe(5 / 2 + 10)
+})
+
+test('the modifiers never reach the model-independent server-tool rates', async () => {
+  // The rate seed prices a web search at $10 per 1,000 "whoever answered", so
+  // it is not a per-model rate and the three per-model modifiers have nothing
+  // to say about it. Applied anyway, this Turn's searches would cost $11 —
+  // and $20 on fast mode alone.
+  const turn = await seedTurn({
+    model: 'claude-opus-5',
+    speed: 'fast',
+    inference_geo: 'us',
+    service_tier: 'batch',
+    web_search_requests: 1000,
+  })
+
+  expect((await costOf(turn)).cost).toBe(10)
+})
+
+test('a Vertex model id carries the same generation as its plain form', async () => {
+  // Vertex spells the snapshot with an `@` rather than a `-`. Read as a bare
+  // major, a fast-mode US Opus 4.8 loses both modifiers and is understated by
+  // 55% — silently, and reported as priced. A rate row naming the Vertex id
+  // (an Org override, say) would then be multiplied by 1 instead of 2.2.
+  //
+  // Tested through the function rather than a Turn because a rate matches a
+  // model id exactly, so a Vertex id with no row of its own is unpriced for
+  // that reason and would hide this one.
+  const [row] = await sql<{ vertex: number; plain: number }[]>`
+    select sessclone_price_multiplier(
+             'claude-opus-4-8@20260101', 'fast', 'us', 'standard'
+           )::float8 as vertex,
+           sessclone_price_multiplier(
+             'claude-opus-4-8', 'fast', 'us', 'standard'
+           )::float8 as plain
+  `
+
+  expect(row!.vertex).toBeCloseTo(2.2, 10)
+  expect(row!.vertex).toBe(row!.plain)
+})
+
+test('a two-digit minor version is a later generation, not an earlier one', async () => {
+  // A minor is a counter and not a decimal. Folded in as tenths,
+  // `claude-opus-4-10` reads as 5.0 — a generation that does not exist.
+  const [row] = await sql<{ ten: number; eight: number; five: number }[]>`
+    select sessclone_model_generation('claude-opus-4-10')::float8 as ten,
+           sessclone_model_generation('claude-opus-4-8')::float8 as eight,
+           sessclone_model_generation('claude-opus-5')::float8 as five
+  `
+
+  expect(row!.ten).toBeGreaterThan(row!.eight)
+  expect(row!.ten).toBeLessThan(row!.five)
+})
+
+test('a reported cache-write total with no split is unpriced, not free', async () => {
+  // `packages/shared/src/turns.ts`: an entry can state a total and no split at
+  // all. Pricing the shortfall at the 5m rate would be a guess; pricing it at
+  // nothing is the $0-that-looks-authoritative ADR 0002 forbids.
+  const turn = await seedTurn({
+    cache_creation_input_tokens: MILLION,
+    cache_creation_5m_input_tokens: 0,
+    cache_creation_1h_input_tokens: 0,
+  })
+
+  expect(await costOf(turn)).toEqual({ cost: null, unpriced: true })
 })
 
 test('the modifiers compose rather than overriding one another', async () => {

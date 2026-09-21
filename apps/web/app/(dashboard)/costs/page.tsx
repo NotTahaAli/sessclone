@@ -30,7 +30,7 @@ const CREATE_A_KEY = { href: '/keys', label: 'Create a key' }
 type Facts = {
   has_key: boolean
   key_used: boolean
-  own_turns: number
+  any_turns: boolean
 }
 
 export default async function Costs() {
@@ -48,8 +48,14 @@ export default async function Costs() {
           select 1 from api_keys
            where revoked_at is null and last_used_at is not null
         ) as key_used,
-        (select count(*)::int from turns where member_id = ${viewer.memberId})
-          as own_turns
+        -- No where clause here either, and the reason is the point: an
+        -- Owner whose engineers have been collecting for a week, but who has
+        -- not run a Collector themselves, is not still onboarding. The
+        -- turns_read policy already narrows a Member to their own Turns and a
+        -- Manager to their Scope, so this is the right answer for every Role
+        -- for free. exists and not count(*), because the branch below asks
+        -- whether there is a Turn and nothing renders the number.
+        exists (select 1 from turns) as any_turns
     `,
   )
 
@@ -79,14 +85,14 @@ function Body({ facts }: { facts: Facts }) {
     )
   }
 
-  if (facts.own_turns === 0) return <Waiting keyUsed={facts.key_used} />
+  if (!facts.any_turns) return <Waiting keyUsed={facts.key_used} />
 
   // Turns exist, and drawing them is tickets 52 to 56. Saying so plainly beats
   // an empty panel that looks like a bug.
   return (
     <EmptyState headline="Collection is working">
-      {facts.own_turns} of your Turns have arrived. The charts that break them
-      down by time, Member, Project and Device are still being built.
+      Turns are arriving. The charts that break them down by time, Member,
+      Project and Device are still being built.
     </EmptyState>
   )
 }

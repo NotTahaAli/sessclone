@@ -441,9 +441,13 @@ test('an accepted report writes the last-used time on the key it came with', asy
   expect(globex!.last_used_at).toBeNull()
 })
 
-test('a refused batch leaves the last-used time where it was', async () => {
-  // It is written inside the transaction, so "the Collector reached us" and
-  // "the Collector reported something" cannot disagree.
+test('a refused batch still records that the Collector reached us', async () => {
+  // The last-used time is evidence of a *request*, not of a write, and it is
+  // written outside the transaction for that reason. Rolled back with the
+  // batch it would be absent in exactly the case somebody needs it to
+  // diagnose: onboarding would tell the Owner that nothing had ever arrived
+  // (`docs/design/product-ia.md`, step 6) while the Collector was reaching the
+  // deployment and being refused on every report.
   await post(
     payload({
       reports: [
@@ -457,5 +461,9 @@ test('a refused batch leaves the last-used time where it was', async () => {
   const [key] = await sql<{ last_used_at: Date | null }[]>`
     select last_used_at from api_keys where key_prefix = ${acmeKey.slice(0, 12)}
   `
-  expect(key!.last_used_at).toBeNull()
+  expect(key!.last_used_at).not.toBeNull()
+
+  // And nothing was written, which is what the transaction is for.
+  const [turns] = await sql<{ count: string }[]>`select count(*) from turns`
+  expect(turns!.count).toBe('0')
 })
