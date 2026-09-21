@@ -1,5 +1,7 @@
 import { RangeControl } from './range-control'
+import { RankedList } from './ranked-list'
 import { SpendChart } from './spend-chart'
+import { resolveView, viewHref, VIEWS, type View } from './views'
 import { EmptyState } from '../empty-state'
 import { InstallCollector } from '../install-collector'
 import { PageHeader } from '../page-header'
@@ -10,14 +12,24 @@ import {
   onboardingState,
   type OnboardingFacts,
 } from '../../../lib/onboarding'
+import {
+  breakdown,
+  type BreakdownRow,
+  type Dimension,
+} from '../../../lib/breakdown'
 import { resolveRange, type RangeParams } from '../../../lib/range'
 import { dailySpend, spendSeries, type SpendSeries } from '../../../lib/series'
 import { currentViewer } from '../../../lib/viewer'
+import Link from 'next/link'
 
 // Costs. Ticket 45 owns the frame and the states before there is anything to
-// draw; ticket 52 owns the first thing drawn in it, which is spend over time.
-// The breakdowns by Member, Project and Device are 54 to 56 and hang from the
-// same range.
+// draw, 52 the spend over time, 53 the period, and 54 to 56 the three
+// breakdowns — by person, by codebase and by machine.
+//
+// Four views, one period. The view and the period are both in the URL and the
+// period survives a switch between views, because the reader is changing the
+// cut rather than the question. Which rows each Role sees is the policy's
+// answer and not this page's (ADR 0001).
 //
 // The range is ticket 53's: read from the URL, defaulting to the current
 // calendar month in the Org's timezone, which
@@ -55,31 +67,88 @@ function OverTime({ series }: { series: SpendSeries }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Tile label="Cost" value={money.format(series.costUsd)}>
-          {series.unpricedTurns > 0 ? 'priced Turns only' : 'this period'}
-        </Tile>
-        <Tile label="Tokens" value={compact.format(series.tokens)}>
-          input, output and cache
-        </Tile>
-        <Tile label="Turns" value={whole.format(series.turns)}>
-          reported in this period
-        </Tile>
-        <Tile
-          label="Unpriced"
-          value={whole.format(series.unpricedTurns)}
-          quiet={series.unpricedTurns === 0}
-        >
-          {series.unpricedTurns === 0
-            ? 'every Turn has a Rate'
-            : 'real usage, cost unknown'}
-        </Tile>
-      </dl>
+      <Totals
+        costUsd={series.costUsd}
+        tokens={series.tokens}
+        turns={series.turns}
+        unpricedTurns={series.unpricedTurns}
+      />
 
       <div className="border-rule bg-surface rounded-md border p-4">
         <SpendChart series={series} />
       </div>
     </div>
+  )
+}
+
+/**
+ * A breakdown, with the same four figures above it as the chart has.
+ *
+ * The tiles are computed from the rows rather than read again: the rows are
+ * the period's Turns cut a different way, so their sums are the period's sums,
+ * and a second query would be a second chance to disagree with the list under
+ * it.
+ */
+function Ranked({
+  rows,
+  dimension,
+}: {
+  rows: BreakdownRow[]
+  dimension: Dimension
+}) {
+  const totals = rows.reduce(
+    (sum, row) => ({
+      costUsd: sum.costUsd + row.costUsd,
+      tokens: sum.tokens + row.tokens,
+      turns: sum.turns + row.turns,
+      unpricedTurns: sum.unpricedTurns + row.unpricedTurns,
+    }),
+    { costUsd: 0, tokens: 0, turns: 0, unpricedTurns: 0 },
+  )
+
+  return (
+    <div className="flex flex-col gap-6">
+      <Totals {...totals} />
+      <div className="border-rule bg-surface rounded-md border p-4">
+        <RankedList rows={rows} dimension={dimension} />
+      </div>
+    </div>
+  )
+}
+
+/** The four figures every Costs view carries, in the same order everywhere. */
+function Totals({
+  costUsd,
+  tokens,
+  turns,
+  unpricedTurns,
+}: {
+  costUsd: number
+  tokens: number
+  turns: number
+  unpricedTurns: number
+}) {
+  return (
+    <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <Tile label="Cost" value={money.format(costUsd)}>
+        {unpricedTurns > 0 ? 'priced Turns only' : 'this period'}
+      </Tile>
+      <Tile label="Tokens" value={compact.format(tokens)}>
+        input, output and cache
+      </Tile>
+      <Tile label="Turns" value={whole.format(turns)}>
+        reported in this period
+      </Tile>
+      <Tile
+        label="Unpriced"
+        value={whole.format(unpricedTurns)}
+        quiet={unpricedTurns === 0}
+      >
+        {unpricedTurns === 0
+          ? 'every Turn has a Rate'
+          : 'real usage, cost unknown'}
+      </Tile>
+    </dl>
   )
 }
 
@@ -107,13 +176,54 @@ function Tile({
   )
 }
 
+/**
+ * The four cuts, as links.
+ *
+ * A link rather than a control, for the same reason the period is: choosing a
+ * view is a navigation, and a navigation is what a browser already does well.
+ */
+function ViewTabs({
+  current,
+  params,
+}: {
+  current: View
+  params: Record<string, string | string[] | undefined>
+}) {
+  return (
+    <nav aria-label="Costs views">
+      <ul className="border-rule flex gap-1 border-b">
+        {VIEWS.map((view) => {
+          const active = view.key === current
+          return (
+            <li key={view.key}>
+              <Link
+                href={viewHref('/costs', view.key, params)}
+                aria-current={active ? 'page' : undefined}
+                className={`-mb-px flex h-9 items-center border-b-2 px-3 text-body ${
+                  active
+                    ? 'border-accent-border text-accent-text'
+                    : 'text-text-secondary border-transparent'
+                }`}
+              >
+                {view.label}
+              </Link>
+            </li>
+          )
+        })}
+      </ul>
+    </nav>
+  )
+}
+
 /** The one action an empty Costs offers, hoisted so it is one object. */
 const CREATE_A_KEY = { href: '/keys', label: 'Create a key' }
+
+type Params = RangeParams & { view?: string | string[] }
 
 export default async function Costs({
   searchParams,
 }: {
-  searchParams: Promise<RangeParams>
+  searchParams: Promise<Params>
 }) {
   const viewer = await currentViewer()
   // The layout above has already refused this case; the narrowing is for the
@@ -123,18 +233,26 @@ export default async function Costs({
   // Ticket 53: the period comes from the URL, so a link to this page is a link
   // to a period. Anything the URL cannot mean falls back to the default rather
   // than failing the page.
-  const resolved = resolveRange(await searchParams, viewer.orgTimezone)
+  const params = await searchParams
+  const resolved = resolveRange(params, viewer.orgTimezone)
   const { range } = resolved
+  const view = resolveView(params.view)
 
-  // One transaction, two independent reads. The spend read is wasted on a
-  // deployment with no Turns at all, which is one index probe that finds
-  // nothing — cheaper than the second round trip avoiding it would cost.
-  const [facts, rows] = await asViewer(viewer.userId, (tx) =>
+  // One transaction, and only the read this view needs beside the facts that
+  // decide whether there is anything to draw at all. The two reads are
+  // independent, so they go together rather than one after the other.
+  const [facts, days, ranked] = await asViewer(viewer.userId, (tx) =>
     Promise.all([
       onboardingFacts(tx, viewer.orgId),
-      dailySpend(tx, viewer.orgId, viewer.orgTimezone, range),
+      view === 'time'
+        ? dailySpend(tx, viewer.orgId, viewer.orgTimezone, range)
+        : null,
+      view === 'time'
+        ? null
+        : breakdown(tx, viewer.orgId, viewer.orgTimezone, range, view),
     ]),
   )
+  const spend = days === null ? null : spendSeries(days, range)
 
   return (
     <div className="flex flex-col gap-6">
@@ -143,23 +261,36 @@ export default async function Costs({
         description={`What ${viewer.orgName} is spending, estimated from usage and published prices.`}
       />
       {onboardingState(facts) === 'collecting' ? (
-        <RangeControl path="/costs" resolved={resolved} />
+        <>
+          <ViewTabs current={view} params={params} />
+          <RangeControl path="/costs" resolved={resolved} />
+        </>
       ) : null}
-      <Body facts={facts} series={spendSeries(rows, range)} />
+      <Body facts={facts} view={view} spend={spend} ranked={ranked} />
     </div>
   )
 }
 
 function Body({
   facts,
-  series,
+  view,
+  spend,
+  ranked,
 }: {
   facts: OnboardingFacts
-  series: SpendSeries
+  view: View
+  spend: SpendSeries | null
+  ranked: BreakdownRow[] | null
 }) {
   switch (onboardingState(facts)) {
     case 'collecting':
-      return <OverTime series={series} />
+      // One of the two is always present, decided by the view above: the read
+      // the other view would need was never issued.
+      return view === 'time' || ranked === null ? (
+        <OverTime series={spend!} />
+      ) : (
+        <Ranked rows={ranked} dimension={view} />
+      )
 
     case 'waiting':
       return <Waiting keyUsed={facts.key_used} />

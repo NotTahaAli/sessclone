@@ -4,9 +4,9 @@
 
 **Blocked by:** 52, 53.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Cost and tokens per Device over the selected range
-- [ ] Every cloud container collapses into one Device per Member
-- [ ] Device nicknames shown where set
-- [ ] Scoped by Role in the same way as every other view
+- [x] Cost and tokens per Device over the selected range
+- [x] Every cloud container collapses into one Device per Member
+- [x] Device nicknames shown where set
+- [x] Scoped by Role in the same way as every other view
