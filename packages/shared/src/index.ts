@@ -4,3 +4,11 @@ export { parseTranscript } from './turns.ts'
 export type { Turn, TurnUsage } from './turns.ts'
 export { deviceKey, normaliseRemote, projectKey } from './identity.ts'
 export type { ProjectIdentity } from './identity.ts'
+export {
+  IngestPayload,
+  ReportedCursor,
+  ReportedTurn,
+  ReportedUsage,
+  TranscriptReport,
+} from './ingest.ts'
+export type { IngestResponse } from './ingest.ts'

@@ -4,10 +4,10 @@
 
 **Blocked by:** 27.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Key shown in full once at creation and never again
-- [ ] Only a hash and a short prefix are stored
-- [ ] Several keys may be active at once, each labelled
-- [ ] Revocation takes effect immediately and affects only that key
-- [ ] Last-used time displayed, populated by ticket 34
+- [x] Key shown in full once at creation and never again
+- [x] Only a hash and a short prefix are stored
+- [x] Several keys may be active at once, each labelled
+- [x] Revocation takes effect immediately and affects only that key
+- [x] Last-used time displayed, populated by ticket 34
