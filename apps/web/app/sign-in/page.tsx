@@ -3,10 +3,11 @@ import { safeNext } from '../../lib/auth/next-path'
 import { ProviderError } from './provider-error'
 
 // Cache Components (ticket 80) prerenders a static shell for every route and
-// refuses one that reads request data outside a Suspense boundary. Every page
-// under here is the signed-in person's own data, read from their session, so
-// there is no shell worth prerendering: this says so, and the route renders at
-// request time as it always has.
+// refuses one that reads request data outside a Suspense boundary. This page
+// is reached signed out and still reads request data before rendering — the
+// `next` parameter here, the token and any session there — so `false` turns
+// the validation off rather than satisfying it, and the route renders at
+// request time as it always has. Deferred with the rest: ticket 83.
 export const instant = false
 
 // Deliberately unstyled. The design system (ticket 16) is documented and not

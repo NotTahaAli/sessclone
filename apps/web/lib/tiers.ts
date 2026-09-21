@@ -1,7 +1,7 @@
 import { cacheTag } from 'next/cache'
 import type { TransactionSql } from 'postgres'
 
-import { asAnyone } from './db'
+import { readAnonymously } from './db'
 
 /**
  * The Tiers the public pages render, read from the `tiers` table.
@@ -109,7 +109,26 @@ type TierRow = {
 export const marketingTiers = async (): Promise<MarketingTier[]> => {
   'use cache'
   cacheTag(TIERS_TAG)
-  return asAnyone(readMarketingTiers)
+
+  // A build with no database prerenders an empty list rather than failing.
+  // `/` and `/pricing` are fully static, so Next fills this entry during
+  // `next build` — which would otherwise make a reachable, correctly
+  // credentialled Postgres a build-time requirement, and a self-hoster's
+  // `docker build` (or a transient blip in CI) a failed release. Ticket 67
+  // promises configuration rather than a fork, and a build that needs the
+  // production database to compile the marketing copy is not that.
+  //
+  // Empty rather than a fallback list of prices: a hardcoded price here is
+  // exactly the second source of truth ticket 80 deleted, and a wrong price
+  // on a pricing page is worse than none. The pages say so when the list is
+  // empty, and the default cache profile refreshes within the quarter hour —
+  // which is also why this scope takes no longer `cacheLife`.
+  try {
+    return await readAnonymously(readMarketingTiers)
+  } catch (error) {
+    console.error('the Tiers could not be read', error)
+    return []
+  }
 }
 
 /** The one tag name, so the read and the two invalidators cannot drift. */
@@ -145,6 +164,24 @@ export const tierPrice = (
     return { amount: 'Contact', unit: null }
   }
   return { amount: 'Free', unit: 'at any size' }
+}
+
+/**
+ * The retention ceiling, from the column rather than from prose.
+ *
+ * Ticket 80's whole point: this used to be a hand-written line inside
+ * `features.includes` ("A year of history"), which is a second source of truth
+ * wearing a different hat — an operator who raises `retention_max_days` on
+ * `/admin/tiers` changes what an Org may keep and does not change that line.
+ */
+export const tierRetention = (tier: Pick<MarketingTier, 'retentionMaxDays'>) => {
+  const days = tier.retentionMaxDays
+  if (days === null) return 'History kept for as long as you keep it'
+  if (days % 365 === 0) {
+    const years = days / 365
+    return years === 1 ? 'A year of history' : `${years} years of history`
+  }
+  return `${days} days of history`
 }
 
 /** The seat allowance, in a sentence rather than as two numbers. */

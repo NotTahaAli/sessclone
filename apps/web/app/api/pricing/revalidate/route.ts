@@ -1,3 +1,5 @@
+import { createHash, timingSafeEqual } from 'node:crypto'
+
 import { revalidateTag } from 'next/cache'
 
 import { TIERS_TAG } from '../../../../lib/tiers'
@@ -42,16 +44,12 @@ const presentedSecret = (request: Request) => {
 }
 
 /**
- * Constant time for the length they share, and length-independent: comparing
- * with `===` leaks how much of a secret a guess got right, and comparing
- * buffers of different lengths throws rather than returning false.
+ * Constant time, and length-independent. Comparing with `===` leaks how much
+ * of a secret a guess got right; comparing buffers of different lengths makes
+ * `timingSafeEqual` throw, so both sides are hashed first — digests are always
+ * 32 bytes, and a hash of the wrong secret is as wrong as the secret is.
  */
-const matches = (presented: string, expected: string) => {
-  const a = Buffer.from(presented)
-  const b = Buffer.from(expected)
-  let difference = a.length ^ b.length
-  for (let index = 0; index < a.length; index += 1) {
-    difference |= a[index]! ^ b[index % b.length]!
-  }
-  return difference === 0
-}
+const matches = (presented: string, expected: string) =>
+  timingSafeEqual(digest(presented), digest(expected))
+
+const digest = (value: string) => createHash('sha256').update(value).digest()

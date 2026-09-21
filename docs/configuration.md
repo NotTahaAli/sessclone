@@ -184,9 +184,33 @@ self-hoster runs against their own database. It takes
 `Authorization: Bearer <secret>` and answers 503 while no secret is set, so a
 deployment that never configures one has no open cache-clearing endpoint.
 
-| Variable | Required | Default | What it is |
-| --- | --- | --- | --- |
-| `PRICING_REVALIDATE_SECRET` | no | — | Shared secret for `POST /api/pricing/revalidate`. Unset means the route refuses every call |
+| Variable                    | Required | Default | What it is                                                                                 |
+| --------------------------- | -------- | ------- | ------------------------------------------------------------------------------------------ |
+| `PRICING_REVALIDATE_SECRET` | no       | —       | Shared secret for `POST /api/pricing/revalidate`. Unset means the route refuses every call |
+
+The secret is a bearer token: it is replayable, and the route is not rate
+limited. That is deliberate — the only thing it does is clear a cache, which
+is cheap to ask for repeatedly — but it is a reason to rotate it like any
+other credential rather than to publish it.
+
+Two things about this cache are worth knowing before a deployment grows:
+
+**It is per instance.** `updateTag` and `revalidateTag` clear the cache of the
+process that runs them. One server behind one process sees a saved price
+immediately. Several instances, or a serverless deployment, do not: the
+instance that handled the save is fresh and the others carry their old copy
+until their own revalidation window passes. Nothing here is wrong on any of
+them — the price is simply older — but a deployment that wants them to agree
+at once needs a shared cache handler (`cacheHandlers` in `next.config.ts`),
+or must call the route through something that reaches every instance.
+
+**The build does not need the database.** The pricing pages are prerendered,
+so `next build` reads the Tiers if it can. If it cannot — no `DATABASE_URL`,
+or no Postgres to reach, as in a container build — the build still succeeds
+and those pages ship with the cards replaced by a short "not loading right
+now" notice, which the first successful read after start-up replaces. A price
+is never written into the build, which is the whole point of reading it from
+the table.
 
 ## Collector — `packages/plugin`
 

@@ -228,7 +228,7 @@ export const asRole = <T>(
 
 /**
  * A transaction with no claim at all, as the dashboard's unprivileged role —
- * what `lib/db.ts`'s `asAnyone` opens for the public pricing pages.
+ * what `lib/db.ts`'s `readAnonymously` opens for the public pricing pages.
  *
  * `sessclone_user_id()` is null inside it, so every policy that tests it
  * refuses. `tiers_read` is `using (true)` and does not.

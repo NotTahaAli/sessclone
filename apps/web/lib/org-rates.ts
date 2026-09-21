@@ -139,6 +139,12 @@ export const listOrgRates = async (
  * the Org keeps paying list price in its estimates while the page shows a
  * negotiated one. This is the same help ticket 63's page gives with its
  * unknown-model chips, from the other direction.
+ *
+ * The cap is a suggestion list and not the truth: past `limit` distinct
+ * models the field still accepts anything typed into it, and a name it did
+ * not suggest saves exactly as it would have. It is here so a `rates` table
+ * that grows to thousands of rows cannot turn one admin page into a long
+ * document.
  */
 export const pricedModels = async (tx: TransactionSql, limit = 100) => {
   const rows = await tx<{ model: string }[]>`

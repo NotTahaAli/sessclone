@@ -7,10 +7,15 @@ import { BottomBarLinks, SidebarLinks } from '../(dashboard)/nav-links'
 import { currentOperator } from '../../lib/platform-admin'
 
 // Cache Components (ticket 80) prerenders a static shell for every route and
-// refuses one that reads request data outside a Suspense boundary. Every page
-// under here is the signed-in person's own data, read from their session, so
-// there is no shell worth prerendering: this says so, and the route renders at
-// request time as it always has.
+// refuses one that reads request data outside a Suspense boundary. This route
+// reads the session before it renders anything, so today it has no shell at
+// all: `false` turns the validation off rather than satisfying it, and the
+// route renders at request time as it always has.
+//
+// That is a deferral, not a design. The chrome here — the sidebar, the bottom
+// bar, the Org name's frame — is exactly what a shell is for, and reaching it
+// means wrapping the session read in a Suspense boundary so the frame
+// prerenders around it. Ticket 83.
 export const instant = false
 
 // Ticket 62: the operator's frame, built once so the admin pages that follow

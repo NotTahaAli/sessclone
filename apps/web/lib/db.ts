@@ -28,21 +28,23 @@ const pool = () => {
 }
 
 /**
- * Runs `query` with no viewer at all, for the public pages.
+ * The published Tiers, read with no viewer at all.
  *
- * The exception to the rule above, and a narrow one: the marketing pages have
- * no signed-in person, and the only table they read is `tiers`, whose read
- * policy is `using (true)` because the published prices are what the pricing
- * page exists to show. Every other table's policy answers an anonymous caller
- * with nothing, which is what makes this safe to have rather than a way round
- * ADR 0001 — the claim is absent, so `sessclone_user_id()` is null and no
- * policy that tests it can pass.
+ * The one exception to the rule above, and deliberately not a general one:
+ * this takes no query, so "a connection with no claim" is not a capability a
+ * page can ask for — there is still no exported path that hands back a bare
+ * connection (ADR 0007, amended for this).
  *
- * Still a transaction, so the connection this borrows carries no identity
- * from the request before it.
+ * It is safe because of what it reads, not because of where it is called
+ * from. `tiers_read` is the only `using (true)` policy in the schema; every
+ * other read policy tests `sessclone_user_id()`, which is null here, and
+ * every write policy on a table this role may write to tests it too. A second
+ * public table would need its own named function beside this one, and would
+ * get the same paragraph.
  */
-export const asAnyone = <T>(query: (tx: postgres.TransactionSql) => Promise<T>) =>
-  pool().begin((tx) => query(tx))
+export const readAnonymously = <T>(
+  query: (tx: postgres.TransactionSql) => Promise<T>,
+) => pool().begin((tx) => query(tx))
 
 /**
  * Runs `query` in a transaction with `userId` as the viewer.

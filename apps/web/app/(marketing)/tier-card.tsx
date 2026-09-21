@@ -1,7 +1,12 @@
 import Link from 'next/link'
 
 import { CONTACT_EMAIL, REPOSITORY } from './constants'
-import { tierPrice, tierSeats, type MarketingTier } from '../../lib/tiers'
+import {
+  tierPrice,
+  tierRetention,
+  tierSeats,
+  type MarketingTier,
+} from '../../lib/tiers'
 
 // TierCard. Three variants — default, highlighted, self-hosted — and the
 // self-hosted one says free plainly, because it is the honest path and
@@ -50,6 +55,11 @@ export function TierCard({
         </p>
         <p className="text-caption text-text-muted font-mono">
           {tierSeats(tier)}
+        </p>
+        {/* From `retention_max_days`, not from the prose below: an operator
+            who raises the ceiling raises what this card says. */}
+        <p className="text-caption text-text-muted font-mono">
+          {tierRetention(tier)}
         </p>
       </div>
 
@@ -100,5 +110,32 @@ export function TierCard({
         </Link>
       )}
     </section>
+  )
+}
+
+/**
+ * What stands where the cards go when the Tiers could not be read.
+ *
+ * `marketingTiers()` answers empty rather than throwing when the database is
+ * unreachable, so a build with no database still produces a site and a blip
+ * does not take the pricing page down with it. Naming a price here would put
+ * one back in the source, which is the thing ticket 80 removed — so this says
+ * plainly that the numbers are missing and gives the visitor somewhere to go.
+ */
+export function TiersUnavailable() {
+  return (
+    <div className="border-rule-strong text-body text-text-secondary border border-dashed p-6">
+      <p>
+        The tiers are not loading right now. Nothing is wrong with your account
+        — this page reads the prices live, and the read failed.
+      </p>
+      <p className="mt-2">
+        Try again in a minute, or{' '}
+        <a className="underline" href={`mailto:${CONTACT_EMAIL}`}>
+          email us
+        </a>{' '}
+        and we will tell you what a tier costs.
+      </p>
+    </div>
   )
 }

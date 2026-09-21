@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 
 import { beforeEach, expect, test, vi } from 'vitest'
 
-import { readMarketingTiers, tierPrice } from '../lib/tiers'
+import { readMarketingTiers, tierPrice, tierRetention } from '../lib/tiers'
 import { anonymous, seedFixture, owner as sql, type Fixture } from './harness'
 
 // Ticket 80: the public pricing section reads Tier records, so a price change
@@ -12,10 +12,16 @@ import { anonymous, seedFixture, owner as sql, type Fixture } from './harness'
 // proved is that the page's numbers come from the table — a test against a
 // literal would prove the literal.
 
-const SEED = new URL(
-  '../../../supabase/migrations/20260922050000_tier_seed.sql',
-  import.meta.url,
-)
+/**
+ * Every migration that shapes the Tier rows, in order. The strip of the
+ * retention prose is one of them: re-applying the seed alone would restore
+ * the lines a later migration deleted, and the suite would then be testing a
+ * state no deployment is in.
+ */
+const SEEDS = [
+  '20260922050000_tier_seed.sql',
+  '20260922070000_tier_retention_prose.sql',
+].map((file) => new URL(`../../../supabase/migrations/${file}`, import.meta.url))
 
 const revalidated = vi.fn()
 
@@ -28,7 +34,10 @@ beforeEach(async () => {
   // from a copy of its numbers, as `costs.test.ts` does with the rate seed: a
   // test that restated the prices would pass while the migration said
   // something else.
-  await sql.unsafe(readFileSync(SEED, 'utf8'))
+  for (const seed of SEEDS) {
+    // oxlint-disable-next-line no-await-in-loop
+    await sql.unsafe(readFileSync(seed, 'utf8'))
+  }
 })
 
 test('the four Tiers on the pricing page are the rows in the table', async () => {
@@ -80,9 +89,23 @@ test('a withdrawn Tier is not offered to somebody new', async () => {
 })
 
 test('the pricing read is anonymous, and reaches nothing else', async () => {
-  // The marketing pages have no signed-in person. `tiers_read` is
+  // Two halves, because neither proves it alone.
+  //
+  // The exported helper the pages actually call sets no claim: inside its own
+  // transaction `sessclone_user_id()` is null, so every policy that tests it
+  // refuses, whatever role the connection holds. A test that opened its own
+  // anonymous connection instead would still pass if that helper started
+  // setting one.
+  const { readAnonymously } = await import('../lib/db')
+  const [claim] = await readAnonymously(
+    (tx) => tx<{ who: string | null }[]>`select sessclone_user_id() as who`,
+  )
+  expect(claim!.who).toBeNull()
+
+  // And with the claim absent, on the unprivileged role a deployment must
+  // point `DATABASE_URL` at, the policies answer nothing. `tiers_read` is
   // `using (true)` because published prices are public; every other table's
-  // policy tests `sessclone_user_id()`, which is null here.
+  // tests the claim above.
   const seen = await anonymous(
     (tx) => tx`select count(*)::int as count from orgs`,
   )
@@ -150,4 +173,62 @@ test('the revalidation route refuses without a secret, and with a wrong one', as
   expect(revalidated).toHaveBeenCalledWith('tiers', 'max')
 
   delete process.env.PRICING_REVALIDATE_SECRET
+})
+
+test('the `features` a card renders survive whatever is in the column', async () => {
+  // `features` is operator-editable jsonb, so `includesOf` is a parser over
+  // input nobody validated at write time before ticket 80's own action did.
+  // Each of these shapes reached a public page.
+  const shapes: [unknown, string[]][] = [
+    [{ includes: ['Every Device', 'A year of history'] }, ['Every Device', 'A year of history']],
+    [{}, []],
+    [{ includes: 'not a list' }, []],
+    [{ includes: [1, 'kept', null] }, ['kept']],
+    ['not an object at all', []],
+  ]
+
+  /* oxlint-disable no-await-in-loop -- each shape is written, read back and
+     replaced by the next: run in parallel they would overwrite each other. */
+  for (const [features, expected] of shapes) {
+    await sql`
+      update tiers set features = ${sql.json(features as never)},
+                       description = null
+       where key = 'personal'
+    `
+    const personal = (await anonymous(readMarketingTiers)).find(
+      (tier) => tier.key === 'personal',
+    )
+    expect(personal!.includes).toEqual(expected)
+    // Null description is an empty string, not the word "null" on a card.
+    expect(personal!.description).toBe('')
+  }
+  /* oxlint-enable no-await-in-loop */
+})
+
+test('the retention ceiling on a card is the column, not prose', async () => {
+  await sql`update tiers set retention_max_days = 730 where key = 'team'`
+
+  const team = (await anonymous(readMarketingTiers)).find(
+    (tier) => tier.key === 'team',
+  )
+  expect(tierRetention(team!)).toBe('2 years of history')
+  // And the prose that used to say it is gone, so the two cannot disagree.
+  expect(team!.includes.join(' ')).not.toMatch(/of history/i)
+})
+
+test('the seed never corrects a running deployment', () => {
+  // A source assertion rather than a re-run: executing a migration mid-suite
+  // is how the schema under every other test disappears. What matters is the
+  // clause — `on conflict (key) do nothing` — because without it the next
+  // deployment of a fresh checkout would reset every price an operator has
+  // edited on /admin/tiers back to the numbers settled in September.
+  const seed = readFileSync(
+    new URL(
+      '../../../supabase/migrations/20260922050000_tier_seed.sql',
+      import.meta.url,
+    ),
+    'utf8',
+  )
+  expect(seed).toMatch(/on conflict \(key\) do nothing/i)
+  expect(seed).not.toMatch(/do update/i)
 })

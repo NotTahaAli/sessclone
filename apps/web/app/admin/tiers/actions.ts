@@ -120,7 +120,11 @@ export const saveTierAction = async (
   // (ticket 80). It is a Server Action, which is the only place `updateTag`
   // may be called — a route handler uses `revalidateTag` instead.
   updateTag(TIERS_TAG)
-  revalidatePath('/', 'layout')
+  // The tag is what the marketing pages read through, so the invalidation is
+  // the line above. `revalidatePath('/', 'layout')` would expire the soft tag
+  // every route in the app carries — the whole cache, for a Tier edit — so
+  // this names the admin page that shows the row it just wrote instead.
+  revalidatePath('/admin/tiers')
   return { saved: parsed.data.name }
 }
 
@@ -149,15 +153,17 @@ const parseFeatures = (raw: string): Record<string, FeatureValue> | null => {
 
   const features: Record<string, FeatureValue> = {}
   for (const [gate, value] of Object.entries(parsed)) {
-    if (
-      value !== null &&
-      typeof value !== 'boolean' &&
-      typeof value !== 'number' &&
-      typeof value !== 'string'
-    ) {
-      return null
-    }
-    features[gate] = value
+    // A list of lines is allowed, because `features.includes` is what the
+    // pricing cards render. A list of anything else is not: it would render
+    // as `[object Object]` on a public page.
+    const ok =
+      value === null ||
+      typeof value === 'boolean' ||
+      typeof value === 'number' ||
+      typeof value === 'string' ||
+      (Array.isArray(value) && value.every((line) => typeof line === 'string'))
+    if (!ok) return null
+    features[gate] = value as FeatureValue
   }
   return features
 }

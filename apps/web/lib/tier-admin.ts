@@ -113,11 +113,16 @@ export const listTiers = async (tx: TransactionSql): Promise<AdminTier[]> => {
 }
 
 /**
- * A gate's value, which is a flag, a number or a string and never a nested
- * object: `features` is read by comparing a key, so a shape nobody can compare
- * is a shape nobody uses.
+ * A gate's value: a flag, a number, a string, or a list of lines.
+ *
+ * Never a nested object — `features` is read by comparing a key, so a shape
+ * nobody can compare is a shape nobody uses. The list is the exception, and
+ * it earns itself: `features.includes` is what the pricing cards render
+ * (ticket 80), so a `features` editor that refuses an array refuses every
+ * Tier the seed wrote — an operator could not change Team's price without
+ * first deleting the card's own prose.
  */
-export type FeatureValue = boolean | number | string | null
+export type FeatureValue = boolean | number | string | string[] | null
 
 export type TierInput = {
   key: string
