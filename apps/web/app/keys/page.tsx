@@ -1,6 +1,5 @@
 import { revokeKey } from './actions'
 import { NewKeyForm } from './new-key-form'
-import { signOut } from '../sign-in/actions'
 import {
   listApiKeys,
   listMemberships,
@@ -8,15 +7,16 @@ import {
 } from '../../lib/api-keys'
 import { asViewer } from '../../lib/db'
 import { signedInUser } from '../../lib/supabase/server'
+import { Panel } from '../panel'
 
 // Ticket 28's surface: `/keys`, reachable by every Role, showing own keys only
 // (`docs/design/product-ia.md`, "Signed-in surfaces"). "Own keys only" is not
 // enforced here — `api_keys_own` enforces it, and this page has no `where`
 // clause to get wrong.
 //
-// The signed-in header is the stub that used to sit on `/` before ticket 26
-// made that the marketing page. The real shell is ticket 45; until then it
-// lives here so "who am I signed in as" is still answerable.
+// The header and the credit under it are `app/panel.tsx`, shared with
+// `/settings/you`. The real shell is ticket 45; until then that frame is what
+// keeps "who am I signed in as" answerable on both.
 
 // Ticket 51 gives the Org a timezone. Until then a date is shown in UTC and
 // said to be, rather than in whatever zone the server happens to run in.
@@ -40,24 +40,7 @@ export default async function Keys() {
   }))
 
   return (
-    <main className="bg-ground text-text mx-auto max-w-3xl p-6">
-      <header className="border-rule flex flex-wrap items-baseline justify-between gap-3 border-b pb-4">
-        <p className="text-text-secondary text-sm">
-          Signed in as {user.email}
-          {memberships.length > 0 ? (
-            <> · {memberships.map((m) => m.org_name).join(', ')}</>
-          ) : null}
-        </p>
-        <form action={signOut}>
-          <button
-            type="submit"
-            className="border-control-border text-text rounded border px-2 py-1 text-sm"
-          >
-            Sign out
-          </button>
-        </form>
-      </header>
-
+    <Panel email={user.email} memberships={memberships}>
       <h1 className="mt-6 text-2xl font-medium">Keys</h1>
       <p className="text-text-secondary mt-2 text-sm">
         A key lets a Collector report this machine&apos;s usage. Give each
@@ -73,7 +56,7 @@ export default async function Keys() {
       )}
 
       <NewKeyForm memberships={memberships} />
-    </main>
+    </Panel>
   )
 }
 
