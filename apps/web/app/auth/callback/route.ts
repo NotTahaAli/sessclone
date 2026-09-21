@@ -100,6 +100,17 @@ export async function GET(request: NextRequest) {
   try {
     await ensureOrgForSigner(claims.sub, claims.email)
   } catch (cause) {
+    // The visitor is told their Org could not be set up and nothing more, on
+    // purpose: the reason is a database error, which names tables and roles.
+    // But it was previously discarded here as well, which left the operator
+    // with a sign-in page that reported a failure nothing anywhere explained —
+    // a misconfigured `DATABASE_URL` and a missing grant are the same sentence
+    // from the outside. Not a logger: there is no logging decision in this app
+    // yet (ticket 45), and inventing one here would be the wrong place.
+    if (!(cause instanceof EmailBelongsToAnotherAccount)) {
+      console.error('sign-in: could not set up an Org for the signer', cause)
+    }
+
     await supabase.auth.signOut()
     return failed(
       request,
