@@ -107,12 +107,24 @@ export const marketingTiers = (): MarketingTier[] => [
 ]
 
 /**
+ * The four fields the two helpers below read, named as a type so the Owner's
+ * Tier page (ticket 47) can pass a row it read from `tiers` rather than a
+ * `MarketingTier`. One spelling of "what does this Tier cost", used by the
+ * marketing card and by the Org's own page — the alternative is two, and the
+ * second one is the one that says Free where the first says Contact.
+ */
+export type TierPricing = Pick<
+  MarketingTier,
+  'basePriceUsd' | 'seatPriceUsd' | 'minSeats' | 'maxSeats'
+>
+
+/**
  * What a card puts where the price goes. A Tier with neither price is
  * "Contact" rather than free — the failure ticket 80 names explicitly, and
  * the one that costs the most when it happens.
  */
 export const tierPrice = (
-  tier: MarketingTier,
+  tier: TierPricing,
 ): { amount: string; unit: string | null } => {
   if (tier.seatPriceUsd !== null && tier.seatPriceUsd > 0) {
     return { amount: `$${tier.seatPriceUsd}`, unit: 'per seat / month' }
@@ -127,7 +139,7 @@ export const tierPrice = (
 }
 
 /** The seat allowance, in a sentence rather than as two numbers. */
-export const tierSeats = (tier: MarketingTier): string => {
+export const tierSeats = (tier: TierPricing): string => {
   if (tier.maxSeats === 1) return 'One person, no seat management'
   if (tier.maxSeats === null) {
     return tier.minSeats === null ? 'No seat limit' : `${tier.minSeats} and up`

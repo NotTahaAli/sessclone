@@ -1204,22 +1204,21 @@ describe('the people outside every Org', () => {
   })
 })
 
+/** `sessclone_is_platform_admin()`, read as somebody, on the app's own role. */
+const isAdmin = async (userId: string | null) =>
+  (
+    await asUser(
+      userId,
+      (tx) =>
+        tx<{ admin: boolean }[]>`select sessclone_is_platform_admin() as admin`,
+    )
+  )[0]!.admin
+
 describe('the platform gate', () => {
   // Ticket 62's refusal, proved where ADR 0001 puts it. The admin area's
   // routing asks `sessclone_is_platform_admin()` and so does every policy on
   // the deployment's own tables, so this is the one assertion that covers
   // both: it is the same function, read on the connection the dashboard uses.
-  const isAdmin = async (userId: string | null) =>
-    (
-      await asUser(
-        userId,
-        (tx) =>
-          tx<
-            { admin: boolean }[]
-          >`select sessclone_is_platform_admin() as admin`,
-      )
-    )[0]!.admin
-
   test('no Org Role grants it, however senior', async () => {
     for (const role of ROLES) {
       // oxlint-disable-next-line no-await-in-loop -- six reads, order is clearer.

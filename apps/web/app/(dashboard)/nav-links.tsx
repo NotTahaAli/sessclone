@@ -52,21 +52,30 @@ export function SidebarLinks({ items }: { items: NavItem[] }) {
   )
 }
 
+/**
+ * The bar's columns follow the list rather than being fixed at four. The Org
+ * navigation has four destinations and the admin area (ticket 62) has three: a
+ * hard `grid-cols-4` left the admin bar's items bunched into the left three
+ * quarters of a phone screen with a gap beside them, which is what the
+ * screenshot showed.
+ *
+ * Written out as whole class names, because Tailwind reads the source rather
+ * than the running page: a class built by interpolation is a class that is
+ * never generated.
+ */
+const COLUMNS: Record<number, string> = {
+  1: 'grid-cols-1',
+  2: 'grid-cols-2',
+  3: 'grid-cols-3',
+  4: 'grid-cols-4',
+  5: 'grid-cols-5',
+}
+
 export function BottomBarLinks({ items }: { items: NavItem[] }) {
   const pathname = usePathname()
 
   return (
-    // The columns follow the list rather than being fixed at four. The Org
-    // navigation has four destinations and the admin area (ticket 62) has
-    // three: a hard `grid-cols-4` left the admin bar's items bunched into the
-    // left three quarters of the phone screen with a gap beside them, which is
-    // what the screenshot showed.
-    <ul
-      className="grid"
-      style={{
-        gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))`,
-      }}
-    >
+    <ul className={`grid ${COLUMNS[items.length] ?? 'grid-cols-4'}`}>
       {items.map((item) => {
         const current = isCurrent(pathname, item.href)
         return (

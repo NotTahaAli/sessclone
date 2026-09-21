@@ -54,6 +54,10 @@ type Entry = {
 // untyped boundary is crossed — and it is a declaration, not an assertion.
 const parseEntry = (line: string): Entry => JSON.parse(line)
 
+/** Sorting strings needs a comparator: the default one sorts by UTF-16 code
+ * unit, which is not what a reader of a failure message expects. */
+const byText = (left: string, right: string) => left.localeCompare(right)
+
 const entriesIn = (file: string): Entry[] =>
   fixture(file)
     .split('\n')
@@ -571,7 +575,7 @@ describe('the corpus as a whole', () => {
     // these beside the responses and none of them carries usage; if a
     // re-capture quietly stopped writing one, the guard underneath would pass
     // on a corpus that no longer contains the case it guards.
-    expect([...withoutUsage].toSorted()).toEqual(
+    expect([...withoutUsage].toSorted(byText)).toEqual(
       expect.arrayContaining([
         'ai-title',
         'atis-latch',
@@ -595,11 +599,11 @@ describe('the corpus as a whole', () => {
     for (const { file } of EXPECTED) {
       const billed = turnsIn(file).flatMap((parsed) => parsed.entryUuids)
 
-      expect(billed.toSorted()).toEqual(
+      expect(billed.toSorted(byText)).toEqual(
         entriesIn(file)
           .filter((entry) => entry.message?.usage !== undefined)
           .map((entry) => entry.uuid)
-          .toSorted(),
+          .toSorted(byText),
       )
     }
   })
