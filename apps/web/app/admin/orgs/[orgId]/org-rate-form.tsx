@@ -25,11 +25,16 @@ const FIELD = 'border-control-border text-text rounded border px-3 py-1 text-sm'
 export function AddOrgRateForm({
   orgId,
   today,
+  models,
 }: {
   orgId: string
   /** Resolved on the server, so the form does not render one date and hydrate
    * another. */
   today: string
+  /** The models the platform list prices, so a typo is visible before it is
+   * saved: an override naming a model nothing reports prices nothing, and
+   * looks exactly like one that works. */
+  models: string[]
 }) {
   const [state, formAction, pending] = useActionState(addOrgRateAction, null)
 
@@ -41,10 +46,16 @@ export function AddOrgRateForm({
           Model
           <input
             name="model"
+            list="priced-models"
             autoComplete="off"
             placeholder="claude-opus-4-6"
             className={`${FIELD} font-mono`}
           />
+          <datalist id="priced-models">
+            {models.map((model) => (
+              <option key={model} value={model} />
+            ))}
+          </datalist>
         </label>
         <label className="flex flex-col gap-1 text-caption">
           Class

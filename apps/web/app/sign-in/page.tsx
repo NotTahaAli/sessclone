@@ -2,6 +2,13 @@ import { sendMagicLink, signInWithGitHub } from './actions'
 import { safeNext } from '../../lib/auth/next-path'
 import { ProviderError } from './provider-error'
 
+// Cache Components (ticket 80) prerenders a static shell for every route and
+// refuses one that reads request data outside a Suspense boundary. Every page
+// under here is the signed-in person's own data, read from their session, so
+// there is no shell worth prerendering: this says so, and the route renders at
+// request time as it always has.
+export const instant = false
+
 // Deliberately unstyled. The design system (ticket 16) is documented and not
 // yet built — there is no Tailwind, no `globals.css` and no shell in this app
 // — and ticket 45 is where the shell and these tokens land. Markup first, so

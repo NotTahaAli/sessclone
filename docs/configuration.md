@@ -172,6 +172,22 @@ of these today, and ticket 67 is where two providers get proven.
 | `STORAGE_FORCE_PATH_STYLE`    | no       | `true`  | Path-style addressing. Required by MinIO and Supabase; AWS accepts it             |
 | `STORAGE_PRESIGN_TTL_SECONDS` | no       | `300`   | Life of an issued URL. A presigned URL is a bearer credential — keep it short     |
 
+### Pricing cache
+
+The public pricing pages read the `tiers` table and cache the read under the
+tag `tiers`. Saving a Tier on `/admin/tiers` clears that cache itself, so an
+operator who works in the panel needs nothing here.
+
+`POST /api/pricing/revalidate` is the other way in, for a Tier changed outside
+the panel — by hand in `psql`, by a billing webhook, or by whatever a
+self-hoster runs against their own database. It takes
+`Authorization: Bearer <secret>` and answers 503 while no secret is set, so a
+deployment that never configures one has no open cache-clearing endpoint.
+
+| Variable | Required | Default | What it is |
+| --- | --- | --- | --- |
+| `PRICING_REVALIDATE_SECRET` | no | — | Shared secret for `POST /api/pricing/revalidate`. Unset means the route refuses every call |
+
 ## Collector — `packages/plugin`
 
 The Collector runs on a Member's own machine, one install per machine. Its

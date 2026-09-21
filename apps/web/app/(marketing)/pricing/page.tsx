@@ -13,8 +13,8 @@ export const metadata = {
     'Self-hosted free at any size, $5 a month for one person, $10 per seat for a team. A seat is a person, not a machine.',
 }
 
-export default function Pricing() {
-  const tiers = marketingTiers()
+export default async function Pricing() {
+  const tiers = await marketingTiers()
 
   return (
     <>

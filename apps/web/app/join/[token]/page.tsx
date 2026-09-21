@@ -4,6 +4,13 @@ import { AcceptForm } from './accept-form'
 import { PanelCredit } from '../../(dashboard)/credit'
 import { signedInUser } from '../../../lib/supabase/server'
 
+// Cache Components (ticket 80) prerenders a static shell for every route and
+// refuses one that reads request data outside a Suspense boundary. Every page
+// under here is the signed-in person's own data, read from their session, so
+// there is no shell worth prerendering: this says so, and the route renders at
+// request time as it always has.
+export const instant = false
+
 // Ticket 49: where an invitation is accepted.
 //
 // Outside the dashboard shell on purpose: whoever opens this may not be in any

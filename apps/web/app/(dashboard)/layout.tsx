@@ -6,6 +6,13 @@ import { BottomBarLinks, SidebarLinks } from './nav-links'
 import { DESTINATIONS } from './navigation'
 import { currentViewer } from '../../lib/viewer'
 
+// Cache Components (ticket 80) prerenders a static shell for every route and
+// refuses one that reads request data outside a Suspense boundary. Every page
+// under here is the signed-in person's own data, read from their session, so
+// there is no shell worth prerendering: this says so, and the route renders at
+// request time as it always has.
+export const instant = false
+
 // Ticket 45: the signed-in frame every later page hangs from.
 //
 // Three things it establishes, and they are the ticket's criteria:

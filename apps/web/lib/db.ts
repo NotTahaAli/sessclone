@@ -28,6 +28,23 @@ const pool = () => {
 }
 
 /**
+ * Runs `query` with no viewer at all, for the public pages.
+ *
+ * The exception to the rule above, and a narrow one: the marketing pages have
+ * no signed-in person, and the only table they read is `tiers`, whose read
+ * policy is `using (true)` because the published prices are what the pricing
+ * page exists to show. Every other table's policy answers an anonymous caller
+ * with nothing, which is what makes this safe to have rather than a way round
+ * ADR 0001 — the claim is absent, so `sessclone_user_id()` is null and no
+ * policy that tests it can pass.
+ *
+ * Still a transaction, so the connection this borrows carries no identity
+ * from the request before it.
+ */
+export const asAnyone = <T>(query: (tx: postgres.TransactionSql) => Promise<T>) =>
+  pool().begin((tx) => query(tx))
+
+/**
  * Runs `query` in a transaction with `userId` as the viewer.
  *
  * The id comes from the verified Supabase session and never from a request

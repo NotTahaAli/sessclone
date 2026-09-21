@@ -4,7 +4,11 @@ import { ActivateForm } from './activate-form'
 import { AddOrgRateForm, DeleteOrgRate } from './org-rate-form'
 import { PageHeader } from '../../../(dashboard)/page-header'
 import { asOperator } from '../../../../lib/platform-admin'
-import { listOrgRates, OVERRIDE_PAGE } from '../../../../lib/org-rates'
+import {
+  listOrgRates,
+  OVERRIDE_PAGE,
+  pricedModels,
+} from '../../../../lib/org-rates'
 import { rateUnit } from '../../../../lib/rates'
 import { tierChoices } from '../../../../lib/tier-admin'
 import {
@@ -45,11 +49,12 @@ export default async function Page({
   // One transaction: the Org, the Tiers it could be put on, and what has
   // happened to it. `orgs_read` is what decides the first of them comes back
   // at all, so an Org this caller may not read is a 404 rather than a refusal.
-  const { org, tiers, history, overrides } = await asOperator(async (tx) => ({
+  const { org, tiers, history, overrides, models } = await asOperator(async (tx) => ({
     org: await adminOrg(tx, orgId),
     tiers: await tierChoices(tx),
     history: await subscriptionHistory(tx, orgId),
     overrides: await listOrgRates(tx, orgId),
+    models: await pricedModels(tx),
   }))
 
   if (!org) notFound()
@@ -90,7 +95,7 @@ export default async function Page({
           cost. Nothing is backfilled: the Turns reprice on the next read.
         </p>
         <div className="mt-3">
-          <AddOrgRateForm orgId={org.id} today={now} />
+          <AddOrgRateForm orgId={org.id} today={now} models={models} />
         </div>
 
         {overrides.rates.length === 0 ? (
@@ -116,7 +121,11 @@ export default async function Page({
                   {rate.platformUsd === null
                     ? ' · nothing published to compare'
                     : ` · list ${MONEY.format(rate.platformUsd)}`}
-                  {rate.current ? '' : ' · superseded'}
+                  {rate.current
+                    ? ''
+                    : rate.effectiveFrom > now
+                      ? ' · scheduled'
+                      : ' · superseded'}
                 </p>
                 {rate.note ? (
                   <p className="text-text-muted text-caption">{rate.note}</p>

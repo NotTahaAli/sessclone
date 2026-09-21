@@ -1,9 +1,10 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, updateTag } from 'next/cache'
 import { z } from 'zod'
 
 import { asOperator, currentOperator } from '../../../lib/platform-admin'
+import { TIERS_TAG } from '../../../lib/tiers'
 import { saveTier, type FeatureValue } from '../../../lib/tier-admin'
 
 // Ticket 65's write. Every field is parsed before it reaches a statement, and
@@ -113,8 +114,12 @@ export const saveTierAction = async (
     }
   }
 
-  // A Tier decides what every Org on it may do, and the marketing pages read
-  // the same rows.
+  // A Tier decides what every Org on it may do, and the public pricing pages
+  // read the same rows: `updateTag` expires that cache now, so the next
+  // request renders the price just typed rather than the one before it
+  // (ticket 80). It is a Server Action, which is the only place `updateTag`
+  // may be called — a route handler uses `revalidateTag` instead.
+  updateTag(TIERS_TAG)
   revalidatePath('/', 'layout')
   return { saved: parsed.data.name }
 }

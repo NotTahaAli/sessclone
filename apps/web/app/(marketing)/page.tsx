@@ -104,8 +104,8 @@ const FAQ = [
   },
 ]
 
-export default function Landing() {
-  const tiers = marketingTiers()
+export default async function Landing() {
+  const tiers = await marketingTiers()
 
   return (
     <>

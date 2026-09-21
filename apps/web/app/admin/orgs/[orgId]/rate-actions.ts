@@ -30,13 +30,17 @@ const Form = z.object({
   priceUsd: z
     .string()
     .trim()
-    .min(1)
+    // Digits and at most one point: a Server Action is a POST endpoint, and
+    // `Number` alone accepts '0x10' as 16 and '1e5' as 100000.
+    .regex(/^\d+(\.\d+)?$/, 'not a price')
     .transform(Number)
     .refine(
       (value) => Number.isFinite(value) && value >= 0 && value <= 100_000,
       'not a price',
     ),
-  effectiveFrom: z.iso.date(),
+  // Bounded: a date in the 99th century is a typo, and it would sit at the
+  // bottom of the list forever pricing nothing.
+  effectiveFrom: z.iso.date().refine((value) => value <= '2100-01-01', 'too far ahead'),
   // What was agreed and where it is written down. An override with no
   // provenance is a discount nobody can re-check.
   note: z

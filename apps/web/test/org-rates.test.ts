@@ -69,16 +69,6 @@ const negotiated = (over: Partial<Parameters<typeof addOrgRate>[1]> = {}) =>
     }),
   )
 
-test('an Org on a negotiated price is estimated at the price it pays', async () => {
-  const turn = await seedTurn(fixture.acme.id, fixture.acme.members.member)
-  // The published price for this model and class, from the seed migration.
-  expect(await costOf(turn)).toBe(5)
-
-  await negotiated()
-
-  expect(await costOf(turn)).toBe(3)
-})
-
 test('an override is effective-dated, so an earlier Turn keeps its price', async () => {
   const before = await seedTurn(
     fixture.acme.id,
@@ -98,32 +88,12 @@ test('an override is effective-dated, so an earlier Turn keeps its price', async
   expect(await costOf(after)).toBe(3)
 })
 
-test('the platform price is the fallback, per class rather than per Org', async () => {
-  const turn = await seedTurn(fixture.acme.id, fixture.acme.members.member)
-
-  // A negotiated output price says nothing about input, which still resolves
-  // to the published row.
-  await negotiated({ class: 'output', priceUsd: 1 })
-  expect(await costOf(turn)).toBe(5)
-
-  // And deleting an override puts the Org back on list price, with nothing to
-  // backfill — the Cost was never stored (ADR 0002).
-  const id = await negotiated()
-  expect(await costOf(turn)).toBe(3)
-  expect(
-    await asOperator((tx) => deleteOrgRate(tx, fixture.acme.id, id)),
-  ).toBe(true)
-  expect(await costOf(turn)).toBe(5)
-})
-
-test('one Org’s negotiated price never reaches another Org', async () => {
+test('one Org’s negotiated prices are invisible to another Org', async () => {
   await negotiated()
-  const turn = await seedTurn(fixture.globex.id, fixture.globex.members.owner)
 
-  // Globex pays list price, and its Costs are computed from list price.
-  expect(await costOf(turn)).toBe(5)
-
-  // Globex's Owner cannot read that Acme has an arrangement at all.
+  // Globex's Owner cannot read that Acme has an arrangement at all. What that
+  // does to Globex's Costs is `costs.test.ts`'s, read there as each Org's own
+  // Owner rather than on the owning connection, which no policy applies to.
   const theirs = await asRole(fixture.globex, 'owner', (tx) =>
     listOrgRates(tx, fixture.acme.id),
   )
@@ -191,4 +161,35 @@ test('an id from another Org is not a capability', async () => {
   expect(
     (await asOperator((tx) => listOrgRates(tx, fixture.acme.id))).rates,
   ).toHaveLength(1)
+})
+
+test('a live override is compared against today’s list price', async () => {
+  // The platform price moved after the override started. Comparing the
+  // discount against the price it replaced on the day it was signed reads a
+  // 67% discount as 40% — and an operator checking a contract is doing
+  // exactly that comparison.
+  await negotiated()
+  await sql`
+    insert into rates (model, class, price_usd, effective_from, source)
+    values ('claude-opus-4-6', 'input', 9, '2026-09-10', 'a price rise')
+  `
+
+  const { rates } = await asOperator((tx) => listOrgRates(tx, fixture.acme.id))
+
+  expect(rates[0]).toMatchObject({ priceUsd: 3, current: true, platformUsd: 9 })
+})
+
+test('an override that has not started yet is scheduled, not superseded', async () => {
+  // Landing next year's price in advance is what effective dating is for, and
+  // a row labelled superseded is a row somebody deletes.
+  const started = await negotiated()
+  await negotiated({ priceUsd: 2, effectiveFrom: '2027-01-01' })
+
+  const { rates } = await asOperator((tx) => listOrgRates(tx, fixture.acme.id))
+  const scheduled = rates.find((rate) => rate.effectiveFrom === '2027-01-01')!
+
+  expect(scheduled.current).toBe(false)
+  // The row in force today is the older one, and it is the one marked current
+  // — so the page can tell "not yet" from "no longer" by the date alone.
+  expect(rates.find((rate) => rate.current)!.id).toBe(started)
 })
