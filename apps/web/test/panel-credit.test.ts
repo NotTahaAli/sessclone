@@ -20,7 +20,14 @@ import { describe, expect, test } from 'vitest'
 // the group rather than by remembering a wrapper.
 
 const APP = new URL('../app/', import.meta.url)
-const SHELL = '(dashboard)'
+/**
+ * Every frame that renders the notices. A signed-in page belongs under one of
+ * them, and each of them is checked below — so the rule is "a signed-in page
+ * is inside a frame that carries the credit" rather than "inside this one
+ * folder", which is what ticket 62's admin area made the difference between.
+ */
+const SHELLS = ['(dashboard)', 'admin']
+const SHELL = SHELLS[0]!
 
 /**
  * The route segments that are not signed-in pages.
@@ -57,15 +64,19 @@ describe('the panel credit', () => {
     expect(credit).toContain('sessclone')
   })
 
-  test('is rendered by the shell that every signed-in page hangs from', () => {
-    const layout = readFileSync(new URL(`${SHELL}/layout.tsx`, APP), 'utf8')
+  test.each(SHELLS)(
+    'is rendered by the %s shell that its signed-in pages hang from',
+    (shell) => {
+      const layout = readFileSync(new URL(`${shell}/layout.tsx`, APP), 'utf8')
 
-    expect(layout).toContain('PanelCredit')
-    // Twice: the sidebar carries it at desktop width and the content column
-    // carries it at phone width, where there is no sidebar to carry anything.
-    // One of the two is visible at a time, and neither width is without it.
-    expect(layout.match(/<PanelCredit \/>/g)).toHaveLength(2)
-  })
+      expect(layout).toContain('PanelCredit')
+      // Twice: the sidebar carries it at desktop width and the content column
+      // carries it at phone width, where there is no sidebar to carry
+      // anything. One of the two is visible at a time, and neither width is
+      // without it.
+      expect(layout.match(/<PanelCredit \/>/g)).toHaveLength(2)
+    },
+  )
 
   test('is on every signed-in page, because every one of them is in the shell', () => {
     const found = pages(APP)
@@ -74,9 +85,10 @@ describe('the panel credit', () => {
     expect(found.length).toBeGreaterThan(0)
 
     for (const page of found) {
-      expect(page, `${page} is a signed-in page outside the shell`).toContain(
-        `${SHELL}/`,
-      )
+      expect(
+        SHELLS.some((shell) => page.startsWith(`${shell}/`)),
+        `${page} is a signed-in page outside every shell that renders the notices`,
+      ).toBe(true)
     }
   })
 })

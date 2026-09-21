@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 
 import { expect, test } from 'vitest'
 
+import { ADMIN_DESTINATIONS } from '../app/admin/navigation'
 import { DESTINATIONS, settingsFor } from '../app/(dashboard)/navigation'
 import { reachesOrgSettings, reachesTier } from '../lib/viewer'
 
@@ -82,4 +83,76 @@ test('the viewer is read once per request, not once per component', () => {
 
   expect(viewer).toContain("import { cache } from 'react'")
   expect(viewer).toMatch(/export const currentViewer = cache\(/)
+})
+
+// Ticket 62: the operator's area, which is not reached from any of the four
+// destinations above and is gated on a flag rather than on a Role.
+
+test('the admin area has its own destinations, not the Org ones', () => {
+  // `docs/design/product-ia.md`: the admin area "does not reuse the Org
+  // navigation, because the subjects are different". The components are
+  // shared; the list is not, and no Org destination may appear in it.
+  expect(ADMIN_DESTINATIONS.map((item) => item.href)).toEqual([
+    '/admin/rates',
+    '/admin/tiers',
+    '/admin/orgs',
+  ])
+
+  const orgHrefs = new Set(DESTINATIONS.map((item) => item.href))
+  for (const item of ADMIN_DESTINATIONS)
+    expect(orgHrefs.has(item.href)).toBe(false)
+})
+
+test('nothing in the signed-in navigation ever leads to the admin area', () => {
+  // The practical rule the product IA states: an Org Role, however senior,
+  // never sees a way in. A `/admin` entry appearing in either list — even one
+  // filtered by Role — would be that rule broken, since no Role grants the
+  // flag.
+  const everyEntry = [
+    ...DESTINATIONS,
+    ...(['owner', 'admin', 'manager', 'member'] as const).flatMap(settingsFor),
+  ]
+
+  expect(everyEntry.some((item) => item.href.startsWith('/admin'))).toBe(false)
+})
+
+test('the admin gate is on the layout, so a page added later is refused by existing', () => {
+  // A file read, as above: the layout is an async Server Component and what is
+  // worth proving is that the guard is in the file that wraps every route
+  // under `/admin` rather than on each page, where the next ticket would have
+  // to remember it.
+  const layout = readFileSync(
+    new URL('../app/admin/layout.tsx', import.meta.url),
+    'utf8',
+  )
+
+  expect(layout).toContain('currentOperator()')
+  expect(layout).toContain('notFound()')
+
+  // And no page under `/admin` carries its own gate instead, which would be
+  // the same rule written twice and one of them eventually wrong.
+  for (const page of [
+    '../app/admin/page.tsx',
+    '../app/admin/rates/page.tsx',
+    '../app/admin/tiers/page.tsx',
+    '../app/admin/orgs/page.tsx',
+  ]) {
+    const source = readFileSync(new URL(page, import.meta.url), 'utf8')
+    expect(source).not.toContain('currentOperator')
+  }
+})
+
+test('the operator is read from the database, not from the session', () => {
+  // The routing gate and the policy gate are one rule read twice.
+  // `sessclone_is_platform_admin()` is what every policy on `rates`, `tiers`
+  // and `subscriptions` asks, so a page that forgot its gate is still handed
+  // no rows — and a change to the policy changes what the navigation offers in
+  // the same commit. A flag carried in a cookie or a claim would be neither.
+  const source = readFileSync(
+    new URL('../lib/platform-admin.ts', import.meta.url),
+    'utf8',
+  )
+
+  expect(source).toContain('sessclone_is_platform_admin()')
+  expect(source).toContain('cache(')
 })

@@ -1203,3 +1203,67 @@ describe('the people outside every Org', () => {
     })
   })
 })
+
+describe('the platform gate', () => {
+  // Ticket 62's refusal, proved where ADR 0001 puts it. The admin area's
+  // routing asks `sessclone_is_platform_admin()` and so does every policy on
+  // the deployment's own tables, so this is the one assertion that covers
+  // both: it is the same function, read on the connection the dashboard uses.
+  const isAdmin = async (userId: string | null) =>
+    (
+      await asUser(
+        userId,
+        (tx) =>
+          tx<
+            { admin: boolean }[]
+          >`select sessclone_is_platform_admin() as admin`,
+      )
+    )[0]!.admin
+
+  test('no Org Role grants it, however senior', async () => {
+    for (const role of ROLES) {
+      // oxlint-disable-next-line no-await-in-loop -- six reads, order is clearer.
+      expect([role, await isAdmin(fixture.acme.users[role])]).toEqual([
+        role,
+        false,
+      ])
+    }
+  })
+
+  test('the flag grants it, and being signed out does not', async () => {
+    expect(await isAdmin(fixture.platformAdmin.userId)).toBe(true)
+    expect(await isAdmin(fixture.stranger.userId)).toBe(false)
+    // Nobody signed in at all. The claim is unset, `sessclone_user_id()` is
+    // null, and the function must say no rather than match a null id against a
+    // row that happens to have one.
+    expect(await isAdmin(null)).toBe(false)
+  })
+
+  test('an Owner cannot hand it to themselves, or to anybody else', async () => {
+    // `users_write_self` lets a person write their own row, so the refusal has
+    // to come from the column guard rather than from the policy.
+    await expect(
+      asRole(
+        fixture.acme,
+        'owner',
+        (tx) =>
+          tx`update users set is_platform_admin = true where id = ${fixture.acme.users.owner}`,
+      ),
+    ).rejects.toThrow(/only a platform admin may change is_platform_admin/)
+
+    // And a row they cannot write at all is refused by the policy first: no
+    // rows touched, no error.
+    expect(
+      (
+        await asRole(
+          fixture.acme,
+          'owner',
+          (tx) =>
+            tx`update users set is_platform_admin = true where id = ${fixture.acme.users.admin}`,
+        )
+      ).count,
+    ).toBe(0)
+
+    expect(await isAdmin(fixture.acme.users.owner)).toBe(false)
+  })
+})

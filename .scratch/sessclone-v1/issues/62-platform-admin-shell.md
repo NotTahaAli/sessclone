@@ -4,9 +4,9 @@
 
 **Blocked by:** 21, 44, 45.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Reachable only by a platform administrator; an Org Owner is refused
-- [ ] Gate enforced in policy as well as in routing
-- [ ] Navigation for the admin pages that follow
-- [ ] Refusal covered by the policy suite
+- [x] Reachable only by a platform administrator; an Org Owner is refused
+- [x] Gate enforced in policy as well as in routing
+- [x] Navigation for the admin pages that follow
+- [x] Refusal covered by the policy suite

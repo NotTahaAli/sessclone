@@ -4,12 +4,12 @@
 
 **Blocked by:** 08, 29, 30, 42.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] One Turn per model response, proven against the multi-block fixtures
-- [ ] Entries without Usage ignored, proven against every bookkeeping type in the corpus
-- [ ] Agent Run and workflow fixtures attributed to the right parent Session
-- [ ] Both spellings of one git remote normalising to one Project
-- [ ] Cost correct per token class, and per pricing modifier
-- [ ] An unpriced model yielding no Cost, and a later rate filling it in
-- [ ] Compaction and model-switch fixtures parsed without loss or double-count
+- [x] One Turn per model response, proven against the multi-block fixtures
+- [x] Entries without Usage ignored, proven against every bookkeeping type in the corpus
+- [x] Agent Run and workflow fixtures attributed to the right parent Session
+- [x] Both spellings of one git remote normalising to one Project
+- [x] Cost correct per token class, and per pricing modifier
+- [x] An unpriced model yielding no Cost, and a later rate filling it in
+- [x] Compaction and model-switch fixtures parsed without loss or double-count
