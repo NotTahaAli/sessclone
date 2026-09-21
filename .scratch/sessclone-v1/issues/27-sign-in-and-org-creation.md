@@ -6,7 +6,7 @@
 
 **Status:** needs-verification
 
-- [ ] GitHub sign-in works end to end
+- [x] GitHub sign-in works end to end
 - [ ] Magic-link sign-in works end to end, for people whose employer blocks OAuth apps
 - [x] First sign-in creates an Org and makes the signer its Owner
 - [x] Signing out and back in returns to the same Org
