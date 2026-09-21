@@ -10,9 +10,9 @@ hosted deployment all get the same rules.
 
 | Migration                       | What it creates                                                                 |
 | ------------------------------- | ------------------------------------------------------------------------------- |
-| `20260912000000_probe_rows.sql` | Ticket 02's throwaway table. Expected to be deleted, not migrated               |
 | `20260920120000_accounts.sql`   | `orgs`, `users`, `members`, `api_keys`, `member_scopes`, and the policy helpers |
 | `20260920120100_collection.sql` | `devices`, `projects`, `turns`, `session_events`, archival exceptions           |
+| `20260922090000_drop_probe.sql` | Drops ticket 02's throwaway table on a deployment that already ran it           |
 
 **A table ships with its policies in the same migration** (ADR 0001). A
 migration that creates a table and leaves its policies to a later one has

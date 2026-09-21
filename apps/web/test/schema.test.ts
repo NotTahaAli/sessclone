@@ -58,9 +58,9 @@ describe('the migrations', () => {
        where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity
     `
 
-    // The probe table from ticket 02 is the exception and is expected to be
-    // deleted rather than protected — it holds a session id and nothing else.
-    expect(unprotected.map((row) => row.relname)).toEqual(['probe_rows'])
+    // No exceptions any more: ticket 02's probe table went with the probe
+    // route when ticket 33 made the tracer report real Turns.
+    expect(unprotected.map((row) => row.relname)).toEqual([])
   })
 
   test('ship each table with at least one policy, in the same migration', async () => {
@@ -77,7 +77,7 @@ describe('the migrations', () => {
          )
     `
 
-    expect(unpoliced.map((row) => row.relname)).toEqual(['probe_rows'])
+    expect(unpoliced.map((row) => row.relname)).toEqual([])
   })
 })
 

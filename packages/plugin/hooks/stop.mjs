@@ -1,14 +1,20 @@
-// Ticket 02's tracer bullet: one row per finished turn, carrying nothing but
-// the session id. Ticket 23 replaces the body with the real collector — read
-// the transcript from the cursor, send the turns, retry, queue.
+// Ticket 33: the Stop hook reports the Turns of the session that just
+// finished. Ticket 02's probe — one row carrying a session id and nothing
+// else — is gone, along with the route and the table it wrote to.
 //
 // Every failure is swallowed and the exit code is always 0. Not because a
 // throw would block the turn — only exit 2 blocks a `Stop` hook, and an
 // uncaught throw exits 1 — but because a non-zero exit prints a hook error
 // notice on every turn, which is a poor way to report that a deployment is
-// down. The collector's answer is the retry queue, not a louder hook.
+// down. The Collector's answer is `session-start.mjs`, which says it once,
+// and the retry queue of ticket 39.
+//
+// Nothing here writes to stderr either, and that is not the same decision: a
+// hook's output lands in the transcript this product uploads, so a message
+// about a failed report would end up inside the next report.
 
-const url = process.env.SESSCLONE_URL ?? 'http://127.0.0.1:3000'
+import { readConfiguration } from '../src/configuration.mjs'
+import { buildPayload, send } from '../src/report.mjs'
 
 const readStdin = async () => {
   let input = ''
@@ -18,12 +24,16 @@ const readStdin = async () => {
 
 try {
   const event = JSON.parse(await readStdin())
-  await fetch(`${url}/api/probe`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ sessionId: event.session_id }),
-    signal: AbortSignal.timeout(5000),
+  const configuration = readConfiguration()
+
+  const payload = await buildPayload({
+    transcriptPath: event.transcript_path,
+    sessionId: event.session_id,
+    cwd: event.cwd,
+    environment: process.env,
   })
+
+  if (payload) await send({ configuration, payload })
 } catch {
   // Deliberately silent: see above.
 }

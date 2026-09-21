@@ -58,9 +58,10 @@ grant usage on schema public to sessclone_app;
 
 -- Read is the dashboard's whole job (ADR 0007): the charts are aggregates over
 -- these ten tables, and every row they return is already filtered by the
--- policies above. `probe_rows` is deliberately absent — ticket 02's throwaway
--- table has no row-level security, so granting the dashboard role a read on it
--- would reintroduce in one table exactly what this migration closes.
+-- policies above. Ticket 02's `probe_rows` was deliberately absent here, and
+-- ticket 33 dropped the table itself: an unprotected table the dashboard role
+-- could read would have reintroduced in one place exactly what this migration
+-- closes.
 grant select on
   orgs, users, members, api_keys, member_scopes,
   devices, projects, turns, session_events, member_project_archival

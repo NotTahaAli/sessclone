@@ -80,11 +80,6 @@ make a correct deployment fail on every report and a misconfigured one — both
 pointed at the owning role, row-level security off — appear to work, which is
 the whole failure this split exists to prevent.
 
-(`apps/web/app/api/probe/route.ts` writes `probe_rows`, which `sessclone_app`
-is granted nothing on either, so it answers `permission denied for table
-probe_rows` on a correct deployment. That route is ticket 02's tracer bullet
-and is expected to be deleted.)
-
 **What one report may carry.** The ingest route bounds the batch at the
 boundary, so an absurd payload is a 400 naming the limit rather than a request
 that times out: at most **100 reports** in a payload and **5000 turns** in a
@@ -217,6 +212,15 @@ the table.
 The Collector runs on a Member's own machine, one install per machine. Its
 configuration is read from the environment so that a self-hoster's team can
 point at their own deployment without editing a vendored plugin.
+
+**It needs Node 22.18 or newer** (or 23.6, or any 24). The hooks are run as
+`node <file>` with no build step, and the parser and identity rules they
+import from `packages/shared` are TypeScript that Node executes by stripping
+the types — which is on by default from those versions and not before. On an
+older Node the import throws inside a hook, where every failure is
+deliberately swallowed, so the plugin would install, start cleanly and report
+nothing. The session-start check names it instead, beside the variables
+below.
 
 | Variable              | Required       | Default                 | What it is                                                                          |
 | --------------------- | -------------- | ----------------------- | ----------------------------------------------------------------------------------- |
