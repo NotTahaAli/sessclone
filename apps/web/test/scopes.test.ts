@@ -194,12 +194,24 @@ test('somebody who is not a Manager has no Scope section at all', async () => {
 test('the Member list keeps a removed Member, marked', async () => {
   // Their history is still in the Org, and a Scope that silently dropped them
   // would change what a past chart shows.
-  const members = await asRole(fixture.acme, 'owner', (tx) =>
+  const { members, more } = await asRole(fixture.acme, 'owner', (tx) =>
     listOrgMembers(tx, fixture.acme.id),
   )
 
   expect(members).toHaveLength(6)
   expect(members.filter((member) => member.removed)).toHaveLength(1)
+  expect(more).toBe(false)
+})
+
+test('the Member list is bounded, and says when it was cut', async () => {
+  // The page renders a control per (Manager, Member) pair, so an unbounded
+  // read here is a document that grows with the Org.
+  const { members, more } = await asRole(fixture.acme, 'owner', (tx) =>
+    listOrgMembers(tx, fixture.acme.id, 2),
+  )
+
+  expect(members).toHaveLength(2)
+  expect(more).toBe(true)
 })
 
 test('the Members page is Owner or Admin, guarded on the page and not the link', () => {

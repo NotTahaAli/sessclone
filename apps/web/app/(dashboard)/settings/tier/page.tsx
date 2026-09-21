@@ -108,6 +108,13 @@ function Tier({ tier }: { tier: OrgTier }) {
             {tier.maxSeats !== null && tier.seatsUsed >= tier.maxSeats
               ? ', which is the limit'
               : ''}
+            {/* The allowance the base price covers, which is a different
+                number from the ceiling on a Tier that charges per seat above
+                it. Shown only when it says something the line above does
+                not. */}
+            {tier.includedSeats > 0 && tier.includedSeats !== tier.maxSeats
+              ? `, ${tier.includedSeats} included in the price`
+              : ''}
           </span>
         </Fact>
 
@@ -158,23 +165,31 @@ function Status({
 
 /**
  * Every further gate, read from the Tier row (ADR 0004: the next capability is
- * a data change, not a migration). Only the ones that are on are listed — a
- * list of things you do not have is a worse page than a shorter one — and the
- * key is shown as written, because inventing prose for a key this code has
- * never seen is how a page starts lying about what a Tier includes.
+ * a data change, not a migration). What is off is not listed — a list of
+ * things you do not have is a worse page than a shorter one — and the key is
+ * shown as written, because inventing prose for a key this code has never seen
+ * is how a page starts lying about what a Tier includes.
+ *
+ * Anything that is not `false` or null counts as on, and a value that is not
+ * `true` is shown beside its key. A gate added as a number (`{"max_projects":
+ * 50}`) is exactly the case ADR 0004 promises needs no deployment, and a
+ * filter for `=== true` would have dropped it off this page silently.
  */
 function Capabilities({ features }: { features: Record<string, unknown> }) {
-  const on = Object.entries(features)
-    .filter(([, value]) => value === true)
-    .map(([key]) => key)
+  const on = Object.entries(features).filter(
+    ([, value]) => value !== false && value !== null && value !== undefined,
+  )
 
   if (on.length === 0) return null
 
   return (
     <Fact label="Also on this Tier">
       <ul className="flex flex-col gap-1">
-        {on.map((key) => (
-          <li key={key}>{key.replaceAll('_', ' ')}</li>
+        {on.map(([key, value]) => (
+          <li key={key}>
+            {key.replaceAll('_', ' ')}
+            {value === true ? '' : `: ${String(value)}`}
+          </li>
         ))}
       </ul>
     </Fact>

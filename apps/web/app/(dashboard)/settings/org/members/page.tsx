@@ -32,7 +32,7 @@ export default async function Members() {
   // One transaction, two independent statements — and `listScopes` is one
   // query for the whole Org rather than one per Manager, which on a page with
   // five Managers would be the query-in-a-loop this repo calls a bug.
-  const [members, scopes] = await asViewer(viewer.userId, (tx) =>
+  const [{ members, more }, scopes] = await asViewer(viewer.userId, (tx) =>
     Promise.all([
       listOrgMembers(tx, viewer.orgId),
       listScopes(tx, viewer.orgId),
@@ -59,6 +59,12 @@ export default async function Members() {
           with nobody assigned sees nothing at all, which is where every Manager
           starts.
         </p>
+        {more ? (
+          <p className="text-text-muted mt-2 text-sm">
+            Showing the first 200 Members. Searching a larger Org arrives with
+            invitations.
+          </p>
+        ) : null}
 
         {managers.length === 0 ? (
           <p className="border-rule text-text-muted mt-4 rounded border border-dashed p-6 text-sm">
@@ -69,7 +75,6 @@ export default async function Members() {
           managers.map((manager) => (
             <Scope
               key={manager.memberId}
-              orgId={viewer.orgId}
               manager={manager}
               members={members}
               scope={scopes.get(manager.memberId) ?? NONE}
@@ -92,12 +97,10 @@ export default async function Members() {
  * past chart shows.
  */
 function Scope({
-  orgId,
   manager,
   members,
   scope,
 }: {
-  orgId: string
   manager: OrgMember
   members: OrgMember[]
   scope: ReadonlySet<string>
@@ -129,7 +132,6 @@ function Scope({
                 </p>
               </div>
               <form action={setScopeMember}>
-                <input type="hidden" name="orgId" value={orgId} />
                 <input
                   type="hidden"
                   name="managerMemberId"

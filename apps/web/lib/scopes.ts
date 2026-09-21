@@ -37,11 +37,19 @@ type MemberRow = {
  * so this is the full list for the people who assign a Scope, and a partial
  * one for anybody else. The page that uses it is theirs; the policy is what
  * makes that true rather than the route.
+ *
+ * Bounded, because the page renders a control per (Manager, Member) pair and
+ * an unbounded read is a rule this repo states outright. The ceiling is a
+ * page's worth of Members rather than a real pager: the Team Tier stops at ten
+ * seats and an Enterprise Org large enough to hit this needs search on this
+ * screen rather than a Next button, which is ticket 49's to build alongside
+ * invitations. `more` says the list was cut so the page can say so too.
  */
 export const listOrgMembers = async (
   tx: TransactionSql,
   orgId: string,
-): Promise<OrgMember[]> => {
+  limit = 200,
+): Promise<{ members: OrgMember[]; more: boolean }> => {
   const rows = await tx<MemberRow[]>`
     select member.id as member_id,
            account.email,
@@ -51,13 +59,17 @@ export const listOrgMembers = async (
       join users account on account.id = member.user_id
      where member.org_id = ${orgId}
      order by member.removed_at nulls first, account.email
+     limit ${limit + 1}
   `
-  return rows.map((row) => ({
-    memberId: row.member_id,
-    email: row.email,
-    role: row.role,
-    removed: row.removed,
-  }))
+  return {
+    members: rows.slice(0, limit).map((row) => ({
+      memberId: row.member_id,
+      email: row.email,
+      role: row.role,
+      removed: row.removed,
+    })),
+    more: rows.length > limit,
+  }
 }
 
 /**

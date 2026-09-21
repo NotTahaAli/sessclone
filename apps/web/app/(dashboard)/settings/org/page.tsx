@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { setTimezone } from './actions'
+import { TimezoneForm } from './timezone-form'
 import { EmptyState } from '../../empty-state'
 import { PageHeader } from '../../page-header'
 import { asViewer } from '../../../../lib/db'
@@ -80,9 +80,10 @@ export default async function Page() {
  * between two names wants to know that the choice moves the boundaries on
  * every chart, and that it moves them for everybody rather than for them.
  *
- * A plain `form` with a `select` and a submit, so the page works as a Server
- * Component with no client JavaScript. The list is long and native pickers
- * type-ahead, which is better than anything worth shipping here.
+ * A native `select` and a submit — the list is long and native pickers
+ * type-ahead, which beats anything worth shipping here. The form itself is a
+ * client component for one reason, named in `timezone-form.tsx`: a refusal
+ * has to reach the reader as a sentence.
  */
 function TimezoneSetting({
   orgId,
@@ -106,35 +107,21 @@ function TimezoneSetting({
         reading it.
       </p>
       <p className="text-text-muted mt-2 text-sm">
-        Changing it re-draws the charts you already have. Nothing that has been
-        collected is altered or lost — a Turn is stored as an instant, and this
-        only decides which day it is counted in.
+        Nothing collected is altered or lost: a Turn is stored as an instant,
+        and this decides which day it is counted in.
+      </p>
+      {/* Said plainly, because it is about money and it is not obvious. A Rate
+          is effective from a date, so the day a Turn falls on is also the day
+          it is priced on — moving the boundary can move a past total by a
+          cent or by a Rate revision. `turn_costs` reads this column, which is
+          what makes the two answers agree; the cost of that agreement is that
+          history is not frozen. */}
+      <p className="text-text-muted mt-2 text-sm">
+        It also re-prices: a Turn is charged at the Rate live on the Org&apos;s
+        day, so a past total can change when the boundary moves.
       </p>
 
-      <form action={setTimezone} className="mt-4 flex flex-wrap gap-3">
-        <input type="hidden" name="orgId" value={orgId} />
-        <label className="sr-only" htmlFor="timezone-select">
-          Timezone
-        </label>
-        <select
-          id="timezone-select"
-          name="timezone"
-          defaultValue={current}
-          className="border-control-border text-text rounded border px-3 py-1 text-sm"
-        >
-          {zones.map((zone) => (
-            <option key={zone} value={zone}>
-              {zone}
-            </option>
-          ))}
-        </select>
-        <button
-          type="submit"
-          className="border-control-border text-text rounded border px-3 py-1 text-sm"
-        >
-          Save timezone
-        </button>
-      </form>
+      <TimezoneForm orgId={orgId} current={current} zones={zones} />
     </section>
   )
 }

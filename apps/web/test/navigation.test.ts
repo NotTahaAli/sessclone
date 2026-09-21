@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 
 import { expect, test } from 'vitest'
 
@@ -117,10 +117,12 @@ test('nothing in the signed-in navigation ever leads to the admin area', () => {
 })
 
 test('the admin gate is on the layout, so a page added later is refused by existing', () => {
-  // A file read, as above: the layout is an async Server Component and what is
-  // worth proving is that the guard is in the file that wraps every route
-  // under `/admin` rather than on each page, where the next ticket would have
-  // to remember it.
+  // A file read: the layout is an async Server Component, and what is worth
+  // proving here is that the guard is in the file that wraps every route under
+  // `/admin` rather than on each page, where the next ticket would have to
+  // remember it. Whether the guard *guards* is `platform-admin.test.ts`,
+  // against the real database — a grep cannot tell `if (operator)` from
+  // `if (!operator)`.
   const layout = readFileSync(
     new URL('../app/admin/layout.tsx', import.meta.url),
     'utf8',
@@ -129,8 +131,12 @@ test('the admin gate is on the layout, so a page added later is refused by exist
   expect(layout).toContain('currentOperator()')
   expect(layout).toContain('notFound()')
 
-  // And no page under `/admin` carries its own gate instead, which would be
-  // the same rule written twice and one of them eventually wrong.
+  // And no *page* under `/admin` carries its own gate, which would be the same
+  // rule written twice and one of them eventually wrong.
+  //
+  // A Server Action or a Route Handler is the opposite case and is deliberately
+  // not covered by this rule: neither renders the layout, so each one carries
+  // its own check. Tickets 63, 64 and 65 add the first of them.
   for (const page of [
     '../app/admin/page.tsx',
     '../app/admin/rates/page.tsx',
@@ -139,6 +145,36 @@ test('the admin gate is on the layout, so a page added later is refused by exist
   ]) {
     const source = readFileSync(new URL(page, import.meta.url), 'utf8')
     expect(source).not.toContain('currentOperator')
+  }
+})
+
+test('every write under the admin area carries its own gate', () => {
+  // A layout does not render for a Server Action POST or for a Route Handler,
+  // so the gate above does not cover either. The rule for those is the
+  // opposite one: each carries the check itself, or it is a platform write
+  // with nothing in front of it but the policy.
+  //
+  // Empty today — the area is three read-only pages — so this is here to fail
+  // the commit that adds the first write without the line, which is the one
+  // that would otherwise ship it.
+  const writes = readdirSync(new URL('../app/admin/', import.meta.url), {
+    withFileTypes: true,
+    recursive: true,
+  }).filter(
+    (entry) =>
+      entry.isFile() &&
+      (entry.name === 'actions.ts' || entry.name === 'route.ts'),
+  )
+
+  for (const file of writes) {
+    const source = readFileSync(
+      new URL(`${file.parentPath}/${file.name}`, 'file:///'),
+      'utf8',
+    )
+    expect(
+      source.includes('currentOperator'),
+      `${file.name} is a write under /admin with no gate of its own`,
+    ).toBe(true)
   }
 })
 

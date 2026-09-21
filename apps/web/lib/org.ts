@@ -13,23 +13,32 @@ import type { TransactionSql } from 'postgres'
 export type Timezone = string
 
 /**
- * Every timezone this Postgres will accept, for the control that sets it.
+ * Every timezone an Org may be set to, for the control that sets it.
+ *
+ * The same four conditions the trigger on `orgs.timezone` enforces, written
+ * once here so the list cannot offer a name the write then refuses. A region
+ * name (`Europe/London`) carries a daylight-saving rule; `EST`, `Etc/GMT+5`
+ * and the rest are fixed offsets wearing a name, and `posix/` and `right/` are
+ * the same zones again under different leap-second rules. `UTC` is the one
+ * offset an Org may choose, and is the default.
  *
  * Read from the database rather than from a list in this repo, because the
- * database is what the trigger validates against — a list here would drift and
- * offer a name the write then refuses. Roughly 1,200 names, which is a plain
- * `<select>` and not a problem worth a combobox.
- *
- * Deprecated aliases (`US/Eastern`, `posixrules`) are filtered out: they still
- * work, they are not what anybody should be choosing in 2026, and leaving them
- * in makes the list a third longer for no gain. A `%/%` filter also drops
- * bare offsets like `UTC+5`, which have no daylight-saving rule and are the
- * one shape an Org must not store — except `UTC` itself, which is the default
- * and has to stay selectable.
+ * database is what the trigger validates against. Roughly 1,200 names, which
+ * is a plain `<select>` and not a problem worth a combobox.
  */
+let cached: Timezone[] | undefined
+
 export const listTimezones = async (
   tx: TransactionSql,
 ): Promise<Timezone[]> => {
+  // One array, for the life of the process. `pg_timezone_names` is a
+  // set-returning function over the whole timezone database rather than a
+  // catalog read, and the answer cannot change while Postgres is running —
+  // so reading it once per render of a settings page is 1,200 rows for a
+  // constant. Bounded by construction, which is what `AGENTS.md` asks of a
+  // module-level cache: one list, replaced rather than grown.
+  if (cached) return cached
+
   const rows = await tx<{ name: string }[]>`
     select name from pg_timezone_names
      where (name like '%/%' or name = 'UTC')
@@ -38,7 +47,7 @@ export const listTimezones = async (
        and name not like 'Etc/%'
      order by name
   `
-  return rows.map((row) => row.name)
+  return (cached = rows.map((row) => row.name))
 }
 
 /**

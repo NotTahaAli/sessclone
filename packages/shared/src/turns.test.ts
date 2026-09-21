@@ -56,7 +56,8 @@ const parseEntry = (line: string): Entry => JSON.parse(line)
 
 /** Sorting strings needs a comparator: the default one sorts by UTF-16 code
  * unit, which is not what a reader of a failure message expects. */
-const byText = (left: string, right: string) => left.localeCompare(right)
+const byText = (left: string | undefined, right: string | undefined) =>
+  (left ?? '').localeCompare(right ?? '')
 
 const entriesIn = (file: string): Entry[] =>
   fixture(file)

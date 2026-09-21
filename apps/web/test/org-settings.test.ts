@@ -81,31 +81,53 @@ test('a name the timezone database does not know is refused', async () => {
 })
 
 test('a fixed offset is refused, because it has no daylight-saving rule', async () => {
-  // An Org that stored `-05:00` would have two hours of every spring land in
-  // the wrong day, once a year, forever. `at time zone` would have accepted
-  // it, which is why the check is against the timezone database.
-  await expect(
-    asRole(fixture.acme, 'owner', (tx) =>
-      setOrgTimezone(tx, fixture.acme.id, '-05:00'),
-    ),
-  ).rejects.toThrow(/unknown timezone/)
+  // An Org that stored a fixed offset would have two hours of every spring
+  // land in the wrong day, once a year, forever.
+  //
+  // Both shapes, because the first version of the guard only caught the first:
+  // `-05:00` is not in the timezone database, but `EST` and `Etc/GMT+5` are —
+  // they are −05:00 all year under a name, which is exactly the value this
+  // column must never hold. The list the page offers and the guard on the
+  // write now state one rule, so a POST cannot store what the `<select>` does
+  // not offer.
+  const refused = ['-05:00', 'EST', 'Etc/GMT+5', 'Factory'].map((offset) =>
+    expect(
+      asRole(fixture.acme, 'owner', (tx) =>
+        setOrgTimezone(tx, fixture.acme.id, offset),
+      ),
+    ).rejects.toThrow(/timezone/),
+  )
+  await Promise.all(refused)
 })
 
-test('the offered list is names with rules, not offsets or aliases', async () => {
+test('every name the list offers is one the write accepts', async () => {
+  // The two halves of one rule, checked against each other rather than each
+  // against a name this container happens to ship: the previous version of
+  // this test asserted `US/Eastern` was filtered out, which passed only
+  // because the backward-compatibility zones are not installed here.
   const zones = await asRole(fixture.acme, 'owner', (tx) => listTimezones(tx))
 
   expect(zones).toContain('UTC')
   expect(zones).toContain('Europe/London')
   expect(zones).toContain('Asia/Karachi')
-  // Every one of these is a name a person should not be picking in 2026: a
-  // bare offset, a deprecated alias, and the two compatibility trees.
-  expect(zones).not.toContain('Etc/GMT+5')
-  expect(zones).not.toContain('US/Eastern')
+  expect(zones.every((zone) => zone === 'UTC' || zone.includes('/'))).toBe(true)
   expect(zones.some((zone) => zone.startsWith('posix/'))).toBe(false)
   expect(zones.some((zone) => zone.startsWith('right/'))).toBe(false)
+  expect(zones.some((zone) => zone.startsWith('Etc/'))).toBe(false)
   // The list is offered to a `<select>`, so it has to be finite and sorted.
   expect(zones).toEqual(zones.toSorted())
   expect(zones.length).toBeGreaterThan(300)
+
+  // A sample rather than all 1,200: one round trip each, and the rule is a
+  // string test rather than anything that varies down the list.
+  const accepted = [zones[0]!, zones.at(-1)!, 'UTC'].map((zone) =>
+    expect(
+      asRole(fixture.acme, 'owner', (tx) =>
+        setOrgTimezone(tx, fixture.acme.id, zone),
+      ),
+    ).resolves.toBe(true),
+  )
+  await Promise.all(accepted)
 })
 
 test('changing the timezone re-buckets a stored Turn rather than rewriting it', async () => {
