@@ -8,9 +8,9 @@ Adding `org_id` and `occurred_at` to the view restores pushdown but only reaches
 
 **Blocks:** 52.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `turn_costs` filterable by Org and date without pricing the deployment
-- [ ] Every result identical to today's view — the costs suite passes unchanged
-- [ ] `security_invoker` kept, and read as an unprivileged role in a test
-- [ ] The 30-day Org chart query measured at 200k Turns, before and after, in the commit message
+- [x] `turn_costs` filterable by Org and date without pricing the deployment
+- [x] Every result identical to today's view — the costs suite passes unchanged
+- [x] `security_invoker` kept, and read as an unprivileged role in a test
+- [x] The 30-day Org chart query measured at 200k Turns, before and after, in the commit message

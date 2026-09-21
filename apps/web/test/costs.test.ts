@@ -466,3 +466,104 @@ test("an Org's override is not readable from another Org, even through the view"
 
   expect(seenByGlobex).toEqual([])
 })
+
+// Ticket 81: the same numbers, at a shape a chart can filter.
+
+test('a Cost carries its Org and its time, so a chart filters before it prices', async () => {
+  // The whole point of the ticket. Ticket 42's view exposed `turn_id` alone,
+  // so an Org chart had nothing to push down and priced the deployment first.
+  const mine = await seedTurn({
+    input_tokens: MILLION,
+    occurred_at: '2026-09-20T08:00:00Z',
+  })
+  await seedTurn({
+    input_tokens: MILLION,
+    occurred_at: '2026-06-01T08:00:00Z',
+  })
+
+  const rows = await sql<{ turn_id: string; cost_usd: string }[]>`
+    select turn_id, cost_usd from turn_costs
+     where org_id = ${fixture.acme.id}
+       and occurred_at >= '2026-09-01T00:00:00Z'
+       and occurred_at < '2026-10-01T00:00:00Z'
+  `
+
+  expect(rows.map((row) => row.turn_id)).toEqual([mine])
+  expect(Number(rows[0]!.cost_usd)).toBe(5)
+})
+
+test('the filtered view reaches the Turn index rather than every Turn', async () => {
+  // A plan assertion, because the ticket is a performance ticket and the
+  // arithmetic tests above would pass just as happily on the 21.9s shape. Two
+  // things have to be true and both are here: the `org_id` and date quals
+  // reach `turns_org_occurred_at_idx`, and nothing aggregates between the
+  // scan and the caller — an aggregate is the barrier that made ticket 42's
+  // view unfilterable, and re-introducing one would fail here rather than in
+  // a chart nobody has timed.
+  //
+  // Seeded so the filter is worth an index: most of the Turns belong to the
+  // other Org, and the rest fall outside the month. On a handful of rows a
+  // sequential scan is the right plan and the assertion would be about the
+  // fixture rather than about the view.
+  await sql`
+    insert into turns (
+      org_id, member_id, session_id, message_id, occurred_at, model,
+      input_tokens
+    )
+    select ${fixture.globex.id}, ${fixture.globex.members.member},
+           'session-bulk', 'bulk_' || g,
+           timestamptz '2026-09-20 08:00Z' - g * interval '1 hour',
+           'claude-opus-4-6', 1000
+      from generate_series(1, 4000) g
+  `
+  await sql`
+    insert into turns (
+      org_id, member_id, session_id, message_id, occurred_at, model,
+      input_tokens
+    )
+    select ${fixture.acme.id}, ${fixture.acme.members.member},
+           'session-bulk', 'bulk_' || g,
+           timestamptz '2026-09-20 08:00Z' - g * interval '1 hour',
+           'claude-opus-4-6', 1000
+      from generate_series(1, 100) g
+  `
+  await sql`analyze turns`
+
+  const plan = await sql<Record<string, string>[]>`
+    explain (costs off)
+      select turn_id, cost_usd from turn_costs
+       where org_id = ${fixture.acme.id}
+         and occurred_at >= '2026-09-01T00:00:00Z'
+         and occurred_at < '2026-10-01T00:00:00Z'
+  `
+  // One plan node per row, under postgres's own `QUERY PLAN` column name.
+  const text = plan.map((row) => Object.values(row)[0]).join('\n')
+
+  expect(text).toMatch(/turns_org_occurred_at_idx/)
+  expect(text).not.toMatch(/Seq Scan on turns/)
+  // No `Group Key` anywhere: the aggregate ticket 42 folded seven rows per
+  // Turn back together is the barrier that made the view unfilterable. The
+  // `Aggregate` inside the rate lateral is ungrouped and is not that.
+  expect(text).not.toMatch(/Group Key/)
+})
+
+test('the filterable view still reads as the viewer, not as its owner', async () => {
+  // `security_invoker` survived the rewrite, read on the unprivileged role
+  // that the dashboard actually connects as. A view that lost it would answer
+  // this query with Acme's Turn.
+  await seedTurn({ input_tokens: MILLION })
+
+  const globex = await asRole(
+    fixture.globex,
+    'owner',
+    (tx) => tx`select turn_id from turn_costs where org_id = ${fixture.acme.id}`,
+  )
+  const acme = await asRole(
+    fixture.acme,
+    'member',
+    (tx) => tx`select turn_id from turn_costs where org_id = ${fixture.acme.id}`,
+  )
+
+  expect(globex).toEqual([])
+  expect(acme).toHaveLength(1)
+})
