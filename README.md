@@ -10,22 +10,37 @@ per device — and download the raw session logs to learn from them.
 pnpm install
 pnpm lint        # oxlint, type-aware
 pnpm typecheck   # tsc across every package
-pnpm test        # vitest
+pnpm test        # vitest, every suite
+pnpm test:db     # the SQL suite only: schema and policies, against Postgres
 pnpm format      # prettier --check
 ```
 
 ### The database
 
-Route tests run against a real Postgres and apply `supabase/migrations/`
-themselves, so a cluster has to be reachable:
+Route and policy tests run against a real Postgres with `supabase/migrations/`
+applied from empty, so a cluster has to be reachable. Two roles, because the
+second one is the point:
 
 ```bash
 sudo -u postgres psql -c "create role sessclone login password 'sessclone'"
 sudo -u postgres createdb sessclone_test --owner sessclone
+sudo -u postgres psql -c "create role sessclone_app login password 'sessclone_app'"
 ```
 
-`DATABASE_URL` overrides the default,
-`postgres://sessclone:sessclone@127.0.0.1:5432/sessclone_test`.
+`sessclone` owns the tables, applies the migrations and seeds the fixtures —
+and, owning them, Postgres exempts it from every policy. `sessclone_app` owns
+nothing and is what the dashboard connects as (ADR 0007), so it is the only
+connection on which a policy test proves anything. The migration grants it what
+it needs; it is created here because a migration must not invent a credential.
+
+`DATABASE_URL` and `APP_DATABASE_URL` override the defaults,
+`postgres://sessclone:sessclone@127.0.0.1:5432/sessclone_test` and
+`postgres://sessclone_app:sessclone_app@127.0.0.1:5432/sessclone_test`.
+
+`apps/web/test/harness.ts` is the rig those tests share: migrations apply once
+per run, the database is emptied between tests so order does not matter, and
+`seedFixture()` creates two Orgs with a person in every Role — including a
+Manager with a Scope and one without.
 
 ### Configuration
 

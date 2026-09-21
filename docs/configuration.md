@@ -13,16 +13,23 @@ if the two ever disagree — a variable added to one and not the other, or a
 default written differently in each, is a test failure rather than a support
 ticket.
 
-> **Most of this is not wired up yet.** v1 is mid-build. Exactly two variables
-> are read by code today: `DATABASE_URL` (`apps/web/app/api/probe/route.ts`)
-> and `SESSCLONE_URL` (`packages/plugin/hooks/stop.mjs`). Every other row below
-> is a commitment this build is working towards, and each section names the
-> ticket that wires it. Setting one today does nothing — which is worth knowing
-> before wondering why a bucket stays empty.
+> **Most of this is not wired up yet.** v1 is mid-build. Five variables are
+> read by code today: `DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`,
+> `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `NEXT_PUBLIC_APP_URL` in `apps/web` since
+> ticket 27 wired sign-in, and `SESSCLONE_URL` in
+> `packages/plugin/hooks/stop.mjs`. Every other row below is
+> a commitment this build is working towards, and each section names the ticket
+> that wires it. Setting one today does nothing — which is worth knowing before
+> wondering why a bucket stays empty.
 
 **Nothing here is a secret.** Every value below is an example or a default.
 Real credentials live in `.env`, which is gitignored, or in the deployment's
 own secret store.
+
+**The server's `.env` belongs in `apps/web`,** not at the repo root beside
+`.env.example`. Next.js reads environment files from its own project root, so a
+root `.env` is loaded by nothing and the first page that needs one fails with
+`NEXT_PUBLIC_SUPABASE_URL is not set` rather than saying where it looked.
 
 ## Server — `apps/web`
 
@@ -41,6 +48,27 @@ surfaces a forgotten variable as `role "..." does not exist` three layers down.
 The throw is per-request rather than at startup: the client is built lazily so
 that `next build` does not open a connection.
 
+**Point it at a role that owns nothing.** The policies below are
+`enable row level security` and not `force`, and Postgres applies no policy at
+all to a superuser or to the role that owns the tables — so a deployment that
+connects as the role which applied the migrations has row-level security
+switched off and no error to say so. `supabase/migrations/20260920120200_app_role.sql`
+creates `sessclone_app` for this, with the grants the dashboard needs and
+nothing else; give it a password (or grant it to a login role that has one) and
+put _that_ in `DATABASE_URL`. ADR 0007 has the reasoning, and
+`apps/web/test/app-role.test.ts` fails if the dashboard is pointed back at a
+privileged role.
+
+**One variable, two jobs, and the split is not done.** `sessclone_app` is the
+right role for everything the dashboard reads, and the wrong one for ingest:
+ingest writes `turns` and `log_artifacts`, which carry no insert policy by
+design, and `apps/web/app/api/probe/route.ts` writes `probe_rows`, which
+`sessclone_app` is granted nothing on at all. So a deployment that follows the
+paragraph above has a working dashboard and a probe route that answers
+`permission denied for table probe_rows`. That route is ticket 02's tracer
+bullet and is expected to be deleted; ticket 31 is where the real ingest route
+lands and where its connection gets named separately from this one.
+
 Authorisation lives in row-level security (ADR 0001), so the policies travel in
 `supabase/migrations/` and a self-hoster gets the same enforcement by applying
 them.
@@ -48,8 +76,16 @@ them.
 ### Supabase (auth and the browser client)
 
 The browser reads scoped rows directly, through the same policies the server
-uses. These three are that client's configuration. Wired by ticket 27
-(sign-in and org creation); nothing reads them today.
+uses. These three are that client's configuration, and ticket 27 wired them:
+`apps/web/lib/supabase/server.ts` and `apps/web/proxy.ts` read the first two.
+The service role key is still read by nothing, and ADR 0001 keeps it that way
+until an ingest path needs it.
+
+Sign-in is GitHub OAuth and a magic link, and no password is created or stored
+by either. Both are configured in the Supabase project: GitHub needs a client
+id and secret under Authentication, and both need
+`<NEXT_PUBLIC_APP_URL>/auth/callback` in the project's list of allowed redirect
+URLs — that one route handles the OAuth code and the magic link's token alike.
 
 | Variable                        | Required | Default | What it is                                                                     |
 | ------------------------------- | -------- | ------- | ------------------------------------------------------------------------------ |
@@ -73,8 +109,10 @@ Supabase project's own SMTP settings, not here.
 | --------------------- | -------- | ------- | ------------------------------------------------------------------------------------------ |
 | `NEXT_PUBLIC_APP_URL` | yes      | —       | Origin this deployment answers on, e.g. `https://sessclone.example.com`. No trailing slash |
 
-Wired by tickets 49 (invites) and 66 (install docs); nothing reads it today.
-Used to build invite links and the install instructions a Member is shown, so a
+Wired by ticket 27 (`apps/web/lib/auth/app-url.ts`), and used again by tickets
+49 (invites) and 66 (install docs).
+Used to build the sign-in redirect, invite links and the install instructions a
+Member is shown, so a
 self-hoster's team is told to report to the self-hoster's deployment. It is not
 derived from request headers: a forwarded `Host` is attacker-controllable, and
 an invite link is a credential.

@@ -26,9 +26,10 @@ nothing else. The owner keeps its exemption on purpose: that is what ingest
 writes a Turn with, on a plain Postgres as `service_role` is on Supabase, and
 it is why `turns` needs no insert policy.
 
-`apps/web/schema.test.ts` applies every migration to an empty database and
-fails if a table arrives without row-level security or without a policy. The
-full Role matrix is Seam C, and belongs to ticket 44.
+`apps/web/test/harness.ts` applies every migration to an empty database once
+per test run and empties it between tests; `test/schema.test.ts` fails if a
+table arrives without row-level security or without a policy. The full Role
+matrix is Seam C, and belongs to ticket 44.
 
 ## Applying them locally
 
@@ -60,3 +61,28 @@ first, as above, is what gives it one, and is also what lets a deployment apply
 migrations with no `createrole` at all. A deployment that would rather not have
 a second password can create it as a group and grant it to a login role it
 already has.
+
+**If the migrations ran first, the role is already there and cannot log in.**
+`create role sessclone_app login password '…'` then fails with
+`role "sessclone_app" already exists`, which is easy to read as "already done"
+— and the first connection answers
+`role "sessclone_app" is not permitted to log in`. Use `alter role` instead,
+which is also how the password is rotated later:
+
+```sql
+alter role sessclone_app login password '<a generated secret>';
+```
+
+## Applying them to a hosted project
+
+Without `psql`, the project's SQL Editor does the same job: paste the output of
+`cat supabase/migrations/*.sql` into one query and run it, then the `alter role`
+above as a second query. The editor wraps a query in a transaction, so one
+failing statement discards the whole paste — read the result line rather than
+assuming it landed.
+
+Give that role a generated password rather than a memorable one, and remember
+what it can do. Every policy resolves the viewer from `request.jwt.claims`,
+which the connecting session sets for itself — that is how
+`apps/web/lib/db.ts` works — so whoever holds that password can name any user
+id and read every Org. On a hosted project the database answers the internet.
