@@ -3,14 +3,19 @@
 import { useActionState, useCallback, useState } from 'react'
 
 import { createKey } from './actions'
+import type { Membership } from '../../lib/api-keys'
 
 // The one client component on this page, and it is client-side for exactly one
 // reason: the new key lives in `useActionState`'s return value and nowhere
 // else. A Server Component cannot hold it — there is nothing to re-read it
 // from on the next render, which is the point.
 
-export function NewKeyForm() {
+export function NewKeyForm({ memberships }: { memberships: Membership[] }) {
   const [state, formAction, pending] = useActionState(createKey, null)
+
+  // Only when there is a choice. One membership is the common case and a
+  // one-option select is a control that asks a question with one answer.
+  const choose = memberships.length > 1
 
   return (
     <section className="border-rule mt-8 border-t pt-6">
@@ -30,6 +35,29 @@ export function NewKeyForm() {
             className="border-control-border bg-surface text-text rounded border px-3 py-2"
           />
         </div>
+        {choose ? (
+          <div className="flex flex-col gap-1">
+            <label htmlFor="memberId" className="text-text-muted text-xs">
+              Org
+            </label>
+            <select
+              id="memberId"
+              name="memberId"
+              required
+              defaultValue=""
+              className="border-control-border bg-surface text-text rounded border px-3 py-2"
+            >
+              <option value="" disabled>
+                Choose an org
+              </option>
+              {memberships.map((membership) => (
+                <option key={membership.member_id} value={membership.member_id}>
+                  {membership.org_name}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
         <button
           type="submit"
           disabled={pending}

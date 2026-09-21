@@ -38,11 +38,26 @@ export const createKey = async (
     return { error: 'Give the key a label — the machine it will live on.' }
   }
 
-  const key = await asViewer(user.id, (tx) => createApiKey(tx, label.data))
+  // Absent when the viewer has one membership: the page renders no picker
+  // then, and `createApiKey` resolves it. Present, it is still only a claim —
+  // parsed here, and intersected with the viewer's own memberships there.
+  const raw = formData.get('memberId')
+  const memberId = raw === null || raw === '' ? undefined : Id.safeParse(raw)
+  if (memberId && !memberId.success) {
+    return { error: 'Choose which org this key reports to.' }
+  }
 
-  revalidatePath('/keys')
-
-  return { key }
+  try {
+    const key = await asViewer(user.id, (tx) =>
+      createApiKey(tx, label.data, memberId?.data),
+    )
+    revalidatePath('/keys')
+    return { key }
+  } catch {
+    // The message would say which membership was refused, which is a fact
+    // about somebody else's Org if the id was guessed at.
+    return { error: 'Could not create that key. Choose an org and try again.' }
+  }
 }
 
 /** Revokes one key. Immediate, and only that key. */

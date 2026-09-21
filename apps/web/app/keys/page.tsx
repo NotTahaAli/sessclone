@@ -1,7 +1,11 @@
 import { revokeKey } from './actions'
 import { NewKeyForm } from './new-key-form'
 import { signOut } from '../sign-in/actions'
-import { listApiKeys, type ApiKeyRow } from '../../lib/api-keys'
+import {
+  listApiKeys,
+  listMemberships,
+  type ApiKeyRow,
+} from '../../lib/api-keys'
 import { asViewer } from '../../lib/db'
 import { signedInUser } from '../../lib/supabase/server'
 
@@ -30,10 +34,8 @@ export default async function Keys() {
 
   // One round trip: two statements on the one transaction `asViewer` opens,
   // rather than two connections' worth of work for one page.
-  const { orgs, keys } = await asViewer(user.id, async (tx) => ({
-    orgs: await tx<
-      { name: string }[]
-    >`select name from orgs order by created_at`,
+  const { memberships, keys } = await asViewer(user.id, async (tx) => ({
+    memberships: await listMemberships(tx),
     keys: await listApiKeys(tx),
   }))
 
@@ -42,7 +44,9 @@ export default async function Keys() {
       <header className="border-rule flex flex-wrap items-baseline justify-between gap-3 border-b pb-4">
         <p className="text-text-secondary text-sm">
           Signed in as {user.email}
-          {orgs[0] ? <> · {orgs[0].name}</> : null}
+          {memberships.length > 0 ? (
+            <> · {memberships.map((m) => m.org_name).join(', ')}</>
+          ) : null}
         </p>
         <form action={signOut}>
           <button
@@ -68,7 +72,7 @@ export default async function Keys() {
         <KeyList keys={keys} />
       )}
 
-      <NewKeyForm />
+      <NewKeyForm memberships={memberships} />
     </main>
   )
 }
@@ -85,6 +89,9 @@ function KeyList({ keys }: { keys: ApiKeyRow[] }) {
             Key
           </th>
           <th scope="col" className="py-2 font-normal">
+            Org
+          </th>
+          <th scope="col" className="py-2 font-normal">
             Last used
           </th>
           <th scope="col" className="py-2 font-normal">
@@ -99,6 +106,9 @@ function KeyList({ keys }: { keys: ApiKeyRow[] }) {
             <td className="text-text-muted py-2 font-mono">
               {key.key_prefix}…
             </td>
+            {/* Which Org this key's Turns land in — the question the create
+                form asks when there is more than one answer. */}
+            <td className="text-text-muted py-2">{key.org_name}</td>
             {/* Written by ticket 34 on each accepted report. */}
             <td className="text-text-muted py-2">
               {when(key.last_used_at) ?? 'never used'}

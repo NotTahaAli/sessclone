@@ -123,7 +123,11 @@ describe('the seeded price list', () => {
     // that was live when it ran.
     expect(await resolve('claude-opus-5', 'input', '2026-10-31')).toBe(5)
     expect(await resolve('claude-opus-5', 'input', '2026-11-01')).toBe(6)
-    // And nothing at all before the seed's own effective date.
-    expect(await resolve('claude-opus-5', 'input', '2026-09-20')).toBeNull()
+    // The seed reaches back to the project epoch, so a Turn from before the
+    // page was read still prices — which is the whole reason it is dated
+    // 2026-01-01 rather than the day the figures were checked.
+    expect(await resolve('claude-opus-5', 'input', '2026-09-20')).toBe(5)
+    // And nothing at all before the epoch itself.
+    expect(await resolve('claude-opus-5', 'input', '2025-12-31')).toBeNull()
   })
 })

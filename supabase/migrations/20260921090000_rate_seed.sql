@@ -24,20 +24,30 @@
 -- convenience alias, because a Turn records whichever string the client sent
 -- and a rate that misses by a suffix is an unpriced Turn.
 --
--- `effective_from` is 2026-09-21 on every row — the date the page was read,
--- which is the only date the source actually asserts. It deliberately does not
--- reach back: claiming today's price was in force in July would be inventing
--- history, and ADR 0002 prefers a null Cost to an authoritative-looking wrong
--- one. A Turn that ran before this date resolves to null until someone lands a
--- dated historical row, which is one insert and no code change — the whole
--- point of effective dating.
+-- `effective_from` is 2026-01-01 on every row, and the read date lives in
+-- `source` instead. Those are two different facts: `source` says when the
+-- figure was checked, `effective_from` says from when it is claimed to hold.
+--
+-- Dating the rows the day they were read was the first attempt and it priced
+-- nothing: `sessclone_resolve_rate` wants `effective_from <= occurred_at`, so
+-- every Turn the product had already collected — the whole fixture corpus —
+-- resolved to null, and a price list that prices none of the data is not a
+-- price list. Reaching back is defensible here because a rate is keyed by
+-- model: a Turn can only name a model that existed when it ran, so a row
+-- reaching back before that model shipped is a row nothing can match. The
+-- exposure is exactly one case — a model whose published price changed after
+-- its launch — and that case is a dated row added above this one, which is
+-- what effective dating is for.
+--
+-- 2026-01-01 rather than a further-back date because it predates every Turn
+-- this deployment has collected and is a date somebody can explain.
 
 insert into rates (model, class, price_usd, effective_from, source)
 select
   price_list.model,
   token_class.class::rate_class,
   token_class.price,
-  date '2026-09-21',
+  date '2026-01-01',
   'https://platform.claude.com/docs/en/about-claude/pricing read 2026-09-21'
 from (values
   -- model,                        input,  5m write, 1h write, cache read, output
@@ -80,7 +90,7 @@ cross join lateral (values
 -- price.
 insert into rates (model, class, price_usd, effective_from, source)
 values
-  (null, 'web_search_request', 10, date '2026-09-21',
+  (null, 'web_search_request', 10, date '2026-01-01',
    'https://platform.claude.com/docs/en/about-claude/pricing read 2026-09-21'),
-  (null, 'web_fetch_request', 0, date '2026-09-21',
+  (null, 'web_fetch_request', 0, date '2026-01-01',
    'https://platform.claude.com/docs/en/about-claude/pricing read 2026-09-21');

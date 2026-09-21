@@ -7,6 +7,7 @@ import {
   generateApiKey,
   hashApiKey,
   listApiKeys,
+  listMemberships,
   revokeApiKey,
 } from '../lib/api-keys'
 import { asUser, owner, seedFixture, type Fixture } from './harness'
@@ -185,5 +186,63 @@ describe('revocation', () => {
       select revoked_at from api_keys where id = ${id}
     `
     expect(row!.revoked_at).toBeInstanceOf(Date)
+  })
+})
+
+describe('a Member of more than one Org', () => {
+  /** Adds the Acme Member to Globex too, and returns that second member id. */
+  const alsoInGlobex = async () => {
+    const [row] = await owner<{ id: string }[]>`
+      insert into members (org_id, user_id, role)
+      values (${fixture.globex.id}, ${fixture.acme.users.member}, 'member')
+      returning id
+    `
+    return row!.id
+  }
+
+  test('sees both memberships, and each key says which Org it reports to', async () => {
+    const second = await alsoInGlobex()
+
+    const memberships = await asUser(
+      fixture.acme.users.member,
+      listMemberships,
+    )
+    expect(memberships).toEqual([
+      { member_id: fixture.acme.members.member, org_name: 'Acme' },
+      { member_id: second, org_name: 'Globex' },
+    ])
+
+    await asUser(fixture.acme.users.member, (tx) =>
+      createApiKey(tx, 'laptop', second),
+    )
+
+    const listed = await asUser(fixture.acme.users.member, listApiKeys)
+    expect(listed).toMatchObject([{ label: 'laptop', org_name: 'Globex' }])
+  })
+
+  test('is asked which Org rather than given the oldest one', async () => {
+    await alsoInGlobex()
+
+    await expect(
+      asUser(fixture.acme.users.member, (tx) => createApiKey(tx, 'laptop')),
+    ).rejects.toThrow(/choose which org/)
+
+    const [row] = await owner<{ count: string }[]>`
+      select count(*) from api_keys
+    `
+    expect(row!.count).toBe('0')
+  })
+
+  test('cannot issue a key against somebody else’s membership', async () => {
+    await expect(
+      asUser(fixture.acme.users.member, (tx) =>
+        createApiKey(tx, 'laptop', fixture.acme.members.admin),
+      ),
+    ).rejects.toThrow(/no membership/)
+
+    const [row] = await owner<{ count: string }[]>`
+      select count(*) from api_keys
+    `
+    expect(row!.count).toBe('0')
   })
 })

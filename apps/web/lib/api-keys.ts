@@ -62,37 +62,73 @@ export type ApiKeyRow = {
   id: string
   label: string
   key_prefix: string
+  org_name: string
   created_at: Date
   last_used_at: Date | null
   revoked_at: Date | null
 }
 
+export type Membership = { member_id: string; org_name: string }
+
+/**
+ * The Orgs the viewer is a Member of, oldest first. `sessclone_own_member_ids()`
+ * is the filter, so this is the database answering "who is this" rather than
+ * the caller asserting it.
+ */
+export const listMemberships = (tx: postgres.TransactionSql) =>
+  tx<Membership[]>`
+    select member.id as member_id, org.name as org_name
+      from members member
+      join orgs org on org.id = member.org_id
+     where member.id in (select sessclone_own_member_ids())
+     order by member.created_at
+  `
+
 /**
  * Issues a key and returns it in full — the only moment it exists anywhere but
  * in the caller's hands. It is returned, never stored and never logged.
  *
- * The membership is chosen by `sessclone_own_member_ids()`, which reads the
- * claim on this transaction. That is the database answering "who is this",
- * not the caller asserting it.
+ * A key belongs to one membership, and therefore to one Org: every Turn the
+ * Collector reports with it is filed there. One person may be a Member of
+ * several Orgs, so when there is a choice to make the caller has to make it —
+ * picking the oldest membership silently is how spend lands in the wrong Org
+ * and nothing on the screen says so.
+ *
+ * `memberId` is still not trusted: it is intersected with
+ * `sessclone_own_member_ids()`, so naming somebody else's membership inserts
+ * nothing.
  */
 export const createApiKey = async (
   tx: postgres.TransactionSql,
   label: string,
+  memberId?: string,
 ) => {
+  // One membership, no question to ask. Several, and the caller answers it:
+  // guessing here is how a key quietly reports a laptop's spend into the wrong
+  // Org, with nothing on any screen to say it did.
+  let member = memberId
+  if (!member) {
+    const memberships = await listMemberships(tx)
+    if (memberships.length > 1) {
+      throw new Error('choose which org this key reports to')
+    }
+    member = memberships[0]?.member_id
+  }
+  if (!member) throw new Error('no membership to issue a key for')
+
   const { key, prefix, hash } = generateApiKey()
 
   const inserted = await tx`
     insert into api_keys (member_id, label, key_hash, key_prefix)
     select id, ${label}, ${hash}, ${prefix}
       from members
-     where id in (select sessclone_own_member_ids())
-     order by created_at
-     limit 1
+     where id = ${member}
+       and id in (select sessclone_own_member_ids())
     returning id
   `
 
-  // No membership, or the policy refused: say so rather than handing back a
-  // key that authenticates nothing.
+  // The named membership is not the caller's, or the policy refused: say so
+  // rather than handing back a key that authenticates nothing.
   if (inserted.length === 0) {
     throw new Error('no membership to issue a key for')
   }
@@ -102,14 +138,21 @@ export const createApiKey = async (
 
 /**
  * The viewer's own keys, newest first. No `where`: `api_keys_own` is the
- * where. Label breaks the tie, because two keys created in one transaction
- * share a `created_at` and an unordered list is a list that reorders itself.
+ * where, and `members_read` is what keeps the join from widening it. Label
+ * breaks the tie, because two keys created in one transaction share a
+ * `created_at` and an unordered list is a list that reorders itself.
+ *
+ * The Org comes back with the row so a person in more than one can tell which
+ * key reports where — the same reason creating a key now asks.
  */
 export const listApiKeys = (tx: postgres.TransactionSql) =>
   tx<ApiKeyRow[]>`
-    select id, label, key_prefix, created_at, last_used_at, revoked_at
-      from api_keys
-     order by created_at desc, label
+    select key.id, key.label, key.key_prefix, org.name as org_name,
+           key.created_at, key.last_used_at, key.revoked_at
+      from api_keys key
+      join members member on member.id = key.member_id
+      join orgs org on org.id = member.org_id
+     order by key.created_at desc, key.label
   `
 
 /**
