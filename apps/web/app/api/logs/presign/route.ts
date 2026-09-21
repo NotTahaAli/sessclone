@@ -8,7 +8,12 @@ import {
   unauthenticated,
 } from '../../../../lib/collector-auth'
 import { presignDecision } from '../../../../lib/presign'
-import { presignUpload, storageConfigured } from '../../../../lib/storage'
+import {
+  MAX_KEY_BYTES,
+  presignUpload,
+  storageConfigured,
+  ttl,
+} from '../../../../lib/storage'
 
 // Ticket 58: the endpoint that authorises a transcript upload — and the five
 // cases where it refuses.
@@ -90,6 +95,8 @@ export async function POST(request: Request) {
     return databaseFailure(error)
   }
 
+  if (!decision) return unauthenticated()
+
   if (!decision.allowed) {
     return Response.json({
       refused: decision.refusal,
@@ -104,12 +111,34 @@ export async function POST(request: Request) {
     () => {},
   )
 
-  const url = await presignUpload(decision.storageKey)
+  // Before the bytes move, not after: a key over the provider's limit is
+  // refused once the whole transcript has been streamed, which is the cost
+  // this route exists to save. The ids are bounded by the schema, so reaching
+  // this needs a Project key long enough to be worth saying so about.
+  if (Buffer.byteLength(decision.storageKey) > MAX_KEY_BYTES) {
+    return refused(
+      'this Session cannot be stored under a key that long',
+      `${decision.storageKey.slice(0, 80)}…`,
+    )
+  }
+
+  let url
+  try {
+    url = await presignUpload(decision.storageKey)
+  } catch {
+    // Signing fails for configuration reasons — a bad endpoint, credentials
+    // the client rejects — so it is the same answer as no storage at all
+    // rather than a stack trace out of the handler.
+    return Response.json(
+      { error: 'this deployment cannot sign an upload right now' },
+      { status: 503 },
+    )
+  }
 
   return Response.json({
     url,
     storageKey: decision.storageKey,
-    expiresIn: Number(process.env.STORAGE_PRESIGN_TTL_SECONDS) || 300,
+    expiresIn: ttl(),
   } satisfies PresignResponse)
 }
 

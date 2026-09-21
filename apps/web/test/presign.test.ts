@@ -94,7 +94,7 @@ const ask = async (
       headers: presented
         ? { authorization: `Bearer ${presented}`, 'content-type': 'application/json' }
         : { 'content-type': 'application/json' },
-      body: JSON.stringify({ sessionId: 'session-1', sha256: SHA, sizeBytes: 10, ...body }),
+      body: JSON.stringify({ sessionId: 'session-1', sha256: SHA, ...body }),
     }),
   )
 
@@ -267,4 +267,53 @@ test('a request that is not a presign request is refused with a reason', async (
   const [status, body] = await answer(await ask({ sha256: 'not-a-hash' }))
   expect(status).toBe(400)
   expect(body.detail).toContain('sha256')
+})
+
+test('a subscription that is not active entitles nothing', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+
+  // Sequential on purpose: each iteration rewrites the same row.
+  // oxlint-disable no-await-in-loop
+  for (const status of ['cancelled', 'past_due', 'inactive']) {
+    await sql`
+      update subscriptions set status = ${status}
+       where org_id = ${fixture.acme.id}
+    `
+    expect(await answer(await ask())).toMatchObject([
+      200,
+      { refused: 'tier_excludes_archival' },
+    ])
+  }
+  // oxlint-enable no-await-in-loop
+})
+
+test('another Member’s stored transcript is not this one’s hash oracle', async () => {
+  await withArchival(fixture.acme.id)
+  const projectId = await seedSession()
+  await sql`
+    insert into log_artifacts (org_id, member_id, project_id, session_id,
+                               storage_key, sha256, size_bytes)
+    values (${fixture.acme.id}, ${fixture.acme.members.manager}, ${projectId},
+            'session-1', 'orgs/x/theirs.jsonl', ${SHA}, 10)
+  `
+
+  // Same Session id, somebody else's row: `unchanged` here would tell the
+  // caller what another Member's transcript hashes to.
+  const [, body] = await answer(await ask())
+  expect(body.storageKey).toContain('session-1.jsonl')
+})
+
+test('a deployment with no storage says so rather than issuing a dead URL', async () => {
+  const storage = await import('../lib/storage')
+  const configured = vi
+    .spyOn(storage, 'storageConfigured')
+    .mockReturnValue(false)
+  try {
+    const [status, body] = await answer(await ask())
+    expect(status).toBe(503)
+    expect(body.error).toContain('storage')
+  } finally {
+    configured.mockRestore()
+  }
 })

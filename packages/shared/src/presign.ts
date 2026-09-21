@@ -14,7 +14,11 @@ import { z } from 'zod'
 // Project be archived by sending a different key. A field that is ignored is
 // worse than no field — it reads as though it were used — so there is none.
 
-const text = z.string().trim().min(1).max(500)
+// 200 characters, not 500: these two become percent-encoded segments of an
+// object key, and a multibyte character encodes to nine bytes. S3's key limit
+// is 1024 bytes, and a key that exceeds it is refused *after* the transcript
+// has been streamed — the cost ADR 0003's presign-side guard exists to avoid.
+const text = z.string().trim().min(1).max(200)
 
 export const PresignRequest = z.object({
   sessionId: text,
@@ -22,7 +26,6 @@ export const PresignRequest = z.object({
   agentId: text.nullable().optional(),
   /** Lowercase hex SHA-256 of the transcript as it stands on disk. */
   sha256: z.string().regex(/^[0-9a-f]{64}$/, 'a lowercase hex sha-256'),
-  sizeBytes: z.int().min(0),
 })
 
 export type PresignRequest = z.infer<typeof PresignRequest>
@@ -45,6 +48,12 @@ export type PresignRefusal =
   | 'tier_excludes_archival'
   | 'no_turns'
 
+/**
+ * A refusal, a URL, or — at 400, 401 and 503 — `{ error, detail? }`: a
+ * malformed body, a key that identifies no live Member, and a deployment with
+ * no storage configured are the three cases that are not answers to the
+ * question the Collector asked.
+ */
 export type PresignResponse =
   | {
       url: string
@@ -53,3 +62,4 @@ export type PresignResponse =
       expiresIn: number
     }
   | { refused: PresignRefusal; detail: string }
+  | { error: string; detail?: string }

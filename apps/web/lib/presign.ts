@@ -21,6 +21,9 @@ import { artifactKey } from './storage'
 export type PresignDecision =
   | { allowed: true; storageKey: string }
   | { allowed: false; refusal: PresignRefusal; detail: string }
+  /** No live membership for that key. The route answers 401, as it does for
+   * every other way a key fails to identify somebody. */
+  | null
 
 type Facts = {
   archival_enabled: boolean
@@ -40,8 +43,9 @@ type Facts = {
  *
  * The order the refusals are checked in is the order a person would fix them:
  * the Tier first, because no switch on the Member's machine changes it, then
- * the master switch, then the Project exception, then the hash — which is not
- * a refusal anybody acts on, just a job already done.
+ * the master switch, then the transient "not ingested yet", then the Project
+ * exception, then the hash — which is not a refusal anybody acts on, just a
+ * job already done.
  */
 export const presignDecision = async (
   tx: postgres.Sql | postgres.TransactionSql,
@@ -61,7 +65,13 @@ export const presignDecision = async (
            coalesce(exception.archival_enabled = false, false) as project_excluded,
            artifact.sha256 as stored_sha256
       from members member
-      left join subscriptions subscription on subscription.org_id = member.org_id
+      -- Only an active subscription entitles anything (lib/tier.ts): an Org
+      -- on the Team Tier with a cancelled or never-activated subscription is
+      -- on the Team Tier and entitled to nothing. Still a left join, so that
+      -- case answers tier_excludes_archival rather than no row at all.
+      left join subscriptions subscription
+             on subscription.org_id = member.org_id
+            and subscription.status = 'active'
       left join tiers tier on tier.id = subscription.tier_id
       -- The Session's Project, from the Turns already ingested. Latest wins:
       -- a Session that moved between repositories (ticket 09) is archived
@@ -72,7 +82,10 @@ export const presignDecision = async (
          where turn.member_id = member.id
            and turn.session_id = ${request.sessionId}
            and turn.agent_id is not distinct from ${request.agentId}
-         order by turn.occurred_at desc
+         -- Turns of one Session often share a timestamp, and on a tie the
+         -- Project decides both the exclusion check and the storage key, so
+         -- the order cannot be the planner's to choose.
+         order by turn.occurred_at desc, turn.id desc
          limit 1
       ) session on true
       left join projects project on project.id = session.project_id
@@ -89,14 +102,10 @@ export const presignDecision = async (
   `
 
   // No row at all means the key resolved to a Member who is no longer live.
-  // The route answers 401 for that before reaching here; this is the belt.
-  if (!facts) {
-    return {
-      allowed: false,
-      refusal: 'archival_off',
-      detail: 'this membership cannot archive',
-    }
-  }
+  // The route answers 401 for that before reaching here; this is the belt, and
+  // it is the same 401 rather than a refusal code a Collector would show
+  // somebody as though a switch were off.
+  if (!facts) return null
 
   // Null is an Org with no subscription, which is not an entitlement anybody
   // granted (ADR 0004): archival is a Tier capability, so no Tier is no
@@ -120,7 +129,7 @@ export const presignDecision = async (
   // Transient, and the only refusal the Member cannot act on: the Collector
   // reports Turns and transcripts on different schedules, so a brand-new
   // Session is simply not ingested yet.
-  if (!facts.project_id && !facts.project_key) {
+  if (!facts.project_id) {
     const [seen] = await tx<{ any: boolean }[]>`
       select true as any from turns
        where member_id = ${request.memberId}

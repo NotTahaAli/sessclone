@@ -14,6 +14,12 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 export const PRESIGN_TTL_SECONDS = 300
 
+/** SigV4's own ceiling: a presign beyond a week is refused by the signer. */
+const MAX_TTL_SECONDS = 604_800
+
+/** S3's object key limit, in bytes rather than characters. */
+export const MAX_KEY_BYTES = 1024
+
 let client: S3Client | undefined
 
 const storage = () => {
@@ -29,6 +35,14 @@ const storage = () => {
     region: process.env.STORAGE_REGION ?? 'auto',
     forcePathStyle: process.env.STORAGE_FORCE_PATH_STYLE !== 'false',
     credentials: { accessKeyId, secretAccessKey },
+    // Since 3.731.0 the S3 client computes a CRC32 over the request body by
+    // default and hoists it into the signed query string. A presign has no
+    // body, so what gets signed is the checksum of zero bytes — and the
+    // provider then refuses every upload that actually carries a transcript.
+    // `WHEN_REQUIRED` leaves it off for PutObject, which is what a presigned
+    // PUT needs: the transcript's own hash is checked by us, before the bytes
+    // move.
+    requestChecksumCalculation: 'WHEN_REQUIRED',
   }))
 }
 
@@ -87,6 +101,10 @@ export const artifactKey = (artifact: {
  * transcript on a bad connection and short enough that a leaked URL is a
  * window rather than a grant.
  *
+ * `ContentType` is deliberately absent: only `host` is signed, so a content
+ * type set here reaches neither the URL nor the stored object. The Collector
+ * sends its own.
+ *
  * `ChecksumSHA256` is deliberately not set: the Collector's hash is base16 and
  * S3 wants base64, and signing the checksum would make the URL refuse an
  * upload whose bytes changed between the hash and the PUT — which is exactly
@@ -98,14 +116,21 @@ export const presignUpload = async (key: string) =>
     new PutObjectCommand({
       Bucket: required('STORAGE_BUCKET'),
       Key: key,
-      ContentType: 'application/x-ndjson',
     }),
     { expiresIn: ttl() },
   )
 
-const ttl = () => {
+/**
+ * How long an issued URL lives, in seconds — and the number the Collector is
+ * told, so the two cannot disagree.
+ *
+ * Clamped at both ends. A negative or unparseable setting falls back to the
+ * default; anything past SigV4's week makes the signer throw, which would turn
+ * a configuration mistake into a 500 on every upload.
+ */
+export const ttl = () => {
   const configured = Number(process.env.STORAGE_PRESIGN_TTL_SECONDS)
   return Number.isFinite(configured) && configured > 0
-    ? configured
+    ? Math.min(configured, MAX_TTL_SECONDS)
     : PRESIGN_TTL_SECONDS
 }
