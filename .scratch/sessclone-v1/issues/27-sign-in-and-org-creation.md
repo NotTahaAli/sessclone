@@ -69,3 +69,11 @@ somebody has signed in both ways against a real project.
   `EmailBelongsToAnotherAccount` and refused with a message.
 - The Proxy's matcher covered `/api`, so the Collector's report was redirected
   to the sign-in page and swallowed. Those routes authenticate by API key.
+- A provider failure reached the sign-in page as "That link is missing
+  something. Start again." Supabase reports one in the URL _fragment_, which
+  never reaches the server, so the callback saw a request with no `code` and no
+  `token_hash` — indistinguishable from a link that arrived empty, and the one
+  thing it is not. `app/sign-in/provider-error.tsx` reads the fragment in the
+  browser, and the callback handles the query-string form of the same error.
+  Only the provider's `error_code` is shown, never `error_description`: that is
+  free text from a third party rendered on our own sign-in page.

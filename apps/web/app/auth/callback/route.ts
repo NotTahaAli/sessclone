@@ -32,10 +32,18 @@ const EmailOtp = z.enum([
   'email_change',
 ])
 
-const failed = (request: NextRequest, reason: string) => {
+// A provider's own error code, when it reports one. Matched rather than
+// forwarded as it arrives: this ends up on our sign-in page, and the
+// `error_description` beside it is free text from a third party, which is not
+// something to render. `app/sign-in/provider-error.tsx` applies the same rule
+// to the fragment, which is where Supabase usually puts this.
+const PROVIDER_CODE = /^[a-z_]{1,64}$/
+
+const failed = (request: NextRequest, reason: string, code?: string) => {
   const url = request.nextUrl.clone()
   url.pathname = '/sign-in'
   url.search = `?error=${reason}`
+  if (code) url.search += `&code=${code}`
   return NextResponse.redirect(url)
 }
 
@@ -50,6 +58,19 @@ export async function GET(request: NextRequest) {
   // freshly-minted session to wherever the link says.
   const requested = params.get('next')
   const next = requested?.startsWith('/') ? requested : '/'
+
+  // The provider refused before we ever got a code. Distinguished from a link
+  // that arrived with nothing, which is what this route used to call it: the
+  // two look identical here — no code, no token — and only one of them is the
+  // visitor's problem.
+  if (params.get('error')) {
+    const reported = params.get('error_code')
+    return failed(
+      request,
+      'provider',
+      reported && PROVIDER_CODE.test(reported) ? reported : 'unknown',
+    )
+  }
 
   const supabase = await supabaseServer()
 

@@ -1,4 +1,5 @@
 import { sendMagicLink, signInWithGitHub } from './actions'
+import { ProviderError } from './provider-error'
 
 // Deliberately unstyled. The design system (ticket 16) is documented and not
 // yet built — there is no Tailwind, no `globals.css` and no shell in this app
@@ -18,20 +19,33 @@ const MESSAGES: Record<string, string> = {
   bootstrap: 'Signed in, but your organisation could not be set up. Try again.',
 }
 
+// Matched, never rendered as it arrives — see `app/auth/callback/route.ts`.
+const PROVIDER_CODE = /^[a-z_]{1,64}$/
+
 export default async function SignIn({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; sent?: string }>
+  searchParams: Promise<{ error?: string; sent?: string; code?: string }>
 }) {
-  const { error, sent } = await searchParams
+  const { error, sent, code } = await searchParams
 
   return (
     <main>
       <h1>Sign in to sessclone</h1>
 
-      {error ? (
+      {error === 'provider' ? (
+        <p role="alert">
+          The provider refused the sign-in (
+          {code && PROVIDER_CODE.test(code) ? code : 'unknown'}). Nothing is
+          wrong with your account. Check the provider&apos;s settings in
+          Supabase, or use a link instead.
+        </p>
+      ) : error ? (
         <p role="alert">{MESSAGES[error] ?? 'Something went wrong.'}</p>
       ) : null}
+
+      {/* The same failure, when Supabase reported it in the fragment. */}
+      <ProviderError />
 
       {sent ? (
         <p role="status">
