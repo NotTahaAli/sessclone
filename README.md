@@ -75,7 +75,18 @@ Collector runs on a contributor's own machine and gets vendored into other
 people's setups; copyleft there would be a tax on installing it, not a
 protection.
 
+One additional term rides with the AGPL, under its section 7(b): a deployment
+keeps the panel's Appropriate Legal Notices — copyright, no warranty, the
+licence and how to read it — and the sessclone credit displayed with them.
+`NOTICE.md` is where that term is written out, along with what the marketing
+site's three self-hosting promises each actually are: one is that term, one is
+narrower than it sounds, and sending features back as a pull request is an ask
+that no open licence enforces.
+
 ## Contributing
+
+`CONTRIBUTING.md` covers the licence of what you send: AGPL-3.0-only, a DCO
+sign-off (`git commit -s`), and no CLA.
 
 `AGENTS.md` is the contract — repo rules, the skills to reach for, and the bars
 every change clears. `CONTEXT.md` is the domain glossary.

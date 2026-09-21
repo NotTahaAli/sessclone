@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 
 import { AccountMenu } from './account'
+import { PanelCredit } from './credit'
 import { BottomBarLinks, SidebarLinks } from './nav-links'
 import { DESTINATIONS } from './navigation'
 import { currentViewer } from '../../lib/viewer'
@@ -18,6 +19,10 @@ import { currentViewer } from '../../lib/viewer'
 //    frame at both widths, next to the account control, because every figure
 //    on every page under here is an Org's figure and a reader who cannot see
 //    whose is reading an unlabelled number.
+//  - **The licence's Appropriate Legal Notices** (ticket 79), which used to
+//    be rendered by the `Panel` frame every signed-in page wrapped in. They
+//    are rendered here instead, so a page added later carries them by being a
+//    page rather than by remembering to.
 //  - **The states before any Turn arrives**, which are `costs/page.tsx`,
 //    `loading.tsx` and `error.tsx` — drawn from the wireframes rather than
 //    improvised, which is the fourth criterion.
@@ -77,7 +82,14 @@ export default async function DashboardLayout({
             <SidebarLinks items={DESTINATIONS} />
           </nav>
         </div>
-        <AccountMenu viewer={viewer} />
+        {/* The account block, and the credit under it — which is where the
+            wireframes put the self-hosting credit at 1440. It is shown on
+            every deployment rather than only a self-hosted one, because the
+            additional term in `NOTICE.md` makes no such distinction. */}
+        <div className="flex flex-col gap-4">
+          <AccountMenu viewer={viewer} />
+          <PanelCredit />
+        </div>
       </aside>
 
       {/* Phone: the header carries the Org name and the account control, and
@@ -94,7 +106,15 @@ export default async function DashboardLayout({
 
       {/* The bottom bar is fixed, so the content column reserves room for it
           rather than ending underneath it. */}
-      <main className="grow px-4 py-6 pb-28 lg:px-8 lg:pb-8">{children}</main>
+      <main className="grow px-4 py-6 pb-28 lg:px-8 lg:pb-8">
+        {children}
+        {/* At phone width the sidebar is not rendered at all, so the notices
+            go under the content instead. One of the two is visible at a
+            time. */}
+        <div className="lg:hidden">
+          <PanelCredit />
+        </div>
+      </main>
 
       <nav
         aria-label="Main"

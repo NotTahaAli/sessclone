@@ -755,6 +755,68 @@ describe('member_project_archival', () => {
     )
     expect(own.count).toBe(1)
   })
+
+  test('refuses that write to every other Role, and across Orgs', async () => {
+    // The Owner case above, completed: ticket 72's settings surface claims no
+    // Role can write another Member's exceptions, and a claim about a matrix
+    // wants the matrix.
+    for (const role of ['admin', 'manager', 'managerWithoutScope'] as const) {
+      // oxlint-disable-next-line no-await-in-loop -- three Roles, order is clearer.
+      await expect(
+        asRole(
+          fixture.acme,
+          role,
+          (tx) => tx`
+            insert into member_project_archival (org_id, member_id, project_id, archival_enabled)
+            values (
+              ${fixture.acme.id}, ${fixture.acme.members.member},
+              ${acmeProjects.c}, false
+            )
+          `,
+        ),
+      ).rejects.toThrow(/row-level security/)
+    }
+
+    // Another Org's Owner, at a row that names neither their Org nor their
+    // Member: refused by the same policy, not by the foreign keys.
+    await expect(
+      asRole(
+        fixture.globex,
+        'owner',
+        (tx) => tx`
+          insert into member_project_archival (org_id, member_id, project_id, archival_enabled)
+          values (
+            ${fixture.acme.id}, ${fixture.acme.members.member},
+            ${acmeProjects.c}, false
+          )
+        `,
+      ),
+    ).rejects.toThrow(/row-level security/)
+
+    // And the update half, aimed at a row the Member already owns.
+    await asRole(
+      fixture.acme,
+      'member',
+      (tx) => tx`
+        insert into member_project_archival (org_id, member_id, project_id, archival_enabled)
+        values (
+          ${fixture.acme.id}, ${fixture.acme.members.member},
+          ${acmeProjects.c}, false
+        )
+      `,
+    )
+
+    const changed = await asRole(
+      fixture.acme,
+      'manager',
+      (tx) => tx`
+        update member_project_archival set archival_enabled = true
+         where member_id = ${fixture.acme.members.member}
+           and project_id = ${acmeProjects.c}
+      `,
+    )
+    expect(changed.count).toBe(0)
+  })
 })
 
 describe('rates', () => {
