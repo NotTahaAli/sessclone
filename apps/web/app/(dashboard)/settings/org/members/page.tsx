@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { setScopeMember } from './actions'
 import { withdrawInvite } from './invite-actions'
 import { InviteForm } from './invite-form'
+import { PersonControls } from './people-controls'
 import { PageHeader } from '../../../page-header'
 import { asViewer } from '../../../../../lib/db'
 import {
@@ -85,6 +86,39 @@ export default async function Members() {
             Showing the most recent invitations.
           </p>
         ) : null}
+      </section>
+
+      <section aria-labelledby="people">
+        <h2 id="people" className="text-heading-lg">
+          People
+        </h2>
+        <p className="text-text-secondary mt-2 text-sm">
+          A Role takes effect at once. Removing somebody frees their Seat and
+          stops their keys reporting, and keeps everything they have already
+          spent in this Org&apos;s history — so the totals still add up.
+        </p>
+        <ul className="mt-4">
+          {members.map((member) => (
+            <li
+              key={member.memberId}
+              className="border-rule flex flex-wrap items-center justify-between gap-3 border-b py-3"
+            >
+              <div className="min-w-0">
+                <p className="text-sm break-all">{member.email}</p>
+                <p className="text-text-muted text-sm">
+                  {member.role}
+                  {member.removed ? ' — removed, history kept' : ''}
+                </p>
+              </div>
+              <PersonControls
+                memberId={member.memberId}
+                role={member.role}
+                email={member.email}
+                removed={member.removed}
+              />
+            </li>
+          ))}
+        </ul>
       </section>
 
       <section aria-labelledby="scopes">

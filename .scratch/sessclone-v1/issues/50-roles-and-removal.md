@@ -4,10 +4,10 @@
 
 **Blocked by:** 44, 49.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Role changes take effect immediately and are enforced by policy
-- [ ] Removing a Member frees their Seat
-- [ ] A removed Member's Turns remain readable, and Org totals still include them
-- [ ] A removed Member's keys stop working
-- [ ] Covered by the policy suite, including that removal is not a cascade delete
+- [x] Role changes take effect immediately and are enforced by policy
+- [x] Removing a Member frees their Seat
+- [x] A removed Member's Turns remain readable, and Org totals still include them
+- [x] A removed Member's keys stop working
+- [x] Covered by the policy suite, including that removal is not a cascade delete
