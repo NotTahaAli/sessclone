@@ -4,9 +4,9 @@
 
 **Blocked by:** 19, 20, 24.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Landing page explaining the problem and the collection-everywhere claim
-- [ ] Pricing page showing tiers, per-seat pricing, and what each tier includes
-- [ ] Self-hosting presented as the free path, linking to the repository
-- [ ] Responsive to phone width, correct in both themes
+- [x] Landing page explaining the problem and the collection-everywhere claim
+- [x] Pricing page showing tiers, per-seat pricing, and what each tier includes
+- [x] Self-hosting presented as the free path, linking to the repository
+- [x] Responsive to phone width, correct in both themes
