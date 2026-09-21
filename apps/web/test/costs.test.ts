@@ -556,12 +556,14 @@ test('the filterable view still reads as the viewer, not as its owner', async ()
   const globex = await asRole(
     fixture.globex,
     'owner',
-    (tx) => tx`select turn_id from turn_costs where org_id = ${fixture.acme.id}`,
+    (tx) =>
+      tx`select turn_id from turn_costs where org_id = ${fixture.acme.id}`,
   )
   const acme = await asRole(
     fixture.acme,
     'member',
-    (tx) => tx`select turn_id from turn_costs where org_id = ${fixture.acme.id}`,
+    (tx) =>
+      tx`select turn_id from turn_costs where org_id = ${fixture.acme.id}`,
   )
 
   expect(globex).toEqual([])

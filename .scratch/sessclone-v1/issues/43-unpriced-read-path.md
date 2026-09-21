@@ -4,8 +4,8 @@
 
 **Blocked by:** 42.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Queries return unpriced Turns as unpriced, never as zero
-- [ ] A count of unpriced Turns available alongside any total
-- [ ] The distinct unknown model identifiers available for the platform admin surface
+- [x] Queries return unpriced Turns as unpriced, never as zero
+- [x] A count of unpriced Turns available alongside any total
+- [x] The distinct unknown model identifiers available for the platform admin surface
