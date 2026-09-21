@@ -6,6 +6,9 @@
     // esModuleInterop, and suggests incremental. Set here so a build leaves the
     // file alone.
     "jsx": "react-jsx",
+    // `@sessclone/shared` is consumed as TypeScript source, and its own
+    // imports name their `.ts` extensions.
+    "allowImportingTsExtensions": true,
     "incremental": true,
     "plugins": [{ "name": "next" }],
     "paths": {

@@ -4,11 +4,11 @@
 
 **Blocked by:** 11, 21, 22, 23, 24, 25.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A Member reads only their own Turns and artifacts
-- [ ] A Manager reads exactly their Scope; a Manager with an empty Scope reads nothing
-- [ ] An Admin and an Owner read the whole Org
-- [ ] No Role reads another Org at all
-- [ ] A Member cannot change their own Role
-- [ ] Every table added later is expected to extend this suite
+- [x] A Member reads only their own Turns and artifacts
+- [x] A Manager reads exactly their Scope; a Manager with an empty Scope reads nothing
+- [x] An Admin and an Owner read the whole Org
+- [x] No Role reads another Org at all
+- [x] A Member cannot change their own Role
+- [x] Every table added later is expected to extend this suite
