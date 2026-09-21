@@ -22,7 +22,6 @@ vi.mock('../lib/storage', async (importOriginal) => ({
   deleteObjects: async (keys: string[]) => {
     deleted.push(...keys)
   },
-  keysUnder: async () => [],
 }))
 
 let fixture: Fixture

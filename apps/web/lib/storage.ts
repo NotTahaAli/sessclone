@@ -1,6 +1,5 @@
 import {
   DeleteObjectsCommand,
-  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3'
@@ -65,22 +64,6 @@ export const storageConfigured = () =>
       process.env.STORAGE_ACCESS_KEY_ID &&
       process.env.STORAGE_SECRET_ACCESS_KEY,
   )
-
-/**
- * The prefix every one of a Member's objects for one Project sits under.
- *
- * ADR 0005 says the Project sweep of ticket 73 is a prefix sweep, and this is
- * why the key is shaped as it is (ADR 0003): one `list` and one `delete`
- * rather than a request per object.
- */
-export const projectPrefix = (artifact: {
-  orgId: string
-  memberId: string
-  projectKey: string | null
-}) =>
-  `orgs/${artifact.orgId}/members/${artifact.memberId}/projects/${encodeURIComponent(
-    artifact.projectKey ?? 'none',
-  )}/`
 
 /**
  * The object key for one Session's transcript, from ADR 0003.
@@ -160,7 +143,8 @@ export const ttl = () => {
 const DELETE_BATCH = 1000
 
 /**
- * Deletes the named objects, in batches of a thousand.
+ * Deletes the named objects, in batches of a thousand, and raises unless
+ * every one of them went.
  *
  * Deleting an object that is not there succeeds, which is what makes ticket
  * 73's deletion safe to re-run: the failure mode worth avoiding is a row
@@ -175,42 +159,24 @@ export const deleteObjects = async (keys: string[]) => {
     // request per thousand objects, and firing every batch at once is how a
     // sweep of a large Project rate-limits itself.
     // eslint-disable-next-line no-await-in-loop
-    await storage().send(
+    const answer = await storage().send(
       new DeleteObjectsCommand({
         Bucket: bucket,
         Delete: { Objects: batch.map((Key) => ({ Key })), Quiet: true },
       }),
     )
-  }
-}
 
-/**
- * Every key under a prefix.
- *
- * Paginated, because a Member with a long-running Project has more than a
- * thousand Sessions and `ListObjectsV2` stops there.
- */
-export const keysUnder = async (prefix: string) => {
-  const bucket = required('STORAGE_BUCKET')
-  const keys: string[] = []
-  let token: string | undefined
-
-  do {
-    // Sequential on purpose: each page needs the continuation token the page
-    // before it returned.
-    // eslint-disable-next-line no-await-in-loop
-    const page = await storage().send(
-      new ListObjectsV2Command({
-        Bucket: bucket,
-        Prefix: prefix,
-        ContinuationToken: token,
-      }),
-    )
-    for (const object of page.Contents ?? []) {
-      if (object.Key) keys.push(object.Key)
+    // S3 answers 200 with a per-key result, so a refused key is not a
+    // rejected promise: `Quiet` asks for the failures alone, and dropping
+    // them would let a sweep that deleted nothing report success. The caller
+    // deletes the rows in a transaction that commits after this, so throwing
+    // here is what keeps the row and its bytes together — the transcripts
+    // stay, and so do the rows that can still find them.
+    if (answer.Errors?.length) {
+      const [first] = answer.Errors
+      throw new Error(
+        `${answer.Errors.length} object(s) were not deleted: ${first?.Code ?? 'unknown'}`,
+      )
     }
-    token = page.NextContinuationToken
-  } while (token)
-
-  return keys
+  }
 }

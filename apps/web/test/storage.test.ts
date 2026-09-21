@@ -1,4 +1,4 @@
-import { beforeEach, expect, test } from 'vitest'
+import { beforeEach, expect, test, vi } from 'vitest'
 
 // Ticket 58's other half: the URL itself.
 //
@@ -57,4 +57,32 @@ test('the signed life is the life the Collector is told', async () => {
 
   const url = new URL(await presignUpload('orgs/a/session-2.jsonl'))
   expect(url.searchParams.get('X-Amz-Expires')).toBe(String(ttl()))
+})
+
+test('a delete that S3 refuses per key is a failure, not a success', async () => {
+  const { S3Client } = await import('@aws-sdk/client-s3')
+  const { deleteObjects } = await import('../lib/storage')
+
+  // `DeleteObjects` answers 200 with a per-key result, so the SDK does not
+  // reject: a refused key arrives as an entry in `Errors`. Dropped, it would
+  // let a sweep commit the row deletions while the transcripts — source code,
+  // sometimes a credential — stayed in the bucket with nothing pointing at
+  // them.
+  const send = vi
+    .spyOn(S3Client.prototype, 'send')
+    .mockResolvedValue({
+      Errors: [{ Key: 'orgs/a/one.jsonl', Code: 'AccessDenied' }],
+    } as never)
+
+  await expect(deleteObjects(['orgs/a/one.jsonl'])).rejects.toThrow(
+    /AccessDenied/,
+  )
+
+  // And a clean answer resolves, in one request per thousand keys rather than
+  // one per object.
+  send.mockResolvedValue({} as never)
+  await deleteObjects(Array.from({ length: 1001 }, (_, n) => `orgs/a/${n}`))
+  expect(send).toHaveBeenCalledTimes(3)
+
+  send.mockRestore()
 })

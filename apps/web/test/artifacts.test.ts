@@ -22,32 +22,26 @@ import {
 // that refuses on demand.
 
 const deleted: string[] = []
-const listed: string[] = []
 let refuseDelete = false
+/** Runs between the row delete and the object delete, to model a race. */
+let duringDelete: (() => Promise<void>) | undefined
 
 vi.mock('../lib/storage', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/storage')>()),
   deleteObjects: async (keys: string[]) => {
+    await duringDelete?.()
     if (refuseDelete) throw new Error('storage is unreachable')
     deleted.push(...keys)
   },
-  keysUnder: async (prefix: string) => {
-    listed.push(prefix)
-    return stored.filter((key) => key.startsWith(prefix))
-  },
 }))
-
-/** What the fake bucket holds, so a prefix listing has something to find. */
-let stored: string[] = []
 
 let fixture: Fixture
 
 beforeEach(async () => {
   fixture = await seedFixture()
   deleted.length = 0
-  listed.length = 0
-  stored = []
   refuseDelete = false
+  duringDelete = undefined
 })
 
 const project = async (key: string) => {
@@ -71,7 +65,6 @@ const artifact = async ({
   const key = `orgs/${fixture.acme.id}/members/${member}/projects/${encodeURIComponent(
     projectKey ?? 'none',
   )}/${sessionId}${agentId ? `/agents/${agentId}` : ''}.jsonl`
-  stored.push(key)
 
   const [row] = await sql<{ id: string }[]>`
     insert into log_artifacts (org_id, member_id, project_id, session_id,
@@ -117,10 +110,9 @@ test('a whole Project goes at once, swept by the key’s prefix', async () => {
     ),
   ).toBe(3)
 
-  // One list and one delete, rather than a request per object.
-  expect(listed).toEqual([
-    `orgs/${fixture.acme.id}/members/${fixture.acme.members.member}/projects/${encodeURIComponent('github.com/acme/api')}/`,
-  ])
+  // One delete for the Project, and exactly the keys of the rows that went:
+  // an object the transaction never saw is an upload that landed while the
+  // sweep ran, and destroying its bytes would leave a row that outlives them.
   expect(deleted).not.toContain(untouched.key)
   expect(deleted).toHaveLength(3)
 
@@ -245,15 +237,40 @@ test('a sweep is safe to run twice', async () => {
       deleteStoredProject(tx, fixture.acme.members.member, projectId),
     ),
   ).toBe(1)
-  // Nothing left, nothing raised: deleting an object that is not there
-  // succeeds, which is what makes a re-run safe after a partial failure.
+  // Nothing left, nothing raised, and no second delete: a re-run after a
+  // failure finds the rows that did not go and leaves the rest alone.
+  deleted.length = 0
   expect(
     await asMember((tx) =>
       deleteStoredProject(tx, fixture.acme.members.member, projectId),
     ),
   ).toBe(0)
+  expect(deleted).toEqual([])
 })
 
+test('an upload that lands during a sweep keeps its bytes', async () => {
+  const projectId = await project('github.com/acme/api')
+  const swept = await artifact({ projectId })
+
+  // The window: the rows are deleted, then the objects. A Collector's upload
+  // lands in it — written by the presign route with the service role, outside
+  // this transaction — so its row survives the sweep. Its bytes must too, or
+  // the row outlives them and the download 404s forever.
+  let landed: { id: string; key: string } | undefined
+  duringDelete = async () => {
+    landed = await artifact({ projectId, sessionId: 'session-mid' })
+  }
+
+  await asMember((tx) =>
+    deleteStoredProject(tx, fixture.acme.members.member, projectId),
+  )
+
+  expect(deleted).toEqual([swept.key])
+  const [row] = await sql<{ count: number }[]>`
+    select count(*)::int as count from log_artifacts where id = ${landed!.id}
+  `
+  expect(row!.count).toBe(1)
+})
 test('a Member sees the repository their stored Sessions belong to', async () => {
   const projectId = await project('github.com/acme/api')
   await artifact({ projectId })
@@ -268,4 +285,41 @@ test('a Member sees the repository their stored Sessions belong to', async () =>
     projectKey: 'github.com/acme/api',
     sessions: 1,
   })
+})
+
+test('the Session list is read from an index rather than sorted', async () => {
+  const projectId = await project('github.com/acme/api')
+  // Enough history for the planner to have a choice: on three rows a
+  // sequential scan wins whatever the indexes say, which would make this
+  // test agree with anything.
+  await sql`
+    insert into log_artifacts (org_id, member_id, project_id, session_id,
+                               storage_key, sha256, size_bytes, uploaded_at)
+    select ${fixture.acme.id}, ${fixture.acme.members.member}, ${projectId},
+           'session-' || n,
+           'orgs/x/members/y/projects/p/session-' || n || '.jsonl',
+           ${'d'.repeat(64)}, 1024, now() - (n || ' minutes')::interval
+      from generate_series(1, 2000) as n
+  `
+  await sql`analyze log_artifacts`
+
+  // The page reads this on every render, and a Member archives every Session
+  // they run: a plan that sorts the whole history to show the newest hundred
+  // gets slower for the rest of that Member's life.
+  const plan = await asMember(
+    (tx) => tx<{ 'QUERY PLAN': string }[]>`
+      explain (costs off)
+      select id from log_artifacts
+       where member_id = ${fixture.acme.members.member}
+         and member_id in (select sessclone_own_member_ids())
+       order by uploaded_at desc, id desc
+       limit 101
+    `,
+  )
+
+  const text = plan.map((row) => row['QUERY PLAN']).join('\n')
+  expect(text).toContain('log_artifacts_member_uploaded_idx')
+  // The index is already in the order the page asks for, so the limit stops
+  // the scan instead of a sort reading everything first.
+  expect(text).not.toContain('Sort Key')
 })

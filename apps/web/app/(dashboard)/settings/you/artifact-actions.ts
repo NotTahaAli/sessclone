@@ -30,6 +30,10 @@ export const deleteSession = async (formData: FormData) => {
   const artifactId = Id.safeParse(formData.get('artifactId'))
   if (!artifactId.success) return
 
+  // The outcome is deliberately not reported. The page renders the viewer's
+  // own rows and nothing else, so a refusal here is a hand-assembled post,
+  // and an answer that told it apart from "already gone" would say whether an
+  // artifact id belongs to somebody.
   await asViewer(user.id, (tx) => deleteStoredSession(tx, artifactId.data))
 
   revalidatePath('/settings/you')

@@ -8,9 +8,16 @@
 -- not tell one Project's transcripts from another's.
 --
 -- The branch mirrors the `turns` one exactly, down to
--- `sessclone_visible_member_ids()`: whoever may read the artifact may read the
--- name of the Project it came from, and nobody else. It adds no row that was
--- not already visible through `log_artifacts_read`.
+-- `sessclone_visible_member_ids()`: whoever may read a Member's artifacts may
+-- read the name of the Project one came from, and nobody else.
+--
+-- It does widen `projects_read`, which this function gates: an Admin, an Owner
+-- or a Manager with that Member in Scope now reads the `projects` row — `key`
+-- and `remote` — for a Project that has a stored transcript and no Turn, where
+-- before they read nothing. ADR 0005 allows exactly that ("Org-visible to
+-- anyone who may see that Member's Projects"), and it is the same key they
+-- would see the moment a Turn landed. Worth stating plainly because a
+-- `local:` key is a hostname and an absolute path on somebody's own machine.
 --
 -- The `search_path` is pinned here as ...120600_search_path.sql pinned it.
 -- `create or replace function` keeps the old `SET` clause only if the new

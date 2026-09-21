@@ -1,6 +1,6 @@
 import type { TransactionSql } from 'postgres'
 
-import { deleteObjects, keysUnder } from './storage'
+import { deleteObjects } from './storage'
 
 // Ticket 73: destroying transcripts that are already stored.
 //
@@ -146,8 +146,10 @@ export const storedSessions = async (
  * both gone rather than a row pointing at nothing.
  *
  * Returns false when nothing was deleted — somebody else's artifact, or one
- * already gone — so the page reports what happened rather than claiming a
- * deletion the policy refused.
+ * already gone. The page does not distinguish the two: it only renders the
+ * viewer's own rows, so a refusal there means a post somebody assembled by
+ * hand, and an answer that told them which it was would be an oracle. The
+ * boolean is for a caller that has a reason to know.
  */
 export const deleteStoredSession = async (
   tx: TransactionSql,
@@ -168,15 +170,20 @@ export const deleteStoredSession = async (
 /**
  * Destroys everything stored for one of the Member's Projects.
  *
- * The sweep is by prefix, as ADR 0005 says: the keys are listed from storage
- * under `orgs/…/members/…/projects/…/` and deleted in batches, rather than one
- * request per row. That also catches an object whose row was already gone —
- * the one direction the ordering above cannot rule out, if a commit fails
- * after the bytes went.
+ * One delete for the whole Project rather than a request per object: the
+ * statement returns every key it removed and they go in batches of a
+ * thousand, which is what ADR 0005's prefix sweep is for.
+ *
+ * It deletes exactly the keys of the rows it deleted, and deliberately does
+ * not also list the bucket under the Project's prefix. A listing would reach
+ * an object whose row this transaction never saw — an upload that lands while
+ * the sweep runs writes its row outside this transaction, so it survives
+ * while its bytes would not, which is precisely the orphan the ordering below
+ * exists to prevent. A Collector uploading during a sweep is the normal case,
+ * not an exotic one: deleting is not an opt-out, so the next Session uploads.
  *
  * Returns how many rows went, which is what the page reports. Safe to re-run:
- * a second sweep finds no rows and deletes the objects that are no longer
- * there, both of which succeed.
+ * a second sweep finds no rows and does nothing.
  */
 export const deleteStoredProject = async (
   tx: TransactionSql,
@@ -192,37 +199,10 @@ export const deleteStoredProject = async (
   `
   if (rows.length === 0) return 0
 
-  // The prefixes come from the rows this statement just deleted, and not from
-  // the Org id and Project key read back separately. Storage has no policies,
-  // so a prefix assembled from anything the policy did not already hand back
-  // is a prefix nobody checked — and a Project the viewer cannot read would
-  // assemble the *wrong* one, which sweeps somebody else's group rather than
-  // this one. A row renamed since it was written keeps its own old prefix
-  // here, which is the one its object actually sits under.
-  const prefixes = new Set(rows.map((row) => row.storage_key).map(prefixOf))
-  const listed = await Promise.all([...prefixes].map(keysUnder))
-
-  // The listing as well as the rows' own keys: the listing catches an object
-  // whose row was already gone, and the rows catch an object a listing has
-  // not caught up with.
-  await deleteObjects([
-    ...new Set([...rows.map((row) => row.storage_key), ...listed.flat()]),
-  ])
+  // The keys come from the rows the policy just handed back, never from the
+  // browser: storage has no policies, so a key assembled from anything else
+  // is a key nobody checked.
+  await deleteObjects(rows.map((row) => row.storage_key))
 
   return rows.length
-}
-
-/**
- * The Project prefix one artifact key sits under, cut from the key itself.
- *
- * `orgs/<org>/members/<member>/projects/<key>/<session>.jsonl` — the prefix is
- * everything up to and including the slash after the Project segment. A key
- * that is not that shape sweeps nothing rather than sweeping something wider:
- * the row's own key is deleted either way.
- */
-const prefixOf = (key: string) => {
-  const parts = key.split('/')
-  return parts.length > 5 && parts[4] === 'projects'
-    ? `${parts.slice(0, 6).join('/')}/`
-    : key
 }
