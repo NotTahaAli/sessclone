@@ -26,6 +26,11 @@ ticket.
 Real credentials live in `.env`, which is gitignored, or in the deployment's
 own secret store.
 
+**The server's `.env` belongs in `apps/web`,** not at the repo root beside
+`.env.example`. Next.js reads environment files from its own project root, so a
+root `.env` is loaded by nothing and the first page that needs one fails with
+`NEXT_PUBLIC_SUPABASE_URL is not set` rather than saying where it looked.
+
 ## Server — `apps/web`
 
 ### Database
