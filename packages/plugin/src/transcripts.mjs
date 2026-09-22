@@ -7,6 +7,12 @@
 //   <config>/projects/<sanitised-cwd>/<sessionId>/
 //       subagents/agent-<agentId>.jsonl                        an Agent Run
 //       subagents/agent-<agentId>.meta.json                     its sidecar
+//       subagents/workflows/<runId>/agent-<agentId>.jsonl      a workflow's run
+//
+// `subagents/` is walked rather than listed, because a workflow's runs sit a
+// level deeper under their run id (spec §Hooks, verified live) and finding 06
+// says the same in glob form: `projects/*/**/*.jsonl` finds them, a flat
+// listing of `subagents/` misses every one.
 //
 // Every subagent run — a workflow's runs included, which are the same files in
 // the same place — writes its own transcript one level deeper, carrying the
@@ -36,6 +42,45 @@ export const configDirectory = (environment = process.env) =>
 const list = async (directory) => {
   try {
     return await readdir(directory)
+  } catch {
+    return []
+  }
+}
+
+/**
+ * How far under `subagents/` a transcript may sit.
+ *
+ * An ordinary run is directly inside it; a workflow's runs are one level
+ * deeper, under their run id. Bounded rather than unbounded because this walks
+ * a directory a Member's machine wrote and a Stop hook has ten seconds.
+ */
+const RUN_DEPTH = 3
+
+/**
+ * Every `.jsonl` under `directory`, to `depth` levels. Missing is empty.
+ *
+ * @param {string} directory
+ * @param {number} depth
+ * @returns {Promise<string[]>}
+ */
+const walk = async (directory, depth) => {
+  if (depth <= 0) return []
+
+  const entries = await readdirOrNothing(directory)
+  const found = await Promise.all(
+    entries.map(async (entry) => {
+      const path = join(directory, entry.name)
+      if (entry.isDirectory()) return walk(path, depth - 1)
+      return entry.isFile() && entry.name.endsWith('.jsonl') ? [path] : []
+    }),
+  )
+  return found.flat()
+}
+
+/** A listing with file types, or nothing: an absent directory is not an error. */
+const readdirOrNothing = async (directory) => {
+  try {
+    return await readdir(directory, { withFileTypes: true })
   } catch {
     return []
   }
@@ -110,17 +155,15 @@ export const sessionTranscripts = async ({
       }
 
       const runs = join(directory, sessionId, 'subagents')
-      const transcripts = (await list(runs)).filter((name) =>
-        name.endsWith('.jsonl'),
-      )
+      const transcripts = await walk(runs, RUN_DEPTH)
       here.push(
         ...(await Promise.all(
-          transcripts.map(async (name) => ({
-            path: join(runs, name),
+          transcripts.map(async (path) => ({
+            path,
             // Which run it is comes from the entries, which name their own
             // `agentId`; the filename is only where to look.
             agentRun: true,
-            spawnDepth: await spawnDepthOf(join(runs, name)),
+            spawnDepth: await spawnDepthOf(path),
           })),
         )),
       )

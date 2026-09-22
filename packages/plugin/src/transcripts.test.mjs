@@ -269,3 +269,34 @@ test('the directory the hook names is searched, whatever the config directory sa
     join(dirname(main), SESSION, 'subagents', 'agent-a4a571530bd42856c.jsonl'),
   ])
 })
+
+test('a workflow’s runs are found a level deeper, under their run id', async () => {
+  // The spec's layout, verified live: a workflow's runs sit under
+  // `subagents/workflows/<runId>/`, not directly in `subagents/`. A flat
+  // listing reports every ordinary run and silently drops every workflow one.
+  const { config, main, project } = await layout({
+    runs: [{ name: 'agent-run.jsonl', agentId: 'a4a571530bd42856c' }],
+  })
+  const nested = join(project, SESSION, 'subagents', 'workflows', 'wf_01')
+  mkdirSync(nested, { recursive: true })
+  writeFileSync(
+    join(nested, 'agent-a38fc2c136a5f46a3.jsonl'),
+    await fixture('workflow-agent-run.jsonl'),
+  )
+  writeFileSync(
+    join(nested, 'agent-a38fc2c136a5f46a3.meta.json'),
+    JSON.stringify({ spawnDepth: 2 }),
+  )
+
+  const found = await sessionTranscripts({
+    transcriptPath: main,
+    sessionId: SESSION,
+    environment: { CLAUDE_CONFIG_DIR: config },
+  })
+
+  const deeper = found.find((file) => file.path.includes('workflows'))
+  expect(deeper).toBeDefined()
+  expect(deeper?.agentRun).toBe(true)
+  // The sidecar is beside the transcript wherever the transcript is.
+  expect(deeper?.spawnDepth).toBe(2)
+})
