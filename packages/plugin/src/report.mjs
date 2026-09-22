@@ -26,7 +26,8 @@ import { hostname } from 'node:os'
 import { promisify } from 'node:util'
 
 import { readCursor, writeCursor } from './cursors.mjs'
-import { sessionTranscripts } from './transcripts.mjs'
+import { drainQueue, enqueue } from './queue.mjs'
+import { allSessions, sessionTranscripts } from './transcripts.mjs'
 import { parseTranscript } from '../../shared/src/turns.ts'
 import { deviceKey, projectKey } from '../../shared/src/identity.ts'
 import {
@@ -499,8 +500,15 @@ export const flush = async ({
   // nothing to flush (the clean case) `refused` is empty and this is the one
   // request; with several turn-requests it is a rare extra round trip, taken
   // rather than write a marker that would lie about a partial flush.
+  //
+  // Delivered rather than sent: a `session_end` marker (and a `stop_failure`)
+  // reads no transcript and moves no cursor, so unlike a Turn nothing re-reads
+  // it — the retry-and-queue in `deliver` is its only durability. Turns above
+  // use `send`, because their cursor held on a failure and the next `Stop` or
+  // the sweep re-reads them, so queueing them too would only duplicate what the
+  // cursor already recovers.
   if (Object.keys(attach).length > 0 && refused.size === 0) {
-    await send({
+    await deliver({
       configuration,
       payload: {
         device: { key: deviceKey({ hostname: hostname(), environment }) },
@@ -509,6 +517,128 @@ export const flush = async ({
       },
     })
   }
+}
+
+/**
+ * How long the `SessionStart` sweep may run before it stops, in milliseconds.
+ *
+ * The hook has ten seconds (`hooks.json`); the sweep drains the queue and then
+ * re-flushes sessions until this budget is spent, newest first, so a laptop
+ * with a year of transcripts recovers the recent ones — the ones with an
+ * unflushed tail — without the hook being killed mid-request. What it does not
+ * reach this start is reached by the next one: `allSessions` is newest-first
+ * and every flush reads from a cursor, so the work is resumable and idempotent.
+ */
+export const SWEEP_BUDGET_MS = 8000
+
+/**
+ * The `SessionStart` recovery pass (spec §5.2).
+ *
+ * Two jobs. First drain the retry queue: a `stop_failure` or `session_end`
+ * marker that never landed has no transcript to be re-read from, so the queue
+ * is its only durability and the drain is where it finally goes. Then re-flush
+ * every session this environment has written, newest first and time-boxed —
+ * each from its own cursor, so a session whose final `Stop` never landed sends
+ * its unflushed tail, a session that predates the install sends its whole
+ * history (no cursor means read from the top), and a session already flushed to
+ * its end sends nothing and costs one bounded read.
+ *
+ * The queue drains first because it is cheap and bounded, so a deployment that
+ * just came back gets the markers it is missing before the sweep spends its
+ * budget re-reading transcripts. Both fail soft: an unreachable deployment
+ * leaves the queue in place and holds every cursor, and the next start retries.
+ *
+ * `now` and the flush's transport are the only clocks, so a test proves the
+ * budget and the idempotence with no real delay.
+ *
+ * @param {object} input
+ * @param {import('./configuration.mjs').CollectorConfiguration} input.configuration
+ * @param {Record<string, string | undefined>} [input.environment]
+ * @param {() => number} [input.now]
+ * @param {number} [input.budgetMs]
+ */
+export const sweep = async ({
+  configuration,
+  environment = process.env,
+  now = Date.now,
+  budgetMs = SWEEP_BUDGET_MS,
+}) => {
+  const deadline = now() + budgetMs
+
+  await drainQueue(configuration.stateDir, (payload) =>
+    send({ configuration, payload }),
+  )
+
+  const sessions = await allSessions(environment)
+  for (const { sessionId, transcriptPath } of sessions) {
+    if (now() >= deadline) break
+    // eslint-disable-next-line no-await-in-loop -- sequential on purpose: firing every session's flush at once is how a Collector takes a deployment down, and the budget is checked between each
+    await flush({
+      configuration,
+      transcriptPath,
+      sessionId,
+      // A swept session is not the hook's own: each Turn carries the directory
+      // it ran in (`turn.cwd`), so there is no session-wide cwd to pass.
+      cwd: undefined,
+      environment,
+    })
+  }
+}
+
+/**
+ * Delays before each in-hook retry, in milliseconds (spec §5.4).
+ *
+ * A transient blip — a proxy reconnecting, a laptop's wifi settling — is worth
+ * three quick retries; a deployment that is down fails each instantly
+ * (`ECONNREFUSED`), so the whole sequence is under three seconds and inside the
+ * hook's ten. A server that accepts the connection and then stalls is the one
+ * case that can outrun the budget and be killed mid-retry — which costs
+ * nothing, because the cursor has not advanced and the next `Stop` or the sweep
+ * re-reads (ticket 37).
+ */
+export const RETRY_DELAYS_MS = [100, 500, 2000]
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/**
+ * Sends a payload, retries it a few times, and queues it if it still will not
+ * go. This is what the hooks call: `send` is the single attempt underneath.
+ *
+ * A queued payload is durability, not delivery — `deliver` returns the *last*
+ * send's result, so the caller advances a cursor only on a real acknowledgement
+ * and never because a payload reached the queue. That keeps the cursor honest:
+ * a queued Turn is re-read later and absorbed by ADR 0006, and a queued session
+ * event is delivered by the drain with its bytes unchanged (ticket 40's
+ * `occurredAt` note).
+ *
+ * `sleep` is injectable so a test proves the backoff without waiting on it.
+ *
+ * @param {object} input
+ * @param {import('./configuration.mjs').CollectorConfiguration} input.configuration
+ * @param {import('@sessclone/shared').IngestPayload} input.payload
+ * @param {(ms: number) => Promise<void>} [input.sleep]
+ * @returns {Promise<{ ok: boolean; status: number | null; queued: boolean }>}
+ */
+export const deliver = async ({ configuration, payload, sleep = wait }) => {
+  let result = await send({ configuration, payload })
+  for (const delay of RETRY_DELAYS_MS) {
+    if (result.ok) break
+    // A refusal (4xx) is final: retrying identical bytes earns the identical
+    // refusal, and it does not belong in the queue either.
+    if (result.status !== null && result.status >= 400 && result.status < 500) {
+      return { ...result, queued: false }
+    }
+    // eslint-disable-next-line no-await-in-loop -- a backoff is sequential by definition
+    await sleep(delay)
+    // eslint-disable-next-line no-await-in-loop -- one attempt at a time
+    result = await send({ configuration, payload })
+  }
+
+  if (!result.ok) {
+    await enqueue(configuration.stateDir, payload)
+    return { ...result, queued: true }
+  }
+  return { ...result, queued: false }
 }
 
 /**

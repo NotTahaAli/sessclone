@@ -3,7 +3,7 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "sessclone v1 — ticket status",
-    "subtitle": "83 tickets · 72 done · 4 ready to start · 7 blocked",
+    "subtitle": "83 tickets · 73 done · 4 ready to start · 6 blocked",
     "output": "docs/tickets/ticket-graph.html",
     "quality_profile": "showcase"
   },
@@ -96,7 +96,7 @@
       "id": "collection",
       "type": "backend",
       "label": "Collection + Cost (29-43)",
-      "sublabel": "15 done · 1 ready",
+      "sublabel": "16 done",
       "pos": [
         960,
         122
@@ -124,7 +124,7 @@
       "id": "ship",
       "type": "external",
       "label": "Ship + Verify (66-71)",
-      "sublabel": "2 done · 5 blocked",
+      "sublabel": "2 done · 1 ready · 4 blocked",
       "pos": [
         1190,
         122
@@ -204,7 +204,7 @@
       "id": "accounts_collection",
       "from": "accounts",
       "to": "collection",
-      "variant": "emphasis"
+      "variant": "default"
     },
     {
       "id": "product_archival",
@@ -216,7 +216,7 @@
       "id": "collection_ship",
       "from": "collection",
       "to": "ship",
-      "variant": "dashed"
+      "variant": "emphasis"
     },
     {
       "id": "collection_projects",

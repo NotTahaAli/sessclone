@@ -36,7 +36,7 @@ try {
   const event = JSON.parse(await readStdin())
   const configuration = readConfiguration()
 
-  const { send } = await import('../src/report.mjs')
+  const { deliver } = await import('../src/report.mjs')
   const { deviceKey } = await import('../../shared/src/identity.ts')
   // Imported, not a second literal: a message between two spellings of the
   // same limit would be refused at the boundary and, with no retry queue yet,
@@ -50,7 +50,7 @@ try {
   // still the ticket's question answered.
   const message = event.error_details ?? event.last_assistant_message ?? null
 
-  await send({
+  await deliver({
     configuration,
     payload: {
       device: {

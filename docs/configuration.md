@@ -281,6 +281,25 @@ fired, against the Session; it reads no transcript and moves no cursor, so the
 Turns before the failure are still the next `Stop`'s to report. A payload
 carrying neither a report nor a failure is a 400.
 
+**When the deployment is unreachable, nothing is lost to a blip and little to
+an outage (ticket 39).** A failed report is retried three times over about two
+and a half seconds; a report that still will not go is written to a queue under
+`<state dir>/queue/`, and the next session started in this environment drains
+that queue and then re-reads every recent transcript from its cursor. So a
+laptop that closed on a train, or a deployment down for an hour, catches up on
+its own at the next session with no Turn lost.
+
+The residual gap — the one thing this does not guarantee — is a **stop failure
+or a session-end marker** that is queued and then never drained, because the
+state directory is read-only, the queue's 14-day age limit or 500-entry cap is
+reached first, or no further session is ever started in this environment. A
+dropped _Turn_ is always recovered, because the cursor did not advance and the
+next session re-reads it; a dropped session **event** reads no transcript and
+so has only the queue behind it. In practice this shows up as a session that
+ran but whose failure or clean-end is missing from the dashboard — usage is
+still counted from the Turns themselves. Keep the state directory writable (see
+the default-path note below) and this gap stays closed.
+
 \* Not required by the code — `readConfiguration` falls back to
 `http://127.0.0.1:3000` — but required by anyone whose deployment is not on
 their own laptop, which is everyone. The fallback is a development

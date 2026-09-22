@@ -26,6 +26,7 @@
     "@tailwindcss/postcss": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "@types/smtp-server": "3.5.13",
     "smtp-server": "3.19.13",
     "tailwindcss": "catalog:",
     "typescript": "catalog:"

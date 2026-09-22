@@ -115,6 +115,73 @@ const spawnDepthOf = async (transcript) => {
 }
 
 /**
+ * Every main-session transcript this environment has written, newest first.
+ *
+ * A main transcript is a `<sessionId>.jsonl` sitting directly in a project
+ * directory — not an Agent Run, which lives under `<sessionId>/subagents/`.
+ * The SessionStart sweep (ticket 39) walks these and re-reports each from its
+ * cursor: a session whose final `Stop` never landed, and the whole history
+ * that predates a fresh install, are both just sessions with an unflushed tail
+ * or no cursor at all.
+ *
+ * Newest first and capped, because the sweep runs inside a hook's ten seconds
+ * and a laptop can hold a year of sessions: the recent ones are the ones with
+ * an unflushed tail worth recovering, and an old session with a cursor at its
+ * end costs a wasted stat either way. `sessionTranscripts` still finds each
+ * session's Agent Runs when the sweep reports it.
+ *
+ * @param {Record<string, string | undefined>} environment
+ * @param {number} [limit]
+ * @returns {Promise<{ sessionId: string, transcriptPath: string }[]>}
+ */
+export const allSessions = async (environment, limit = 200) => {
+  const projects = join(configDirectory(environment), 'projects')
+  const directories = (await list(projects)).map((entry) =>
+    join(projects, entry),
+  )
+
+  const perDirectory = await Promise.all(
+    directories.map(async (directory) => {
+      const entries = await readdirOrNothing(directory)
+      return Promise.all(
+        entries
+          .filter((entry) => entry.isFile() && entry.name.endsWith('.jsonl'))
+          .map(async (entry) => {
+            const path = join(directory, entry.name)
+            let mtimeMs = 0
+            try {
+              mtimeMs = (await stat(path)).mtimeMs
+            } catch {
+              // Swept between the listing and the stat: treat as oldest.
+            }
+            return {
+              sessionId: entry.name.replace(/\.jsonl$/, ''),
+              transcriptPath: path,
+              mtimeMs,
+            }
+          }),
+      )
+    }),
+  )
+
+  // One session id can be written under two project directories (a changed
+  // working directory, finding 74). Keep the newest sighting of each; the
+  // sweep's own `sessionTranscripts` re-finds every directory when it reports.
+  const newest = new Map()
+  for (const session of perDirectory.flat()) {
+    const seen = newest.get(session.sessionId)
+    if (!seen || session.mtimeMs > seen.mtimeMs) {
+      newest.set(session.sessionId, session)
+    }
+  }
+
+  return [...newest.values()]
+    .toSorted((a, b) => b.mtimeMs - a.mtimeMs)
+    .slice(0, limit)
+    .map(({ sessionId, transcriptPath }) => ({ sessionId, transcriptPath }))
+}
+
+/**
  * Every transcript belonging to `sessionId`: its own, and one per Agent Run.
  *
  * The hook's own `transcript_path` is always included, even when the search
