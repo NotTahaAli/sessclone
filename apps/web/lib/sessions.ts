@@ -1,5 +1,6 @@
 import type { TransactionSql } from 'postgres'
 
+import type { SessionState } from './names'
 import type { LocalRange } from './series'
 
 // Ticket 86: the Sessions themselves.
@@ -41,6 +42,8 @@ export type SessionRow = {
   projectName: string | null
   /** The name somebody has given this Session (ticket 90), or null. */
   label: string | null
+  /** Archived, hidden, or null for an ordinary listed Session (ticket 92). */
+  state: SessionState | null
   deviceLabel: string | null
   /** The first Turn of the Session inside the period, ISO 8601 in UTC. */
   startedAt: string
@@ -73,6 +76,7 @@ type RawSession = {
   project_key: string | null
   project_name: string | null
   label: string | null
+  state: SessionState | null
   device_label: string | null
   started_at: Date
   last_turn_at: Date
@@ -103,6 +107,7 @@ const AGGREGATES = (tx: TransactionSql) => tx`
   max(project.key) as project_key,
   max(project.nickname) as project_name,
   max(naming.label) as label,
+  max(naming.state) as state,
   max(coalesce(device.nickname, device.key)) as device_label,
   min(turn.occurred_at) as started_at,
   max(turn.occurred_at) as last_turn_at,
@@ -143,6 +148,19 @@ export type SessionFilter = {
   /** A Project id, or `null` for the Sessions that ran outside a repository. */
   projectId?: string | null
   memberId?: string
+  /**
+   * Which shelf to read (ticket 92). `listed` is the default and the one a
+   * reader arrives on; `archived` is the filter that brings them back.
+   *
+   * There is deliberately no value that returns the hidden ones. Hidden means
+   * no list, and an option for it would make it a second archive with a
+   * longer name — the detail page is how a hidden Session is reached.
+   */
+  state?: 'listed' | 'archived'
+  /** Ticket 93: matched against the Session's name and its id. */
+  search?: string
+  /** Ticket 93: only the Sessions that ended a Turn on an API error. */
+  failedOnly?: boolean
 }
 
 /** `(last turn, session id)`: the ordering key, so a page cannot repeat a row. */
@@ -166,7 +184,13 @@ export const sessionList = async (
   orgId: string,
   timezone: string,
   range: LocalRange,
-  { projectId, memberId }: SessionFilter = {},
+  {
+    projectId,
+    memberId,
+    state = 'listed',
+    search,
+    failedOnly,
+  }: SessionFilter = {},
   {
     limit = SESSION_PAGE,
     before,
@@ -192,6 +216,49 @@ export const sessionList = async (
              : tx`and turn.project_id = ${projectId}`
        }
        ${memberId ? tx`and turn.member_id = ${memberId}` : tx``}
+       ${
+         // Ticket 92. A `where` rather than a `having`, because the state is
+         // one value per Session and the join already carries it onto every
+         // Turn of the group — so the planner drops the Turns before it
+         // aggregates them rather than after.
+         //
+         // `listed` tests `is null` on the joined column, which is both the
+         // Session with no row at all and the one whose row holds only a
+         // name. `distinct from` rather than `<>`, for the second of those:
+         // `state <> 'hidden'` is null, and therefore not true, on a row that
+         // has a label and no state.
+         state === 'archived'
+           ? tx`and naming.state = 'archived'`
+           : tx`and naming.state is distinct from 'archived'
+                and naming.state is distinct from 'hidden'`
+       }
+       ${
+         // Ticket 93. The name or the id, which are the two things a reader
+         // has in hand. `ilike` with both wildcards: a session id is a uuid
+         // nobody types in full, so a prefix match would answer nothing.
+         search
+           ? tx`and (naming.label ilike ${'%' + search + '%'}
+                     or turn.session_id ilike ${'%' + search + '%'})`
+           : tx``
+       }
+       ${
+         // Ticket 93. A `stop_failure`, which is what ticket 40 records and
+         // ticket 78 reads. Not "no end marker": that Session was killed or
+         // is still running (ticket 05), and calling it failed would be
+         // inventing an ending.
+         //
+         // `exists` rather than a join, because a Session may have several
+         // failures and a join would multiply every aggregate above by their
+         // number.
+         failedOnly
+           ? tx`and exists (
+                  select 1 from session_events failure
+                   where failure.kind = 'stop_failure'
+                     and failure.member_id = turn.member_id
+                     and failure.session_id = turn.session_id
+                )`
+           : tx``
+       }
      group by turn.member_id, turn.session_id
      ${
        before
@@ -231,6 +298,7 @@ const asSession = (row: RawSession): SessionRow => ({
   projectKey: row.project_key,
   projectName: row.project_name,
   label: row.label,
+  state: row.state,
   deviceLabel: row.device_label,
   startedAt: row.started_at.toISOString(),
   lastTurnAt: row.last_turn_at.toISOString(),
@@ -384,7 +452,22 @@ export type SessionModel = {
   /** Null when the Turn reported no model. Its own row, never dropped. */
   model: string | null
   turns: number
+  /**
+   * The four reported classes added up, and the figure ticket 89 showed.
+   * Kept beside the four below so a caller that wants the one number does not
+   * have to add them and risk adding a fifth.
+   */
   tokens: number
+  /** Ticket 94: the same total, split the way the reader reads a bill. */
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  /**
+   * The reported cache-creation total. Deliberately not the 5m and 1h
+   * columns: those are subsets of this one, and a column each beside it would
+   * count a token twice on any reader's mental sum.
+   */
+  cacheWriteTokens: number
   /** Null, never zero, when nothing in this model's Turns is priced. */
   costUsd: number | null
   unpricedTurns: number
@@ -417,18 +500,20 @@ export const sessionModels = async (
     {
       model: string | null
       turns: string
-      tokens: string
+      input_tokens: string
+      output_tokens: string
+      cache_read_tokens: string
+      cache_write_tokens: string
       cost_usd: string | null
       unpriced_turns: string
     }[]
   >`
     select turn.model,
            count(*) as turns,
-           sum(
-             turn.input_tokens + turn.output_tokens
-               + turn.cache_read_input_tokens
-               + turn.cache_creation_input_tokens
-           ) as tokens,
+           sum(turn.input_tokens) as input_tokens,
+           sum(turn.output_tokens) as output_tokens,
+           sum(turn.cache_read_input_tokens) as cache_read_tokens,
+           sum(turn.cache_creation_input_tokens) as cache_write_tokens,
            sum(cost.cost_usd) as cost_usd,
            count(*) filter (where cost.unpriced) as unpriced_turns
       from turn_costs cost
@@ -442,13 +527,27 @@ export const sessionModels = async (
      order by sum(cost.cost_usd) desc nulls last, count(*) desc
   `
 
-  return rows.map((row) => ({
-    model: row.model,
-    turns: Number(row.turns),
-    tokens: Number(row.tokens),
-    costUsd: row.cost_usd === null ? null : Number(row.cost_usd),
-    unpricedTurns: Number(row.unpriced_turns),
-  }))
+  return rows.map((row) => {
+    const inputTokens = Number(row.input_tokens)
+    const outputTokens = Number(row.output_tokens)
+    const cacheReadTokens = Number(row.cache_read_tokens)
+    const cacheWriteTokens = Number(row.cache_write_tokens)
+
+    return {
+      model: row.model,
+      turns: Number(row.turns),
+      // Added here rather than in the statement, so there is one place the
+      // four classes are summed and no chance of the total disagreeing with
+      // the columns printed beside it.
+      tokens: inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens,
+      inputTokens,
+      outputTokens,
+      cacheReadTokens,
+      cacheWriteTokens,
+      costUsd: row.cost_usd === null ? null : Number(row.cost_usd),
+      unpricedTurns: Number(row.unpriced_turns),
+    }
+  })
 }
 
 /**

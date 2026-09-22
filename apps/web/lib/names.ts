@@ -1,6 +1,7 @@
 import type { TransactionSql } from 'postgres'
 
-// Tickets 90 and 91: the three writes that give something a friendly name.
+// Tickets 90 and 91: the three writes that give something a friendly name,
+// and ticket 92's fourth, which is not a name but shares a row with one.
 //
 // One module, because the three are the same shape — one short string, cleared
 // by emptying the box — and because what differs between them is not the
@@ -53,27 +54,106 @@ export const labelSession = async (
   sessionId: string,
   label: string | null,
 ): Promise<boolean> => {
-  const rows = label
-    ? await tx`
-        insert into session_labels ${tx({
-          org_id: orgId,
-          member_id: memberId,
-          session_id: sessionId,
-          label,
-        })}
-        on conflict (member_id, session_id)
-          do update set label = excluded.label, updated_at = now()
-        returning member_id
-      `
-    : await tx`
-        delete from session_labels
-         where member_id = ${memberId} and session_id = ${sessionId}
-        returning member_id
-      `
+  if (label) {
+    const rows = await tx`
+      insert into session_labels ${tx({
+        org_id: orgId,
+        member_id: memberId,
+        session_id: sessionId,
+        label,
+      })}
+      on conflict (member_id, session_id)
+        do update set label = excluded.label, updated_at = now()
+      returning member_id
+    `
+    return rows.length > 0
+  }
+
+  await clearRow(tx, memberId, sessionId, 'label')
 
   // A delete of a label that was never there wrote nothing and is still what
   // the caller asked for, so clearing reports success on an empty result.
-  return label ? rows.length > 0 : true
+  return true
+}
+
+/** What a Session can be, beyond listed (ticket 92). */
+export type SessionState = 'archived' | 'hidden'
+
+/**
+ * Archives or hides a Session, or puts it back in the list when given null.
+ *
+ * The same row and the same policy as the label above — `session_labels_write`
+ * is the Session's own Member, or an Owner or Admin of its Org — so this
+ * function, like the others here, asks nobody who the caller is.
+ *
+ * Neither state is a delete and neither is a number: no Turn moves and
+ * `turn_costs` is not consulted, so the month's total is the same before and
+ * after. What changes is which rows `sessionList` returns.
+ */
+export const setSessionState = async (
+  tx: TransactionSql,
+  orgId: string,
+  memberId: string,
+  sessionId: string,
+  state: SessionState | null,
+): Promise<boolean> => {
+  if (state) {
+    const rows = await tx`
+      insert into session_labels ${tx({
+        org_id: orgId,
+        member_id: memberId,
+        session_id: sessionId,
+        state,
+      })}
+      on conflict (member_id, session_id)
+        do update set state = excluded.state, updated_at = now()
+      returning member_id
+    `
+    return rows.length > 0
+  }
+
+  await clearRow(tx, memberId, sessionId, 'state')
+  return true
+}
+
+/**
+ * Clears one of the row's two fields, and takes the row with it when that
+ * leaves nothing.
+ *
+ * Two statements rather than one because the row means two different things
+ * in the two cases: a Session with a name and no state is a row worth
+ * keeping, and a Session with neither is a row that says nothing. The delete
+ * runs first, so the update only ever touches rows that survive it —
+ * `session_labels_not_empty` refuses the other order.
+ */
+const clearRow = async (
+  tx: TransactionSql,
+  memberId: string,
+  sessionId: string,
+  field: 'label' | 'state',
+) => {
+  if (field === 'label') {
+    await tx`
+      delete from session_labels
+       where member_id = ${memberId} and session_id = ${sessionId}
+         and state is null
+    `
+    await tx`
+      update session_labels set label = null, updated_at = now()
+       where member_id = ${memberId} and session_id = ${sessionId}
+    `
+    return
+  }
+
+  await tx`
+    delete from session_labels
+     where member_id = ${memberId} and session_id = ${sessionId}
+       and label is null
+  `
+  await tx`
+    update session_labels set state = null, updated_at = now()
+     where member_id = ${memberId} and session_id = ${sessionId}
+  `
 }
 
 /**

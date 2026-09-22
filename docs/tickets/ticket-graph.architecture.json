@@ -3,7 +3,7 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "sessclone v1 — ticket status",
-    "subtitle": "91 tickets · 91 done · 0 ready to start · 0 blocked",
+    "subtitle": "94 tickets · 91 done · 3 ready to start · 0 blocked",
     "output": "docs/tickets/ticket-graph.html",
     "quality_profile": "showcase"
   },
@@ -165,8 +165,8 @@
     {
       "id": "drilldown",
       "type": "frontend",
-      "label": "Sessions + Names (85-91)",
-      "sublabel": "7 done",
+      "label": "Sessions + Names (85-94)",
+      "sublabel": "7 done · 3 ready",
       "pos": [
         1190,
         800
