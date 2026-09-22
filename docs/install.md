@@ -226,6 +226,11 @@ environment" here, performed in a browser.
   session end. The one loss is a turn still in flight when the container is
   killed, which cloud cannot recover because the transcript dies with the
   container (finding 69).
+- **Transcripts upload after every turn.** With no `SessionEnd` and no next
+  start in the same container, a cloud transcript would never be archived, so
+  here the Collector uploads it in the background after each turn (ticket 99).
+  The whole file goes each time and replaces the stored copy, which is then at
+  most one turn behind. It still needs the archival switch in Settings > You.
 - **Every container collapses into one Device.** The Device key is derived from
   the account (`cloud:<account uuid>`), which outlives the container, rather
   than from anything the container mints — so burning through containers does
