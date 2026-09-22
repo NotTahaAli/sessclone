@@ -29,7 +29,10 @@ it is why `turns` needs no insert policy.
 
 `apps/web/test/harness.ts` applies every migration to an empty database once
 per test run and empties it between tests; `test/schema.test.ts` fails if a
-table arrives without row-level security or without a policy. The full Role
+table arrives without row-level security or without a policy. Neither says
+anything about a _deployment_: nothing in a deploy applies a migration, so
+`apps/web/scripts/schema-drift.mjs` is what tells a deployed database it is
+behind its code, and `docs/self-hosting.md` is where it is run. The full Role
 matrix is Seam C, and belongs to ticket 44.
 
 ## Applying them locally
