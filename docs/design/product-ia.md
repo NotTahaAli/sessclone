@@ -259,8 +259,9 @@ told to report to the self-hoster's deployment rather than to ours.
 
 An environment with no shell the Member can reach — Claude Code Cloud, Claude
 Projects — gets its own install path on this step rather than a footnote:
-the plugin from the environment's init script, the key from the environment's
-own settings. Ticket 66 requires that path written down, and finding 74 is
+the plugin from the environment's setup script with a placeholder key, the
+real key from an API credential the agent proxy adds on the way out (ticket
+96). Ticket 66 requires that path written down, and finding 74 is
 where it came from.
 
 - _Waiting:_ nothing; this step is instructions.
