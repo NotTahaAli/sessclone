@@ -136,13 +136,20 @@ const ask = async (
 const answer = async (response: Response) =>
   [response.status, await response.json()] as const
 
-/** The object key this Member's `session-1` resolves to for a Project. */
+/**
+ * The object key this Member's `session-1` resolves to for a Project.
+ *
+ * The Project segment is flattened rather than percent-encoded, because
+ * storage refuses a key carrying `%` (ADR 0003). Written out here rather than
+ * imported, so a change to how keys are built fails this file instead of
+ * agreeing with itself; the fixtures' keys only carry slashes.
+ */
 const derivedKey = (
   projectKey: string | null = 'github.com/acme/api',
   agentId: string | null = null,
 ) =>
   `orgs/${fixture.acme.id}/members/${fixture.acme.members.member}/projects/${
-    projectKey === null ? 'none' : encodeURIComponent(projectKey)
+    projectKey === null ? 'none' : projectKey.replaceAll('/', '-')
   }/${agentId ? `session-1/agents/${agentId}.jsonl` : 'session-1.jsonl'}`
 
 type ArtifactRow = {
@@ -207,7 +214,7 @@ test('the Session’s object key is derived, never taken from the Collector', as
   )
 
   expect(body.storageKey).toBe(
-    `orgs/${fixture.acme.id}/members/${fixture.acme.members.member}/projects/${encodeURIComponent('github.com/acme/api')}/session-1.jsonl`,
+    `orgs/${fixture.acme.id}/members/${fixture.acme.members.member}/projects/github.com-acme-api/session-1.jsonl`,
   )
   expect(body.sizeBytes).toBe(4096)
 
