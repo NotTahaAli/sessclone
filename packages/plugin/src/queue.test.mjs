@@ -52,6 +52,41 @@ test('a queued payload is drained by a later send, oldest first', async () => {
   expect(queueFiles(dir)).toHaveLength(0)
 })
 
+test('a marker is re-sent byte-identical: occurredAt is not regenerated', async () => {
+  // The whole reason payloads are stored whole (not just transcript positions)
+  // is that a session_event's occurredAt is part of session_events_identity_key
+  // — a re-send with a fresh clock is a second row, not a dedup. Prove the
+  // drained bytes carry the enqueued timestamp exactly.
+  const dir = stateDir()
+  const original = payload(7)
+  await enqueue(dir, original)
+
+  const { send, seen } = transport([ok])
+  await drainQueue(dir, send)
+
+  expect(seen).toHaveLength(1)
+  expect(seen[0].sessionEnd.occurredAt).toBe(original.sessionEnd.occurredAt)
+  expect(seen[0]).toEqual(original) // the whole payload round-trips unchanged
+})
+
+test('the drain honours a time box, leaving the rest for the next start', async () => {
+  // A reachable-but-slow deployment: without a budget check the drain runs
+  // until the queue is empty, past the hook's ten seconds. `shouldStop` is
+  // checked between entries, so the first is sent and the rest are left.
+  const dir = stateDir()
+  await enqueue(dir, payload(1))
+  await enqueue(dir, payload(2))
+  await enqueue(dir, payload(3))
+
+  const { send, seen } = transport([ok])
+  let calls = 0
+  const { drained } = await drainQueue(dir, send, () => calls++ >= 1)
+
+  expect(seen).toHaveLength(1) // only the first entry went before the box closed
+  expect(drained).toBe(1)
+  expect(queueFiles(dir)).toHaveLength(2) // the other two carry over
+})
+
 test('an unreachable deployment leaves the queue in place, oldest untried again after the break', async () => {
   const dir = stateDir()
   await enqueue(dir, payload(1))

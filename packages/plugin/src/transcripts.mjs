@@ -115,6 +115,17 @@ const spawnDepthOf = async (transcript) => {
 }
 
 /**
+/**
+ * How many transcripts are `stat`ed at once.
+ *
+ * A machine can hold thousands of sessions (finding 06), and one `stat` per
+ * file all in flight at once is thousands of open descriptors inside a hook —
+ * `EMFILE` on a laptop with a modest `ulimit`. A bounded window keeps the
+ * descriptor count flat while still overlapping the I/O.
+ */
+const STAT_CONCURRENCY = 64
+
+/**
  * Every main-session transcript this environment has written, newest first.
  *
  * A main transcript is a `<sessionId>.jsonl` sitting directly in a project
@@ -124,51 +135,63 @@ const spawnDepthOf = async (transcript) => {
  * that predates a fresh install, are both just sessions with an unflushed tail
  * or no cursor at all.
  *
- * Newest first and capped, because the sweep runs inside a hook's ten seconds
- * and a laptop can hold a year of sessions: the recent ones are the ones with
- * an unflushed tail worth recovering, and an old session with a cursor at its
- * end costs a wasted stat either way. `sessionTranscripts` still finds each
- * session's Agent Runs when the sweep reports it.
+ * Newest first and *not* capped: the sweep is time-boxed rather than
+ * count-limited (see `sweep` in `report.mjs`), so returning the whole list and
+ * letting the budget decide is what keeps "re-report every incomplete session
+ * in full" honest as far as the ten seconds reach. Newest first because a
+ * recently active session is the one with an unflushed tail worth recovering
+ * first, and because once it is flushed its cursor is at the end and the next
+ * sweep skips it cheaply — so a large backlog (a fresh install over a year of
+ * history) is worked oldest-ward across successive starts rather than lost.
+ * `sessionTranscripts` still finds each session's Agent Runs when reported.
  *
  * @param {Record<string, string | undefined>} environment
- * @param {number} [limit]
  * @returns {Promise<{ sessionId: string, transcriptPath: string }[]>}
  */
-export const allSessions = async (environment, limit = 200) => {
+export const allSessions = async (environment) => {
   const projects = join(configDirectory(environment), 'projects')
   const directories = (await list(projects)).map((entry) =>
     join(projects, entry),
   )
 
-  const perDirectory = await Promise.all(
+  // The (directory, file) pairs first, from a listing per directory — the
+  // directories are few, so those readdirs may all run at once. The `stat`s
+  // are the many, and they are what the window below bounds.
+  const listings = await Promise.all(
     directories.map(async (directory) => {
       const entries = await readdirOrNothing(directory)
-      return Promise.all(
-        entries
-          .filter((entry) => entry.isFile() && entry.name.endsWith('.jsonl'))
-          .map(async (entry) => {
-            const path = join(directory, entry.name)
-            let mtimeMs = 0
-            try {
-              mtimeMs = (await stat(path)).mtimeMs
-            } catch {
-              // Swept between the listing and the stat: treat as oldest.
-            }
-            return {
-              sessionId: entry.name.replace(/\.jsonl$/, ''),
-              transcriptPath: path,
-              mtimeMs,
-            }
-          }),
-      )
+      return entries
+        .filter((entry) => entry.isFile() && entry.name.endsWith('.jsonl'))
+        .map((entry) => ({
+          sessionId: entry.name.replace(/\.jsonl$/, ''),
+          transcriptPath: join(directory, entry.name),
+        }))
     }),
   )
+  const files = listings.flat()
+
+  const sighted = []
+  for (let at = 0; at < files.length; at += STAT_CONCURRENCY) {
+    // eslint-disable-next-line no-await-in-loop -- bounded window: one chunk of stats in flight at a time, so the descriptor count stays flat
+    const chunk = await Promise.all(
+      files.slice(at, at + STAT_CONCURRENCY).map(async (file) => {
+        let mtimeMs = 0
+        try {
+          mtimeMs = (await stat(file.transcriptPath)).mtimeMs
+        } catch {
+          // Swept between the listing and the stat: treat as oldest.
+        }
+        return { ...file, mtimeMs }
+      }),
+    )
+    sighted.push(...chunk)
+  }
 
   // One session id can be written under two project directories (a changed
   // working directory, finding 74). Keep the newest sighting of each; the
   // sweep's own `sessionTranscripts` re-finds every directory when it reports.
   const newest = new Map()
-  for (const session of perDirectory.flat()) {
+  for (const session of sighted) {
     const seen = newest.get(session.sessionId)
     if (!seen || session.mtimeMs > seen.mtimeMs) {
       newest.set(session.sessionId, session)
@@ -177,7 +200,6 @@ export const allSessions = async (environment, limit = 200) => {
 
   return [...newest.values()]
     .toSorted((a, b) => b.mtimeMs - a.mtimeMs)
-    .slice(0, limit)
     .map(({ sessionId, transcriptPath }) => ({ sessionId, transcriptPath }))
 }
 

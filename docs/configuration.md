@@ -287,7 +287,11 @@ and a half seconds; a report that still will not go is written to a queue under
 `<state dir>/queue/`, and the next session started in this environment drains
 that queue and then re-reads every recent transcript from its cursor. So a
 laptop that closed on a train, or a deployment down for an hour, catches up on
-its own at the next session with no Turn lost.
+its own at the next session with no Turn lost. The sweep is time-boxed to fit
+inside the session-start hook, working newest-first, so a very large backlog —
+a fresh install over a year of existing history, say — is caught up oldest-ward
+across several sessions rather than all in one; each recovered session is
+reported in full, and the ones not yet reached carry over to the next start.
 
 The residual gap — the one thing this does not guarantee — is a **stop failure
 or a session-end marker** that is queued and then never drained, because the

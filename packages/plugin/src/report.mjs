@@ -543,10 +543,12 @@ export const SWEEP_BUDGET_MS = 8000
  * history (no cursor means read from the top), and a session already flushed to
  * its end sends nothing and costs one bounded read.
  *
- * The queue drains first because it is cheap and bounded, so a deployment that
- * just came back gets the markers it is missing before the sweep spends its
- * budget re-reading transcripts. Both fail soft: an unreachable deployment
- * leaves the queue in place and holds every cursor, and the next start retries.
+ * The queue drains first so a deployment that just came back gets the markers
+ * it is missing before the sweep spends its budget re-reading transcripts, and
+ * the drain shares the same time box (a slow-but-reachable deployment must not
+ * let the drain alone outrun the hook). Both fail soft: an unreachable
+ * deployment leaves the queue in place and holds every cursor, and the next
+ * start retries.
  *
  * `now` and the flush's transport are the only clocks, so a test proves the
  * budget and the idempotence with no real delay.
@@ -564,14 +566,17 @@ export const sweep = async ({
   budgetMs = SWEEP_BUDGET_MS,
 }) => {
   const deadline = now() + budgetMs
+  const overBudget = () => now() >= deadline
 
-  await drainQueue(configuration.stateDir, (payload) =>
-    send({ configuration, payload }),
+  await drainQueue(
+    configuration.stateDir,
+    (payload) => send({ configuration, payload }),
+    overBudget,
   )
 
   const sessions = await allSessions(environment)
   for (const { sessionId, transcriptPath } of sessions) {
-    if (now() >= deadline) break
+    if (overBudget()) break
     // eslint-disable-next-line no-await-in-loop -- sequential on purpose: firing every session's flush at once is how a Collector takes a deployment down, and the budget is checked between each
     await flush({
       configuration,

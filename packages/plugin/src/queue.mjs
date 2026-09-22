@@ -125,11 +125,24 @@ const queueFiles = async (directory) =>
  * report would be; only an unreachable deployment (`ok` false with no status)
  * leaves the entry in place.
  *
+ * `shouldStop` is the sweep's time box: a deployment that is reachable but slow
+ * can answer each entry in hundreds of milliseconds, so a large backlog would
+ * otherwise run past the hook's ten seconds and be killed mid-drain. The check
+ * is between entries, so the current one always finishes; whatever is left is
+ * drained by the next session start.
+ *
+ * No lock, so two session starts at once each drain the whole queue and every
+ * entry is sent twice. That is deliberately left to ingest's idempotence: a
+ * `session_event` re-sent with its bytes unchanged is the same row (ADR 0006),
+ * so a double drain costs a wasted request, never a wrong count — cheaper than
+ * a cross-process lock in a hook that has ten seconds to live.
+ *
  * @param {string} stateDir
  * @param {(payload: import('@sessclone/shared').IngestPayload) => Promise<{ ok: boolean, status: number | null }>} send
+ * @param {() => boolean} [shouldStop] Checked between entries; true ends the drain.
  * @returns {Promise<{ drained: number }>}
  */
-export const drainQueue = async (stateDir, send) => {
+export const drainQueue = async (stateDir, send, shouldStop = () => false) => {
   const directory = queueDirectory(stateDir)
   let drained = 0
 
@@ -141,6 +154,7 @@ export const drainQueue = async (stateDir, send) => {
   }
 
   for (const name of names) {
+    if (shouldStop()) break
     const path = join(directory, name)
     let payload
     try {
