@@ -128,6 +128,23 @@ test('a Session with no end marker says so rather than guessing one', async () =
   expect(sessions[0]!.lastTurnAt).toBe('2026-09-20T08:00:00.000Z')
 })
 
+test('a Session on a cloud Device is marked, since cloud never reports an end', async () => {
+  // Ticket 95: Claude Code runs no `SessionEnd` in a cloud container, archived
+  // or reclaimed, so the page needs to know which missing ends are ordinary.
+  const [device] = await sql<{ id: string }[]>`
+    insert into devices (member_id, key)
+    values (${fixture.acme.members.member}, 'cloud:6c6ec04b-15a2-4eba-915f-ae53ff0e1e8d')
+    returning id
+  `
+  await seedTurn({ device_id: device!.id })
+  await seedTurn({ session_id: 'session-2' })
+
+  const { sessions } = await list('owner')
+  const cloud = Object.fromEntries(sessions.map((s) => [s.sessionId, s.cloud]))
+
+  expect(cloud).toEqual({ 'session-1': true, 'session-2': false })
+})
+
 test('a subagent’s own end marker does not end the Session', async () => {
   // An Agent Run reports its `session_end` under the parent's session id. The
   // Session ends when the Session ends, not when the last subagent stopped.

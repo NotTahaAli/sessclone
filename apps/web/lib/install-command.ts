@@ -14,3 +14,13 @@
  */
 export const installCommand = (appUrl: string, apiKey: string) =>
   `claude plugin install sessclone --config url=${appUrl} --config api_key=${apiKey}`
+
+/**
+ * The key a cloud environment's setup script installs with (Taha,
+ * 2026-09-22). Not a key: the environment's API credential makes the agent
+ * proxy replace the `Authorization` header on the way out, so the real key
+ * never enters the container. It has a key's shape only so the Collector's
+ * session-start check (`KEY_PATTERN` in `packages/plugin/src/configuration.mjs`)
+ * passes it.
+ */
+export const CLOUD_PLACEHOLDER_KEY = `sk_${'0'.repeat(43)}`

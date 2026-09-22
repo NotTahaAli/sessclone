@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { expect, test } from 'vitest'
 import { z } from 'zod'
 
-import { installCommand } from '../lib/install-command'
+import { CLOUD_PLACEHOLDER_KEY, installCommand } from '../lib/install-command'
 
 // Taha asked for a one-command install on the dashboard (2026-09-22):
 // `claude plugin install sessclone --config url=… --config api_key=…`. The
@@ -47,4 +47,26 @@ test('the command names the plugin and both of its required settings', () => {
   // run this way never stops to ask.
   for (const [key, setting] of Object.entries(manifest.userConfig))
     if (setting.required) expect(command).toContain(` --config ${key}=`)
+})
+
+test('the cloud placeholder passes the Collector’s own key check', async () => {
+  // Ticket 95. The proxy swaps the real key in after the request leaves, but
+  // only if the Collector sends one: a placeholder its session-start check
+  // refused would collect nothing, silently.
+  // By URL rather than by specifier: the plugin is JSDoc-typed JavaScript
+  // this project's `tsc` does not read, and the check is the real one.
+  const { readConfiguration } = await import(
+    new URL('../../../packages/plugin/src/configuration.mjs', import.meta.url)
+      .href
+  )
+  expect(() =>
+    readConfiguration(
+      {
+        SESSCLONE_API_KEY: CLOUD_PLACEHOLDER_KEY,
+        SESSCLONE_URL: 'https://sessclone.example.com',
+        SESSCLONE_STATE_DIR: '/tmp/sessclone-test',
+      },
+      'linux',
+    ),
+  ).not.toThrow()
 })

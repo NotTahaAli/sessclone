@@ -335,18 +335,30 @@ function Summary({
             } inside`
           : 'no subagents'}
       </Tile>
-      <Tile
-        label="Ended"
-        value={session.endedAt ? when.format(new Date(session.endedAt)) : '—'}
-        quiet={!session.endedAt}
-      >
-        {/* Ticket 05: `SessionEnd` fires about 180ms after SIGTERM and never
-            under SIGKILL, so a missing marker is a killed or still-running
-            session rather than a fault. Said, not filled in. */}
-        {session.endedAt
-          ? `started ${when.format(new Date(session.startedAt))}`
-          : 'no end marker — killed, or still running'}
-      </Tile>
+      {!session.endedAt && session.cloud ? (
+        // Ticket 95: a cloud container never runs `SessionEnd`, archived or
+        // reclaimed, so the tile names the last Turn as the last Turn rather
+        // than leaving a blank that reads as a fault.
+        <Tile
+          label="Last Turn"
+          value={when.format(new Date(session.lastTurnAt))}
+        >
+          cloud sessions report no end
+        </Tile>
+      ) : (
+        <Tile
+          label="Ended"
+          value={session.endedAt ? when.format(new Date(session.endedAt)) : '—'}
+          quiet={!session.endedAt}
+        >
+          {/* Ticket 05: `SessionEnd` fires about 180ms after SIGTERM and never
+              under SIGKILL, so a missing marker is a killed or still-running
+              session rather than a fault. Said, not filled in. */}
+          {session.endedAt
+            ? `started ${when.format(new Date(session.startedAt))}`
+            : 'no end marker — killed, or still running'}
+        </Tile>
+      )}
     </dl>
   )
 }

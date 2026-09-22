@@ -186,6 +186,14 @@ export default async function Sessions({
                       {when.format(new Date(session.endedAt))}
                       {lasted(session) ? ` · ${lasted(session)}` : ''}
                     </>
+                  ) : session.cloud ? (
+                    // A cloud container never runs `SessionEnd`, archived
+                    // or reclaimed (Taha, 2026-09-22), so the last Turn is
+                    // the most that is known and is said as exactly that.
+                    <>
+                      last Turn {when.format(new Date(session.lastTurnAt))} ·
+                      cloud, no end reported
+                    </>
                   ) : (
                     <span className="text-warn-text">no end recorded</span>
                   )}

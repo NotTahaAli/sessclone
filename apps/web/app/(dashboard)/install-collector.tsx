@@ -1,5 +1,9 @@
 import { CodeBlock } from './code-block'
-import { installCommand } from '../../lib/install-command'
+import { SetupTabs } from './setup-tabs'
+import {
+  CLOUD_PLACEHOLDER_KEY,
+  installCommand,
+} from '../../lib/install-command'
 
 // The install step, shown wherever somebody has to put the Collector on a
 // machine: the onboarding state on Costs, and the Keys page for a second
@@ -29,19 +33,27 @@ import { installCommand } from '../../lib/install-command'
 
 const PLACEHOLDER = 'sk_your_key'
 
+const MARKETPLACE = 'claude plugin marketplace add NotTahaAli/sessclone'
+
 export function InstallCollector({ appUrl }: { appUrl: string }) {
   return (
-    <ol className="mt-6 flex max-w-3xl flex-col gap-6">
+    <SetupTabs>
+      <OnAMachine appUrl={appUrl} />
+      <InACloudEnvironment appUrl={appUrl} />
+    </SetupTabs>
+  )
+}
+
+function OnAMachine({ appUrl }: { appUrl: string }) {
+  return (
+    <ol className="mt-6 flex flex-col gap-6">
       <li>
         <h3 className="text-heading">1. Add the marketplace</h3>
         <p className="text-text-secondary mt-1 text-body">
           In a terminal on the machine whose usage you want collected.
         </p>
         <div className="mt-2">
-          <CodeBlock
-            command="claude plugin marketplace add NotTahaAli/sessclone"
-            label="the marketplace command"
-          />
+          <CodeBlock command={MARKETPLACE} label="the marketplace command" />
         </div>
       </li>
 
@@ -77,6 +89,71 @@ export function InstallCollector({ appUrl }: { appUrl: string }) {
           Hooks only take effect after a restart. Turns from before the restart
           are not lost: the first sweep after it backfills them, so there is no
           need to re-run the install when an existing session reports nothing.
+        </p>
+      </li>
+    </ol>
+  )
+}
+
+// Ticket 95, Taha's finalised route (2026-09-22). The setup script installs
+// with a placeholder key, and the environment's API credential makes the agent
+// proxy replace the `Authorization` header after the request leaves the
+// container — so the real key is never in the script, which everyone using the
+// environment can read, nor in the container. Claude's docs:
+// https://code.claude.com/docs/en/cloud-environments#add-api-credentials
+function InACloudEnvironment({ appUrl }: { appUrl: string }) {
+  // `appUrl()` checks only that the variable is set, so a value with no
+  // scheme must not take the page down: the raw value is the fallback.
+  const host = URL.parse(appUrl)?.hostname ?? appUrl
+  return (
+    <ol className="mt-6 flex flex-col gap-6">
+      <li>
+        <h3 className="text-heading">1. Add the setup script</h3>
+        <p className="text-text-secondary mt-1 text-body">
+          Open the environment for editing in Claude Code on the web and paste
+          this as its setup script. The key in it is a placeholder: leave it
+          exactly as it is.
+        </p>
+        <div className="mt-2">
+          <CodeBlock
+            command={`${MARKETPLACE}\n${installCommand(appUrl, CLOUD_PLACEHOLDER_KEY)}`}
+            label="the setup script"
+          />
+        </div>
+      </li>
+
+      <li>
+        <h3 className="text-heading">2. Add an API credential</h3>
+        <p className="text-text-secondary mt-1 text-body">
+          In the same dialog, under API credentials, select Add credential.
+        </p>
+        <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-body">
+          <dt className="text-text-secondary">Name</dt>
+          <dd className="font-mono">SessClone</dd>
+          <dt className="text-text-secondary">Credential type</dt>
+          <dd>Bearer</dd>
+          <dt className="text-text-secondary">Allowed websites</dt>
+          <dd className="font-mono break-all">{host}</dd>
+          <dt className="text-text-secondary">Header name</dt>
+          <dd className="font-mono">Authorization</dd>
+          <dt className="text-text-secondary">Prefix</dt>
+          <dd className="font-mono">Bearer</dd>
+          <dt className="text-text-secondary">Value</dt>
+          <dd>your key from Keys</dd>
+        </dl>
+        <p className="text-text-secondary mt-2 text-body">
+          The proxy puts your key on every request to {host} after it leaves the
+          container, so the key is never in the script or the session. Claude
+          offers API credentials on Pro and Max plans.
+        </p>
+      </li>
+
+      <li>
+        <h3 className="text-heading">3. Start a new session</h3>
+        <p className="text-text-secondary mt-1 text-body">
+          The setup script runs when a session starts, so the one already open
+          reports nothing. Cloud sessions never report an end: Sessions shows
+          their last Turn instead.
         </p>
       </li>
     </ol>

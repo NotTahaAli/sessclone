@@ -12,10 +12,12 @@ import { marketingTiers } from '../../lib/tiers'
 // states it rather than asking it, because a question headline can be
 // answered "I do not care" by a visitor on their way out.
 
-// Ticket 66 owns distribution; these are the two commands the spec settles on.
+// Ticket 66 owns distribution. Shell commands, since the block prints a `$`
+// prompt: the same two lines a cloud environment's setup script runs (ticket
+// 95). The install prompts for the URL and the key when it has no `--config`.
 const INSTALL = [
-  '/plugin marketplace add NotTahaAli/sessclone',
-  '/plugin install sessclone',
+  'claude plugin marketplace add NotTahaAli/sessclone',
+  'claude plugin install sessclone',
 ]
 
 const QUESTIONS = [
@@ -81,7 +83,7 @@ const FAQ = [
   {
     question: 'How does it see cloud sessions and CI?',
     answer:
-      'The same plugin, in the same place. A cloud session keys by account rather than by container, so every container a Member burns through collapses into one Device instead of filling the dashboard with hours-old machines.',
+      'The same plugin. A cloud environment installs it in its setup script, and the key goes in an API credential, so the proxy adds it on the way out and it never sits in the container. A cloud session keys by account rather than by container, so every container a Member burns through collapses into one Device instead of filling the dashboard with hours-old machines.',
   },
   {
     question: 'What happens when a session is killed?',
