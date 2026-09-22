@@ -37,16 +37,34 @@ the plugin's first release collect nothing at all (PR #12).
 | Machine | OS            | Claude Code | Node   | Turns arrived | State directory as resolved                         |
 | ------- | ------------- | ----------- | ------ | ------------- | --------------------------------------------------- |
 | macOS   | Darwin 27.0.0 | 2.1.267     | 26.8.1 | yes           | `~/Library/Application Support/sessclone`, writable |
-| Linux   |               |             |        |               |                                                     |
-| Windows |               |             |        |               |                                                     |
+| Linux   | not tested    | —           | —      | —             | no machine available to the operator                |
+| Windows | not tested    | —           | —      | —             | no machine available to the operator                |
 
-**Windows is the one with no prior evidence.** Finding 06 has the config
-directory and the transcript layout observed on a real Windows box, and the
-Collector's own state directory confirmed writable by its operator — but no
-Collector has ever run there. Record whether it was native Windows or WSL: they
-resolve different state directories (`%LOCALAPPDATA%\sessclone` against
-`~/.local/state/sessclone`), and a report that says only "Windows" does not say
-which of the two was exercised.
+**The ticket is closed on the macOS row alone, and the other two rows are
+untested rather than passing.** The operator has neither a Linux box nor a
+Windows box in front of them, and a cloud container is not one: it is the cloud
+install, which is finding 69's subject and reports a different Device key and a
+different state directory. Nothing here should be read as evidence that the
+Collector works on Linux or on Windows.
+
+What each missing row would have to show, when a machine appears:
+
+- **Linux** — `~/.local/state/sessclone` resolved and writable, a `host:` Device
+  key rather than a `cloud:` one, and Turns arriving after a restart. Finding 69
+  shows the state directory resolving correctly on Linux inside a container, so
+  the open question is the install path on a desktop rather than the path
+  handling.
+- **Windows** — everything above, plus **which Windows it was**. Native Windows
+  and WSL resolve different state directories (`%LOCALAPPDATA%\sessclone`
+  against `~/.local/state/sessclone`), and `async: true` is what keeps the
+  `SessionEnd` hook alive past exit on macOS and Linux — Windows may kill an
+  orphaned hook instead, which would make a flush at session end unreliable
+  there and nowhere else.
+
+Finding 06 has the Windows config directory and transcript layout observed on a
+real Windows box, and the Collector's own state directory confirmed writable by
+its operator — but no Collector has ever run there, so Windows remains the
+operating system with the least evidence behind it.
 
 ### Paste per machine
 
