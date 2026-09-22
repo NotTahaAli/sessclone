@@ -194,7 +194,7 @@ export async function POST(request: Request) {
           project_id: projectIds.get(report.project.key)!,
           session_id: turn.sessionId,
           agent_id: turn.agentId,
-          spawn_depth: turn.spawnDepth,
+          spawn_depth: turn.spawnDepth ?? null,
           message_id: turn.messageId,
           // An entry may carry no timestamp while carrying usage, and the
           // column is not null. Arrival time is the honest fallback: it is

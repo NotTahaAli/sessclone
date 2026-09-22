@@ -89,9 +89,11 @@ export const ReportedTurn = z.object({
   /**
    * How deep the Agent Run that produced this Turn was spawned, read by the
    * Collector from the sidecar beside the run's transcript (tickets 35, 36).
-   * Optional and nullable: a main Session has none, and some runs state none.
+   * Optional as well as nullable, and deliberately so: the parser produces a
+   * `Turn` without this field, and the Collector attaches it only for the
+   * Turns of an Agent Run. A payload that omits it is a main Session's.
    */
-  spawnDepth: counter.nullable().default(null),
+  spawnDepth: counter.nullable().optional(),
   usage: ReportedUsage,
   entryUuids: z.array(z.string()),
 })
