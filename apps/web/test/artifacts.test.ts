@@ -123,7 +123,7 @@ test('a whole Project goes at once, swept by the key’s prefix', async () => {
   expect(deleted).not.toContain(untouched.key)
   expect(deleted).toHaveLength(3)
 
-  const projects = await asMember(storedProjects)
+  const { projects } = await asMember(storedProjects)
   expect(projects.map((row) => row.projectId)).toEqual([otherId])
 })
 
@@ -286,7 +286,7 @@ test('a Member sees the repository their stored Sessions belong to', async () =>
   // branches `sessclone_visible_project_ids()` had before ticket 73. Without
   // the artifact branch the page groups a Member's own work under "No
   // repository" and the deletion buttons cannot tell one group from another.
-  const [row] = await asMember(storedProjects)
+  const [row] = (await asMember(storedProjects)).projects
   expect(row).toMatchObject({
     projectId,
     projectKey: 'github.com/acme/api',
@@ -337,8 +337,8 @@ test('the Session list is read from an index rather than sorted', async () => {
 // visible and the assertions would prove nothing.
 
 test('a team listing is what each Role may see, and never more', async () => {
-  const mine = await artifact({ sessionId: 'mine' })
-  const owners = await artifact({
+  await artifact({ sessionId: 'mine' })
+  await artifact({
     memberId: fixture.acme.members.owner,
     sessionId: 'owners',
   })
@@ -351,7 +351,9 @@ test('a team listing is what each Role may see, and never more', async () => {
 
   const listed = async (role: Parameters<typeof asRole>[1]) =>
     (
-      await asRole(fixture.acme, role, (tx) => storedSessions(tx, 100, 'team'))
+      await asRole(fixture.acme, role, (tx) =>
+        storedSessions(tx, { audience: 'team', limit: 100 }),
+      )
     ).sessions.map((session) => session.sessionId)
 
   // An Owner and an Admin see every Member's, and never another Org's.
@@ -363,17 +365,16 @@ test('a team listing is what each Role may see, and never more', async () => {
   // A Member's own team listing is their own rows: the policy is the whole
   // answer, so the page they cannot reach would not leak if they did.
   expect(await listed('member')).toEqual(['mine'])
-
-  expect([mine.id, owners.id]).toHaveLength(2)
 })
 
 test('a team listing names who each project belongs to', async () => {
   const projectId = await project('github.com/acme/api')
   await artifact({ projectId })
 
-  const [group] = await asRole(fixture.acme, 'owner', (tx) =>
-    storedProjects(tx, 'team'),
+  const { projects } = await asRole(fixture.acme, 'owner', (tx) =>
+    storedProjects(tx, { audience: 'team' }),
   )
+  const [group] = projects
 
   expect(group).toMatchObject({
     memberId: fixture.acme.members.member,
@@ -383,8 +384,16 @@ test('a team listing names who each project belongs to', async () => {
 
   // And a Member's own listing carries their own address rather than null, so
   // one component renders both.
-  const [own] = await asMember(storedProjects)
-  expect(own?.memberEmail).toBe('member@acme.test')
+  // A Manager reads the address through their Scope, which is the newest and
+  // riskiest path: `users_read` resolves through `visible_user_ids`, which
+  // resolves through the Scope. If it regressed the page would say "A Member"
+  // for every row.
+  const asManager = await asRole(fixture.acme, 'manager', (tx) =>
+    storedProjects(tx, { audience: 'team' }),
+  )
+  expect(asManager.projects.map((one) => one.memberEmail)).toEqual([
+    'member@acme.test',
+  ])
 })
 
 test('a removed Member’s transcripts stay in the Org’s listing', async () => {
@@ -393,7 +402,7 @@ test('a removed Member’s transcripts stay in the Org’s listing', async () =>
   await artifact({ memberId: fixture.acme.members.removed, sessionId: 'left' })
 
   const { sessions } = await asRole(fixture.acme, 'owner', (tx) =>
-    storedSessions(tx, 100, 'team'),
+    storedSessions(tx, { audience: 'team', limit: 100 }),
   )
   expect(sessions.map((session) => session.sessionId)).toEqual(['left'])
 })
@@ -412,10 +421,138 @@ test('Your settings stays your own, whatever Role you hold', async () => {
   )
   expect(sessions.map((session) => session.sessionId)).toEqual(['mine'])
 
-  const projects = await asRole(fixture.acme, 'owner', (tx) =>
-    storedProjects(tx),
-  )
-  expect(projects.map((group) => group.memberId)).toEqual([
+  const own = await asRole(fixture.acme, 'owner', (tx) => storedProjects(tx))
+  expect(own.projects.map((group) => group.memberId)).toEqual([
     fixture.acme.members.owner,
   ])
+})
+
+test('a group’s Sessions page by a cursor, with no row repeated or skipped', async () => {
+  const projectId = await project('github.com/acme/api')
+  for (const n of [1, 2, 3, 4, 5]) {
+    // oxlint-disable-next-line no-await-in-loop -- five rows, and each needs its own timestamp
+    await sql`
+      insert into log_artifacts (org_id, member_id, project_id, session_id,
+                                 storage_key, sha256, size_bytes, uploaded_at)
+      values (${fixture.acme.id}, ${fixture.acme.members.member}, ${projectId},
+              ${`session-${n}`}, ${`orgs/a/p/session-${n}.jsonl`},
+              ${'a'.repeat(64)}, 1024, ${new Date(Date.now() - n * 60_000)})
+    `
+  }
+  // Another Member's Sessions, and another Project's, to prove the group is
+  // the filter rather than the page size.
+  await artifact({ memberId: fixture.acme.members.owner, sessionId: 'owners' })
+  await artifact({ sessionId: 'other-project' })
+
+  const group = {
+    memberId: fixture.acme.members.member,
+    projectId,
+  }
+  const page = (before?: { uploadedAt: Date; id: string }) =>
+    asRole(fixture.acme, 'owner', (tx) =>
+      storedSessions(tx, { audience: 'team', limit: 2, group, before }),
+    )
+
+  const first = await page()
+  expect(first.sessions.map((one) => one.sessionId)).toEqual([
+    'session-1',
+    'session-2',
+  ])
+  expect(first.more).toBe(true)
+
+  const second = await page(first.sessions.at(-1))
+  expect(second.sessions.map((one) => one.sessionId)).toEqual([
+    'session-3',
+    'session-4',
+  ])
+
+  const third = await page(second.sessions.at(-1))
+  expect(third.sessions.map((one) => one.sessionId)).toEqual(['session-5'])
+  expect(third.more).toBe(false)
+})
+
+test('a group a Manager may not see is empty rather than refused', async () => {
+  const projectId = await project('github.com/acme/api')
+  await artifact({ memberId: fixture.acme.members.owner, projectId })
+
+  // The group is named in the URL, so it is the browser's word. The policy is
+  // the whole answer: the Owner is outside this Manager's Scope.
+  const { sessions } = await asRole(fixture.acme, 'manager', (tx) =>
+    storedSessions(tx, {
+      audience: 'team',
+      group: { memberId: fixture.acme.members.owner, projectId },
+    }),
+  )
+  expect(sessions).toEqual([])
+})
+
+test('a group’s Sessions are read from the index, not sorted', async () => {
+  const projectId = await project('github.com/acme/api')
+  await sql`
+    insert into log_artifacts (org_id, member_id, project_id, session_id,
+                               storage_key, sha256, size_bytes, uploaded_at)
+    select ${fixture.acme.id}, ${fixture.acme.members.member}, ${projectId},
+           'session-' || n,
+           'orgs/x/members/y/projects/p/session-' || n || '.jsonl',
+           ${'d'.repeat(64)}, 1024, now() - (n || ' minutes')::interval
+      from generate_series(1, 2000) as n
+  `
+  await sql`analyze log_artifacts`
+
+  // This is why a team listing pages by group: across a whole Org the id set
+  // has many Members in it and the order cannot come from the index, so the
+  // plan is a sort over every artifact the Org ever stored. One Member by
+  // equality is the shape the index answers.
+  const plan = await asRole(fixture.acme, 'owner', (tx) =>
+    storedSessions(tx, {
+      audience: 'team',
+      group: { memberId: fixture.acme.members.member, projectId },
+    }).then(
+      () =>
+        tx<{ 'QUERY PLAN': string }[]>`
+        explain (costs off)
+        select id from log_artifacts
+         where member_id = ${fixture.acme.members.member}
+           and member_id in (select sessclone_visible_member_ids())
+           and project_id is not distinct from ${projectId}
+         order by uploaded_at desc, id desc
+         limit 101
+      `,
+    ),
+  )
+
+  const text = plan.map((row) => row['QUERY PLAN']).join('\n')
+  expect(text).toContain('log_artifacts_member_uploaded_idx')
+  expect(text).not.toContain('Sort Key')
+})
+
+test('a viewer in two Orgs sees both, and each group says which', async () => {
+  // `sessclone_visible_member_ids()` unions every Org the caller owns or
+  // administers *and* their own memberships elsewhere, so a team listing can
+  // legitimately carry rows from a second Org. The page must not claim they
+  // are all one Org's.
+  const [second] = await sql<{ id: string }[]>`
+    insert into orgs (name) values ('Second') returning id
+  `
+  const [elsewhere] = await sql<{ user_id: string; member_id: string }[]>`
+    insert into members (org_id, user_id, role)
+    values (${second!.id}, ${fixture.acme.users.owner}, 'member')
+    returning user_id, id as member_id
+  `
+  await sql`
+    insert into log_artifacts (org_id, member_id, session_id, storage_key,
+                               sha256, size_bytes)
+    values (${second!.id}, ${elsewhere!.member_id}, 'elsewhere',
+            'orgs/second/session.jsonl', ${'a'.repeat(64)}, 1024)
+  `
+  await artifact({ sessionId: 'at-acme' })
+
+  const { projects } = await asRole(fixture.acme, 'owner', (tx) =>
+    storedProjects(tx, { audience: 'team' }),
+  )
+
+  expect(projects).toHaveLength(2)
+  expect(
+    projects.map((one) => one.orgName).toSorted((a, b) => (a! < b! ? -1 : 1)),
+  ).toEqual(['Acme', 'Second'])
 })

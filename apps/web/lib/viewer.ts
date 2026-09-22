@@ -125,8 +125,14 @@ export const reachesOrgSettings = (role: Role) =>
  * since their own transcripts are on Your settings and a second page showing
  * the same rows under a different name only invites the question of which one
  * is the real list.
+ *
+ * Named Roles rather than `!== 'member'`: this is the gate on the one surface
+ * that lists other people's transcripts, which are source code and sometimes
+ * a credential, and a Role added later should have to be let in rather than
+ * arrive already holding the key.
  */
-export const reachesTeamTranscripts = (role: Role) => role !== 'member'
+export const reachesTeamTranscripts = (role: Role) =>
+  role === 'owner' || role === 'admin' || role === 'manager'
 
 /**
  * Whether this Role reaches the Tier page.

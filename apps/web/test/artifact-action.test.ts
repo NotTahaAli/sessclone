@@ -63,8 +63,8 @@ const artifact = async ({
 }
 
 const remaining = () =>
-  asUser(fixture.acme.users.member, storedProjects).then((rows) =>
-    rows.reduce((total, row) => total + row.sessions, 0),
+  asUser(fixture.acme.users.member, storedProjects).then(({ projects }) =>
+    projects.reduce((total, row) => total + row.sessions, 0),
   )
 
 test('a signed-in Member deletes their own stored Session', async () => {

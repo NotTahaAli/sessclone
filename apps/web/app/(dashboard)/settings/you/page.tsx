@@ -97,9 +97,10 @@ export default async function YourSettings() {
       </section>
 
       <StoredTranscripts
-        projects={stored}
+        projects={stored.projects}
         sessions={sessions.sessions}
-        more={sessions.more}
+        // Either cap being reached means the page is not the whole picture.
+        more={sessions.more || stored.more}
         // Named only when there is more than one Org to tell apart, as the
         // archival section above names them only then.
         orgNames={

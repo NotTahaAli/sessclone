@@ -37,14 +37,45 @@ const memberIds = (tx: TransactionSql, audience: Audience) =>
     ? tx`select sessclone_own_member_ids()`
     : tx`select sessclone_visible_member_ids()`
 
+/**
+ * What a listing is asking for.
+ *
+ * `group` narrows to one membership and one Project, which is how a team
+ * listing stays both index-backed and complete: the page lists the groups,
+ * and each group's Sessions are read by equality on `member_id`. `before` is
+ * the cursor inside a group — `(uploaded_at, id)` because `uploaded_at` alone
+ * is not unique and a page boundary that repeats or skips a row is worse than
+ * no paging at all.
+ */
+export type Listing = {
+  audience?: Audience
+  limit?: number
+  group?: { memberId: string; projectId: string | null }
+  before?: { uploadedAt: Date; id: string }
+}
+
 export type StoredProject = {
   memberId: string
   /**
-   * Who it belongs to, for a `team` listing. Null when the viewer may read
-   * the artifact and not the person — left joined rather than inner, so a
-   * listing never silently drops a transcript it is allowed to show.
+   * Who it belongs to, for a `team` listing.
+   *
+   * Left joined rather than inner so a listing can never silently drop a
+   * transcript it is allowed to show — which is belt and braces rather than a
+   * reachable state: `log_artifacts_read` and `users_read` resolve through the
+   * same visible-member set, so a readable artifact implies a readable
+   * address.
    */
   memberEmail: string | null
+  /**
+   * The Org the group belongs to, for a `team` listing.
+   *
+   * `sessclone_visible_member_ids()` unions every Org the caller owns or
+   * administers *and* their own memberships elsewhere, so a team listing can
+   * legitimately carry rows from a second Org — and a page that showed them
+   * under one Org's name would be claiming something untrue about where a
+   * transcript came from.
+   */
+  orgName: string | null
   projectId: string | null
   /** Null is the Sessions that ran outside any repository. */
   projectKey: string | null
@@ -78,14 +109,18 @@ export const SESSION_PAGE = 100
  * first is "what is being kept about me, and how much of it" — one aggregate
  * read instead of pulling every artifact to count them in JavaScript.
  */
+/** Bounded like the Session list: an Org with 500 Members has 500+ groups. */
+export const PROJECT_PAGE = 50
+
 export const storedProjects = async (
   tx: TransactionSql,
-  audience: Audience = 'own',
-): Promise<StoredProject[]> => {
+  { audience = 'own', limit = PROJECT_PAGE, group }: Listing = {},
+): Promise<{ projects: StoredProject[]; more: boolean }> => {
   const rows = await tx<
     {
       member_id: string
       member_email: string | null
+      org_name: string | null
       project_id: string | null
       project_key: string | null
       sessions: string
@@ -94,7 +129,9 @@ export const storedProjects = async (
     }[]
   >`
     select artifact.member_id,
-           person.email as member_email,
+           ${audience === 'team' ? tx`person.email` : tx`null::text`}
+             as member_email,
+           ${audience === 'team' ? tx`org.name` : tx`null::text`} as org_name,
            artifact.project_id,
            project.key as project_key,
            count(*) as sessions,
@@ -102,23 +139,45 @@ export const storedProjects = async (
            max(artifact.uploaded_at) as newest
       from log_artifacts artifact
       left join projects project on project.id = artifact.project_id
-      left join members member on member.id = artifact.member_id
+      ${
+        // Only a team listing renders the address, and the own page would
+        // otherwise pay for two joins per render to select a column nothing
+        // reads.
+        audience === 'team'
+          ? tx`left join members member on member.id = artifact.member_id
       left join users person on person.id = member.user_id
+      left join orgs org on org.id = artifact.org_id`
+          : tx``
+      }
      where artifact.member_id in (${memberIds(tx, audience)})
-     group by artifact.member_id, person.email, artifact.project_id,
-              project.key
+       ${
+         // One group, for the page that opens it: the summary it shows is the
+         // same aggregate, and asking for it by name is one row instead of
+         // every group the viewer can see.
+         group
+           ? tx`and artifact.member_id = ${group.memberId}
+         and artifact.project_id is not distinct from ${group.projectId}`
+           : tx``
+       }
+     group by artifact.member_id, ${
+       audience === 'team' ? tx`person.email, org.name,` : tx``
+     } artifact.project_id, project.key
      order by max(artifact.uploaded_at) desc
+     limit ${limit + 1}
   `
 
-  return rows.map((row) => ({
+  const projects = rows.slice(0, limit).map((row) => ({
     memberId: row.member_id,
     memberEmail: row.member_email,
+    orgName: row.org_name,
     projectId: row.project_id,
     projectKey: row.project_key,
     sessions: Number(row.sessions),
     bytes: Number(row.bytes),
     newest: row.newest,
   }))
+
+  return { projects, more: rows.length > limit }
 }
 
 /**
@@ -131,8 +190,7 @@ export const storedProjects = async (
  */
 export const storedSessions = async (
   tx: TransactionSql,
-  limit = SESSION_PAGE,
-  audience: Audience = 'own',
+  { audience = 'own', limit = SESSION_PAGE, group, before }: Listing = {},
 ): Promise<{ sessions: StoredSession[]; more: boolean }> => {
   const rows = await tx<
     {
@@ -148,7 +206,23 @@ export const storedSessions = async (
     select id, member_id, project_id, session_id, agent_id, size_bytes,
            uploaded_at
       from log_artifacts
-     where member_id in (${memberIds(tx, audience)})
+     -- One Member by equality when a group is named, which is what lets
+     -- log_artifacts_member_uploaded_idx answer the order as well as the
+     -- filter. Across a whole Org the ordering cannot come from that index
+     -- (the id set has many Members in it), so a group is the unit a team
+     -- listing pages by.
+     where ${
+       group
+         ? tx`member_id = ${group.memberId}
+           and member_id in (${memberIds(tx, audience)})
+           and project_id is not distinct from ${group.projectId}`
+         : tx`member_id in (${memberIds(tx, audience)})`
+     }
+       ${
+         before
+           ? tx`and (uploaded_at, id) < (${before.uploadedAt}, ${before.id})`
+           : tx``
+       }
      order by uploaded_at desc, id desc
      limit ${limit + 1}
   `

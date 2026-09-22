@@ -1,4 +1,6 @@
+import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
 import { expect, test } from 'vitest'
 
@@ -76,4 +78,53 @@ test('the tables are found at all, so nothing above passes vacuously', () => {
   expect(documented.size).toBeGreaterThan(10)
   expect(assignments.size).toBe(documented.size)
   expect(documentedDefaults.size).toBeGreaterThan(3)
+})
+
+// Ticket 67's first criterion: "every external dependency configured by
+// environment variable, nothing hard-coded". A hostname compiled into the
+// application is a deployment that silently talks to somebody else's
+// infrastructure, and the failure is invisible until it is expensive.
+
+const sources = execFileSync(
+  'git',
+  [
+    'ls-files',
+    'apps/web/app',
+    'apps/web/lib',
+    'packages/*/src',
+    'packages/*/hooks',
+  ],
+  { cwd: fileURLToPath(root), encoding: 'utf8' },
+)
+  .split('\n')
+  .filter((path) => /\.(ts|tsx|mjs)$/.test(path))
+  .filter((path) => !path.includes('.test.'))
+
+/**
+ * Hosts that would mean a dependency was chosen at build time rather than by
+ * the deployment. `127.0.0.1:3000` is deliberately not here: it is the
+ * Collector's documented default for `SESSCLONE_URL`, which is the opposite
+ * of hard-coded — it is what the variable falls back to when nobody set it,
+ * on the one machine where that guess is right.
+ */
+const HARD_CODED =
+  /\b(?:[\w-]+\.)?(?:supabase\.co|supabase\.in|cloudflarestorage\.com|amazonaws\.com|r2\.dev|anthropic\.com)\b/
+
+test('no external host is compiled into the application', () => {
+  const offenders = sources.flatMap((path) => {
+    const found = readFileSync(new URL(path, root), 'utf8')
+      .split('\n')
+      .map((line, index) => [index + 1, line] as const)
+      // A comment naming a provider is documentation, not a dependency.
+      .filter(([, line]) => !/^\s*(?:\/\/|\*|#)/.test(line))
+      .filter(([, line]) => HARD_CODED.test(line))
+    return found.map(([line]) => `${path}:${line}`)
+  })
+
+  expect(offenders).toEqual([])
+})
+
+test('the file list is found at all, so the check is not vacuous', () => {
+  expect(sources.length).toBeGreaterThan(40)
+  expect(sources.some((path) => path.includes('lib/storage.ts'))).toBe(true)
 })

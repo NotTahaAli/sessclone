@@ -49,6 +49,13 @@ key, the restart that hooks only take effect after, and what the first sweep
 backfills. It also covers the two paths that are not a shell on a laptop — an
 environment configured from claude.ai, and a self-hoster's own fork.
 
+### Running it yourself
+
+`docs/self-hosting.md` goes from a clone to the first collected Turn: the two
+database roles, the migrations, the script that checks whether your bucket
+speaks the parts of the S3 API this product depends on, `compose.yaml`, and
+what the licence asks of a deployment. Self-hosting is free at any size.
+
 ### Configuration
 
 `docs/configuration.md` names every environment variable the server and the

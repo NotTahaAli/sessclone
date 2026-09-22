@@ -40,3 +40,36 @@ The shape is `storedSessions` again over `sessclone_visible_member_ids()` with a
 
 Shots: `/tmp/claude-0/shots-84/` — the new page, the Settings index and Your
 settings, desktop and phone, both themes.
+
+## Acted on after review
+
+- **A group is the unit, so nothing is browsable-by-nobody.** The first
+  version was one flat Org-wide page of the 100 newest uploads, which on a
+  read-only page is a dead end: in an Org with more stored sessions than that,
+  most groups rendered as a header and a count with no Download link anywhere.
+  The page now lists the groups and each group opens its own Sessions, paged by
+  a `(uploaded_at, id)` cursor — a cursor rather than an offset, because a page
+  boundary that repeats or skips a row is worse than no paging.
+- **And that is also the query plan.** The index is
+  `(member_id, uploaded_at desc, id desc)`; across a whole Org the id set has
+  many Members in it, so the ordering could not come from it and the plan was a
+  sort over every artifact the Org had ever stored, on every render. One Member
+  by equality is the shape the index answers, asserted by a plan test beside
+  the existing one for the Member's own listing.
+- **`storedProjects` is bounded too**, at 50 groups with a `more` flag: an Org
+  with 500 Members had thousands of `<li>` in one response.
+- **`reachesTeamTranscripts` names its Roles** rather than `!== 'member'`.
+  This is the gate on the one surface that lists other people's transcripts,
+  and a Role added later should have to be let in.
+- **A viewer in two Orgs is told which.** `sessclone_visible_member_ids()`
+  unions every Org the caller owns or administers _and_ their own memberships
+  elsewhere, so a team listing can carry a second Org's rows — the page named
+  one Org in its own description and would have shown them all under it. Each
+  group now carries its Org, tested with a real second membership.
+- **The own listing pays for nothing it does not render**: the `members` and
+  `users` joins are added only for a team listing.
+- The options object replaced the positional `storedSessions(tx, undefined,
+'team')`, and the tautological assertion is gone. New tests: the cursor
+  across three pages, a group a Manager may not see coming back empty rather
+  than refused, the plan, the Manager reading a Member's address through their
+  Scope, and the two-Org case.
