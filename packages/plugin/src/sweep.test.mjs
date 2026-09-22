@@ -224,8 +224,8 @@ test('the sweep stops when its time budget is spent', async () => {
 test('a flush out of time stops sending and writes no session_end marker', async () => {
   // What a hook's timeout does when the budget is not shared: the flush runs
   // long, Claude Code kills the hook mid-request, and the Member reads "Hook
-  // cancelled" in their session. The deadline is checked between requests
-  // instead, and a flush that stops early is a partial one — so the marker
+  // cancelled" in their session. A deadline already past therefore sends
+  // nothing, and a flush that stops early is a partial one — so the marker
   // that says this Session need not be re-read must not be written.
   const config = configuration()
   const dir = await configDir({
@@ -239,7 +239,7 @@ test('a flush out of time stops sending and writes no session_end marker', async
     sessionId: 'session-a',
     cwd: '/home/dev/api',
     environment: {},
-    shouldStop: () => true,
+    deadline: 0,
     attach: {
       sessionEnd: {
         sessionId: 'session-a',
@@ -264,7 +264,7 @@ test('a flush inside its budget still sends the session_end marker', async () =>
     sessionId: 'session-a',
     cwd: '/home/dev/api',
     environment: {},
-    shouldStop: () => false,
+    deadline: Date.now() + 60_000,
     attach: {
       sessionEnd: {
         sessionId: 'session-a',

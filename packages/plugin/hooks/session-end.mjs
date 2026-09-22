@@ -22,6 +22,7 @@
 
 import { readConfiguration } from '../src/configuration.mjs'
 import { debugFailure } from '../src/debug.mjs'
+import { deadlineIn } from '../src/deadline.mjs'
 
 /**
  * How long this whole hook may run, in milliseconds.
@@ -31,13 +32,15 @@ import { debugFailure } from '../src/debug.mjs'
  * session whose whole history is still unflushed is several requests — so a
  * budget the flush and the uploads each got in full could add up past the
  * timeout, and Claude Code kills a hook that outruns it with "Hook cancelled"
- * in the session. Whatever this deadline cuts off is picked up by the next
- * `SessionStart` sweep, which reads from the same cursors.
+ * in the session. The deadline is handed down to every individual request as
+ * well, because a check between requests alone still lets the last one start
+ * just inside the budget and run seconds past it. Whatever this cuts off is
+ * picked up by the next `SessionStart` sweep, which reads from the same
+ * cursors.
  */
 const HOOK_BUDGET_MS = 8000
 
-const deadline = Date.now() + HOOK_BUDGET_MS
-const outOfTime = () => Date.now() >= deadline
+const deadline = deadlineIn(HOOK_BUDGET_MS)
 
 const readStdin = async () => {
   let input = ''
@@ -57,7 +60,7 @@ try {
     sessionId: event.session_id,
     cwd: event.cwd,
     environment: process.env,
-    shouldStop: outOfTime,
+    deadline,
     attach: {
       sessionEnd: {
         sessionId: event.session_id,
@@ -83,7 +86,7 @@ try {
     transcriptPath: event.transcript_path,
     sessionId: event.session_id,
     environment: process.env,
-    shouldStop: outOfTime,
+    deadline,
   })
 } catch (error) {
   // Deliberately silent unless somebody is looking: see `src/debug.mjs`.
