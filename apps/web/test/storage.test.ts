@@ -121,3 +121,75 @@ test('a hostile Session id cannot escape the download filename', async () => {
     'attachment; filename=""; filename*=UTF-8\'\''.length + 400,
   )
 })
+
+// What Supabase Storage accepts in an object key, from its own refusal: a key
+// carrying `%` is answered `InvalidKey` with a 400 — after the bytes have
+// moved, since presign had already said yes. Observed against a real
+// deployment on 2026-09-22, where every transcript upload failed this way and
+// nothing in the product could say so.
+const SUPABASE_KEY = /^[A-Za-z0-9/._-]+$/
+
+test('a key carries no character a provider refuses', async () => {
+  const { artifactKey } = await import('../lib/storage')
+
+  const key = artifactKey({
+    orgId: '69d07d8f-0959-46ad-97dc-d6a1bb9fd71f',
+    memberId: 'e1dfc225-05e8-451d-b7fb-afe37abaeb4c',
+    // The Project key that produced the failure: slashes, and a dot.
+    projectKey: 'github.com/nottahaali/sessclone',
+    sessionId: 'fe7a7700-cf66-4da1-87b1-723f1a40b3d0',
+    agentId: null,
+  })
+
+  expect(key).not.toContain('%')
+  expect(key).toMatch(SUPABASE_KEY)
+  expect(key).toBe(
+    'orgs/69d07d8f-0959-46ad-97dc-d6a1bb9fd71f/members/e1dfc225-05e8-451d-b7fb-afe37abaeb4c/projects/github.com-nottahaali-sessclone/fe7a7700-cf66-4da1-87b1-723f1a40b3d0.jsonl',
+  )
+})
+
+test('an Agent Run is a file under its Session, and still a valid key', async () => {
+  const { artifactKey } = await import('../lib/storage')
+
+  const key = artifactKey({
+    orgId: 'org',
+    memberId: 'member',
+    projectKey: 'local:/Users/someone/My Projects/api',
+    sessionId: 'session-1',
+    agentId: 'agent-1',
+  })
+
+  expect(key).toMatch(SUPABASE_KEY)
+  expect(key).toContain('/projects/local-Users-someone-My-Projects-api/')
+  expect(key.endsWith('/session-1/agents/agent-1.jsonl')).toBe(true)
+})
+
+test('nothing a Collector sends escapes its own segment', async () => {
+  const { artifactKey } = await import('../lib/storage')
+
+  const key = artifactKey({
+    orgId: 'org',
+    memberId: 'member',
+    projectKey: '../../../etc',
+    sessionId: '../../secrets',
+    agentId: null,
+  })
+
+  // The traversal is transliterated, not honoured: one Project segment, one
+  // Session file, both under this Member's prefix.
+  expect(key).toBe('orgs/org/members/member/projects/etc/secrets.jsonl')
+})
+
+test('a Session outside any repository still has a segment of its own', async () => {
+  const { artifactKey } = await import('../lib/storage')
+
+  expect(
+    artifactKey({
+      orgId: 'org',
+      memberId: 'member',
+      projectKey: null,
+      sessionId: 'session-1',
+      agentId: null,
+    }),
+  ).toBe('orgs/org/members/member/projects/none/session-1.jsonl')
+})

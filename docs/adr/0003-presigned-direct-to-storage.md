@@ -60,9 +60,18 @@ orgs/<org_id>/members/<member_id>/projects/<project_key>/<session_id>.jsonl
 ```
 
 A Project key contains slashes (`host/owner/repo`, or a `local:` key carrying
-an absolute path), so it is percent-encoded into a single path segment. Left
-raw it would both break the prefix and let a collector-supplied path escape its
-own prefix.
+an absolute path), so it is flattened into a single path segment: every
+character outside letters, digits, dot, dash and underscore becomes a dash, and
+a leading dot or dash is dropped. Left raw it would both break the prefix and
+let a collector-supplied path escape its own prefix. The Session and Agent ids
+are flattened the same way, for the same reason.
+
+Percent-encoding was the original answer and had to be replaced: Supabase
+Storage refuses a key containing `%` with `InvalidKey` and a 400, after the
+whole transcript has been uploaded, which made every archival upload fail while
+presign answered 200 (observed 2026-09-22). Flattening is not reversible and
+does not need to be — `log_artifacts` records the key an object was stored
+under, and nothing reads an id back out of a path.
 
 The latest upload replaces the prior one at the same key. One object per
 Session, not forty partial versions: the use case is feeding a whole session to

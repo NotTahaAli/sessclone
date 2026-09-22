@@ -67,6 +67,37 @@ export const storageConfigured = () =>
     process.env.STORAGE_SECRET_ACCESS_KEY,
   )
 
+/** The longest a single segment may be, so no key runs past a provider's limit. */
+const MAX_SEGMENT = 120
+
+/**
+ * One path segment, made of characters every provider accepts.
+ *
+ * Percent-encoding was the obvious answer and is the wrong one: Supabase
+ * Storage refuses a key containing `%` outright — `InvalidKey`, 400, after the
+ * whole transcript has been sent — which is how every upload to this
+ * deployment failed silently on 2026-09-22 while presign answered 200. So a
+ * segment is transliterated rather than escaped, to letters, digits, dot,
+ * dash and underscore.
+ *
+ * It is not reversible, and does not need to be: `log_artifacts` records the
+ * key it stored under, and nothing reads a Project or Session id back out of
+ * a path. What it must be is *contained* — no slash survives, so a Project key
+ * like `host/owner/repo` cannot escape its own segment, and no leading dot
+ * survives, so nothing resolves upwards.
+ *
+ * Two different values can transliterate alike. That is harmless here: the
+ * segments below it are a Session id, which belongs to one Project, and the
+ * row in the database is what says which is which.
+ */
+const segment = (raw: string) => {
+  const safe = raw
+    .replace(/[^A-Za-z0-9._-]+/g, '-')
+    .replace(/^[.-]+/, '')
+    .slice(0, MAX_SEGMENT)
+  return safe || 'unnamed'
+}
+
 /**
  * The object key for one Session's transcript, from ADR 0003.
  *
@@ -74,11 +105,11 @@ export const storageConfigured = () =>
  * orgs/<org>/members/<member>/projects/<project key>/<session>.jsonl
  * ```
  *
- * The Project key contains slashes — `host/owner/repo`, or a `local:` key
- * carrying an absolute path — so it is percent-encoded into one segment.
- * Raw, it would both break the prefix a per-Project sweep depends on (ADR
- * 0005) and let a key escape its own prefix. The Session and Agent ids are
- * encoded for the same reason: they arrive from a Collector.
+ * Every segment a Collector influences — the Project key, which carries
+ * slashes as `host/owner/repo` or an absolute path, and the Session and Agent
+ * ids, which arrive from a machine we do not control — goes through
+ * {@link segment}. Raw, they would break the prefix a per-Project sweep
+ * depends on (ADR 0005) and let a key escape its own prefix.
  */
 export const artifactKey = (artifact: {
   orgId: string
@@ -88,13 +119,13 @@ export const artifactKey = (artifact: {
   agentId: string | null
 }) => {
   const name = artifact.agentId
-    ? `${encodeURIComponent(artifact.sessionId)}/agents/${encodeURIComponent(artifact.agentId)}.jsonl`
-    : `${encodeURIComponent(artifact.sessionId)}.jsonl`
+    ? `${segment(artifact.sessionId)}/agents/${segment(artifact.agentId)}.jsonl`
+    : `${segment(artifact.sessionId)}.jsonl`
 
   // A Session outside any repository still has a transcript, and it needs a
   // segment of its own rather than an empty one — two slashes in a row is a
   // different key to some providers and the same to others.
-  const project = encodeURIComponent(artifact.projectKey ?? 'none')
+  const project = segment(artifact.projectKey ?? 'none')
 
   return `orgs/${artifact.orgId}/members/${artifact.memberId}/projects/${project}/${name}`
 }

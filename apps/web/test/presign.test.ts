@@ -137,7 +137,7 @@ test('a Member who has opted in gets a URL for their own Session', async () => {
   // percent-encoded segment (ADR 0003) — raw it would break the prefix a
   // per-Project sweep depends on.
   expect(body.storageKey).toBe(
-    `orgs/${fixture.acme.id}/members/${fixture.acme.members.member}/projects/${encodeURIComponent('github.com/acme/api')}/session-1.jsonl`,
+    `orgs/${fixture.acme.id}/members/${fixture.acme.members.member}/projects/github.com-acme-api/session-1.jsonl`,
   )
   expect(body.url).toContain(body.storageKey)
   expect(body.expiresIn).toBeGreaterThan(0)
