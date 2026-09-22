@@ -1,7 +1,9 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
+import { renameProjectAction } from './actions'
 import { RangeControl } from '../../range-control'
+import { InlineName } from '../../../inline-name'
 import { viewHref } from '../../views'
 import { TurnRows } from '../../../turns/turn-row'
 import { PageHeader } from '../../../page-header'
@@ -14,7 +16,8 @@ import {
   type TurnFilter,
 } from '../../../../../lib/turns'
 import { compact, usd } from '../../../../../lib/money'
-import { currentViewer } from '../../../../../lib/viewer'
+import { projectNickname } from '../../../../../lib/names'
+import { currentViewer, reachesOrgSettings } from '../../../../../lib/viewer'
 
 // Ticket 88's first level: a ranked row was a dead end, and this is what is
 // under it.
@@ -83,7 +86,12 @@ export default async function Cut({
       ? { kind: 'members', id }
       : { kind: dimension, id: groupId }
 
-  const [cut, page] = await asViewer(viewer.userId, (tx) =>
+  // Ticket 90: the box on this page prefills with the name itself, so it has
+  // to know whether the label above it is a name or a key. Only a Project can
+  // be named, and only an Owner or Admin may — so nobody else pays for the
+  // statement.
+  const naming = dimension === 'projects' && groupId !== null
+  const [cut, page, nickname] = await asViewer(viewer.userId, (tx) =>
     Promise.all([
       // The group's own totals, read by name rather than summed from the page
       // below: the page is capped, and a total summed from a capped list drops
@@ -101,6 +109,7 @@ export default async function Cut({
         range: resolved.range,
         before,
       }),
+      naming ? projectNickname(tx, groupId) : Promise.resolve(null),
     ]),
   )
 
@@ -111,7 +120,6 @@ export default async function Cut({
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <PageHeader
-        title={label}
         description={
           row
             ? `${usd(row.costUsd)} · ${compact.format(row.tokens)} tokens · ${
@@ -121,7 +129,23 @@ export default async function Cut({
               } in this period.`
             : 'Nothing in this period.'
         }
-      />
+      >
+        {/* Ticket 90: a Project can be named, and only an Owner or an Admin
+            may. Everybody else reads the label the breakdown gave it. */}
+        {naming && reachesOrgSettings(viewer.role) ? (
+          <InlineName
+            action={renameProjectAction}
+            hidden={`projectId=${encodeURIComponent(id)}`}
+            current={nickname}
+            fallback={label}
+            label="Name for this Project"
+            placeholder="The dashboard"
+            mono
+          />
+        ) : (
+          label
+        )}
+      </PageHeader>
 
       <p className="text-body">
         <Link

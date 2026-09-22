@@ -32,7 +32,15 @@ export type SessionRow = {
   /** The Member's address, or null when the row is not the viewer's to read —
    * the `left` join below says why that is not the same as absent. */
   memberEmail: string | null
+  /** The name that person has set for themselves (ticket 91), or null. Shown
+   * ahead of the address, never instead of it. */
+  memberName: string | null
   projectKey: string | null
+  /** The name the Org has given this Project (ticket 90), or null. The key is
+   * still the identity and still what the breakdowns group on. */
+  projectName: string | null
+  /** The name somebody has given this Session (ticket 90), or null. */
+  label: string | null
   deviceLabel: string | null
   /** The first Turn of the Session inside the period, ISO 8601 in UTC. */
   startedAt: string
@@ -61,7 +69,10 @@ type RawSession = {
   member_id: string
   session_id: string
   member_email: string | null
+  member_name: string | null
   project_key: string | null
+  project_name: string | null
+  label: string | null
   device_label: string | null
   started_at: Date
   last_turn_at: Date
@@ -88,7 +99,10 @@ type RawSession = {
  */
 const AGGREGATES = (tx: TransactionSql) => tx`
   max(account.email) as member_email,
+  max(account.display_name) as member_name,
   max(project.key) as project_key,
+  max(project.nickname) as project_name,
+  max(naming.label) as label,
   max(coalesce(device.nickname, device.key)) as device_label,
   min(turn.occurred_at) as started_at,
   max(turn.occurred_at) as last_turn_at,
@@ -117,6 +131,12 @@ const SOURCE = (tx: TransactionSql) => tx`
   left join devices device on device.id = turn.device_id
   left join members member on member.id = turn.member_id
   left join users account on account.id = member.user_id
+  -- Ticket 90. A left join, and read here rather than in a second statement:
+  -- the pair it is keyed on is the pair the query already groups by, so it
+  -- costs one join and cannot disagree with the row it names.
+  left join session_labels naming
+    on naming.member_id = turn.member_id
+   and naming.session_id = turn.session_id
 `
 
 export type SessionFilter = {
@@ -207,7 +227,10 @@ const asSession = (row: RawSession): SessionRow => ({
   memberId: row.member_id,
   sessionId: row.session_id,
   memberEmail: row.member_email,
+  memberName: row.member_name,
   projectKey: row.project_key,
+  projectName: row.project_name,
+  label: row.label,
   deviceLabel: row.device_label,
   startedAt: row.started_at.toISOString(),
   lastTurnAt: row.last_turn_at.toISOString(),
@@ -356,6 +379,78 @@ export const sessionDetail = async (
   }
 }
 
+/** One model's share of a Session (ticket 89). */
+export type SessionModel = {
+  /** Null when the Turn reported no model. Its own row, never dropped. */
+  model: string | null
+  turns: number
+  tokens: number
+  /** Null, never zero, when nothing in this model's Turns is priced. */
+  costUsd: number | null
+  unpricedTurns: number
+}
+
+/**
+ * What one Session spent, per model (ticket 89).
+ *
+ * The Session summary is one figure and the Turn list is four hundred rows;
+ * between them there was nothing, so "what did the Opus part cost" was
+ * answered by reading four hundred rows. This is the same aggregate the
+ * summary is, grouped by one more column — which is why the rows cannot sum
+ * to something other than the tiles above them, and why `sessions.test.ts`
+ * pins exactly that.
+ *
+ * Both columns of the filter, as everywhere in this file: `turns_identity_key`
+ * leads on `member_id`, so a session id alone has no index behind it.
+ *
+ * A Turn with no model is a row of its own rather than a drop. `turns.model`
+ * is nullable and `<synthetic>` is a real value no Rate will ever match, so
+ * those Turns are in the Session's total and this says where they went.
+ */
+export const sessionModels = async (
+  tx: TransactionSql,
+  orgId: string,
+  memberId: string,
+  sessionId: string,
+): Promise<SessionModel[]> => {
+  const rows = await tx<
+    {
+      model: string | null
+      turns: string
+      tokens: string
+      cost_usd: string | null
+      unpriced_turns: string
+    }[]
+  >`
+    select turn.model,
+           count(*) as turns,
+           sum(
+             turn.input_tokens + turn.output_tokens
+               + turn.cache_read_input_tokens
+               + turn.cache_creation_input_tokens
+           ) as tokens,
+           sum(cost.cost_usd) as cost_usd,
+           count(*) filter (where cost.unpriced) as unpriced_turns
+      from turn_costs cost
+      join turns turn on turn.id = cost.turn_id
+     where turn.org_id = ${orgId}
+       and turn.member_id = ${memberId}
+       and turn.session_id = ${sessionId}
+     group by turn.model
+     -- Biggest spend first, and a model with nothing priced last rather than
+     -- first: nulls last on a descending sort, as the ranked lists order.
+     order by sum(cost.cost_usd) desc nulls last, count(*) desc
+  `
+
+  return rows.map((row) => ({
+    model: row.model,
+    turns: Number(row.turns),
+    tokens: Number(row.tokens),
+    costUsd: row.cost_usd === null ? null : Number(row.cost_usd),
+    unpricedTurns: Number(row.unpriced_turns),
+  }))
+}
+
 /**
  * The transcripts stored for one Session — the main one, and one per Agent Run
  * (finding 74).
@@ -462,14 +557,16 @@ export const sessionFilters = async (
 }> => {
   const [projects, people] = await Promise.all([
     tx<{ id: string; key: string }[]>`
-      select id, key from projects where org_id = ${orgId} order by key
+      select id, coalesce(nickname, key) as key
+        from projects where org_id = ${orgId} order by coalesce(nickname, key)
     `,
     tx<{ id: string; email: string }[]>`
-      select member.id, account.email
+      select member.id,
+             coalesce(account.display_name, account.email) as email
         from members member
         join users account on account.id = member.user_id
        where member.org_id = ${orgId}
-       order by account.email
+       order by coalesce(account.display_name, account.email)
     `,
   ])
 

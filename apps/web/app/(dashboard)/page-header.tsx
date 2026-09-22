@@ -10,14 +10,19 @@
 export function PageHeader({
   title,
   description,
+  children,
 }: {
-  title: string
+  title?: string
   description?: string
+  /** The heading's content when it is more than a string — since tickets 90
+   * and 91, the surfaces whose subject can be renamed put the pencil inside
+   * the heading, beside the name, rather than in a form further down. */
+  children?: React.ReactNode
 }) {
   return (
     <header className="border-rule flex flex-wrap items-end justify-between gap-4 border-b pb-4">
       <div>
-        <h1 className="text-heading-lg">{title}</h1>
+        <h1 className="text-heading-lg">{children ?? title}</h1>
         {description ? (
           <p className="text-text-secondary mt-1 text-body">{description}</p>
         ) : null}

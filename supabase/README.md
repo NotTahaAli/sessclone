@@ -8,11 +8,12 @@ schema, and `sessclone_user_id()` reads the same JWT claim settings that
 Supabase's own `auth.uid()` reads, so CI, a self-hoster's cluster and the
 hosted deployment all get the same rules.
 
-| Migration                       | What it creates                                                                 |
-| ------------------------------- | ------------------------------------------------------------------------------- |
-| `20260920120000_accounts.sql`   | `orgs`, `users`, `members`, `api_keys`, `member_scopes`, and the policy helpers |
-| `20260920120100_collection.sql` | `devices`, `projects`, `turns`, `session_events`, archival exceptions           |
-| `20260922090000_drop_probe.sql` | Drops ticket 02's throwaway table on a deployment that already ran it           |
+| Migration                           | What it creates                                                                                   |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `20260920120000_accounts.sql`       | `orgs`, `users`, `members`, `api_keys`, `member_scopes`, and the policy helpers                   |
+| `20260920120100_collection.sql`     | `devices`, `projects`, `turns`, `session_events`, archival exceptions                             |
+| `20260922090000_drop_probe.sql`     | Drops ticket 02's throwaway table on a deployment that already ran it                             |
+| `20260922150000_friendly_names.sql` | `projects.nickname`, `session_labels`, `users.display_name` — the friendly names (tickets 90, 91) |
 
 **A table ships with its policies in the same migration** (ADR 0001). A
 migration that creates a table and leaves its policies to a later one has

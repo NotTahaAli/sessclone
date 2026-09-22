@@ -18,6 +18,9 @@ import type { Role } from './viewer'
 export type OrgMember = {
   memberId: string
   email: string
+  /** What they call themselves (ticket 91), or null. The address stays: this
+   * is the page an Admin acts on people from, and two Tahas is ordinary. */
+  name: string | null
   role: Role
   /** A removed Member keeps their history, so they stay listed and marked. */
   removed: boolean
@@ -26,6 +29,7 @@ export type OrgMember = {
 type MemberRow = {
   member_id: string
   email: string
+  name: string | null
   role: Role
   removed: boolean
 }
@@ -53,18 +57,21 @@ export const listOrgMembers = async (
   const rows = await tx<MemberRow[]>`
     select member.id as member_id,
            account.email,
+           account.display_name as name,
            member.role,
            member.removed_at is not null as removed
       from members member
       join users account on account.id = member.user_id
      where member.org_id = ${orgId}
-     order by member.removed_at nulls first, account.email
+     order by member.removed_at nulls first,
+              coalesce(account.display_name, account.email)
      limit ${limit + 1}
   `
   return {
     members: rows.slice(0, limit).map((row) => ({
       memberId: row.member_id,
       email: row.email,
+      name: row.name,
       role: row.role,
       removed: row.removed,
     })),
@@ -176,7 +183,7 @@ export const ownScopes = async (tx: TransactionSql): Promise<OwnScope[]> => {
            org.name as org_name,
            manager.id as manager_member_id,
            scope.member_id,
-           account.email
+           coalesce(account.display_name, account.email) as email
       from members manager
       join orgs org on org.id = manager.org_id
       left join member_scopes scope
@@ -185,7 +192,7 @@ export const ownScopes = async (tx: TransactionSql): Promise<OwnScope[]> => {
       left join users account on account.id = scoped.user_id
      where manager.id in (select sessclone_own_member_ids())
        and manager.role = 'manager'
-     order by org.name, account.email
+     order by org.name, coalesce(account.display_name, account.email)
   `
 
   const byManager = new Map<string, OwnScope>()

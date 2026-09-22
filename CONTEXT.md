@@ -19,6 +19,11 @@ collected. Members are the billable unit.
 - **Manager** — read-only, and only for the Members in their Scope.
 - **Member** — sees their own usage only.
 
+A person may set a **display name** for themselves. It is theirs alone to
+change, it is one name across the deployment rather than one per Org, and it
+leads rather than replaces their address — an address identifies, a name
+labels.
+
 **Scope** — the set of Members a Manager may see. Assigned by an Owner or
 Admin. An empty Scope sees nobody.
 
@@ -35,11 +40,14 @@ and they remain distinct. Its **nickname** is display-only and may change; its
 identity may not.
 
 **Project** — the codebase a Session ran against, identified by its git remote
-where one exists.
+where one exists. Its **name** is display-only, one per Project across the Org,
+and an Owner's or Admin's to set; the key stays the identity and stays what
+spend is grouped on.
 
 **Session** — one Claude Code conversation. A **main Session** is started by a
 person; an **Agent Run** is a subagent's Session, belonging to the main Session
-that spawned it.
+that spawned it. A Session may be given a **name**, by the Member whose Session
+it is or by an Owner or Admin; it is display-only, as a Device's is.
 
 **Turn** — one model response within a Session, and the atomic unit of
 everything sessclone records. A Turn carries the Usage for that response.

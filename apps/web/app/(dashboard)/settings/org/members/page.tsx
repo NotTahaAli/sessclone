@@ -104,8 +104,15 @@ export default async function Members() {
               className="border-rule flex flex-wrap items-center justify-between gap-3 border-b py-3"
             >
               <div className="min-w-0">
-                <p className="text-sm break-all">{member.email}</p>
+                {/* Ticket 91: their name when they have set one, and their
+                    address underneath either way — this is the page an Admin
+                    changes a Role from, and two people called Taha is the
+                    ordinary case. */}
+                <p className="text-sm break-all">
+                  {member.name ?? member.email}
+                </p>
                 <p className="text-text-muted text-sm">
+                  {member.name ? `${member.email} · ` : ''}
                   {member.role}
                   {member.removed ? ' — removed, history kept' : ''}
                 </p>
@@ -196,8 +203,15 @@ function Scope({
               className="border-rule flex flex-wrap items-center justify-between gap-3 border-b py-3"
             >
               <div className="min-w-0">
-                <p className="text-sm break-all">{member.email}</p>
+                {/* Ticket 91: their name when they have set one, and their
+                    address underneath either way — this is the page an Admin
+                    changes a Role from, and two people called Taha is the
+                    ordinary case. */}
+                <p className="text-sm break-all">
+                  {member.name ?? member.email}
+                </p>
                 <p className="text-text-muted text-sm">
+                  {member.name ? `${member.email} · ` : ''}
                   {member.role}
                   {member.removed ? ' — removed, history kept' : ''}
                 </p>

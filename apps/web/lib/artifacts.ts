@@ -145,11 +145,12 @@ export const storedProjects = async (
     }[]
   >`
     select artifact.member_id,
-           ${audience === 'team' ? tx`person.email` : tx`null::text`}
+           ${audience === 'team' ? tx`coalesce(person.display_name, person.email)` : tx`null::text`}
              as member_email,
            ${audience === 'team' ? tx`org.name` : tx`null::text`} as org_name,
            artifact.project_id,
-           project.key as project_key,
+           -- Ticket 90: the Org's name for the Project, or its key.
+           coalesce(project.nickname, project.key) as project_key,
            count(*) as sessions,
            coalesce(sum(artifact.size_bytes), 0) as bytes,
            max(artifact.uploaded_at) as newest
@@ -176,8 +177,10 @@ export const storedProjects = async (
            : tx``
        }
      group by artifact.member_id, ${
-       audience === 'team' ? tx`person.email, org.name,` : tx``
-     } artifact.project_id, project.key
+       audience === 'team'
+         ? tx`coalesce(person.display_name, person.email), org.name,`
+         : tx``
+     } artifact.project_id, coalesce(project.nickname, project.key)
      order by max(artifact.uploaded_at) desc
      limit ${limit + 1}
   `

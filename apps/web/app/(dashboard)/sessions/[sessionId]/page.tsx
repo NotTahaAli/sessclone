@@ -1,15 +1,19 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
+import { labelSessionAction } from './actions'
 import { TurnRows } from '../../turns/turn-row'
+import { InlineName } from '../../inline-name'
 import { PageHeader } from '../../page-header'
 import { asViewer } from '../../../../lib/db'
 import { compact, count, usd } from '../../../../lib/money'
 import {
   archivalReason,
   sessionDetail,
+  sessionModels,
   sessionTranscripts,
   type AgentRun,
+  type SessionModel,
   type SessionRow,
   type StoredTranscript,
 } from '../../../../lib/sessions'
@@ -79,9 +83,9 @@ export default async function Session({
     )
     if (!found) return null
 
-    // The three reads that depend on the Session existing, together rather
+    // The four reads that depend on the Session existing, together rather
     // than one after another: they are independent of each other.
-    const [page, transcripts, archival] = await Promise.all([
+    const [page, transcripts, archival, models] = await Promise.all([
       turnList(
         tx,
         viewer.orgId,
@@ -94,27 +98,48 @@ export default async function Session({
       ),
       sessionTranscripts(tx, member, found.session.sessionId),
       transcriptReasonFor(tx, member, found.session),
+      sessionModels(tx, viewer.orgId, member, found.session.sessionId),
     ])
 
-    return { ...found, page, transcripts, archival }
+    return { ...found, page, transcripts, archival, models }
   })
 
   if (!detail) notFound()
 
-  const { session, agentRuns, page, transcripts, archival } = detail
+  const { session, agentRuns, page, transcripts, archival, models } = detail
   const when = clock(viewer.orgTimezone)
   const last = page.turns.at(-1)
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
+      {/* Ticket 90: the name when somebody has given this Session one, the
+          Project it ran against when they have not, and a pencil beside it
+          either way. The session id and the Project key stay underneath —
+          they are the identity, and a name that hid them would make two
+          Sessions indistinguishable. */}
       <PageHeader
-        title={session.projectKey ?? 'Session outside a repository'}
-        description={`${session.memberEmail ?? 'Outside your view'}${
+        description={`${person(session)}${
           session.deviceLabel ? ` · ${session.deviceLabel}` : ''
+        }${session.label && project(session) ? ` · ${project(session)}` : ''}${
+          session.label || !session.projectName
+            ? ''
+            : ` · ${session.projectKey}`
         } · ${session.sessionId}`}
-      />
+      >
+        <InlineName
+          action={labelSessionAction}
+          hidden={`memberId=${member}&sessionId=${encodeURIComponent(session.sessionId)}`}
+          current={session.label}
+          fallback={project(session) ?? 'Session outside a repository'}
+          label="Name for this Session"
+          placeholder="Thursday's migration"
+          mono
+        />
+      </PageHeader>
 
       <Summary session={session} when={when} />
+
+      <Models models={models} />
 
       <Transcripts
         transcripts={transcripts}
@@ -152,6 +177,76 @@ export default async function Session({
         ) : null}
       </section>
     </div>
+  )
+}
+
+/** The Project, by the name it has been given or by its key (ticket 90). */
+const project = (session: SessionRow) =>
+  session.projectName ?? session.projectKey
+
+/** The person, by the name they set for themselves or by their address
+ * (ticket 91). Both, when they set one: an address identifies and a name
+ * labels, and this page is where somebody asks "whose session was that". */
+const person = (session: SessionRow) =>
+  session.memberName
+    ? `${session.memberName} (${session.memberEmail ?? 'address hidden'})`
+    : (session.memberEmail ?? 'Outside your view')
+
+/**
+ * Ticket 89: what this Session spent, per model.
+ *
+ * Between the four tiles above and the Turn list below there was nothing, so
+ * "what did the Opus part cost" meant reading four hundred rows. These rows
+ * are the same aggregate as the tiles with one more column in the `group by`,
+ * so they sum to the figures above them rather than to something near them.
+ *
+ * Tokens *and* dollars, which is the half of the ask that a per-Turn
+ * breakdown already had and a Session did not. A model with nothing priced
+ * shows an em dash and says how many Turns are behind it — never `$0.00`,
+ * which is the confident wrong number ADR 0002 is about.
+ */
+function Models({ models }: { models: SessionModel[] }) {
+  if (models.length === 0) return null
+
+  return (
+    <section aria-labelledby="models" className="flex flex-col gap-3">
+      <h2 id="models" className="text-heading-lg">
+        Models
+      </h2>
+      <ul className="border-rule bg-surface divide-rule divide-y rounded-md border">
+        {models.map((model) => (
+          <li
+            key={model.model ?? 'none'}
+            // Not wrapping, as the Turn rows do not: at 390px a model
+            // identifier is wider than half the row, and a wrapped cost lands
+            // on the left where it reads as part of the model's subtitle
+            // rather than as the figure the row is about.
+            className="flex items-baseline justify-between gap-x-4 p-4"
+          >
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span className="font-mono text-body break-all">
+                {model.model ?? 'No model reported'}
+              </span>
+              <span className="text-text-muted text-caption">
+                {count.format(model.turns)}{' '}
+                {model.turns === 1 ? 'Turn' : 'Turns'} ·{' '}
+                {compact.format(model.tokens)} tokens
+              </span>
+            </span>
+            <span className="flex shrink-0 flex-col items-end gap-0.5 text-right">
+              <span className="font-mono text-body">{usd(model.costUsd)}</span>
+              <span className="text-text-muted text-caption">
+                {model.unpricedTurns === 0
+                  ? 'every Turn has a Rate'
+                  : model.costUsd === null
+                    ? `${model.unpricedTurns} Turns, no Rate`
+                    : `at least: ${model.unpricedTurns} unpriced`}
+              </span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }
 
