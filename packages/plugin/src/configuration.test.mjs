@@ -35,8 +35,44 @@ test('a key and nothing else resolves, with the documented URL default', () => {
 test('a missing key is refused, naming where to get one', () => {
   const [problem] = problemsFrom({ SESSCLONE_STATE_DIR: '/tmp/sessclone' })
 
-  expect(problem).toContain('SESSCLONE_API_KEY is not set')
+  expect(problem).toContain('No API key')
   expect(problem).toContain('Keys')
+})
+
+test("the plugin's own setup answers count as configuration", () => {
+  // `userConfig` in `.claude-plugin/plugin.json`: Claude Code asks for these
+  // when the plugin is enabled and hands them to a hook as
+  // `CLAUDE_PLUGIN_OPTION_*`. It is the only route on a machine where nobody
+  // can export anything — the desktop app — and the key is kept in the OS
+  // keychain rather than in a file anybody can read.
+  const config = readConfiguration(
+    {
+      CLAUDE_PLUGIN_OPTION_API_KEY: KEY,
+      CLAUDE_PLUGIN_OPTION_URL: 'https://sessclone.example.com/',
+      SESSCLONE_STATE_DIR: '/tmp/sessclone',
+    },
+    'linux',
+  )
+
+  expect(config.apiKey).toBe(KEY)
+  expect(config.url).toBe('https://sessclone.example.com')
+})
+
+test('an exported variable wins over the setup answer', () => {
+  // Somebody exporting one is doing it deliberately, usually to point one
+  // shell at a second deployment.
+  const config = readConfiguration(
+    {
+      ...valid,
+      SESSCLONE_URL: 'https://exported.example.com',
+      CLAUDE_PLUGIN_OPTION_API_KEY: `sk_${'z'.repeat(43)}`,
+      CLAUDE_PLUGIN_OPTION_URL: 'https://configured.example.com',
+    },
+    'linux',
+  )
+
+  expect(config.apiKey).toBe(KEY)
+  expect(config.url).toBe('https://exported.example.com')
 })
 
 test('an empty key is a missing key, not a key', () => {

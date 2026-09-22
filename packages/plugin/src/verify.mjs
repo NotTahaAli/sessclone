@@ -25,8 +25,8 @@ import { readdir, readFile, stat, unlink, writeFile } from 'node:fs/promises'
 import { hostname as osHostname, release, type as osType } from 'node:os'
 import { join } from 'node:path'
 
-import { deviceKey } from '../../shared/src/identity.ts'
-import { parseTranscript } from '../../shared/src/turns.ts'
+import { deviceKey } from './shared/identity.ts'
+import { parseTranscript } from './shared/turns.ts'
 import {
   ConfigurationError,
   MINIMUM_NODE,
@@ -417,11 +417,11 @@ export const dayOf = (timestamp, timeZone) =>
  * is the number to compare, and `parsed - unique` is what a re-read of the
  * same transcript would have added if the index were not there.
  *
- * @param {import('../../shared/src/turns.ts').Turn[]} turns
+ * @param {import('./shared/turns.ts').Turn[]} turns
  * @param {{ day: string | null, timeZone: string }} window
  */
 export const reconcile = (turns, { day, timeZone }) => {
-  /** @type {Map<string, import('../../shared/src/turns.ts').Turn>} */
+  /** @type {Map<string, import('./shared/turns.ts').Turn>} */
   const unique = new Map()
   let parsed = 0
   let undated = 0
@@ -519,7 +519,7 @@ export const handCount = async ({
   environment = process.env,
 }) => {
   const paths = await everyTranscript(environment)
-  /** @type {import('../../shared/src/turns.ts').Turn[]} */
+  /** @type {import('./shared/turns.ts').Turn[]} */
   const turns = []
   let unreadable = 0
 

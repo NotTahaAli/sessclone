@@ -5,5 +5,20 @@
   "hooks": "./hooks/hooks.json",
   "author": {
     "name": "sessclone contributors"
+  },
+  "userConfig": {
+    "url": {
+      "type": "string",
+      "title": "Deployment URL",
+      "description": "Where this machine reports to, e.g. https://sessclone.example.com. Matches the deployment's own NEXT_PUBLIC_APP_URL.",
+      "required": true
+    },
+    "api_key": {
+      "type": "string",
+      "title": "API key",
+      "description": "Your key from the dashboard under Keys. It identifies you and your Org, and is shown once.",
+      "sensitive": true,
+      "required": true
+    }
   }
 }

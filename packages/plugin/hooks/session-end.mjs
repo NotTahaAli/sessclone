@@ -21,6 +21,7 @@
 // reaches `packages/shared`'s TypeScript that an old Node cannot load.
 
 import { readConfiguration } from '../src/configuration.mjs'
+import { debugFailure } from '../src/debug.mjs'
 
 /**
  * How long this hook may spend archiving, in milliseconds.
@@ -77,6 +78,7 @@ try {
     environment: process.env,
     shouldStop: () => Date.now() >= deadline,
   })
-} catch {
-  // Deliberately silent: see above.
+} catch (error) {
+  // Deliberately silent unless somebody is looking: see `src/debug.mjs`.
+  debugFailure('the SessionEnd flush', error)
 }

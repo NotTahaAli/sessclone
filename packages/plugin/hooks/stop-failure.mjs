@@ -25,6 +25,7 @@
 import { hostname } from 'node:os'
 
 import { readConfiguration } from '../src/configuration.mjs'
+import { debugFailure } from '../src/debug.mjs'
 
 const readStdin = async () => {
   let input = ''
@@ -37,12 +38,12 @@ try {
   const configuration = readConfiguration()
 
   const { deliver } = await import('../src/report.mjs')
-  const { deviceKey } = await import('../../shared/src/identity.ts')
+  const { deviceKey } = await import('../src/shared/identity.ts')
   // Imported, not a second literal: a message between two spellings of the
   // same limit would be refused at the boundary and, with no retry queue yet,
   // silently lost. Bounded here as well as there so the route refuses nothing
   // this hook could have trimmed.
-  const { FAILURE_MESSAGE_LIMIT } = await import('../../shared/src/limits.ts')
+  const { FAILURE_MESSAGE_LIMIT } = await import('../src/shared/limits.ts')
 
   // `error_details` before the rendered line: it is the one that says *what*
   // the deployment answered ("429 Too Many Requests"), where the rendered line
@@ -79,6 +80,7 @@ try {
       ],
     },
   })
-} catch {
-  // Deliberately silent: see above.
+} catch (error) {
+  // Deliberately silent unless somebody is looking: see `src/debug.mjs`.
+  debugFailure('the StopFailure report', error)
 }

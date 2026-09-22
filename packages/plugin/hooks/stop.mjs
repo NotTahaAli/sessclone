@@ -20,6 +20,7 @@
 // trace on every turn, into the next transcript.
 
 import { readConfiguration } from '../src/configuration.mjs'
+import { debugFailure } from '../src/debug.mjs'
 
 const readStdin = async () => {
   let input = ''
@@ -40,6 +41,7 @@ try {
     cwd: event.cwd,
     environment: process.env,
   })
-} catch {
-  // Deliberately silent: see above.
+} catch (error) {
+  // Deliberately silent unless somebody is looking: see `src/debug.mjs`.
+  debugFailure('the Stop flush', error)
 }
