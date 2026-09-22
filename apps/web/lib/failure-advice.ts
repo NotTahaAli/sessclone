@@ -24,7 +24,15 @@ export type FailureAdvice = {
   tone: FailureTone
   /** The sentence of advice, or null to show the recorded message instead. */
   advice: string | null
-  /** Whether the reader's bill is affected — always shown when advice is. */
+  /**
+   * Whether the reader's bill is affected — always shown when advice is.
+   *
+   * Every type below sets this false, because a stop failure ends the turn
+   * before any usage is written. It is a field rather than a fixed sentence on
+   * purpose: a later type that *does* cost money must not inherit a hardcoded
+   * "your cost is unaffected", which is the one claim on this surface that is
+   * worse to get wrong than to omit.
+   */
   costsAffected: boolean
 }
 

@@ -81,8 +81,12 @@ function Row({ row, when }: { row: FailureRow; when: string }) {
   return (
     <li className="border-rule flex flex-col gap-1.5 border-b py-3">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        {/* `break-all` and `max-w-full`: the type is collector-controlled text
+            of up to 64 characters (ticket 40's schema), and 64 unbreakable
+            monospace characters are wider than a phone — without these it
+            forces the whole page to scroll sideways. */}
         <span
-          className={`rounded border px-2 py-0.5 font-mono text-caption ${CHIP[advice.tone]}`}
+          className={`max-w-full rounded border px-2 py-0.5 font-mono text-caption break-all ${CHIP[advice.tone]}`}
         >
           {row.errorType}
         </span>

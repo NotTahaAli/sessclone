@@ -69,6 +69,9 @@ test('a row names the session, type, message, device and member', async () => {
     errorType: 'overloaded',
     message: 'API Error',
     device: 'Work laptop',
+    // "when it failed" is a named acceptance criterion, so it is asserted
+    // rather than assumed: the row carries the recorded instant, not the read.
+    occurredAt: '2026-09-20T08:00:00.000Z',
   })
   expect(rows[0]!.member).toContain('@')
 })
@@ -116,24 +119,71 @@ test('the range is cut in the Org’s timezone, not UTC', async () => {
 })
 
 test('a Member sees only their own failures, through the policy', async () => {
-  await seedFailure({ member_id: fixture.acme.members.owner })
-  await seedFailure({ member_id: fixture.acme.members.member })
+  await seedFailure({
+    member_id: fixture.acme.members.owner,
+    session_id: 'theirs',
+  })
+  await seedFailure({
+    member_id: fixture.acme.members.member,
+    session_id: 'mine',
+  })
 
   const { rows } = await asRole(fixture.acme, 'member', (tx) =>
     sessionFailures(tx, fixture.acme.id, 'UTC', september),
   )
-  expect(rows).toHaveLength(1)
+  // Named, not counted: a policy that returned somebody else's one failure
+  // would satisfy a length check and leak.
+  expect(rows.map((row) => row.sessionId)).toEqual(['mine'])
 })
 
 test('a Manager sees their Scope and nobody else', async () => {
-  await seedFailure({ member_id: fixture.acme.members.owner })
-  await seedFailure({ member_id: fixture.acme.members.member })
+  await seedFailure({
+    member_id: fixture.acme.members.owner,
+    session_id: 'owners',
+  })
+  await seedFailure({
+    member_id: fixture.acme.members.member,
+    session_id: 'in-scope',
+  })
 
   const { rows } = await asRole(fixture.acme, 'manager', (tx) =>
     sessionFailures(tx, fixture.acme.id, 'UTC', september),
   )
   // The fixture's Scope holds the Member and not the Owner.
-  expect(rows).toHaveLength(1)
+  expect(rows.map((row) => row.sessionId)).toEqual(['in-scope'])
+})
+
+test('a Manager with an empty Scope sees nothing', async () => {
+  // The most visible leak: a Manager who should see nobody. The fixture builds
+  // this role for exactly that reason.
+  await seedFailure({ member_id: fixture.acme.members.owner })
+  await seedFailure({ member_id: fixture.acme.members.member })
+
+  const { rows, total } = await asRole(
+    fixture.acme,
+    'managerWithoutScope',
+    (tx) => sessionFailures(tx, fixture.acme.id, 'UTC', september),
+  )
+  expect(rows).toEqual([])
+  expect(total).toBe(0)
+})
+
+test('a removed Member sees nothing, and their failures still show to the Owner', async () => {
+  await seedFailure({
+    member_id: fixture.acme.members.removed,
+    session_id: 'left-the-org',
+  })
+
+  const theirs = await asRole(fixture.acme, 'removed', (tx) =>
+    sessionFailures(tx, fixture.acme.id, 'UTC', september),
+  )
+  expect(theirs.rows).toEqual([])
+
+  // The failure happened while they were here, so the Org's record keeps it.
+  const owners = await asRole(fixture.acme, 'owner', (tx) =>
+    sessionFailures(tx, fixture.acme.id, 'UTC', september),
+  )
+  expect(owners.rows.map((row) => row.sessionId)).toEqual(['left-the-org'])
 })
 
 test('one Org’s failures never leak into another’s read', async () => {

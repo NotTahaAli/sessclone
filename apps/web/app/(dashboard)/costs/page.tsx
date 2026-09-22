@@ -258,11 +258,14 @@ export default async function Costs({
   const view = resolveView(params.view)
 
   // One transaction, and only the reads this view needs beside the facts that
-  // decide whether there is anything to draw at all. The failures count is
-  // always read — it is the tab's badge, shown on every view — while the rows
-  // and the spend/breakdown are read only for the view being shown. The reads
-  // are independent, so they go together rather than one after the other.
-  const [facts, days, ranked, failuresCount, failures] = await asViewer(
+  // decide whether there is anything to draw at all. The reads are
+  // independent, so they go together rather than one after the other.
+  //
+  // The failures count is the tab's badge, shown on every view — but on the
+  // failures view itself the row read already carries the full total from one
+  // statement, so counting again there would be a second count that could
+  // disagree with the list beside it under a concurrent insert.
+  const [facts, days, ranked, counted, failures] = await asViewer(
     viewer.userId,
     (tx) =>
       Promise.all([
@@ -273,13 +276,16 @@ export default async function Costs({
         isDimension(view)
           ? breakdown(tx, viewer.orgId, viewer.orgTimezone, range, view)
           : null,
-        countFailures(tx, viewer.orgId, viewer.orgTimezone, range),
+        view === 'failures'
+          ? null
+          : countFailures(tx, viewer.orgId, viewer.orgTimezone, range),
         view === 'failures'
           ? sessionFailures(tx, viewer.orgId, viewer.orgTimezone, range)
           : null,
       ]),
   )
   const spend = days === null ? null : spendSeries(days, range)
+  const failuresCount = failures ? failures.total : (counted ?? 0)
 
   // The failures view (and its link from the waiting surface) is reachable
   // whenever a key exists, since a failure can arrive before the first Turn —
@@ -316,6 +322,7 @@ export default async function Costs({
         failures={failures}
         failuresCount={failuresCount}
         timezone={viewer.orgTimezone}
+        params={params}
       />
     </div>
   )
@@ -329,6 +336,7 @@ function Body({
   failures,
   failuresCount,
   timezone,
+  params,
 }: {
   facts: OnboardingFacts
   view: View
@@ -337,6 +345,8 @@ function Body({
   failures: Failures | null
   failuresCount: number
   timezone: string
+  /** The current query, so the link to the failures view keeps the period. */
+  params: Record<string, string | string[] | undefined>
 }) {
   // The failures view stands apart from the onboarding states: a failure can
   // arrive before the first Turn, so it renders whenever a key exists rather
@@ -357,7 +367,13 @@ function Body({
       )
 
     case 'waiting':
-      return <Waiting keyUsed={facts.key_used} failuresCount={failuresCount} />
+      return (
+        <Waiting
+          keyUsed={facts.key_used}
+          failuresCount={failuresCount}
+          params={params}
+        />
+      )
 
     // No key and no Turn: the Collector has nothing to report with, so that is
     // the one thing worth saying. The sentence is the product IA's, for the
@@ -392,11 +408,17 @@ function Body({
 function Waiting({
   keyUsed,
   failuresCount,
+  params,
 }: {
   keyUsed: boolean
   /** Failures in the current period: where a stalled Collector is first
    * noticed, so the surface links to them when there are any (ticket 78). */
   failuresCount: number
+  /** The current query, so the link carries the period the count was read for
+   * — the same rule `viewHref` and `presetHref` keep everywhere else. A link
+   * that dropped the range would promise a count the destination then cuts a
+   * different period for. */
+  params: Record<string, string | string[] | undefined>
 }) {
   return (
     <section>
@@ -409,7 +431,10 @@ function Waiting({
         </p>
         {failuresCount > 0 ? (
           <p className="mt-3 text-body">
-            <Link href="/costs?view=failures" className="text-accent-text">
+            <Link
+              href={viewHref('/costs', 'failures', params)}
+              className="text-accent-text"
+            >
               {failuresCount === 1
                 ? '1 failure was recorded in this period'
                 : `${failuresCount} failures were recorded in this period`}
