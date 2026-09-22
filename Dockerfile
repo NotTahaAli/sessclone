@@ -1,9 +1,12 @@
 # Ticket 67: the image a self-hoster runs.
 #
-# Two stages, so the thing that ships carries no pnpm store and no build
-# toolchain. The versions are pinned because an unpinned base silently changes
-# the Node a hook runs under, and `packages/shared` is TypeScript that Node
-# strips at runtime — a feature with a floor (22.18) rather than a polyfill.
+# Two stages, so the pnpm store and the build cache stay out of the shipped
+# layers. What ships is still the whole resolved `node_modules`, dev
+# dependencies included: `next start` runs from the same layout `next build`
+# produced, and `pnpm prune --prod` on a workspace is not safe to do blind.
+# The versions are pinned because an unpinned base silently changes the Node a
+# hook runs under, and `packages/shared` is TypeScript that Node strips at
+# runtime — a feature with a floor (22.18) rather than a polyfill.
 FROM node:22.23.2-trixie-slim AS build
 
 # Corepack reads `packageManager` from package.json, which is where this
@@ -34,8 +37,7 @@ ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL \
 RUN pnpm --filter web build
 
 FROM node:22.23.2-trixie-slim AS run
-RUN corepack enable
-WORKDIR /app
+WORKDIR /app/apps/web
 ENV NODE_ENV=production
 
 # Copied rather than rebuilt: the build stage already resolved the graph, and
@@ -47,4 +49,11 @@ COPY --from=build --chown=node:node /app /app
 # is a worse afternoon.
 USER node
 EXPOSE 3000
-CMD ["pnpm", "--filter", "web", "start"]
+
+# `next` directly, not `pnpm --filter web start`. Corepack materialises pnpm by
+# downloading it from the npm registry the first time it is invoked, so a pnpm
+# entrypoint means every container start reaches the network — and on an
+# air-gapped or registry-blocked host it means a container that never serves,
+# which `restart: unless-stopped` turns into a silent crash loop. The binary is
+# already in the image, symlinked by the install above.
+CMD ["node_modules/.bin/next", "start"]

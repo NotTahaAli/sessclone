@@ -7,7 +7,6 @@
 //
 //   - a presigned PUT that carries no checksum header (the SDK signs a CRC32
 //     of an empty body by default, which every provider then refuses),
-//   - a streamed body with an exact `content-length`,
 //   - `HeadObject`, which the confirm route reads the size back from rather
 //     than believing the Collector,
 //   - a presigned GET carrying `response-content-disposition`, which is what
@@ -20,8 +19,10 @@
 //   STORAGE_SECRET_ACCESS_KEY=… node apps/web/scripts/storage-compat.mjs
 //
 // It writes and deletes one object under `storage-compat/`, prints a line per
-// check, and exits non-zero on the first failure. Nothing here is part of the
-// test suite: it needs a provider, and CI has none.
+// check, and stops at the first failure with a non-zero exit — every check
+// after the first depends on the one before it, so carrying on would bury the
+// real error under cascaded ones. Nothing here is part of the test suite: it
+// needs a provider, and CI has none.
 
 import { createHash } from 'node:crypto'
 
@@ -63,16 +64,26 @@ const sha256 = createHash('sha256').update(body).digest('hex')
 
 /** The presigned PUT, issued by one check and used by the next. */
 let put = ''
-let failed = false
+
+/**
+ * Runs one check, and exits the process if it failed.
+ *
+ * Each check is the next one's precondition — no presigned URL means no
+ * upload, no upload means nothing to head — so continuing after a failure
+ * prints four more failures that say nothing and hide the one that does. The
+ * object is left in the bucket when this exits early, under
+ * `storage-compat/`, which is the one thing to sweep by hand afterwards.
+ */
 const check = async (what, run) => {
   try {
     const note = await run()
     console.log(`  ok    ${what}${note ? ` — ${String(note)}` : ''}`)
   } catch (error) {
-    failed = true
     console.log(
       `  FAIL  ${what}: ${error instanceof Error ? error.message : String(error)}`,
     )
+    console.log('\nnot compatible')
+    process.exit(1)
   }
 }
 
@@ -165,11 +176,24 @@ await check('a deleted object is gone', async () => {
     await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }))
   } catch (error) {
     const status = error?.$metadata?.httpStatusCode
-    if (status === 404 || status === 403) return `answers ${status}`
+    if (status === 404) return 'answers 404'
+    // 403 is not proof of absence. `lib/storage.ts` treats it as "no object to
+    // record here" because a credential that cannot list the bucket answers a
+    // HEAD on a *missing* key that way — but it answers the same on a key that
+    // is still there, so accepting it here would pass a bucket whose delete
+    // silently did nothing. That is the one false pass a compatibility script
+    // must not give.
+    if (status === 403) {
+      throw new Error(
+        'this credential answers 403 rather than 404, so whether the delete ' +
+          'took cannot be told from here — grant it read on the bucket and ' +
+          'run this again',
+        { cause: error },
+      )
+    }
     throw error
   }
   throw new Error('it is still there')
 })
 
-console.log(failed ? '\nnot compatible' : '\ncompatible')
-process.exit(failed ? 1 : 0)
+console.log('\ncompatible')

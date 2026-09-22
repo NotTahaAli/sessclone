@@ -3,7 +3,7 @@
 Everything this product needs is yours to supply: a Postgres cluster, an
 S3-compatible bucket, and a Supabase project for sign-in. Nothing is
 hard-coded and nothing phones home — `packages/shared/src/configuration.test.ts`
-fails the build if a provider's hostname ever appears in application code.
+fails CI if a provider's hostname ever appears in application code.
 
 This page goes from a clone to the first collected Turn. `docs/configuration.md`
 is the reference for every variable; this is the order to do them in.
@@ -27,8 +27,14 @@ and shows them, and stores no transcripts at all.
 git clone https://github.com/NotTahaAli/sessclone
 cd sessclone
 pnpm install
-cp .env.example apps/web/.env     # apps/web/.env, not the repo root
+cp .env.example apps/web/.env     # running it directly
+cp .env.example .env              # running it with Docker Compose
 ```
+
+Two destinations, and they are not interchangeable. `next dev` and `next start`
+read `apps/web/.env`, because Next reads environment files from its own project
+root; `compose.yaml` reads the `.env` beside it. Doing both means the same
+values in both files, and `.env.example` says which variables belong to which.
 
 Fill it in. The two database URLs are deliberately two roles, and pointing
 both at the same one switches row-level security off for the whole application
@@ -36,19 +42,42 @@ with no error anywhere to say so — `supabase/README.md` is the long version.
 
 ## 2. Create the roles and apply the migrations
 
+`$ADMIN_URL` below is a connection as a role that may create roles and
+databases — on a fresh cluster that is `postgres`, and on a managed one it is
+whatever superuser-equivalent your provider gave you.
+
+**Both roles are created before the migrations run.** The migration that
+creates `sessclone_app` guards on its existence and skips it if it is already
+there, which is the path to take: creating a role from inside the migrations
+needs `createrole`, and `sessclone` deliberately has neither that nor
+superuser — a plain login role gets `permission denied to create role` part way
+through `20260920120200_app_role.sql`.
+
 ```bash
+ADMIN_URL="postgres://postgres:…@your-host:5432/postgres"
+
 psql "$ADMIN_URL" -c "create role sessclone login password 'choose-one'"
 psql "$ADMIN_URL" -c "create database sessclone owner sessclone"
-# The migrations create sessclone_app themselves, without a password: a
-# migration has no business inventing a credential. Give it one.
+# nologin is wrong here: this is the role the dashboard connects as.
+psql "$ADMIN_URL" -c "create role sessclone_app login password 'choose-another'"
+
+OWNER_URL="postgres://sessclone:choose-one@your-host:5432/sessclone"
 for file in supabase/migrations/*.sql; do
-  psql "postgres://sessclone:choose-one@your-host:5432/sessclone" -f "$file"
+  echo "$file"
+  psql -v ON_ERROR_STOP=1 --single-transaction "$OWNER_URL" -f "$file" || exit 1
 done
-psql "$ADMIN_URL" -c "alter role sessclone_app login password 'choose-another'"
 ```
 
-`alter role`, never `create role`: the migration already created it, and a
-`create role` attempt fails with "already exists" in a way that looks harmless.
+`ON_ERROR_STOP=1` is not optional. Without it `psql` exits 0 after a failed
+statement, so the loop walks the whole directory and leaves you with a
+half-migrated database that reports success. `--single-transaction` means a
+file that fails leaves nothing of itself behind.
+
+On an existing deployment, do not re-run the loop: the migrations use bare
+`create table` and there is no applied-migration ledger yet, so a second run
+errors on the first file. Apply only the files added since your last upgrade,
+in filename order, and read the header of each one first — the retention
+warning below is an example of an upgrade that acts on data.
 
 Then point `DATABASE_URL` at `sessclone_app` and `INGEST_DATABASE_URL` at
 `sessclone`. `apps/web/app-role.test.ts` fails if the dashboard is ever
@@ -57,8 +86,8 @@ pointed at a privileged role.
 ## 3. Check your bucket actually works
 
 "S3-compatible" covers a wide range, and this product uses a narrow and
-specific part of the API: a presigned PUT with no checksum in the signature, a
-streamed body with an exact `content-length`, `HeadObject`, a presigned GET
+specific part of the API: a presigned PUT with no checksum in the signature,
+`HeadObject`, a presigned GET
 carrying `response-content-disposition`, and `DeleteObjects` — whose per-key
 failures arrive inside a 200. One script answers whether yours does all of it:
 
@@ -69,15 +98,36 @@ node apps/web/scripts/storage-compat.mjs
 ```
 
 It writes and deletes one object under `storage-compat/`, prints a line per
-check and exits non-zero on the first failure. Run it before you tell anybody
+check and stops at the first failure with a non-zero exit, so the line above
+the exit is the thing to fix. Run it before you tell anybody
 archival is on.
 
 ## 4. Run it
 
 ```bash
-docker compose up --build            # your database
+docker compose up --build                # your database
 docker compose --profile db up --build   # or bring one up alongside
 ```
+
+If you used the `db` profile, three things differ. The database is reachable
+from the web container as the host `db` rather than `127.0.0.1`, so both
+database URLs in the root `.env` name `db:5432`. The database itself already
+exists and is already owned by `sessclone`, so skip the `create database` line
+in step 2 — and set `POSTGRES_PASSWORD` in `.env` to the password you gave
+`sessclone`, since that image creates the role from it. And step 2's psql runs
+inside the cluster:
+
+```bash
+for file in supabase/migrations/*.sql; do
+  echo "$file"
+  docker compose exec -T db psql -v ON_ERROR_STOP=1 --single-transaction \
+    -U sessclone -d sessclone < "$file" || exit 1
+done
+```
+
+The Postgres port is published on loopback only. Reaching it from another
+machine is a change to `compose.yaml` and a decision about who can see your
+transcripts.
 
 `compose.yaml` runs the application and, under the `db` profile, a Postgres
 with a named volume. It deliberately does **not** stand up storage or
@@ -101,7 +151,12 @@ changing one means rebuilding rather than restarting.
    **OAuth App**, not a GitHub App — a GitHub App fails with `Error getting
 user profile from external provider`, because Supabase asks for the
    `user:email` scope a GitHub App ignores.
-2. The first person to sign in gets an Org and is its Owner.
+2. Signing in with no membership creates an Org and makes you its Owner —
+   which is true of _everyone_ who signs in, not only the first person. On a
+   deployment whose Supabase project accepts open sign-ups, every stranger who
+   signs in gets their own Org on your box. If that is not what you want,
+   restrict sign-ups in the Supabase project: an allow-list, or sign-ups
+   disabled and accounts invited.
 3. Issue a key under **Keys**.
 4. Install the Collector on a machine: `docs/install.md`, which is two
    commands, the key, and a restart of Claude Code.
@@ -116,10 +171,27 @@ recorded.
 
 ## Rates, so the costs are not zero
 
-A Turn with no Rate that matches its model is _unpriced_, never zero — the
-total always carries the count of unpriced Turns beside it. Seed the published
-prices under **/admin → Rates** (the platform admin flag is set on the `users`
-row), or accept unpriced Turns and read token counts only.
+The published prices as of 2026-09-21 arrive seeded by
+`supabase/migrations/20260921090000_rate_seed.sql`, along with the Tier table,
+so a fresh deployment prices Turns without anybody visiting the admin panel. A
+model published after that date has no Rate, and a Turn with no matching Rate
+is _unpriced_, never zero — every total carries the count of unpriced Turns
+beside it.
+
+Adding one is the admin panel's job, under **/admin → Rates**, which needs the
+platform admin flag on your `users` row. That flag is guarded by a trigger so
+that only a platform admin may grant it, and the guard fires for the owning
+role too — the first one on a deployment therefore has to step around it once:
+
+```sql
+alter table users disable trigger users_guard_platform_admin;
+update users set is_platform_admin = true
+ where lower(email) = lower('you@example.com');
+alter table users enable trigger users_guard_platform_admin;
+```
+
+As the owning role, in a `psql` session. Every later platform admin is granted
+from inside the panel.
 
 ## Retention, so transcripts do not accumulate forever
 

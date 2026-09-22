@@ -1,0 +1,32 @@
+# Ticket 67: what must not reach the image.
+#
+# `COPY . .` in the Dockerfile copies the build context, and three things in a
+# working clone would each break or leak something:
+#
+#  - `node_modules` holds binaries resolved for the *host's* platform, copied
+#    over the tree `pnpm install` just resolved inside the image. A macOS or
+#    arm64 clone would produce an image that cannot run.
+#  - `apps/web/.env` is a live credential once step 1 of docs/self-hosting.md
+#    has been followed, and an image layer keeps it forever.
+#  - `.git` and `.next` are large and rebuilt anyway.
+#
+# `.gitignore` protects the repository; nothing but this file protects the
+# image.
+node_modules
+**/node_modules
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+.next
+**/.next
+.scratch
+.claude
+.claude-plugin
+.githooks
+.github
+coverage
+test-results
+playwright-report
+*.tsbuildinfo

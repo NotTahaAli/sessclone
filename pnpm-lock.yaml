@@ -64,6 +64,11 @@ catalogs:
       specifier: 4.6.2
       version: 4.6.2
 
+patchedDependencies:
+  '@material/material-color-utilities@0.4.0':
+    hash: b1ce5dea9a31733ac3ddd4b236a80185e050df5f98e48bb7fd93f8ccf3f58378
+    path: patches/@material__material-color-utilities@0.4.0.patch
+
 importers:
 
   .:
@@ -95,6 +100,9 @@ importers:
       '@aws-sdk/s3-request-presigner':
         specifier: 'catalog:'
         version: 3.1137.0
+      '@material/material-color-utilities':
+        specifier: 0.4.0
+        version: 0.4.0(patch_hash=b1ce5dea9a31733ac3ddd4b236a80185e050df5f98e48bb7fd93f8ccf3f58378)
       '@sessclone/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -426,6 +434,9 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@material/material-color-utilities@0.4.0':
+    resolution: {integrity: sha512-dlq6VExJReb8dhjj3a/yTigr3ncNwoFmL5Iy2ENtbDX03EmNeOEdZ+vsaGrj7RTuO+mB7L58II4LCsl4NpM8uw==}
 
   '@next/env@16.3.5':
     resolution: {integrity: sha512-NWEXVDMqoEo0ktmU6u0sE2Vg0LOcsD7NnOTJNo3/fEaTfsg+F1bMIxuDmQbda4e3yTIQwVdUREF2yIuMOusKtg==}
@@ -1851,6 +1862,8 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
+
+  '@material/material-color-utilities@0.4.0(patch_hash=b1ce5dea9a31733ac3ddd4b236a80185e050df5f98e48bb7fd93f8ccf3f58378)': {}
 
   '@next/env@16.3.5': {}
 

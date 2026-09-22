@@ -278,6 +278,32 @@ now" notice, which the first successful read after start-up replaces. A price
 is never written into the build, which is the whole point of reading it from
 the table.
 
+## Docker Compose — `compose.yaml`
+
+Three variables read by compose itself rather than by any process it starts.
+They live in the `.env` at the repository root, which is the file compose
+reads; the application's own variables are read from that same file and handed
+to the container. A deployment that runs the app directly rather than in a
+container needs none of them.
+
+| Variable            | Required       | Default | What it is                                                                   |
+| ------------------- | -------------- | ------- | ---------------------------------------------------------------------------- |
+| `WEB_PORT`          | no             | `3000`  | Host port the dashboard is published on. Deliberately not `PORT` — see below |
+| `POSTGRES_PASSWORD` | with `db` only | —       | Password for the `sessclone` role in the bundled Postgres (`--profile db`)   |
+| `POSTGRES_PORT`     | no             | `5432`  | Host port the bundled Postgres is published on, bound to loopback            |
+
+`WEB_PORT` is not named `PORT` because `next start` reads `PORT` as the port it
+listens on _inside_ the container, and the same file is handed to both. One
+variable for both would publish `8080:3000` while the server moved to 8080, and
+nothing would answer.
+
+`POSTGRES_PASSWORD` carries no compose-level requirement even though the `db`
+service cannot start without it: compose interpolates every service's variables
+whether or not that service's profile is active, so a required value here would
+refuse `docker compose up` on a deployment that brings its own database. Left
+unset with the profile in use, the Postgres image refuses to initialise and
+says why.
+
 ## Collector — `packages/plugin`
 
 The Collector runs on a Member's own machine, one install per machine. Its

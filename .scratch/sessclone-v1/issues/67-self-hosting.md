@@ -71,3 +71,80 @@ Supabase Storage need credentials this environment does not have, and
 built — there is no Docker daemon in this container. Both belong to the manual
 verification tickets (68, 69), and the compose file should be built once on a
 machine that can before anybody is told to rely on it.
+
+## Acted on after review
+
+An independent review read the whole slice and reproduced five failures that a
+self-hoster following this page would hit before the application ever started.
+Every one of them is fixed here, and each was reproduced first rather than
+taken on trust.
+
+- **`docker compose up` could not start, whichever path you took.**
+  `POSTGRES_PASSWORD` carried a `:?` requirement, and compose interpolates
+  every service's variables whether or not that service's profile is active —
+  so a deployment bringing its own database was refused a start over a
+  password for a Postgres it never asked for. Reproduced with
+  `docker compose config`: `required variable POSTGRES_PASSWORD is missing a
+value`. It now has an empty default, and the Postgres image itself refuses
+  to initialise without one, which is the error at the right moment.
+- **The environment file was documented in the wrong place for Docker.**
+  `compose.yaml` reads the `.env` beside it; the page said `apps/web/.env`,
+  which Next reads and compose does not. Both are now named, with which is
+  which, in `.env.example`, `compose.yaml` and step 1.
+- **The documented migration order could not complete.** `sessclone` is
+  created as a plain login role, and `20260920120200_app_role.sql` runs
+  `create role sessclone_app`, which needs `createrole`. Reproduced:
+  `permission denied to create role`. It worked locally only because the
+  development role is a superuser. Both roles are now created before the
+  migrations, which the migration's own existence guard is written for.
+- **The migration loop reported success on a half-migrated database.** `psql`
+  exits 0 after a failed statement, so the loop walked all 28 files and left
+  the operator to find out later. It now runs with `ON_ERROR_STOP=1`,
+  `--single-transaction` and `|| exit 1`.
+- **No `.dockerignore`, with `COPY . .` in the Dockerfile.** The host's
+  `node_modules` (host-platform binaries), `.git`, `.next`, `.scratch` and —
+  after step 1 — a live `apps/web/.env` were all copied into an image layer.
+  Added.
+- **The runtime image reached the npm registry on every container start.** The
+  run stage enabled corepack and the entrypoint was `pnpm --filter web start`;
+  corepack materialises pnpm by downloading it, so an air-gapped host got a
+  container that never served and `restart: unless-stopped` turned that into a
+  silent crash loop. The entrypoint is `next` directly, and corepack is gone
+  from the final stage.
+
+Seven more, each verified before it was believed:
+
+- Postgres was published on every interface; it is now bound to loopback.
+- `PORT` named both the host mapping and the port `next start` listens on, so
+  setting it moved the server and published the old port. Renamed `WEB_PORT`,
+  and documented in `docs/configuration.md` along with the other two compose
+  variables.
+- The `db` profile had no usable path: the host is `db` inside the network and
+  not `127.0.0.1`, the database already exists, and nothing waited for it. The
+  page now has that block, and `web` has an optional `depends_on` on the
+  healthcheck that was defined and unused.
+- "Seed the published prices" sent an operator to the admin panel for
+  something `20260921090000_rate_seed.sql` already does — 82 Rates and 5
+  Tiers on a fresh database. And the platform admin flag it told them to set
+  is guarded by a trigger that fires for the owning role too, so the obvious
+  `update users set is_platform_admin = true` fails. Reproduced, and the page
+  now carries the incantation that works.
+- "The first person to sign in gets an Org" implied a one-time bootstrap.
+  `lib/auth/bootstrap.ts` runs for everybody with no membership, so on a
+  deployment with open sign-ups every stranger gets an Org. Said plainly, with
+  the fix being Supabase's sign-up settings.
+- `storage-compat.mjs` continued after a failure, so one broken presign
+  printed five cascaded failures that hid it, and it accepted a 403 from
+  `HeadObject` as proof that a delete had taken — the one false pass a
+  compatibility script must not give. It now stops at the first failure, and
+  says it cannot tell rather than passing on a 403. Re-verified against both
+  implementations, and the fail-fast path was seen firing on a wrong
+  credential.
+- The hard-coded-host test scanned neither `apps/web/proxy.ts` (the session
+  path, and the likeliest place for a hostname) nor `next.config.ts` nor
+  `apps/web/scripts`, and its host list was missing six object stores and this
+  project's own domains. Widened, all still clean. It also spawned `git` at
+  module import, which a release tarball or a Docker build context has none of
+  — and which would have taken the other configuration contract tests down
+  with it. It now falls back to walking the directories, verified by running
+  the file with `git` replaced by a shim that exits 1.
