@@ -179,7 +179,7 @@ export const readConfiguration = (
   const apiKey = env.SESSCLONE_API_KEY?.trim()
   if (!apiKey) {
     problems.push(
-      'SESSCLONE_API_KEY is not set. Create a key in the dashboard under Keys and set it in the environment Claude Code runs in.',
+      'SESSCLONE_API_KEY is not set. Create a key in the dashboard under Keys, then either export it in the shell Claude Code runs in, or — on a machine with no shell to export it in, such as the desktop app — put it in the "env" block of ~/.claude/settings.json, which applies to every session and the hooks it starts. See docs/install.md.',
     )
   } else if (!KEY_PATTERN.test(apiKey)) {
     // The length and the prefix, and never the key itself: those two are
