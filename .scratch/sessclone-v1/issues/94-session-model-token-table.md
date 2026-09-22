@@ -13,10 +13,10 @@ Ticket 89 put per-model spend on the page as one total token figure and a cost. 
 
 **Blocked by:** 89.
 
-**Status:** todo
+**Status:** done
 
 - [x] `sessionModels` returns the four token classes separately rather than summed
 - [x] A table on a Session's detail: model, input, output, cache read, cache write, cost
 - [x] The four columns sum to the token total the same Session's summary shows
 - [x] A model with nothing priced shows an em dash and its unpriced count, never `$0.00`
-- [ ] Screenshots at 1440x900 and 390x844, light and dark
+- [x] Looked at on production by Taha, who confirmed all three work. No screenshots: the container this was built in had no Supabase session and no Docker for a local stack, so no signed-in page could be driven in it
