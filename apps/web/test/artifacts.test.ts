@@ -556,3 +556,78 @@ test('a viewer in two Orgs sees both, and each group says which', async () => {
     projects.map((one) => one.orgName).toSorted((a, b) => (a! < b! ? -1 : 1)),
   ).toEqual(['Acme', 'Second'])
 })
+
+// Taha asked for the last message rather than the upload (2026-09-22). The
+// upload time is a fact about the Collector — a laptop that was closed uploads
+// hours after the work — so the listing shows when the session last said
+// something, and says which it is showing when no Turn of it is readable.
+
+/** A Turn of a session, so a stored transcript has a last message. */
+const turn = async ({
+  sessionId = 'session-1',
+  agentId = null,
+  at,
+  messageId,
+}: {
+  sessionId?: string
+  agentId?: string | null
+  at: string
+  messageId: string
+}) => {
+  await sql`
+    insert into turns (org_id, member_id, session_id, agent_id, message_id,
+                       occurred_at, model, input_tokens)
+    values (${fixture.acme.id}, ${fixture.acme.members.member}, ${sessionId},
+            ${agentId}, ${messageId}, ${at}, 'claude-opus-4-6', 10)
+  `
+}
+
+test('a stored session carries its last Turn, not its upload', async () => {
+  const projectId = await project('github.com/acme/api')
+  await artifact({ projectId })
+  await turn({ at: '2026-09-20T08:00:00Z', messageId: 'msg_1' })
+  await turn({ at: '2026-09-20T09:30:00Z', messageId: 'msg_2' })
+
+  const { sessions } = await asMember(storedSessions)
+
+  expect(sessions).toHaveLength(1)
+  expect(sessions[0]!.lastTurnAt?.toISOString()).toBe(
+    '2026-09-20T09:30:00.000Z',
+  )
+  // The upload is still there and still what the list is ordered by.
+  expect(sessions[0]!.uploadedAt).toBeInstanceOf(Date)
+})
+
+test('an Agent Run’s transcript carries its own last Turn', async () => {
+  const projectId = await project('github.com/acme/api')
+  await artifact({ projectId })
+  await artifact({ projectId, agentId: 'agent-7' })
+  // The parent kept going after the subagent stopped, so the two times differ
+  // — which is the whole reason the agent id is matched and not just grouped.
+  await turn({
+    at: '2026-09-20T08:00:00Z',
+    messageId: 'msg_agent',
+    agentId: 'agent-7',
+  })
+  await turn({ at: '2026-09-20T11:00:00Z', messageId: 'msg_parent' })
+
+  const { sessions } = await asMember(storedSessions)
+  const byAgent = new Map(
+    sessions.map((session) => [
+      session.agentId ?? 'main',
+      session.lastTurnAt?.toISOString(),
+    ]),
+  )
+
+  expect(byAgent.get('agent-7')).toBe('2026-09-20T08:00:00.000Z')
+  expect(byAgent.get('main')).toBe('2026-09-20T11:00:00.000Z')
+})
+
+test('a transcript whose Turns never arrived reports null, not the upload', async () => {
+  const projectId = await project('github.com/acme/api')
+  await artifact({ projectId })
+
+  const { sessions } = await asMember(storedSessions)
+
+  expect(sessions[0]!.lastTurnAt).toBeNull()
+})

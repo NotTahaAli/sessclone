@@ -21,6 +21,9 @@ const ROOT = argv[2] ?? 'apps/web/.next/server/app'
 /** Routes whose shell must exist and must not be empty. */
 const SHELLS = [
   'costs.html',
+  'sessions.html',
+  'transcripts.html',
+  'more.html',
   'devices.html',
   'keys.html',
   'settings.html',

@@ -6,11 +6,13 @@ import { z } from 'zod'
 import {
   deleteStoredProject,
   deleteStoredSession,
-} from '../../../../lib/artifacts'
-import { asViewer } from '../../../../lib/db'
-import { signedInUser } from '../../../../lib/supabase/server'
+} from '../../../lib/artifacts'
+import { asViewer } from '../../../lib/db'
+import { signedInUser } from '../../../lib/supabase/server'
 
-// Ticket 73's two writes, beside ticket 72's. A Server Action is a POST
+// Ticket 73's two writes. They moved here with the listing in ticket 87 —
+// `/transcripts` is where the rows are now, so it is the path that revalidates.
+// A Server Action is a POST
 // endpoint anybody can reach whether or not the page rendered a form for them,
 // so identity comes from the session and every input is parsed before it
 // reaches a statement.
@@ -36,7 +38,7 @@ export const deleteSession = async (formData: FormData) => {
   // artifact id belongs to somebody.
   await asViewer(user.id, (tx) => deleteStoredSession(tx, artifactId.data))
 
-  revalidatePath('/settings/you')
+  revalidatePath('/transcripts')
 }
 
 /**
@@ -60,5 +62,5 @@ export const deleteProject = async (formData: FormData) => {
     deleteStoredProject(tx, memberId.data, project ? project.data : null),
   )
 
-  revalidatePath('/settings/you')
+  revalidatePath('/transcripts')
 }

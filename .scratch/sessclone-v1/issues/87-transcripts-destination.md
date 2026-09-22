@@ -12,10 +12,10 @@ The archival toggle — whether uploads happen at all — stays in Your settings
 
 **Blocked by:** 84, 85.
 
-**Status:** open
+**Status:** done
 
-- [ ] `/transcripts` lists your own stored transcripts, and the team's when your Role reaches them
-- [ ] The settings entries are gone and `/settings/transcripts` redirects to the new destination
-- [ ] Download works for every listed transcript; Delete appears only on your own
-- [ ] The archival opt-in stays in Your settings
-- [ ] Screenshots at 1440x900 and 390x844, light and dark
+- [x] `/transcripts` lists your own stored transcripts, and the team's when your Role reaches them
+- [x] The settings entries are gone and `/settings/transcripts` is a 308 to the new destination, since the link has shipped
+- [x] Download works for every listed transcript; Delete appears only on your own
+- [x] The archival opt-in stays in Your settings, with one line pointing at the list
+- [x] Screenshots at 1440x900 and 390x844, light and dark, in `/mnt/project-files/shots-tickets-85-88/`
