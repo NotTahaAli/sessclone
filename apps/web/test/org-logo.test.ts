@@ -8,6 +8,7 @@ import { beforeEach, expect, test } from 'vitest'
 import {
   clearOrgLogo,
   MAX_LOGO_BYTES,
+  MAX_LOGO_PIXELS,
   MIN_LOGO_PIXELS,
   orgLogo,
   orgLogoSrc,
@@ -111,6 +112,41 @@ test('anything that is not one of the three formats is refused', () => {
   ]) {
     expect(readLogo(bytes)).toEqual({ refusal: 'not_an_image' })
   }
+})
+
+test('a PNG whose first chunk is not IHDR is not an image', () => {
+  // The dimensions are read from a fixed offset because IHDR must come first.
+  // A file that carries the signature and puts something else there would
+  // otherwise be measured from whatever those bytes happen to say.
+  const real = png(200, 120)
+  const forged = new Uint8Array(real)
+  forged.set(new TextEncoder().encode('tEXt'), 12)
+  expect(readLogo(forged)).toEqual({ refusal: 'not_an_image' })
+})
+
+test('fill bytes between JPEG segments are padding, not a refusal', () => {
+  // `ff` repeated before a marker is legal, and a walk that treated it as the
+  // marker refused valid files.
+  const real = jpeg(200, 120)
+  const padded = new Uint8Array(real.byteLength + 3)
+  padded.set(real.subarray(0, 2))
+  padded.set([0xff, 0xff, 0xff], 2)
+  padded.set(real.subarray(2), 5)
+  expect(readLogo(padded)).toEqual({
+    logo: { contentType: 'image/jpeg', width: 200, height: 120 },
+  })
+})
+
+test('an image with more pixels than the table will hold is refused, not raised', () => {
+  // A flat 10000x10000 PNG compresses to a few kB, so the byte bound lets it
+  // through and `org_logos_dimensions_check` would then raise a check
+  // violation out of the server action.
+  expect(readLogo(png(MAX_LOGO_PIXELS + 1, 200))).toEqual({
+    refusal: 'too_many_pixels',
+  })
+  expect(readLogo(png(200, MAX_LOGO_PIXELS + 1))).toEqual({
+    refusal: 'too_many_pixels',
+  })
 })
 
 test('a logo too small to draw, and a file too large to send, are refused', () => {

@@ -9,7 +9,7 @@ import {
 } from '../../../lib/auth/bootstrap'
 import {
   APPEARANCE_COOKIE,
-  APPEARANCE_COOKIE_MAX_AGE,
+  APPEARANCE_COOKIE_OPTIONS,
   encodeAppearance,
   viewerAppearance,
 } from '../../../lib/appearance'
@@ -145,13 +145,11 @@ export async function GET(request: NextRequest) {
   // it the shell notices on the next load and applies it then.
   try {
     const appearance = await asViewer(claims.sub, viewerAppearance)
-    answer.cookies.set(APPEARANCE_COOKIE, encodeAppearance(appearance), {
-      path: '/',
-      maxAge: APPEARANCE_COOKIE_MAX_AGE,
-      sameSite: 'lax',
-      // Read by the inline script in `<head>`, so deliberately not httpOnly.
-      secure: destination.protocol === 'https:',
-    })
+    answer.cookies.set(
+      APPEARANCE_COOKIE,
+      encodeAppearance(appearance),
+      APPEARANCE_COOKIE_OPTIONS,
+    )
   } catch (cause) {
     console.error('sign-in: could not read the signer’s appearance', cause)
   }

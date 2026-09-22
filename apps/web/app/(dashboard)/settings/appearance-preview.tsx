@@ -1,7 +1,7 @@
-import type { AccentTones } from '../../../lib/accent'
+import type { AccentTones } from '../../../lib/accent-presets'
 
 // Ticket 77, third criterion: the derived values are computed once on save and
-// stored. This is what that buys — the six resolved tones, shown as they are
+// stored. This is what that buys — the seven resolved values, shown as they are
 // stored, rendered on the server from the row.
 //
 // It is also the answer to "what will my seed become". `CorePalette.of()` puts

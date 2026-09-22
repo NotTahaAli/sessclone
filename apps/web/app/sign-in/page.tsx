@@ -5,7 +5,7 @@ import { readAnonymously } from '../../lib/db'
 import { invitationOrg } from '../../lib/invitations'
 import { logoPath } from '../../lib/org-logo'
 import { OrgMark } from '../org-mark'
-import { safeNext } from '../../lib/auth/next-path'
+import { invitationToken, safeNext } from '../../lib/auth/next-path'
 import { ProviderError } from './provider-error'
 
 // Ticket 83: the page prerenders, and the query string streams into it.
@@ -67,10 +67,7 @@ async function ReturnTo({ searchParams }: { searchParams: Query }) {
  * renders nothing.
  */
 async function InvitedBy({ searchParams }: { searchParams: Query }) {
-  const returnTo = safeNext((await searchParams).next)
-  const token = returnTo?.startsWith('/join/')
-    ? decodeURIComponent(returnTo.slice('/join/'.length))
-    : null
+  const token = invitationToken(safeNext((await searchParams).next))
   if (!token) return null
 
   const invitation = await readAnonymously((tx) => invitationOrg(tx, token))

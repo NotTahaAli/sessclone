@@ -7,8 +7,6 @@ import { PanelCredit } from './credit'
 import { BottomBarLinks, SidebarLinks } from './nav-links'
 import { DESTINATIONS } from './navigation'
 import Loading from './loading'
-import { asViewer } from '../../lib/db'
-import { orgLogoSrc } from '../../lib/org-logo'
 import { currentViewer } from '../../lib/viewer'
 
 // Ticket 83: this layout prerenders a static shell.
@@ -115,14 +113,11 @@ async function OrgName({ className }: { className: string }) {
 
   // Ticket 77: the mark sits beside the name wherever the name is, which is
   // the design system's rule for OrgMark — never instead of it, since a logo
-  // is not a label.
-  const logo = await asViewer(viewer.userId, (tx) =>
-    orgLogoSrc(tx, viewer.orgId),
-  )
-
+  // is not a label. It rides on the viewer's own row rather than being read
+  // here, so the shell still costs one transaction.
   return (
     <span className="flex items-center gap-2">
-      <OrgMark name={viewer.orgName} src={logo} size={20} />
+      <OrgMark name={viewer.orgName} src={viewer.orgLogo} size={20} />
       <span className={className} title={viewer.orgName}>
         {viewer.orgName}
       </span>

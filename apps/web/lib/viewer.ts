@@ -1,5 +1,6 @@
 import { cache } from 'react'
 import { asViewer } from './db'
+import { logoPath } from './org-logo'
 import type { SubscriptionStatus } from './tier'
 import { signedInUser } from './supabase/server'
 
@@ -42,6 +43,14 @@ export type Viewer = {
    */
   subscriptionStatus: SubscriptionStatus | null
   role: Role
+  /**
+   * The Org's logo (ticket 77), already versioned, or null. Read here rather
+   * than by the component that draws it: the mark sits beside the Org's name
+   * in the shell, so a separate read would be a third `asViewer` transaction
+   * on every dashboard load to answer a question this row was already open
+   * for.
+   */
+  orgLogo: string | null
 }
 
 type MembershipRow = {
@@ -51,6 +60,7 @@ type MembershipRow = {
   org_timezone: string
   subscription_status: SubscriptionStatus | null
   role: Role
+  logo_updated_at: Date | null
 }
 
 /**
@@ -80,11 +90,13 @@ export const currentViewer = cache(async (): Promise<Viewer | null> => {
              org.name as org_name,
              org.timezone as org_timezone,
              subscription.status as subscription_status,
-             member.role
+             member.role,
+             logo.updated_at as logo_updated_at
         from members member
         join orgs org on org.id = member.org_id
         left join subscriptions subscription
                on subscription.org_id = member.org_id
+        left join org_logos logo on logo.org_id = member.org_id
        where member.id in (select sessclone_own_member_ids())
        order by member.created_at
        limit 1
@@ -102,6 +114,9 @@ export const currentViewer = cache(async (): Promise<Viewer | null> => {
     orgTimezone: membership.org_timezone,
     subscriptionStatus: membership.subscription_status,
     role: membership.role,
+    orgLogo: membership.logo_updated_at
+      ? logoPath(membership.org_id, membership.logo_updated_at)
+      : null,
   }
 })
 

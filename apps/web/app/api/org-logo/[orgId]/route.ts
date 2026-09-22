@@ -28,8 +28,8 @@ const OrgId = z.uuid()
  * (or a mail client that dropped the query string) would otherwise be holding
  * last year's logo with no way to be told.
  */
-const cacheFor = (url: string) =>
-  new URL(url).searchParams.has('v')
+const cacheFor = (url: string, version: Date) =>
+  new URL(url).searchParams.get('v') === String(version.getTime())
     ? 'public, max-age=31536000, immutable'
     : 'public, max-age=300'
 
@@ -37,18 +37,27 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ orgId: string }> },
 ) {
-  const cache = cacheFor(request.url)
   const orgId = OrgId.safeParse((await params).orgId)
   if (!orgId.success) return new Response('no such logo', { status: 404 })
 
   const logo = await readAnonymously((tx) => orgLogo(tx, orgId.data))
   if (!logo) return new Response('no such logo', { status: 404 })
 
+  // The version has to match the row, not merely be present: otherwise a
+  // hand-made `?v=0` link pins a year-long answer in somebody's cache.
+  const cache = cacheFor(request.url, logo.updated_at)
+
   // Weak would do — the bytes are the bytes — but a strong tag is what makes
   // a range request valid, and the mail clients that do partial fetches of
   // images are the reason to bother.
   const etag = `"${logo.updated_at.getTime().toString(36)}-${logo.bytes.byteLength.toString(36)}"`
-  if (request.headers.get('if-none-match') === etag) {
+  // A proxy may send several tags, and may weaken ours; both still identify
+  // this body, and comparing the whole header as one string would resend
+  // 256 kB rather than answer 304.
+  const offered = (request.headers.get('if-none-match') ?? '')
+    .split(',')
+    .map((tag) => tag.trim().replace(/^W\//, ''))
+  if (offered.includes(etag)) {
     return new Response(null, {
       status: 304,
       headers: { etag, 'cache-control': cache },

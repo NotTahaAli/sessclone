@@ -5,6 +5,8 @@ import {
   hexFromArgb,
 } from '@material/material-color-utilities'
 
+import { type AccentTones, CLAY_SEED } from './accent-presets'
+
 // Ticket 77: one seed colour in, the derived half of the token system out.
 //
 // `docs/design/design-system.md` § "Colour — accent, derived from a seed"
@@ -13,11 +15,19 @@ import {
 // `CorePalette.of(argbFromHex(seed)).a1.tone(n)`, one call per tone, and
 // `accent.test.ts` asserts the output against the six presets it measured.
 //
-// **This module never reaches the browser.** The tones are resolved when a
+// **This module never reaches the browser**, and the names a browser does need
+// — the preset list, the tone type, the property names — live in
+// `accent-presets.ts` so that importing one of them cannot drag the library
+// along. A client component importing from *this* file ships 86 kB of colour
+// science, because resolving Clay below is a top-level side effect and
+// tree-shaking gives up on those. The tones are resolved when a
 // seed is saved and stored beside it, which is the ticket's own criterion:
 // the colour library is 60 kB of colour science, and a live preview that
 // imported it would ship all of it to every visitor to recompute a value the
 // database already holds.
+
+export type { AccentTones } from './accent-presets'
+export { accentProperties, CLAY_SEED, PRESETS } from './accent-presets'
 
 /** The tones the design system reads off `a1`, per token. */
 const TONES = {
@@ -29,30 +39,6 @@ const TONES = {
   subtleLight: 95,
   subtleDark: 20,
 } as const
-
-/**
- * The seven values written onto the document, from five painted tokens: two
- * of them — text and subtle — differ by theme, and an inline style cannot
- * vary by media query, so both halves of each pair are carried and the rules
- * in `globals.css` pick between them.
- */
-export type AccentTones = { [K in keyof typeof TONES]: string }
-
-export const CLAY_SEED = '#D97757'
-
-/**
- * The six preset seeds, in the order the design system lists them. A Member or
- * an Org can type any hex; these are the ones with measured contrast ratios
- * behind them, which is why they are what the picker offers first.
- */
-export const PRESETS: { name: string; seed: string }[] = [
-  { name: 'Clay', seed: CLAY_SEED },
-  { name: 'Blue', seed: '#6A9BCC' },
-  { name: 'Olive', seed: '#788C5D' },
-  { name: 'Aqua', seed: '#2E9191' },
-  { name: 'Violet', seed: '#6B4D9E' },
-  { name: 'Fig', seed: '#C46686' },
-]
 
 /** Six digits with a leading `#`. Three-digit shorthand is expanded first. */
 const HEX = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i
@@ -138,21 +124,3 @@ export const resolveAccent = (seed: string): AccentTones => {
 
 /** Clay, resolved — the default accent, and what `globals.css` declares. */
 export const CLAY: AccentTones = resolveAccent(CLAY_SEED)
-
-/**
- * The custom properties the document carries, as the design system's own
- * example writes them.
- *
- * One map rather than a string, so the caller decides whether it becomes a
- * `style` attribute, a cookie or a line in an inline script — and so the
- * property names exist in exactly one place.
- */
-export const accentProperties = (tones: AccentTones) => ({
-  '--accent-fill': tones.fill,
-  '--accent-on-fill': tones.onFill,
-  '--accent-border': tones.border,
-  '--accent-text-light': tones.textLight,
-  '--accent-text-dark': tones.textDark,
-  '--accent-subtle-light': tones.subtleLight,
-  '--accent-subtle-dark': tones.subtleDark,
-})

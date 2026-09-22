@@ -55,6 +55,15 @@ export type InviteEmail = {
    * because a mail client has no origin to resolve a path against — and it is
    * the only image in the message, which is why it is 24px and beside the
    * name rather than a banner across the top.
+   *
+   * **It is a remote image, so fetching it reaches this deployment**: an
+   * invitee whose mail client loads images discloses their IP address and the
+   * moment they opened the message to whoever reads the web logs, for an
+   * invitation they have not accepted. Named rather than hidden, because it
+   * is the kind of thing a privacy notice has to be able to say. Most clients
+   * block remote images by default and the message reads the same without it;
+   * a deployment that would rather not offer the choice can leave the logo
+   * unset.
    */
   logoUrl?: string | null
 }

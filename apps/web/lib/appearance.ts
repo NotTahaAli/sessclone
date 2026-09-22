@@ -179,6 +179,25 @@ export const APPEARANCE_COOKIE = 'sessclone-appearance'
 export const APPEARANCE_COOKIE_MAX_AGE = 31_536_000
 
 /**
+ * How the appearance cookie is written, everywhere it is written — the
+ * settings action and the sign-in callback both use this, because two writers
+ * disagreeing about `secure` means one sets a cookie the other cannot replace.
+ *
+ * Presentation, and the script in `<head>` is its only reader, so deliberately
+ * not `httpOnly`. `secure` follows the deployment's own URL rather than the
+ * request's scheme: behind a TLS-terminating proxy the request arrives as
+ * plain HTTP while the browser is on HTTPS, and a self-hoster on plain HTTP
+ * behind a VPN would otherwise get a cookie the browser refuses to store and a
+ * theme that never applies.
+ */
+export const APPEARANCE_COOKIE_OPTIONS = {
+  path: '/',
+  maxAge: APPEARANCE_COOKIE_MAX_AGE,
+  sameSite: 'lax',
+  secure: (process.env.NEXT_PUBLIC_APP_URL ?? '').startsWith('https://'),
+} as const
+
+/**
  * The seven tones, in the fixed order the script reassembles them in, after
  * the theme.
  *

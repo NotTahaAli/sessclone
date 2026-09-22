@@ -3,7 +3,11 @@
 import { useActionState, useCallback, useState } from 'react'
 
 import { removeOrgLogo, uploadOrgLogo } from './logo-actions'
-import { MAX_LOGO_BYTES, MIN_LOGO_PIXELS } from '../../../../lib/org-logo'
+import {
+  LOGO_REFUSALS,
+  MAX_LOGO_BYTES,
+  MIN_LOGO_PIXELS,
+} from '../../../../lib/org-logo'
 import { OrgMark } from '../../../org-mark'
 
 // Ticket 77's FileDrop, in the states the design system lists for it: empty,
@@ -28,11 +32,21 @@ export function LogoForm({
   const [removeState, remove, removing] = useActionState(removeOrgLogo, null)
   const [chosen, setChosen] = useState<string | null>(null)
 
+  const [refusal, setRefusal] = useState<string | null>(null)
+
   const choose = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    setChosen(event.target.files?.[0]?.name ?? null)
+    const file = event.target.files?.[0]
+    // Checked here as well as in the action, because Next refuses a Server
+    // Action body over 1 MB before the action runs at all — so the common
+    // failure, a phone photo, would otherwise produce a framework error page
+    // instead of the sentence that says what is wrong.
+    setRefusal(
+      file && file.size > MAX_LOGO_BYTES ? LOGO_REFUSALS.too_large : null,
+    )
+    setChosen(file?.name ?? null)
   }, [])
 
-  const result = state ?? removeState
+  const result = refusal ? { error: refusal } : (state ?? removeState)
 
   return (
     <div className="mt-6">
@@ -57,7 +71,7 @@ export function LogoForm({
         />
         <button
           type="submit"
-          disabled={uploading || !chosen}
+          disabled={uploading || !chosen || Boolean(refusal)}
           className="border-control-border text-label hover:bg-surface-hover h-[var(--control-h)] border px-4 font-mono uppercase disabled:opacity-50"
         >
           {uploading ? 'Uploading' : src ? 'Replace' : 'Upload'}

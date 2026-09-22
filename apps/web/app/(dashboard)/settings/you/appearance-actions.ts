@@ -7,7 +7,7 @@ import { z } from 'zod'
 import { readSeed, SEED_REFUSALS, resolveAccent } from '../../../../lib/accent'
 import {
   APPEARANCE_COOKIE,
-  APPEARANCE_COOKIE_MAX_AGE,
+  APPEARANCE_COOKIE_OPTIONS,
   encodeAppearance,
   setMemberAccent,
   setMemberTheme,
@@ -55,17 +55,11 @@ const submitted = (formData: FormData) =>
 const remember = async (userId: string) => {
   const appearance = await asViewer(userId, viewerAppearance)
   const store = await cookies()
-  store.set(APPEARANCE_COOKIE, encodeAppearance(appearance), {
-    path: '/',
-    maxAge: APPEARANCE_COOKIE_MAX_AGE,
-    sameSite: 'lax',
-    // Presentation, and the script in `<head>` is its only reader — so not
-    // `httpOnly`, which would hide it from that script. `secure` follows the
-    // deployment: a self-hoster on plain HTTP behind a VPN would otherwise
-    // have a cookie the browser refuses to store, and a theme that never
-    // applied.
-    secure: (process.env.NEXT_PUBLIC_APP_URL ?? '').startsWith('https://'),
-  })
+  store.set(
+    APPEARANCE_COOKIE,
+    encodeAppearance(appearance),
+    APPEARANCE_COOKIE_OPTIONS,
+  )
 }
 
 /**

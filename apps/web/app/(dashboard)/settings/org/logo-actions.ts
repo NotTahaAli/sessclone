@@ -39,9 +39,11 @@ export const uploadOrgLogo = async (
   if (!(file instanceof File) || file.size === 0) {
     return { error: 'Choose an image to upload.' }
   }
-  // Checked before the bytes are read into memory, so a large file is refused
-  // rather than buffered. `size` is the part's real length here — this is the
-  // server's own parse of the multipart body, not a header the client sent.
+  // `size` is the part's real length — this is the server's own parse of the
+  // multipart body, not a header the client sent. It is the backstop rather
+  // than the first line of defence: Next refuses a Server Action body over
+  // 1 MB before this function is called, so `logo-form.tsx` checks the size in
+  // the browser to keep the refusal a sentence rather than an error page.
   if (file.size > MAX_LOGO_BYTES) return { error: LOGO_REFUSALS.too_large }
 
   const bytes = new Uint8Array(await file.arrayBuffer())

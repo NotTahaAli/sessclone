@@ -19,7 +19,16 @@ export const MAX_LOGO_BYTES = 262_144
  */
 export const MIN_LOGO_PIXELS = 64
 
-export type LogoRefusal = 'not_an_image' | 'too_small' | 'too_large'
+/**
+ * The largest side the table will hold, matched by
+ * `org_logos_dimensions_check`. A 10000x10000 flat colour compresses to well
+ * under the byte bound, so without this it passes every check here and then
+ * raises a check violation on insert — an error page where a refusal belongs.
+ */
+export const MAX_LOGO_PIXELS = 8192
+
+export type LogoRefusal =
+  'not_an_image' | 'too_small' | 'too_large' | 'too_many_pixels'
 
 export type Logo = {
   contentType: 'image/png' | 'image/jpeg' | 'image/webp'
@@ -31,6 +40,7 @@ export const LOGO_REFUSALS: Record<LogoRefusal, string> = {
   not_an_image: 'A logo is a PNG, a JPEG or a WebP image.',
   too_small: `That image is under ${MIN_LOGO_PIXELS}px on one side, which would be upscaled wherever it appears.`,
   too_large: `That file is over ${Math.round(MAX_LOGO_BYTES / 1024)} kB. A logo this size is a logo somebody waits for.`,
+  too_many_pixels: `That image is over ${MAX_LOGO_PIXELS}px on one side. A mark is drawn at 32px; nothing here needs that many.`,
 }
 
 const startsWith = (bytes: Uint8Array, signature: number[], at = 0) =>
@@ -42,8 +52,12 @@ const png = (bytes: Uint8Array): Logo | null => {
   }
   // IHDR is required to be the first chunk, so the two dimensions are at fixed
   // offsets: 8 bytes of signature, 8 of chunk header, then two big-endian 32s.
+  // Required, and therefore checked: a file carrying the signature with some
+  // other chunk first would otherwise yield whatever those bytes happen to
+  // say.
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   if (bytes.byteLength < 24) return null
+  if (!startsWith(bytes, [0x49, 0x48, 0x44, 0x52], 12)) return null
   return {
     contentType: 'image/png',
     width: view.getUint32(16),
@@ -61,6 +75,11 @@ const jpeg = (bytes: Uint8Array): Logo | null => {
   let at = 2
   while (at + 9 < bytes.byteLength) {
     if (bytes[at] !== 0xff) return null
+    // `ff` repeated is legal padding between segments, so the marker is the
+    // first byte that is not one. Refusing on it would turn a valid JPEG into
+    // "not an image".
+    while (bytes[at + 1] === 0xff) at += 1
+    if (at + 9 >= bytes.byteLength) return null
     const marker = bytes[at + 1]!
     // Any SOFn — baseline, progressive, lossless — carries the size in the
     // same place. DHT (c4), DNL (c8) and DAC (cc) share the range and do not.
@@ -136,6 +155,9 @@ export const readLogo = (
   if (logo.width < 1 || logo.height < 1) return { refusal: 'not_an_image' }
   if (logo.width < MIN_LOGO_PIXELS || logo.height < MIN_LOGO_PIXELS) {
     return { refusal: 'too_small' }
+  }
+  if (logo.width > MAX_LOGO_PIXELS || logo.height > MAX_LOGO_PIXELS) {
+    return { refusal: 'too_many_pixels' }
   }
   return { logo }
 }

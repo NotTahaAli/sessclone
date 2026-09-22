@@ -18,3 +18,24 @@ export const safeNext = (value: unknown): string | null =>
   !value.startsWith('/\\')
     ? value
     : null
+
+/**
+ * The invitation token a `next` path carries, or null (ticket 77).
+ *
+ * `safeNext` decides whether a path may be redirected to; it does not decide
+ * whether the path is well-formed. `decodeURIComponent` throws on a malformed
+ * escape, so `?next=/join/%` took the whole sign-in page down for a signed-out
+ * visitor who followed a mangled link. The shape is checked rather than the
+ * decode trusted: a token is 43 base64url characters, and anything else is
+ * a link that was going to fail at `/join` anyway.
+ */
+export const invitationToken = (returnTo: string | null) => {
+  if (!returnTo?.startsWith('/join/')) return null
+  let token
+  try {
+    token = decodeURIComponent(returnTo.slice('/join/'.length))
+  } catch {
+    return null
+  }
+  return /^[\w-]{16,128}$/.test(token) ? token : null
+}

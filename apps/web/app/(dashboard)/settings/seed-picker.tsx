@@ -2,7 +2,7 @@
 
 import { useActionState, useCallback, useState } from 'react'
 
-import { PRESETS } from '../../../lib/accent'
+import { PRESETS } from '../../../lib/accent-presets'
 
 // Ticket 77's SeedPicker, from the design system's component inventory: "Six
 // preset swatches, custom swatch, hex field, live preview. Preset selected,
@@ -17,7 +17,7 @@ import { PRESETS } from '../../../lib/accent'
 // **The preview is of what is stored, not of what is typed.** Resolving a seed
 // to its tones needs `@material/material-color-utilities`, and the ticket's
 // third criterion is that the library never reaches the browser — so the
-// swatches below are the seeds themselves, and the six resolved tones appear
+// swatches below are the seeds themselves, and the seven resolved values appear
 // after a save, painted by the page that read them back. A typed hex therefore
 // shows its own colour and not the accent it will become, which is honest: the
 // palette puts a floor under chroma, so the two are not always the same colour

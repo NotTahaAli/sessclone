@@ -43,3 +43,36 @@ optional on a self-hosted deployment, and it is one image of at most 256 kB
 served with an ETag. The format and the dimensions are read out of the bytes
 rather than believed from the upload, and `image/svg+xml` is refused — an SVG
 served from this origin is a document that can carry script.
+
+## Acted on after review
+
+An independent review of the implementation found one blocker and four
+should-fixes. Each is fixed with a test, red-verified by reverting the fix.
+
+- **The colour library was in the client bundle**, so the third criterion was
+  not met: `seed-picker.tsx` imported the preset list from `lib/accent.ts`,
+  whose top-level `resolveAccent(CLAY_SEED)` defeats tree-shaking, and 86 kB of
+  CAM16 colour science went to every visitor of the two settings pages. The
+  names a browser needs now live in `lib/accent-presets.ts`, which imports
+  nothing, and `client-bundle.test.ts` asserts both halves of that in the
+  source, since a build is too slow to assert on every run.
+- **An oversized image was an error page, not a refusal.** A 10000x10000 flat
+  colour compresses to a few kB, so it passed the byte bound and then raised a
+  check violation out of the server action. `readLogo` now enforces the same
+  8192px bound the table does.
+- **A malformed invitation link took the sign-in page down.** `safeNext` says a
+  path is safe to return to; it does not say it is well-formed, and
+  `?next=/join/%` reached `decodeURIComponent` and threw for a signed-out
+  visitor. The token's shape is checked instead, in `lib/auth/next-path.ts`.
+- **The friendly "too large" message was unreachable.** Next refuses a Server
+  Action body over 1 MB before the action runs, so the common failure — a phone
+  photo — produced a framework error rather than the sentence. The size is
+  checked in the browser as well.
+- **The PNG parser trusted the first chunk to be IHDR** and the JPEG parser
+  refused legal `ff` padding between segments. Both fixed, both covered.
+- Smaller: `?v=` now has to match the row before the route answers `immutable`,
+  `if-none-match` is compared per tag so a weakened or multi-tag validator still
+  answers 304, the appearance cookie's options live in one place rather than
+  being decided two ways, the shell reads the logo on the viewer's own row
+  instead of opening a third transaction per load, and the invitation email's
+  remote image is documented as the read receipt it is.
