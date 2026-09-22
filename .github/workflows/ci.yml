@@ -5,7 +5,30 @@ name: CI
 # contributions start arriving from forks.
 on: push
 
+# Three jobs rather than one, because one was three minutes of which the
+# database suite was seventy-six seconds and everything else waited its turn.
+# They share nothing but the install, so they run side by side and the wall
+# clock is the slowest of them. `check` keeps its name: it is the one a branch
+# protection rule would be written against.
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm format
+      - run: pnpm typecheck
+      # The suites that need no database: the parser, the identity rules, the
+      # cost arithmetic and the Collector. Seconds, so they ride with the
+      # linting rather than waiting behind Postgres.
+      - run: pnpm vitest run --project plugin --project shared
+
   check:
     runs-on: ubuntu-latest
 
@@ -36,9 +59,6 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
-      - run: pnpm format
-      - run: pnpm typecheck
       # `sessclone` owns the tables and is also this image's superuser, so it
       # is exempt from every policy twice over — which is why the policy tests
       # read as `sessclone_app` instead. The migration creates that role if it
@@ -46,10 +66,30 @@ jobs:
       - run: psql "$DATABASE_URL" -c "create role sessclone_app login password 'sessclone_app'"
         env:
           DATABASE_URL: postgres://sessclone:sessclone@127.0.0.1:5432/sessclone_test
-      - run: pnpm test
+      - run: pnpm test:db
         env:
           DATABASE_URL: postgres://sessclone:sessclone@127.0.0.1:5432/sessclone_test
           APP_DATABASE_URL: postgres://sessclone_app:sessclone_app@127.0.0.1:5432/sessclone_test
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Next keeps its compilation cache here, and a cold build is most of
+      # this job. Keyed by the lockfile and the sources so a hit is a hit;
+      # restored from any earlier build of the same lockfile otherwise.
+      - uses: actions/cache@v4
+        with:
+          path: apps/web/.next/cache
+          key: next-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('apps/web/**/*.ts', 'apps/web/**/*.tsx') }}
+          restore-keys: |
+            next-${{ hashFiles('pnpm-lock.yaml') }}-
       # With no database reachable at all: the marketing pages are prerendered
       # at build time (Cache Components, ticket 80), and a build that needs a
       # live Postgres to compile its own pricing copy would fail a
