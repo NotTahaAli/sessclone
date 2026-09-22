@@ -241,9 +241,13 @@ sessclone`. Self-hosters use the identical path against their own fork.
 
 Two mechanics, verified by building a probe plugin and installing it here.
 Hooks register when `hooks.json` sits at `hooks/hooks.json`, or when
-`plugin.json` points at it with a `"hooks"` key — either alone is enough. Only
-the remaining combination fails: a bare `hooks.json` in the plugin root with no
-pointer is ignored silently, and `claude plugin details <name>` reporting
+`plugin.json` points at it with a `"hooks"` key — either alone is enough, and
+**doing both is now refused**: Claude Code loads `hooks/hooks.json` by its path
+and then rejects the manifest pointer to the same file as a duplicate, leaving
+the plugin with no hooks at all ("Duplicate hooks file detected", seen on a
+real machine 2026-09-22). The standard path alone is what this plugin uses. The
+remaining combination also fails: a bare `hooks.json` in the plugin root with
+no pointer is ignored silently, and `claude plugin details <name>` reporting
 `Hooks (0)` is how that shows up. (The earlier reading here, that the pointer
 was the deciding factor, came from a two-variable test; ticket 02 measured the
 four cases one variable at a time.)

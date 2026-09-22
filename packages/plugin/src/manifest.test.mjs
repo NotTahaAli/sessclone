@@ -7,10 +7,9 @@ import { expect, test } from 'vitest'
 import { SWEEP_BUDGET_MS } from './report.mjs'
 
 // Ticket 66. An install is two commands, and everything that happens after
-// them is manifest: the marketplace entry points at the plugin, the plugin
-// points at its hooks file, the hooks file points at four scripts, and each of
-// those reaches outside the plugin directory for the parser and the identity
-// rules in `packages/shared`.
+// them is manifest: the marketplace entry points at the plugin, Claude Code
+// loads the plugin's hooks file by its path, and that file points at four
+// scripts which import the parser and the identity rules beside them.
 //
 // Every one of those pointers can be broken by a rename that breaks no build
 // and fails no other test — the Collector simply stops collecting, silently,
@@ -30,6 +29,9 @@ const exists = async (path) =>
     () => true,
     () => false,
   )
+
+/** Where Claude Code looks for a plugin's hooks, with no manifest entry. */
+const HOOKS_FILE = 'hooks/hooks.json'
 
 /** The events the Collector registers. */
 const EVENTS = ['SessionStart', 'Stop', 'StopFailure', 'SessionEnd']
@@ -56,17 +58,27 @@ test('the marketplace entry points at this repository’s plugin', async () => {
   ).toBe(true)
 })
 
+test('the manifest does not name the hooks file Claude Code loads itself', async () => {
+  // `hooks/hooks.json` is loaded by its path alone, and naming it under
+  // `hooks` in the manifest loads it twice — which Claude Code refuses:
+  // "Duplicate hooks file detected ... manifest.hooks should only reference
+  // additional hook files." The plugin then registers no hooks at all and
+  // collects nothing, which is the same silence this package keeps being
+  // caught by. So `hooks` stays absent while the standard file is the only
+  // one there.
+  const plugin = await json(
+    join(repository, 'packages/plugin/.claude-plugin/plugin.json'),
+  )
+
+  expect(plugin.hooks).toBeUndefined()
+  expect(await exists(join(repository, 'packages/plugin', HOOKS_FILE))).toBe(
+    true,
+  )
+})
+
 test('every hook the plugin registers runs a script that is there', async () => {
-  // Walked, not written out: repointing `plugin.json`'s `hooks` at some other
-  // existing file would otherwise leave this green with no hook registered.
   const root = join(repository, 'packages/plugin')
-  const plugin = await json(join(root, '.claude-plugin/plugin.json'))
-
-  expect(plugin.name).toBe('sessclone')
-  expect(typeof plugin.hooks).toBe('string')
-  expect(plugin.hooks.startsWith('./')).toBe(true)
-
-  const { hooks } = await json(join(root, plugin.hooks))
+  const { hooks } = await json(join(root, HOOKS_FILE))
   expect(Object.keys(hooks).toSorted()).toEqual(EVENTS.toSorted())
 
   for (const event of EVENTS) {
@@ -93,10 +105,11 @@ test('every hook the plugin registers runs a script that is there', async () => 
   }
 })
 
-test('what the hooks import from outside the plugin is still there', async () => {
-  // The hooks reach into `packages/shared` by relative path, which is why an
-  // install that copies only the plugin directory reports nothing (docs/install.md).
-  // Renaming a module over there breaks no build in this package.
+test('what the hooks import is still there', async () => {
+  // Every specifier is resolved on disk. `src/installable.test.mjs` is what
+  // keeps them inside the plugin, which an install is; this is what keeps
+  // them pointing at a file that exists, which a rename can break with no
+  // other test going red.
   const files = [
     'hooks/session-start.mjs',
     'hooks/session-end.mjs',
