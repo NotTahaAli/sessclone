@@ -34,6 +34,7 @@ import { basename, join } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 
+import { NO_DEADLINE, expired, requestSignal } from './deadline.mjs'
 import { sessionTranscripts } from './transcripts.mjs'
 
 /**
@@ -183,9 +184,10 @@ export const agentIdOf = (path) => {
  * @param {import('./configuration.mjs').CollectorConfiguration} input.configuration
  * @param {string} input.path
  * @param {unknown} input.body
+ * @param {number} [input.deadline]
  * @returns {Promise<{ ok: boolean, status: number | null, body: any }>}
  */
-const ask = async ({ configuration, path, body }) => {
+const ask = async ({ configuration, path, body, deadline = NO_DEADLINE }) => {
   try {
     const answer = await fetch(`${configuration.url}${path}`, {
       method: 'POST',
@@ -194,7 +196,7 @@ const ask = async ({ configuration, path, body }) => {
         authorization: `Bearer ${configuration.apiKey}`,
       },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: requestSignal(REQUEST_TIMEOUT_MS, deadline),
     })
     const parsed = await answer.json().catch(() => null)
     return { ok: answer.ok, status: answer.status, body: parsed }
@@ -211,6 +213,7 @@ const ask = async ({ configuration, path, body }) => {
  * @param {string} input.transcriptPath
  * @param {string} input.sessionId
  * @param {string | null} [input.agentId]
+ * @param {number} [input.deadline]
  * @returns {Promise<{ archived: boolean, refused?: string, sizeBytes?: number }>}
  */
 export const archiveTranscript = async ({
@@ -218,6 +221,7 @@ export const archiveTranscript = async ({
   transcriptPath,
   sessionId,
   agentId = agentIdOf(transcriptPath),
+  deadline = NO_DEADLINE,
 }) => {
   // The size first, and once: everything below reads exactly this range, so a
   // transcript that grows underneath is archived as it stood here and the next
@@ -262,6 +266,7 @@ export const archiveTranscript = async ({
     configuration,
     path: '/api/logs/presign',
     body: { sessionId, agentId, sha256 },
+    deadline,
   })
 
   // Anything that is not an issued URL — a refusal, a 401, a deployment with
@@ -290,7 +295,7 @@ export const archiveTranscript = async ({
       ),
       // Node requires this for a streamed request body.
       duplex: 'half',
-      signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
+      signal: requestSignal(UPLOAD_TIMEOUT_MS, deadline),
     })
     if (!answer.ok) return { archived: false, refused: 'upload_failed' }
   } catch {
@@ -304,6 +309,7 @@ export const archiveTranscript = async ({
     // a Session that moved Project since the presign rather than record one
     // object under another's hash.
     body: { sessionId, agentId, sha256, storageKey: presign.body.storageKey },
+    deadline,
   })
   if (!confirm.ok || !confirm.body?.stored) {
     if (confirm.body?.refused) {
@@ -326,23 +332,25 @@ export const archiveTranscript = async ({
 /**
  * Archives every transcript one Session wrote: its own, and one per Agent Run.
  *
- * Sequential, and stopped by `shouldStop`, for the same reason the sweep is:
- * a Session with twenty subagent runs must not fire twenty uploads at once,
- * and the hook it runs inside has ten seconds.
+ * Sequential, and bounded by `deadline`, for the same reason the sweep is: a
+ * Session with twenty subagent runs must not fire twenty uploads at once, and
+ * the hook it runs inside has ten seconds. The deadline bounds each request as
+ * well as the loop — an upload started just inside it would otherwise run for
+ * its own eight seconds and be killed with the hook.
  *
  * @param {object} input
  * @param {import('./configuration.mjs').CollectorConfiguration} input.configuration
  * @param {string | undefined} input.transcriptPath
  * @param {string} input.sessionId
  * @param {Record<string, string | undefined>} input.environment
- * @param {() => boolean} [input.shouldStop]
+ * @param {number} [input.deadline]
  */
 export const archiveSession = async ({
   configuration,
   transcriptPath,
   sessionId,
   environment,
-  shouldStop = () => false,
+  deadline = NO_DEADLINE,
 }) => {
   const transcripts = await sessionTranscripts({
     transcriptPath,
@@ -355,7 +363,7 @@ export const archiveSession = async ({
   const refusals = []
 
   for (const { path, agentRun } of transcripts) {
-    if (shouldStop()) break
+    if (expired(deadline)) break
 
     // The id comes from the filename, and an Agent Run whose filename does not
     // carry one is skipped rather than archived: `agentId: null` would file it
@@ -370,6 +378,7 @@ export const archiveSession = async ({
       transcriptPath: path,
       sessionId,
       agentId,
+      deadline,
     })
     if (result.archived) archived += 1
     else if (result.refused) refusals.push(result.refused)

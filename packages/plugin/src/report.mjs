@@ -26,6 +26,7 @@ import { hostname } from 'node:os'
 import { promisify } from 'node:util'
 
 import { archiveSession } from './archive.mjs'
+import { NO_DEADLINE, expired, requestSignal } from './deadline.mjs'
 import { readCursor, writeCursor } from './cursors.mjs'
 import { drainQueue, enqueue } from './queue.mjs'
 import { allSessions, sessionTranscripts } from './transcripts.mjs'
@@ -456,17 +457,18 @@ export const buildPayloads = async ({
  * @param {string} input.sessionId
  * @param {string | undefined} input.cwd
  * @param {Record<string, string | undefined>} input.environment
- * `shouldStop` is the caller's deadline, checked before each request rather
- * than during one. A hook is killed at the timeout `hooks.json` gives it, and
- * a session whose whole history is still unflushed is several requests of
- * several seconds each — so without a deadline the last one is cut off mid-
- * flight and Claude Code reports the hook as cancelled, which is what a Member
- * sees. Stopping early costs nothing: the cursors for what was not sent stay
- * where they are, and the next `Stop` or `SessionStart` sweep sends the rest.
- * A stopped flush is a partial flush, so it writes no marker either.
+ * `deadline` is when the caller is killed, and it bounds both the loop and
+ * each request inside it. A hook is killed at the timeout `hooks.json` gives
+ * it, and a session whose whole history is still unflushed is several requests
+ * of several seconds each — so a check only *between* requests still lets the
+ * last one start a second before the deadline and run six seconds past it,
+ * which is exactly the "Hook cancelled" a Member sees. Stopping early costs
+ * nothing: the cursors for what was not sent stay where they are, and the next
+ * `Stop` or `SessionStart` sweep sends the rest. A stopped flush is a partial
+ * flush, so it writes no marker either.
  *
  * @param {Partial<import('@sessclone/shared').IngestPayload>} [input.attach]
- * @param {() => boolean} [input.shouldStop]
+ * @param {number} [input.deadline]
  */
 export const flush = async ({
   configuration,
@@ -475,7 +477,7 @@ export const flush = async ({
   cwd,
   environment,
   attach = {},
-  shouldStop = () => false,
+  deadline = NO_DEADLINE,
 }) => {
   const plans = await buildPayloads({
     transcriptPath,
@@ -493,13 +495,13 @@ export const flush = async ({
   let stopped = false
 
   for (const { payload, advance } of plans) {
-    if (shouldStop()) {
+    if (expired(deadline)) {
       stopped = true
       break
     }
 
     // eslint-disable-next-line no-await-in-loop -- one request at a time; firing them together is how a Collector takes a deployment down
-    const { ok } = await send({ configuration, payload })
+    const { ok } = await send({ configuration, payload, deadline })
     for (const { path, cursor } of advance) {
       if (ok) acknowledged.set(path, cursor)
       else refused.add(path)
@@ -532,6 +534,7 @@ export const flush = async ({
         reports: [],
         ...attach,
       },
+      deadline,
     })
   }
 }
@@ -587,7 +590,7 @@ export const sweep = async ({
 
   await drainQueue(
     configuration.stateDir,
-    (payload) => send({ configuration, payload }),
+    (payload) => send({ configuration, payload, deadline }),
     overBudget,
   )
 
@@ -603,6 +606,7 @@ export const sweep = async ({
       // it ran in (`turn.cwd`), so there is no session-wide cwd to pass.
       cwd: undefined,
       environment,
+      deadline,
     })
 
     // Ticket 59: and archive it, for the Member who has opted in. Turns come
@@ -617,7 +621,7 @@ export const sweep = async ({
       transcriptPath,
       sessionId,
       environment,
-      shouldStop: overBudget,
+      deadline,
     })
   }
 }
@@ -650,16 +654,29 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
  *
  * `sleep` is injectable so a test proves the backoff without waiting on it.
  *
+ * Retries stop at `deadline` rather than running the whole sequence: the
+ * backoff is up to 2.6 seconds on top of the attempts themselves, and a hook
+ * killed part-way through it is the same "Hook cancelled". A payload that ran
+ * out of time is queued exactly as one that failed is, so the next
+ * `SessionStart` drain delivers it.
+ *
  * @param {object} input
  * @param {import('./configuration.mjs').CollectorConfiguration} input.configuration
  * @param {import('@sessclone/shared').IngestPayload} input.payload
  * @param {(ms: number) => Promise<void>} [input.sleep]
+ * @param {number} [input.deadline]
  * @returns {Promise<{ ok: boolean; status: number | null; queued: boolean }>}
  */
-export const deliver = async ({ configuration, payload, sleep = wait }) => {
-  let result = await send({ configuration, payload })
+export const deliver = async ({
+  configuration,
+  payload,
+  sleep = wait,
+  deadline = NO_DEADLINE,
+}) => {
+  let result = await send({ configuration, payload, deadline })
   for (const delay of RETRY_DELAYS_MS) {
     if (result.ok) break
+    if (expired(deadline)) break
     // A refusal (4xx) is final: retrying identical bytes earns the identical
     // refusal, and it does not belong in the queue either.
     if (result.status !== null && result.status >= 400 && result.status < 500) {
@@ -668,7 +685,7 @@ export const deliver = async ({ configuration, payload, sleep = wait }) => {
     // eslint-disable-next-line no-await-in-loop -- a backoff is sequential by definition
     await sleep(delay)
     // eslint-disable-next-line no-await-in-loop -- one attempt at a time
-    result = await send({ configuration, payload })
+    result = await send({ configuration, payload, deadline })
   }
 
   if (!result.ok) {
@@ -688,9 +705,14 @@ export const deliver = async ({ configuration, payload, sleep = wait }) => {
  * @param {object} input
  * @param {import('./configuration.mjs').CollectorConfiguration} input.configuration
  * @param {import('@sessclone/shared').IngestPayload} input.payload
+ * @param {number} [input.deadline]
  * @returns {Promise<{ ok: boolean; status: number | null }>}
  */
-export const send = async ({ configuration, payload }) => {
+export const send = async ({
+  configuration,
+  payload,
+  deadline = NO_DEADLINE,
+}) => {
   try {
     const answer = await fetch(`${configuration.url}/api/ingest`, {
       method: 'POST',
@@ -699,7 +721,7 @@ export const send = async ({ configuration, payload }) => {
         authorization: `Bearer ${configuration.apiKey}`,
       },
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: requestSignal(REQUEST_TIMEOUT_MS, deadline),
     })
     return { ok: answer.ok, status: answer.status }
   } catch {

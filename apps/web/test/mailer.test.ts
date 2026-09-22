@@ -82,6 +82,10 @@ test('a malformed SMTP_URL is a failed delivery, never a throw', async () => {
   // an exceptional case. It must be caught: the invitation is already created,
   // and letting it escape would orphan it and hide the link.
   vi.stubEnv('SMTP_FROM', 'sessclone <no-reply@example.com>')
+  // The middle one makes nodemailer reach Node's legacy `url.parse`, which
+  // prints a DEP0170 deprecation warning during this suite. The warning is
+  // this line, not a defect in the product, and the case earns it: a
+  // non-numeric port is the self-host typo the catch exists for.
   for (const bad of [
     'smtp.example.com:587',
     'smtp://u:p@h:notaport',

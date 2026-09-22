@@ -346,7 +346,7 @@ test('each of a Session’s transcripts is archived under its own id', async () 
   ])
 })
 
-test('the session archive stops when its caller says to', async () => {
+test('the session archive sends nothing once its deadline has passed', async () => {
   const config = configuration()
   const dir = mkdtempSync(join(tmpdir(), 'sessclone-archive-config-'))
   const project = join(dir, 'projects', 'home-dev-api')
@@ -357,16 +357,16 @@ test('the session archive stops when its caller says to', async () => {
 
   const calls = stubFetch({ presign: { body: { refused: 'archival_off' } } })
 
-  // The hook has ten seconds and an upload may take eight, so the budget is
-  // what keeps a Session with several runs from being killed mid-request.
-  let asked = 0
+  // The hook has ten seconds and an upload may take eight, so the deadline is
+  // what keeps a Session with several runs from being killed mid-request. The
+  // test above proves both transcripts are asked about when there is time.
   await archiveSession({
     configuration: config,
     transcriptPath: join(project, 'session-a.jsonl'),
     sessionId: 'session-a',
     environment: { CLAUDE_CONFIG_DIR: dir },
-    shouldStop: () => asked++ >= 1,
+    deadline: Date.now() - 1,
   })
 
-  expect(calls).toHaveLength(1)
+  expect(calls).toHaveLength(0)
 })

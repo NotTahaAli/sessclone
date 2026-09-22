@@ -43,7 +43,8 @@
             "type": "command",
             "command": "node",
             "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/session-end.mjs"],
-            "timeout": 10
+            "timeout": 10,
+            "async": true
           }
         ]
       }
