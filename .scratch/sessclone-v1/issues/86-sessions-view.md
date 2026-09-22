@@ -12,13 +12,13 @@ Turn rows here are the same component ticket 88 builds for the Costs drill-down;
 
 **Blocked by:** 22, 42, 53, 60, 85.
 
-**Status:** open
+**Status:** done
 
-- [ ] Sessions lists the period's Sessions with project, device, person, start, end, Turns and cost
-- [ ] Filter by project and by person; paginated; newest first
-- [ ] Role scoping proven against the policies as the unprivileged role, not through the UI
-- [ ] A Session's detail shows its Turns in order and its Agent Runs grouped under it
-- [ ] The transcript download appears when one is stored, and says why when one is not
-- [ ] A Session with no end marker says so rather than showing a blank or a guess
-- [ ] The reads are index-backed; no query in a loop
-- [ ] Screenshots at 1440x900 and 390x844, light and dark
+- [x] Sessions lists the period's Sessions with project, device, person, start, end, Turns and cost
+- [x] Filter by project and by person; paginated by a `(max(occurred_at), session_id)` cursor rather than an offset; newest first
+- [x] Role scoping proven in `test/sessions.test.ts` as `sessclone_app`, the unprivileged role — the owning role is exempt from every policy, so a Role assertion on it proves nothing
+- [x] A Session's detail shows its Turns in order and its Agent Runs grouped under it, and is deliberately not bounded by the period the reader came from
+- [x] The transcript download appears when one is stored, and says why when one is not. The `on` case is worded as a list of possibilities rather than a diagnosis: `member_project_archival_own` is the Member's own list in both directions (ADR 0005), so an Admin cannot tell an excluded Project from an unexcluded one and the page must not claim otherwise.
+- [x] A Session with no end marker says so rather than showing a blank or a guess
+- [x] The reads are index-backed, pinned by a plan assertion; the page's end markers are one statement rather than one per row
+- [x] Screenshots at 1440x900 and 390x844, light and dark, in `/mnt/project-files/shots-tickets-85-88/`

@@ -2,7 +2,7 @@
 
 import { usePathname } from 'next/navigation'
 
-import type { NavItem } from './navigation'
+import type { NavGroup, NavItem } from './navigation'
 import { PendingLink } from './pending-link'
 
 // The only client module in the shell, and it is one because of a single
@@ -11,16 +11,76 @@ import { PendingLink } from './pending-link'
 // state is computed here, from `usePathname`, and nothing else in this module
 // needs the browser.
 //
-// The items themselves arrive as props, already filtered by Role on the
-// server. What a Role may reach is not a decision that ships to the browser.
+// The items themselves arrive as props, already filtered on the server. What a
+// Role may reach, and whether the viewer holds the platform flag, is not a
+// decision that ships to the browser.
 
 /** `/costs` is current on `/costs?view=members`, and on nothing else. */
-const isCurrent = (pathname: string, href: string) =>
-  pathname === href || pathname.startsWith(`${href}/`)
+const isCurrent = (pathname: string | null, href: string) =>
+  pathname !== null && (pathname === href || pathname.startsWith(`${href}/`))
+
+// Every list below comes in two components over one render function, and the
+// pair exists for Cache Components (ticket 83).
+//
+// `usePathname()` is a runtime value, so a route with a dynamic segment —
+// `/sessions/[sessionId]`, `/turns/[id]`, `/costs/[dimension]/[id]` — cannot
+// prerender a component that reads it, and Next refuses the build rather than
+// shipping a shell that waits. The fix Next itself names is a Suspense
+// boundary, and a boundary needs a fallback worth showing: this one is the
+// same navigation with nothing marked, which is the navigation a reader can
+// already use while the mark streams in. A spinner or a blank would be the
+// frame disappearing on exactly the pages reached by clicking a row.
+//
+// On a static route the boundary resolves during the build, so those shells
+// carry the marked navigation exactly as before and `check-shells.mjs` still
+// passes.
+
+/**
+ * One group's links. Groups arrive as a list and each renders its own list,
+ * so a heading always has its items under it rather than beside them.
+ */
+type Groups = {
+  groups: NavGroup[]
+  /**
+   * Appended to the last group (ticket 85). The admin entry is the one item
+   * that depends on a database read, and the shell above prerenders (ticket
+   * 83) — so it streams in there rather than making the whole frame wait for
+   * a flag that is false for almost everybody.
+   */
+  children?: React.ReactNode
+}
+
+const groupsMarkup = (
+  { groups, children }: Groups,
+  pathname: string | null,
+) => (
+  <div className="flex flex-col gap-5">
+    {groups.map((group, index) => (
+      <div key={group.label} className="flex flex-col gap-1">
+        <p className="text-label text-text-muted px-3 uppercase">
+          {group.label}
+        </p>
+        {linksMarkup(group.items, pathname)}
+        {index === groups.length - 1 ? children : null}
+      </div>
+    ))}
+  </div>
+)
+
+export function SidebarGroups(props: Groups) {
+  return groupsMarkup(props, usePathname())
+}
+
+/** The same groups with nothing marked: the Suspense fallback. */
+export function SidebarGroupsPending(props: Groups) {
+  return groupsMarkup(props, null)
+}
 
 export function SidebarLinks({ items }: { items: NavItem[] }) {
-  const pathname = usePathname()
+  return linksMarkup(items, usePathname())
+}
 
+const linksMarkup = (items: NavItem[], pathname: string | null) => {
   return (
     <ul className="flex flex-col gap-1">
       {items.map((item) => {
@@ -54,10 +114,10 @@ export function SidebarLinks({ items }: { items: NavItem[] }) {
 
 /**
  * The bar's columns follow the list rather than being fixed at four. The Org
- * navigation has four destinations and the admin area (ticket 62) has three: a
- * hard `grid-cols-4` left the admin bar's items bunched into the left three
- * quarters of a phone screen with a gap beside them, which is what the
- * screenshot showed.
+ * navigation has four entries — three destinations and More (ticket 85) — and
+ * the admin area (ticket 62) has three: a hard `grid-cols-4` left the admin
+ * bar's items bunched into the left three quarters of a phone screen with a
+ * gap beside them, which is what the screenshot showed.
  *
  * Written out as whole class names, because Tailwind reads the source rather
  * than the running page: a class built by interpolation is a class that is
@@ -71,13 +131,37 @@ const COLUMNS: Record<number, string> = {
   5: 'grid-cols-5',
 }
 
-export function BottomBarLinks({ items }: { items: NavItem[] }) {
-  const pathname = usePathname()
+type Bar = {
+  items: NavItem[]
+  /**
+   * The destinations one of these entries stands in for — the More entry's
+   * own, on the Org bar (ticket 85). Without it a reader on Devices sees
+   * nothing marked at all, which reads as having navigated out of the product.
+   *
+   * Keyed by href so the bar stays a plain list: the entry that has a `behind`
+   * list is current when the reader is on any of them.
+   */
+  behind?: Record<string, NavItem[]>
+}
 
+export function BottomBarLinks(props: Bar) {
+  return barMarkup(props, usePathname())
+}
+
+/** The same bar with nothing marked: the Suspense fallback. */
+export function BottomBarLinksPending(props: Bar) {
+  return barMarkup(props, null)
+}
+
+const barMarkup = ({ items, behind }: Bar, pathname: string | null) => {
   return (
     <ul className={`grid ${COLUMNS[items.length] ?? 'grid-cols-4'}`}>
       {items.map((item) => {
-        const current = isCurrent(pathname, item.href)
+        const current =
+          isCurrent(pathname, item.href) ||
+          (behind?.[item.href] ?? []).some((hidden) =>
+            isCurrent(pathname, hidden.href),
+          )
         return (
           <li key={item.href}>
             <PendingLink

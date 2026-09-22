@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { SignedInLink } from './signed-in-link'
 import type { ReactNode } from 'react'
 
 import { CONTACT_EMAIL, REPOSITORY } from './constants'
@@ -36,12 +37,7 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
             >
               Repository
             </a>
-            <Link
-              href="/sign-in"
-              className="bg-accent-fill text-accent-on-fill border-accent-border flex h-[var(--control-h)] items-center border px-4"
-            >
-              Sign in
-            </Link>
+            <SignedInLink variant="header" />
           </div>
         </nav>
       </header>

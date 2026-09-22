@@ -135,6 +135,18 @@ export const breakdown = async (
   timezone: string,
   range: LocalRange,
   dimension: Dimension,
+  /**
+   * One group by id, for the page that opens it (ticket 88). The drill-down
+   * needs that row's own totals above its Turns, and summing the Turns it
+   * shows would be a total drawn from a capped page. Asking for the group by
+   * name is the same statement narrowed by one equality, which lands on the
+   * dimension's own `(column, occurred_at)` index — and it is the same
+   * arithmetic as the ranked list, so the two cannot disagree.
+   *
+   * `null` is the absent group: no Project or no Device reported. `is null`
+   * rather than `is not distinct from`, because only the first is indexable.
+   */
+  group?: { id: string | null },
 ): Promise<Breakdown> => {
   const from = tx`(${range.from}::date)::timestamp at time zone ${timezone}`
   const to = tx`(${range.to}::date)::timestamp at time zone ${timezone}`
@@ -145,11 +157,24 @@ export const breakdown = async (
   // Both sides carry the qual so each reaches `turns_org_occurred_at_idx`:
   // `turn_costs` is a plain join over `turns` since ticket 81, and the planner
   // bounds both scans rather than pricing the deployment and discarding it.
+  const column =
+    dimension === 'members'
+      ? tx`turn.member_id`
+      : dimension === 'projects'
+        ? tx`turn.project_id`
+        : tx`turn.device_id`
   const filter = tx`
      where cost.org_id = ${orgId}
        and turn.org_id = ${orgId}
        and cost.occurred_at >= ${from} and cost.occurred_at < ${to}
        and turn.occurred_at >= ${from} and turn.occurred_at < ${to}
+       ${
+         group === undefined
+           ? tx``
+           : group.id === null
+             ? tx`and ${column} is null`
+             : tx`and ${column} = ${group.id}`
+       }
   `
 
   const rows = await (dimension === 'members'

@@ -1,5 +1,5 @@
 import { deleteProject, deleteSession } from './artifact-actions'
-import type { StoredProject, StoredSession } from '../../../../lib/artifacts'
+import type { StoredProject, StoredSession } from '../../../lib/artifacts'
 
 // Ticket 73's surface. ADR 0005 keeps it apart from the archival switch above
 // on purpose: stopping collection and destroying what is held are different
@@ -25,7 +25,20 @@ const size = (bytes: number) => {
   return `${unit === 0 ? value : value.toFixed(value < 10 ? 1 : 0)} ${BYTES[unit]}`
 }
 
-const DAY = new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' })
+/**
+ * A time on this page, to the minute and in the Org's timezone.
+ *
+ * The date alone was not enough (Taha, 2026-09-22): several sessions on one
+ * repository land on the same day, and a column of identical dates cannot say
+ * which of them is the one somebody just asked about. The Org's zone rather
+ * than the server's, so this agrees with every other time in the product.
+ */
+const when = (timezone: string) =>
+  new Intl.DateTimeFormat('en-GB', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: timezone,
+  })
 
 /** One shared empty list, so a Project with no listed Session is not a new array. */
 const EMPTY: StoredSession[] = []
@@ -44,6 +57,8 @@ export function StoredTranscripts({
   more,
   orgNames,
   audience = 'own',
+  heading = true,
+  timezone,
 }: {
   projects: StoredProject[]
   sessions: StoredSession[]
@@ -57,8 +72,18 @@ export function StoredTranscripts({
    * button an Admin can see and never use is a button that lies.
    */
   audience?: 'own' | 'team'
+  /**
+   * Whether this renders its own heading (ticket 87). On `/transcripts` the
+   * page writes the heading and the sentence under it, so a second pair here
+   * would read as a second list of the same rows.
+   */
+  heading?: boolean
+  /** The Org's timezone, so an upload time reads in the same zone as every
+   * other figure on the dashboard. */
+  timezone: string
 }) {
   const own = audience === 'own'
+  const stamp = when(timezone)
   // Grouped once rather than filtered per Project, which would be a pass over
   // every Session per group — and a new array in a prop on every render.
   const byGroup = new Map<string, StoredSession[]>()
@@ -71,13 +96,15 @@ export function StoredTranscripts({
 
   return (
     <section
-      aria-labelledby={own ? 'stored' : undefined}
-      aria-label={own ? undefined : 'Stored transcripts'}
-      className={own ? 'mt-8' : ''}
+      aria-labelledby={own && heading ? 'stored' : undefined}
+      aria-label={own && heading ? undefined : 'Stored transcripts'}
+      className={own && heading ? 'mt-8' : ''}
     >
       {/* On a team listing the page's own title says this already, and a
-          second heading with a third wording of it reads as a second list. */}
-      {own ? (
+          second heading with a third wording of it reads as a second list.
+          Ticket 87 made the same true of the viewer's own listing, which now
+          sits under a heading the page writes. */}
+      {own && heading ? (
         <>
           <h2 id="stored" className="text-heading-lg">
             Stored transcripts
@@ -91,17 +118,13 @@ export function StoredTranscripts({
       ) : null}
 
       {projects.length === 0 ? (
-        <p
-          className={`border-rule text-text-muted rounded border border-dashed p-6 text-sm${
-            own ? ' mt-4' : ''
-          }`}
-        >
+        <p className="border-rule text-text-muted mt-4 rounded border border-dashed p-6 text-sm">
           {own
             ? 'Nothing stored. Transcripts appear here once archival is on and a session has finished.'
             : 'Nothing stored. A transcript appears here once a Member turns archival on and one of their sessions has finished.'}
         </p>
       ) : (
-        <ul className={`flex flex-col gap-4${own ? ' mt-4' : ''}`}>
+        <ul className="mt-4 flex flex-col gap-4">
           {projects.map((project) => (
             <li
               key={groupKey(project.memberId, project.projectId)}
@@ -111,6 +134,7 @@ export function StoredTranscripts({
                 project={project}
                 own={own}
                 orgName={orgNames.get(project.memberId)}
+                stamp={stamp}
                 sessions={
                   byGroup.get(groupKey(project.memberId, project.projectId)) ??
                   EMPTY
@@ -137,11 +161,13 @@ function Group({
   sessions,
   orgName,
   own,
+  stamp,
 }: {
   project: StoredProject
   sessions: StoredSession[]
   orgName: string | undefined
   own: boolean
+  stamp: Intl.DateTimeFormat
 }) {
   const name = project.projectKey ?? 'Sessions outside a repository'
 
@@ -161,7 +187,7 @@ function Group({
           <p className="text-text-muted mt-1 text-sm">
             {own ? '' : `${project.memberEmail ?? 'A Member'} · `}
             {project.sessions} session{project.sessions === 1 ? '' : 's'} ·{' '}
-            {size(project.bytes)} · newest {DAY.format(project.newest)}
+            {size(project.bytes)} · last upload {stamp.format(project.newest)}
             {orgName ? ` · ${orgName}` : ''}
           </p>
         </div>
@@ -195,8 +221,18 @@ function Group({
                   {session.sessionId}
                   {session.agentId ? ` · subagent ${session.agentId}` : ''}
                 </p>
+                {/* The last message rather than the upload (Taha,
+                    2026-09-22). A transcript is uploaded when the session
+                    ends, which is a fact about the Collector: a laptop that
+                    was closed uploads hours after the work everybody
+                    remembers. Where no Turn of the session is readable there
+                    is nothing to say but when it arrived, so it says that
+                    instead of dressing one time up as the other. */}
                 <p className="text-text-muted text-sm">
-                  {size(session.bytes)} · {DAY.format(session.uploadedAt)}
+                  {size(session.bytes)} ·{' '}
+                  {session.lastTurnAt
+                    ? `last message ${stamp.format(session.lastTurnAt)}`
+                    : `uploaded ${stamp.format(session.uploadedAt)}`}
                 </p>
               </div>
               <div className="flex items-center gap-3">

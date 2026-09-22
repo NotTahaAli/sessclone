@@ -1,0 +1,90 @@
+import { NextRequest } from 'next/server'
+import { beforeEach, expect, test, vi } from 'vitest'
+
+// The Proxy's two redirects, which are each other's mirror: a signed-out
+// visitor is sent to the sign-in page, and — the half that was missing until
+// Taha reported it on 2026-09-22 — a signed-in one is sent away from it.
+//
+// Supabase is stubbed because the question is the routing rather than the JWT.
+// `claims` is what the real client returns from `getClaims()`, and the only
+// thing this file does with it is decide whether somebody is signed in.
+
+let claims: { sub: string } | null = null
+
+vi.mock('@supabase/ssr', () => ({
+  createServerClient: () => ({
+    auth: { getClaims: async () => ({ data: claims ? { claims } : null }) },
+  }),
+}))
+
+const { proxy } = await import('../proxy')
+
+beforeEach(() => {
+  claims = null
+  process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co'
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'anon'
+})
+
+const at = (path: string) =>
+  proxy(new NextRequest(`https://sessclone.example.com${path}`))
+
+test('a signed-out visitor is sent to the sign-in page', async () => {
+  const response = await at('/costs')
+
+  expect(response.status).toBe(307)
+  expect(response.headers.get('location')).toBe(
+    'https://sessclone.example.com/sign-in',
+  )
+})
+
+test('a signed-in person is sent off the sign-in page', async () => {
+  claims = { sub: 'user-1' }
+
+  const response = await at('/sign-in')
+
+  expect(response.status).toBe(307)
+  expect(response.headers.get('location')).toBe(
+    'https://sessclone.example.com/costs',
+  )
+})
+
+test('an invitation followed while signed in lands on the invitation', async () => {
+  claims = { sub: 'user-1' }
+
+  const response = await at('/sign-in?next=%2Fjoin%2Ftoken-1')
+
+  expect(response.headers.get('location')).toBe(
+    'https://sessclone.example.com/join/token-1',
+  )
+})
+
+test('a `next` keeps its own query string', async () => {
+  claims = { sub: 'user-1' }
+
+  const response = await at('/sign-in?next=%2Fcosts%3Fview%3Dprojects')
+
+  expect(response.headers.get('location')).toBe(
+    'https://sessclone.example.com/costs?view=projects',
+  )
+})
+
+test('a `next` that leaves the origin is not redirected to', async () => {
+  claims = { sub: 'user-1' }
+
+  // `//evil.example` is an absolute URL to a browser, which is why `safeNext`
+  // exists and why this goes to Costs instead.
+  const response = await at('/sign-in?next=%2F%2Fevil.example')
+
+  expect(response.headers.get('location')).toBe(
+    'https://sessclone.example.com/costs',
+  )
+})
+
+test('the marketing page is left alone either way', async () => {
+  expect((await at('/')).status).toBe(200)
+
+  claims = { sub: 'user-1' }
+  // Signed in, `/` still renders: the call to action on it changes instead,
+  // which is `app/(marketing)/signed-in-link.tsx`.
+  expect((await at('/')).status).toBe(200)
+})

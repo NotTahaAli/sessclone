@@ -1,6 +1,8 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+import { safeNext } from './lib/auth/next-path'
+
 // Next 16 calls this Proxy; it is what earlier versions called Middleware.
 // Two jobs, and no more than two: refresh the Supabase session on every
 // request, and send a signed-out visitor to the sign-in page.
@@ -73,6 +75,30 @@ export async function proxy(request: NextRequest) {
     const signIn = request.nextUrl.clone()
     signIn.pathname = '/sign-in'
     return NextResponse.redirect(signIn)
+  }
+
+  // The other direction, which was missing (Taha, 2026-09-22): a signed-in
+  // person who reaches the sign-in page has nothing to do there. Signing in
+  // again as themselves is the best case; the worst is reading it as proof
+  // that the session did not stick and starting again.
+  //
+  // Here rather than on the page, because the page prerenders (ticket 83) and
+  // a redirect decided during a render would cost it its static shell. The
+  // Proxy has already read the claims for the check above, so this is the same
+  // read.
+  //
+  // `next` is honoured and passed through `safeNext`, so an invitation link
+  // followed while signed in lands on the invitation rather than on Costs.
+  // Anything a browser would resolve to another origin is not a path this
+  // will redirect to.
+  if (data?.claims && path === '/sign-in') {
+    // Resolved against the origin rather than assigned to `pathname`: a
+    // `next` may carry its own query string, and a path assigned to
+    // `pathname` has its `?` escaped into the path.
+    const onward = safeNext(request.nextUrl.searchParams.get('next'))
+    return NextResponse.redirect(
+      new URL(onward ?? '/costs', request.nextUrl.origin),
+    )
   }
 
   return response
