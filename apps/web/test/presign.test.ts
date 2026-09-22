@@ -92,7 +92,10 @@ const ask = async (
     new Request('https://sessclone.test/api/logs/presign', {
       method: 'POST',
       headers: presented
-        ? { authorization: `Bearer ${presented}`, 'content-type': 'application/json' }
+        ? {
+            authorization: `Bearer ${presented}`,
+            'content-type': 'application/json',
+          }
         : { 'content-type': 'application/json' },
       body: JSON.stringify({ sessionId: 'session-1', sha256: SHA, ...body }),
     }),

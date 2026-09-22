@@ -279,8 +279,6 @@ test('filtering by model keeps the rows that price every model', async () => {
     }),
   )
 
-  const { rates } = await asOperator((tx) =>
-    listRates(tx, { model: 'opus' }),
-  )
+  const { rates } = await asOperator((tx) => listRates(tx, { model: 'opus' }))
   expect(rates.some((rate) => rate.model === null)).toBe(true)
 })

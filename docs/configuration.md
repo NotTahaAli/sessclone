@@ -217,10 +217,18 @@ point at their own deployment without editing a vendored plugin.
 `node <file>` with no build step, and the parser and identity rules they
 import from `packages/shared` are TypeScript that Node executes by stripping
 the types — which is on by default from those versions and not before. On an
-older Node the import throws inside a hook, where every failure is
-deliberately swallowed, so the plugin would install, start cleanly and report
-nothing. The session-start check names it instead, beside the variables
-below.
+older Node that import throws, and `stop.mjs` performs it inside its own
+`try` for that reason: the plugin installs, starts cleanly, reports nothing
+and says nothing, rather than printing a stack trace on every turn into the
+transcript this product then uploads. The session-start check names the
+problem instead, beside the variables below.
+
+The hooks import those modules by relative path, which reaches outside the
+plugin directory into the same clone. That is how the marketplace entry
+installs it (`.claude-plugin/marketplace.json` points at `./packages/plugin`
+inside this repository), but an install that copies only the plugin directory
+has no `packages/shared` to reach and reports nothing — silently, for the same
+reason as above.
 
 | Variable              | Required       | Default                 | What it is                                                                          |
 | --------------------- | -------------- | ----------------------- | ----------------------------------------------------------------------------------- |
@@ -228,6 +236,12 @@ below.
 | `SESSCLONE_API_KEY`   | yes            | —                       | The Member's API key, issued in the dashboard. Identifies the Member and the Org    |
 | `SESSCLONE_STATE_DIR` | no             | platform-dependent \*\* | Where the cursor and the retry queue are kept                                       |
 | `SESSCLONE_DEVICE`    | no             | derived \*\*\*          | Pins this environment's Device key instead of deriving one                          |
+
+One request carries at most 100 reports of at most 5,000 Turns each
+(`packages/shared/src/limits.ts`, which both ends import). The Collector
+splits a long transcript across requests itself rather than sending one the
+route refuses: a session past the limit would otherwise be refused on every
+Stop for the rest of its life, and nothing reads the answer.
 
 \* Not required by the code — `readConfiguration` falls back to
 `http://127.0.0.1:3000` — but required by anyone whose deployment is not on

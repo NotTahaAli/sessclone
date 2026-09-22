@@ -233,5 +233,6 @@ export const asRole = <T>(
  * `sessclone_user_id()` is null inside it, so every policy that tests it
  * refuses. `tiers_read` is `using (true)` and does not.
  */
-export const anonymous = <T>(query: (tx: postgres.TransactionSql) => Promise<T>) =>
-  app.begin((tx) => query(tx))
+export const anonymous = <T>(
+  query: (tx: postgres.TransactionSql) => Promise<T>,
+) => app.begin((tx) => query(tx))

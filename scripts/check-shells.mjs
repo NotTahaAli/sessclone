@@ -61,7 +61,9 @@ for (const shell of SHELLS) {
 
   for (const pattern of FORBIDDEN) {
     if (pattern.test(html)) {
-      problems.push(`${shell} contains ${pattern} — that is a viewer's data in a page served to everybody`)
+      problems.push(
+        `${shell} contains ${pattern} — that is a viewer's data in a page served to everybody`,
+      )
     }
   }
 }
@@ -72,4 +74,6 @@ if (problems.length > 0) {
   exit(1)
 }
 
-console.log(`static shells: ${SHELLS.length} checked, all non-empty and anonymous`)
+console.log(
+  `static shells: ${SHELLS.length} checked, all non-empty and anonymous`,
+)

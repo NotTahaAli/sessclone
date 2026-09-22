@@ -2,12 +2,14 @@ import { readFileSync } from 'node:fs'
 
 import { beforeEach, expect, test } from 'vitest'
 
+import { addOrgRate, deleteOrgRate, listOrgRates } from '../lib/org-rates'
 import {
-  addOrgRate,
-  deleteOrgRate,
-  listOrgRates,
-} from '../lib/org-rates'
-import { asRole, asUser, owner as sql, seedFixture, type Fixture } from './harness'
+  asRole,
+  asUser,
+  owner as sql,
+  seedFixture,
+  type Fixture,
+} from './harness'
 
 // Ticket 64: an Org with negotiated pricing, and the three things that have to
 // be true about it — the estimate matches what the Org actually pays, the
@@ -37,7 +39,11 @@ const MILLION = 1_000_000
 let nextMessage = 0
 
 /** One Turn of a million input tokens, so the Cost is the rate itself. */
-const seedTurn = async (orgId: string, memberId: string, day = '2026-09-20') => {
+const seedTurn = async (
+  orgId: string,
+  memberId: string,
+  day = '2026-09-20',
+) => {
   nextMessage += 1
   const [turn] = await sql<{ id: string }[]>`
     insert into turns (org_id, member_id, session_id, message_id, occurred_at,

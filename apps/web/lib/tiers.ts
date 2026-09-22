@@ -61,8 +61,10 @@ export const readMarketingTiers = async (
     description: row.description ?? '',
     // `numeric` arrives as a string, and `Number(null)` is 0 — which is the
     // difference between "contact us" and "free" on a pricing page.
-    basePriceUsd: row.base_price_usd === null ? null : Number(row.base_price_usd),
-    seatPriceUsd: row.seat_price_usd === null ? null : Number(row.seat_price_usd),
+    basePriceUsd:
+      row.base_price_usd === null ? null : Number(row.base_price_usd),
+    seatPriceUsd:
+      row.seat_price_usd === null ? null : Number(row.seat_price_usd),
     minSeats: row.min_seats,
     maxSeats: row.max_seats,
     retentionMaxDays: row.retention_max_days,
@@ -174,7 +176,9 @@ export const tierPrice = (
  * wearing a different hat — an operator who raises `retention_max_days` on
  * `/admin/tiers` changes what an Org may keep and does not change that line.
  */
-export const tierRetention = (tier: Pick<MarketingTier, 'retentionMaxDays'>) => {
+export const tierRetention = (
+  tier: Pick<MarketingTier, 'retentionMaxDays'>,
+) => {
   const days = tier.retentionMaxDays
   if (days === null) return 'History kept for as long as you keep it'
   if (days % 365 === 0) {

@@ -53,7 +53,12 @@ test('a capability change reaches the Org on the next read', async () => {
 
   // The edit is a row, not a release.
   await asOperator((tx) =>
-    saveTier(tx, { ...TEAM, mode: 'edit', archivalAvailable: true, maxSeats: 25 }),
+    saveTier(tx, {
+      ...TEAM,
+      mode: 'edit',
+      archivalAvailable: true,
+      maxSeats: 25,
+    }),
   )
 
   expect(
@@ -73,7 +78,9 @@ test('editing a Tier keeps its id, so the Orgs on it stay on it', async () => {
     }),
   )
 
-  await asOperator((tx) => saveTier(tx, { ...TEAM, mode: 'edit', name: 'Team (renamed)' }))
+  await asOperator((tx) =>
+    saveTier(tx, { ...TEAM, mode: 'edit', name: 'Team (renamed)' }),
+  )
 
   const [after] = await asOperator((tx) => listTiers(tx))
   expect(after).toMatchObject({

@@ -164,11 +164,7 @@ const PENDING_SIDEBAR = <Pending className="mt-1" />
 const PENDING_HEADER = <Pending className="" />
 const PENDING_CONTENT = <Loading />
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: ReactNode
-}) {
+export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <div className="bg-ground text-text min-h-dvh lg:flex">
       {/* Desktop: the 232px sidebar, holding the same four destinations and

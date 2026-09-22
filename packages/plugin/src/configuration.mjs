@@ -54,7 +54,8 @@ export const nodeProblem = (version) => {
   const [major = 0, minor = 0] = version.split('.').map(Number)
   const [wantMajor, wantMinor] = MINIMUM_NODE
   const old =
-    major < wantMajor || (major === wantMajor && minor < wantMinor) ||
+    major < wantMajor ||
+    (major === wantMajor && minor < wantMinor) ||
     // The 23 line never received type stripping by default before 23.6.
     (major === 23 && minor < 6)
   return old

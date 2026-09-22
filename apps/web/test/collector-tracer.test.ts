@@ -3,7 +3,6 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
-import { hostname } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 
@@ -35,6 +34,8 @@ const CORPUS = new URL(
 let fixture: Fixture
 let server: Server
 let url: string
+/** Every request the hook made, exactly as it went over the socket. */
+let received: { body: string; authorization: string | undefined }[] = []
 
 /** The route, behind a real socket, because the hook makes a real request. */
 const serve = () =>
@@ -43,6 +44,10 @@ const serve = () =>
       const chunks: Buffer[] = []
       request.on('data', (chunk) => chunks.push(chunk))
       request.on('end', async () => {
+        received.push({
+          body: Buffer.concat(chunks).toString('utf8'),
+          authorization: request.headers.authorization,
+        })
         const answer = await ingest(
           new Request(`http://127.0.0.1${request.url}`, {
             method: 'POST',
@@ -65,6 +70,7 @@ const serve = () =>
 
 beforeEach(async () => {
   fixture = await seedFixture()
+  received = []
   await serve()
 })
 
@@ -97,8 +103,11 @@ const runHook = async (
   return child
 }
 
-const transcript = async (name: string) => {
-  const text = await readFile(new URL(name, CORPUS), 'utf8')
+const transcript = async (
+  name: string,
+  rewrite: (raw: string) => string = (raw) => raw,
+) => {
+  const text = rewrite(await readFile(new URL(name, CORPUS), 'utf8'))
   const directory = mkdtempSync(join(tmpdir(), 'sessclone-tracer-'))
   const path = join(directory, name)
   writeFileSync(path, text)
@@ -153,9 +162,9 @@ test('a finished session reaches the database as Turns, on this Device and Proje
   // API iterations, and the counters are per iteration rather than summed.
   expect(turns).toHaveLength(2)
   expect(turns.map((turn) => turn.session_id)).toEqual([sessionId, sessionId])
-  expect(turns.every((turn) => turn.member_id === fixture.acme.members.member)).toBe(
-    true,
-  )
+  expect(
+    turns.every((turn) => turn.member_id === fixture.acme.members.member),
+  ).toBe(true)
   expect(new Set(turns.map((turn) => turn.device_key))).toEqual(
     new Set(['host:tracer-box']),
   )
@@ -254,18 +263,31 @@ test('the counters stored are the counters in the transcript', async () => {
 
 test('the Project is the repository the session ran in, not its directory name', async () => {
   const key = await issueKey()
-  const { path, text } = await transcript('multi-iteration-turn.jsonl')
-  const sessionId = JSON.parse(text.split('\n').find(Boolean)!).sessionId
 
   // A real repository with a real remote, so the resolution is the one a
   // Member's machine performs rather than a value handed to the code.
   const repository = mkdtempSync(join(tmpdir(), 'sessclone-repo-'))
   await run('git', ['init', '--quiet'], { cwd: repository })
-  await run(
-    'git',
-    ['remote', 'add', 'origin', 'git@github.com:acme/api.git'],
-    { cwd: repository },
+  await run('git', ['remote', 'add', 'origin', 'git@github.com:acme/api.git'], {
+    cwd: repository,
+  })
+
+  // The fixture was captured elsewhere, so its entries name a directory that
+  // is not this repository. Rewritten to it, the `git` read is the only thing
+  // that can produce the key asserted below — which is what makes this cover
+  // the remote path rather than the fallback.
+  const { path, text } = await transcript(
+    'multi-iteration-turn.jsonl',
+    (raw) => {
+      const ran = raw
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line).cwd)
+        .find((directory) => typeof directory === 'string')!
+      return raw.replaceAll(ran, repository)
+    },
   )
+  const sessionId = JSON.parse(text.split('\n').find(Boolean)!).sessionId
 
   await runHook(
     { session_id: sessionId, transcript_path: path, cwd: repository },
@@ -275,11 +297,27 @@ test('the Project is the repository the session ran in, not its directory name',
   const [project] = await sql<{ key: string; remote: string | null }[]>`
     select key, remote from projects
   `
-  // The entry's own `cwd` wins over the event's when it has one, so this
-  // fixture — captured elsewhere — keys by machine and path. What the
-  // repository proves is that the git read happened and did not throw.
-  expect(project!.key).toMatch(/^local:/)
-  expect(project!.key).toContain(hostname().split('.')[0])
+  expect(project!.key).toBe('github.com/acme/api')
+  expect(project!.remote).toBe('git@github.com:acme/api.git')
+})
+
+test('the credential travels in the header and never in the body', async () => {
+  // The stated property of this hook. `IngestPayload` strips unknown keys
+  // rather than refusing them, so nothing on the route's side would notice a
+  // key that started riding along in the body a proxy logs.
+  const key = await issueKey()
+  const { path, text } = await transcript('multi-iteration-turn.jsonl')
+  const sessionId = JSON.parse(text.split('\n').find(Boolean)!).sessionId
+
+  await runHook(
+    { session_id: sessionId, transcript_path: path, cwd: '/home/dev/api' },
+    { SESSCLONE_URL: url, SESSCLONE_API_KEY: key },
+  )
+
+  expect(received).toHaveLength(1)
+  expect(received[0]!.authorization).toBe(`Bearer ${key}`)
+  expect(received[0]!.body).not.toContain('sk_')
+  expect(received[0]!.body).not.toContain(key)
 })
 
 test('a session whose deployment is unreachable fails quietly and stores nothing', async () => {

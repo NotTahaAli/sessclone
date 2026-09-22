@@ -68,11 +68,9 @@ test('a delete that S3 refuses per key is a failure, not a success', async () =>
   // let a sweep commit the row deletions while the transcripts — source code,
   // sometimes a credential — stayed in the bucket with nothing pointing at
   // them.
-  const send = vi
-    .spyOn(S3Client.prototype, 'send')
-    .mockResolvedValue({
-      Errors: [{ Key: 'orgs/a/one.jsonl', Code: 'AccessDenied' }],
-    } as never)
+  const send = vi.spyOn(S3Client.prototype, 'send').mockResolvedValue({
+    Errors: [{ Key: 'orgs/a/one.jsonl', Code: 'AccessDenied' }],
+  } as never)
 
   await expect(deleteObjects(['orgs/a/one.jsonl'])).rejects.toThrow(
     /AccessDenied/,

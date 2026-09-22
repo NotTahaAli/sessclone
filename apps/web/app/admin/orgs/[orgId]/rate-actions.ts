@@ -40,7 +40,9 @@ const Form = z.object({
     ),
   // Bounded: a date in the 99th century is a typo, and it would sit at the
   // bottom of the list forever pricing nothing.
-  effectiveFrom: z.iso.date().refine((value) => value <= '2100-01-01', 'too far ahead'),
+  effectiveFrom: z.iso
+    .date()
+    .refine((value) => value <= '2100-01-01', 'too far ahead'),
   // What was agreed and where it is written down. An override with no
   // provenance is a discount nobody can re-check.
   note: z
@@ -55,7 +57,9 @@ export const addOrgRateAction = async (
   formData: FormData,
 ): Promise<{ error: string } | { added: string } | null> => {
   if (!(await currentOperator())) {
-    return { error: 'Only a platform administrator may set a negotiated price.' }
+    return {
+      error: 'Only a platform administrator may set a negotiated price.',
+    }
   }
 
   const parsed = Form.safeParse({
@@ -101,12 +105,10 @@ export const deleteOrgRateAction = async (
     return { error: 'Only a platform administrator may delete a price.' }
   }
 
-  const parsed = z
-    .object({ orgId: z.uuid(), rateId: z.uuid() })
-    .safeParse({
-      orgId: formData.get('orgId'),
-      rateId: formData.get('rateId'),
-    })
+  const parsed = z.object({ orgId: z.uuid(), rateId: z.uuid() }).safeParse({
+    orgId: formData.get('orgId'),
+    rateId: formData.get('rateId'),
+  })
   if (!parsed.success) return { error: 'That price could not be found.' }
 
   // The boolean is the answer: the policy refuses a non-operator silently, so

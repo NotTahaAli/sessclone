@@ -21,7 +21,9 @@ import { anonymous, seedFixture, owner as sql, type Fixture } from './harness'
 const SEEDS = [
   '20260922050000_tier_seed.sql',
   '20260922070000_tier_retention_prose.sql',
-].map((file) => new URL(`../../../supabase/migrations/${file}`, import.meta.url))
+].map(
+  (file) => new URL(`../../../supabase/migrations/${file}`, import.meta.url),
+)
 
 const revalidated = vi.fn()
 
@@ -56,7 +58,9 @@ test('the four Tiers on the pricing page are the rows in the table', async () =>
   expect(team.archivalAvailable).toBe(true)
   // The card's prose is `features.includes`, so a Tier that starts including
   // something new is an edit rather than a deployment (ADR 0004).
-  expect(team.includes).toContain('Manager Scopes, so a lead sees their own people')
+  expect(team.includes).toContain(
+    'Manager Scopes, so a lead sees their own people',
+  )
 })
 
 test('a price change is visible on the next read, with nothing deployed', async () => {
@@ -180,7 +184,10 @@ test('the `features` a card renders survive whatever is in the column', async ()
   // input nobody validated at write time before ticket 80's own action did.
   // Each of these shapes reached a public page.
   const shapes: [unknown, string[]][] = [
-    [{ includes: ['Every Device', 'A year of history'] }, ['Every Device', 'A year of history']],
+    [
+      { includes: ['Every Device', 'A year of history'] },
+      ['Every Device', 'A year of history'],
+    ],
     [{}, []],
     [{ includes: 'not a list' }, []],
     [{ includes: [1, 'kept', null] }, ['kept']],

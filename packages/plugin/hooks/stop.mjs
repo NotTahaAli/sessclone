@@ -12,9 +12,14 @@
 // Nothing here writes to stderr either, and that is not the same decision: a
 // hook's output lands in the transcript this product uploads, so a message
 // about a failed report would end up inside the next report.
+//
+// `report.mjs` is imported inside the `try` rather than at the top, and that
+// is what makes those two true on an unsupported Node: it reaches
+// `packages/shared`'s TypeScript, which a Node below 22.18 cannot load, and a
+// top-level import throws before any handler exists — printing the stack
+// trace on every turn, into the next transcript.
 
 import { readConfiguration } from '../src/configuration.mjs'
-import { buildPayload, send } from '../src/report.mjs'
 
 const readStdin = async () => {
   let input = ''
@@ -26,14 +31,22 @@ try {
   const event = JSON.parse(await readStdin())
   const configuration = readConfiguration()
 
-  const payload = await buildPayload({
+  const { buildPayloads, send } = await import('../src/report.mjs')
+
+  const payloads = await buildPayloads({
     transcriptPath: event.transcript_path,
     sessionId: event.session_id,
     cwd: event.cwd,
     environment: process.env,
   })
 
-  if (payload) await send({ configuration, payload })
+  /* oxlint-disable no-await-in-loop -- one request at a time: a transcript
+     needing several is already large, and firing them together is how a
+     Collector takes a deployment down. */
+  for (const payload of payloads) {
+    await send({ configuration, payload })
+  }
+  /* oxlint-enable no-await-in-loop */
 } catch {
   // Deliberately silent: see above.
 }

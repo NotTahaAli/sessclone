@@ -49,13 +49,15 @@ export default async function Page({
   // One transaction: the Org, the Tiers it could be put on, and what has
   // happened to it. `orgs_read` is what decides the first of them comes back
   // at all, so an Org this caller may not read is a 404 rather than a refusal.
-  const { org, tiers, history, overrides, models } = await asOperator(async (tx) => ({
-    org: await adminOrg(tx, orgId),
-    tiers: await tierChoices(tx),
-    history: await subscriptionHistory(tx, orgId),
-    overrides: await listOrgRates(tx, orgId),
-    models: await pricedModels(tx),
-  }))
+  const { org, tiers, history, overrides, models } = await asOperator(
+    async (tx) => ({
+      org: await adminOrg(tx, orgId),
+      tiers: await tierChoices(tx),
+      history: await subscriptionHistory(tx, orgId),
+      overrides: await listOrgRates(tx, orgId),
+      models: await pricedModels(tx),
+    }),
+  )
 
   if (!org) notFound()
 

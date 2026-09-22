@@ -92,9 +92,8 @@ test('a whole group goes, and `none` is the group rather than a missing field', 
 test('a signed-out caller deletes nothing', async () => {
   await artifact()
   signedInUser.mockResolvedValue(null)
-  const actions = await import(
-    '../app/(dashboard)/settings/you/artifact-actions'
-  )
+  const actions =
+    await import('../app/(dashboard)/settings/you/artifact-actions')
 
   await actions.deleteSession(form({ artifactId: crypto.randomUUID() }))
   await actions.deleteProject(

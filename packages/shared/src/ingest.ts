@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { REPORTS_PER_PAYLOAD, TURNS_PER_REPORT } from './limits.ts'
+
 // Ticket 31. The ingest wire contract, in the one place both ends import it
 // from: the Collector builds a payload against this schema and the route
 // refuses anything that is not one, so a payload change breaks the build
@@ -25,14 +27,9 @@ import { z } from 'zod'
 // refused batch impossible to mistake for a whole one: a 400 acknowledges
 // nothing at all.
 
-/**
- * What one request may carry, documented in `docs/configuration.md` because a
- * Collector author is who has to split a drain across requests. Generous
- * rather than tight: the point is that an absurd batch is refused in
- * microseconds with a message that says the limit, not that a real drain is.
- */
-export const REPORTS_PER_PAYLOAD = 100
-export const TURNS_PER_REPORT = 5000
+// The limits live in `limits.ts`, which imports nothing: the Collector chunks
+// to them and cannot import this file, because its hooks run without zod.
+export { REPORTS_PER_PAYLOAD, TURNS_PER_REPORT }
 
 /** A token count: a non-negative safe integer, or the payload is not one. */
 const counter = z.int().min(0)
