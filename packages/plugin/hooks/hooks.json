@@ -6,7 +6,9 @@
           {
             "type": "command",
             "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/session-start.mjs"],
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.mjs"
+            ],
             "timeout": 10
           }
         ]
@@ -18,7 +20,9 @@
           {
             "type": "command",
             "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/stop-failure.mjs"],
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/stop-failure.mjs"
+            ],
             "timeout": 10
           }
         ]
@@ -30,7 +34,9 @@
           {
             "type": "command",
             "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/stop.mjs"],
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/stop.mjs"
+            ],
             "timeout": 10
           }
         ]
@@ -42,8 +48,11 @@
           {
             "type": "command",
             "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/session-end.mjs"],
-            "timeout": 10
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/session-end.mjs"
+            ],
+            "timeout": 10,
+            "async": true
           }
         ]
       }

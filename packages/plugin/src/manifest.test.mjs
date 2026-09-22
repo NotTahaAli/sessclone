@@ -105,6 +105,32 @@ test('every hook the plugin registers runs a script that is there', async () => 
   }
 })
 
+test('the SessionEnd hook runs asynchronously, so the exit cannot cancel it', async () => {
+  // Claude Code's own limit, and the one this plugin kept hitting: "all
+  // SessionEnd hooks together share a 1.5-second budget", against a hook that
+  // flushes the last Turns and then archives transcripts. The `timeout: 10`
+  // above is documented to raise that shared budget, and did not on a real
+  // machine — the Member read `SessionEnd hook [...] failed: Hook cancelled`
+  // at every exit (2026-09-22).
+  //
+  // `async: true` is the documented way out: Claude Code spawns the hook and
+  // continues, and a hook still running at exit is orphaned rather than
+  // killed. It costs nothing here because SessionEnd has no decision fields —
+  // its output was already ignored — and the hook is silent by design.
+  const root = join(repository, 'packages/plugin')
+  const { hooks } = await json(join(root, HOOKS_FILE))
+  const [sessionEnd] = hooks.SessionEnd.flatMap((group) => group.hooks)
+  expect(sessionEnd.async).toBe(true)
+
+  // And only SessionEnd: a Stop hook that returned no decision would let the
+  // turn end before its Turns were read, and the sweep's one-line notice on
+  // SessionStart is stderr Claude Code would stop reading.
+  for (const event of EVENTS.filter((name) => name !== 'SessionEnd')) {
+    const entries = hooks[event].flatMap((group) => group.hooks)
+    expect(entries.every((entry) => entry.async === undefined)).toBe(true)
+  }
+})
+
 test('what the hooks import is still there', async () => {
   // Every specifier is resolved on disk. `src/installable.test.mjs` is what
   // keeps them inside the plugin, which an install is; this is what keeps
