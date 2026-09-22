@@ -4,10 +4,10 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 
 import { asViewer } from '../../../../lib/db'
-import { setOrgTimezone } from '../../../../lib/org'
+import { setOrgRetention, setOrgTimezone } from '../../../../lib/org'
 import { signedInUser } from '../../../../lib/supabase/server'
 
-// Ticket 51's one write. A Server Action is a POST endpoint anybody can reach,
+// Ticket 51's timezone write and ticket 61's retention write. A Server Action is a POST endpoint anybody can reach,
 // whether or not the page rendered a form for them, so identity comes from the
 // session and every input is parsed before it reaches a statement — the same
 // treatment the Keys and Your-settings actions give theirs.
@@ -63,4 +63,49 @@ export const setTimezone = async (
   // until something else happened to evict them.
   revalidatePath('/', 'layout')
   return { saved: timezone.data }
+}
+
+/** The window, bounded before it reaches a statement. The Tier's ceiling is
+ * the trigger's to enforce; this is the trust boundary refusing nonsense. */
+const Days = z.coerce.number().int().min(1).max(3650)
+
+/**
+ * Sets how long this Org keeps a stored transcript (ticket 61).
+ *
+ * Shortening it does not delete anything by itself: the sweep
+ * (`POST /api/retention/sweep`) is what removes what is now past the window,
+ * and the message says so rather than implying an immediate deletion that has
+ * not happened.
+ */
+export const setRetention = async (
+  _previous: unknown,
+  formData: FormData,
+): Promise<{ error: string } | { saved: number } | null> => {
+  const user = await signedInUser()
+  if (!user) return { error: 'Sign in again to change retention.' }
+
+  const days = Days.safeParse(formData.get('days'))
+  const orgId = z.uuid().safeParse(formData.get('orgId'))
+  if (!days.success || !orgId.success) {
+    return { error: 'Retention is a number of days, from 1 to 3650.' }
+  }
+
+  try {
+    const written = await asViewer(user.id, (tx) =>
+      setOrgRetention(tx, orgId.data, days.data),
+    )
+    if (!written) {
+      return { error: 'You do not have permission to change this setting.' }
+    }
+  } catch {
+    // The trigger raises when the window is past the Tier's ceiling — which
+    // can happen to a form that was rendered before the Tier changed.
+    return {
+      error:
+        'That is longer than this Org’s Tier allows. The Tier page states the ceiling.',
+    }
+  }
+
+  revalidatePath('/settings/org')
+  return { saved: days.data }
 }

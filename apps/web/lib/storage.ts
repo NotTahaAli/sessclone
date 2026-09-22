@@ -152,21 +152,32 @@ export const ttl = () => {
  *
  * `ResponseContentDisposition` is what makes a browser save the file under a
  * readable name rather than render the object key: the object is `.jsonl`,
- * and the key is a path with a percent-encoded Project in it. The filename is
- * quoted and stripped of quotes and control characters, because it is built
- * from a Session id a Collector sent.
+ * and the key is a path with a percent-encoded Project in it.
+ *
+ * The filename is built from a Session id a Collector sent, so it is treated
+ * as hostile input: quotes and backslashes would end the quoted string early,
+ * and `\p{C}` covers the control characters (so CR and LF, which would split
+ * the header) along with the formatting ones (so U+202E, which would show a
+ * reader a different extension to the one they are saving). Bounded too,
+ * because the whole value travels in a signed query string that a provider
+ * may refuse for length. `filename*` carries the non-ASCII form per RFC 6266,
+ * since the quoted `filename` is only reliably read as ASCII.
  */
-export const presignDownload = async (key: string, filename: string) =>
-  getSignedUrl(
+export const presignDownload = async (key: string, filename: string) => {
+  const clean = filename.replaceAll(/["\\\p{C}]/gu, '').slice(0, 200)
+  return getSignedUrl(
     storage(),
     new GetObjectCommand({
       Bucket: required('STORAGE_BUCKET'),
       Key: key,
       ResponseContentType: 'application/x-ndjson',
-      ResponseContentDisposition: `attachment; filename="${filename.replaceAll(/["\\\p{C}]/gu, '')}"`,
+      ResponseContentDisposition:
+        `attachment; filename="${clean}"; ` +
+        `filename*=UTF-8''${encodeURIComponent(clean)}`,
     }),
     { expiresIn: ttl() },
   )
+}
 
 /**
  * The size of a stored object, or null when it is not there.

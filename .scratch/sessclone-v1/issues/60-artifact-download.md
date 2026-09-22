@@ -50,3 +50,13 @@ somebody cannot see is there.
 the suite's `DATABASE_URL` is the role that owns the tables, and Postgres
 applies no policy to an owner — so a policy test on that connection would pass
 while enforcing nothing.
+
+## Scope, stated rather than assumed
+
+The route is the capability: it authorises through `log_artifacts_read`, so an
+Owner, an Admin and a Manager in Scope are each answered 302 for a transcript
+they may see, which is what stories 35 and 36 ask for. What is deferred is the
+_listing_ — the only surface that renders a Download link is a Member's own
+`/settings/you`, built on `storedSessions`, which filters on
+`sessclone_own_member_ids()`. So another Member's transcript is reachable by
+its id and is not yet browsable. Ticket 84 adds the Org-side listing.

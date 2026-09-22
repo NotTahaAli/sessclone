@@ -121,34 +121,19 @@ test('the download is named after the Session, and an Agent Run says which', asy
   )
 })
 
-test('an Owner and an Admin download any Member’s', async () => {
+test('a platform admin downloads nothing', async () => {
   const id = await seedArtifact({
     memberId: fixture.acme.members.member,
     orgId: fixture.acme.id,
   })
 
-  expect((await as('owner', id)).status).toBe(302)
-  expect((await as('admin', id)).status).toBe(302)
-})
-
-test('a Manager downloads their Scope and nobody else', async () => {
-  const inScope = await seedArtifact({
-    memberId: fixture.acme.members.member,
-    orgId: fixture.acme.id,
-  })
-  const outside = await seedArtifact({
-    memberId: fixture.acme.members.owner,
-    orgId: fixture.acme.id,
-    sessionId: 'owners-session',
-  })
-
-  // The fixture's Scope holds the Member and not the Owner.
-  expect((await as('manager', inScope)).status).toBe(302)
-  expect((await as('manager', outside)).status).toBe(404)
-
-  // And a Manager with an empty Scope reaches neither.
-  expect((await as('managerWithoutScope', inScope)).status).toBe(404)
-  expect((await as('managerWithoutScope', outside)).status).toBe(404)
+  // `log_artifacts_read` has no platform-admin branch, unlike `subscriptions_read`
+  // and `subscription_events_read` beside it in the same migration. That is
+  // ADR 0005: the operator of the deployment is not a party to a Member's
+  // transcript. Asserted here so adding one for symmetry fails a test rather
+  // than quietly handing the operator every transcript on the deployment.
+  session.userId = fixture.platformAdmin.userId
+  expect((await download(id)).status).toBe(404)
 })
 
 test('a removed Member downloads nothing, their own included', async () => {

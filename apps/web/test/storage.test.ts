@@ -89,3 +89,35 @@ test('a delete that S3 refuses per key is a failure, not a success', async () =>
 
   send.mockRestore()
 })
+
+test('a hostile Session id cannot escape the download filename', async () => {
+  const { presignDownload } = await import('../lib/storage')
+
+  // Every character here has reached `log_artifacts.session_id`'s only check,
+  // which is that it is not blank. The quote and the backslash would end the
+  // quoted string, the CRLF would split the header, `%0d` is the same attempt
+  // percent-encoded, and U+202E reverses what a person reads before they save.
+  const url = new URL(
+    await presignDownload(
+      'orgs/a/session.jsonl',
+      'se"ss\\ion\r\n%0d‮lsx.jsonl',
+    ),
+  )
+  const disposition = url.searchParams.get('response-content-disposition')!
+
+  expect(disposition).toBe(
+    `attachment; filename="session%0dlsx.jsonl"; ` +
+      `filename*=UTF-8''session%250dlsx.jsonl`,
+  )
+  // The percent-encoded attempt stays literal text: the signer encodes the
+  // query value, so the provider hands back `%` and `0d` rather than a CR.
+  expect(url.search).toContain('session%250dlsx.jsonl')
+
+  // And the value is bounded, because it travels in a signed query string.
+  const long = new URL(
+    await presignDownload('orgs/a/session.jsonl', `${'x'.repeat(4000)}.jsonl`),
+  )
+  expect(long.searchParams.get('response-content-disposition')).toHaveLength(
+    'attachment; filename=""; filename*=UTF-8\'\''.length + 400,
+  )
+})

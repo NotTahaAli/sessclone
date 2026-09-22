@@ -1,10 +1,11 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { RetentionForm } from './retention-form'
 import { TimezoneForm } from './timezone-form'
 import { EmptyState } from '../../empty-state'
 import { PageHeader } from '../../page-header'
 import { asViewer } from '../../../../lib/db'
-import { listTimezones } from '../../../../lib/org'
+import { listTimezones, orgRetention } from '../../../../lib/org'
 import {
   currentViewer,
   reachesOrgSettings,
@@ -30,7 +31,9 @@ export default async function Page() {
   const viewer = await currentViewer()
   if (!viewer || !reachesOrgSettings(viewer.role)) notFound()
 
-  const zones = await asViewer(viewer.userId, (tx) => listTimezones(tx))
+  const [zones, retention] = await asViewer(viewer.userId, (tx) =>
+    Promise.all([listTimezones(tx), orgRetention(tx, viewer.orgId)]),
+  )
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
@@ -42,6 +45,14 @@ export default async function Page() {
         current={viewer.orgTimezone}
         zones={zones}
       />
+
+      {retention ? (
+        <RetentionSetting
+          orgId={viewer.orgId}
+          days={retention.days}
+          ceiling={retention.ceiling}
+        />
+      ) : null}
 
       <Link
         href="/settings/org/members"
@@ -67,7 +78,7 @@ export default async function Page() {
       ) : null}
 
       <EmptyState headline="More to come">
-        Retention, appearance defaults and invitations will live here.
+        Appearance defaults and invitations will live here.
       </EmptyState>
     </div>
   )
@@ -122,6 +133,49 @@ function TimezoneSetting({
       </p>
 
       <TimezoneForm orgId={orgId} current={current} zones={zones} />
+    </section>
+  )
+}
+
+/**
+ * Ticket 61. Retention sits beside the timezone rather than with the
+ * archival switch: turning archival off is a Member's own decision about
+ * their machine (ADR 0005), while how long the Org keeps what it already
+ * holds is the Org's.
+ *
+ * Both the window and the Tier's ceiling are stated, because a control that
+ * silently refuses a number is worse than one that says what the bound is.
+ */
+function RetentionSetting({
+  orgId,
+  days,
+  ceiling,
+}: {
+  orgId: string
+  days: number
+  ceiling: number | null
+}) {
+  return (
+    <section aria-labelledby="retention">
+      <h2 id="retention" className="text-heading-lg">
+        Retention
+      </h2>
+      <p className="text-text-secondary mt-2 text-sm">
+        How long a stored transcript is kept. Past this, the transcript and its
+        record are removed together.
+      </p>
+      <p className="text-text-muted mt-2 text-sm">
+        Usage and cost are never removed by retention. A Session&apos;s spend
+        stays in the history whether or not its transcript is still here, so
+        shortening this loses reading material and never money.
+      </p>
+      <p className="text-text-muted mt-2 text-sm">
+        {ceiling === null
+          ? 'This Tier sets no ceiling, so the window is yours to choose.'
+          : `This Tier allows up to ${ceiling} days.`}
+      </p>
+
+      <RetentionForm orgId={orgId} current={days} ceiling={ceiling} />
     </section>
   )
 }

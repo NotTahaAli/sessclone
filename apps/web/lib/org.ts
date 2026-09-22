@@ -75,3 +75,53 @@ export const setOrgTimezone = async (
   `
   return rows.length > 0
 }
+
+/**
+ * The Org's Retention window in days, and the ceiling its Tier allows.
+ *
+ * Both in one read because the control needs both: a number to show and the
+ * bound to refuse past. `retention_max_days` is null for a Tier with no
+ * ceiling, and an Org with no active subscription has no ceiling either — no
+ * Tier is no entitlement everywhere else (ADR 0004), but a ceiling is a
+ * restriction rather than an entitlement, and inventing one would delete the
+ * transcripts of every Org an operator has not activated yet.
+ */
+export const orgRetention = async (
+  tx: TransactionSql,
+  orgId: string,
+): Promise<{ days: number; ceiling: number | null } | null> => {
+  const [row] = await tx<{ days: number; ceiling: number | null }[]>`
+    select org.retention_days as days, tier.retention_max_days as ceiling
+      from orgs org
+      left join subscriptions subscription
+             on subscription.org_id = org.id
+            and subscription.status = 'active'
+      left join tiers tier on tier.id = subscription.tier_id
+     where org.id = ${orgId}
+  `
+  return row ?? null
+}
+
+/**
+ * Sets how long the Org keeps a stored transcript.
+ *
+ * Who may: `orgs_write`, which is Owner or Admin — the same policy the
+ * timezone leans on, and the reason this function names no Role. What may:
+ * the trigger beside the column, which raises when the window is past the
+ * Tier's ceiling, so a Tier that shrinks cannot be outrun by a form that
+ * was rendered before it did.
+ *
+ * Returns whether a row was written, so a caller can tell a refusal by policy
+ * from a value that was already set — an update refused by policy touches no
+ * rows and raises nothing.
+ */
+export const setOrgRetention = async (
+  tx: TransactionSql,
+  orgId: string,
+  days: number,
+): Promise<boolean> => {
+  const rows = await tx`
+    update orgs set retention_days = ${days} where id = ${orgId} returning id
+  `
+  return rows.length > 0
+}

@@ -169,6 +169,32 @@ own verified address, and accepting it takes a deliberate press rather than a
 page load. Treat a link in a chat message the way you would treat a password
 reset link, and revoke one you think has been seen.
 
+### Retention sweep
+
+Retention is a window per Org, in days, set by an Owner or an Admin under Org
+settings and capped by the Tier's ceiling. Nothing enforces it on a schedule,
+because this deployment has no scheduler and a self-hoster's is their own:
+`POST /api/retention/sweep` is the call that removes what is past the window —
+the `log_artifacts` rows and the stored objects together, oldest first, at most
+500 per call, and it answers how many remain so a backlog can be drained by
+calling again. It is idempotent: nothing is past its window twice, and deleting
+an object that is already gone succeeds.
+
+**Turns are never touched by it.** The spend history is append-only and
+survives every transcript it describes.
+
+| Variable                 | Required | Default | What it is                                                                       |
+| ------------------------ | -------- | ------- | -------------------------------------------------------------------------------- |
+| `RETENTION_SWEEP_SECRET` | no       | —       | Shared secret for `POST /api/retention/sweep`. Unset means the route refuses all |
+
+Unset is the safe default on purpose: this endpoint destroys transcripts, so a
+deployment that has not configured a sweep keeps everything rather than leaving
+a destructive route open. The secret travels as `Authorization: Bearer <secret>`
+and is compared in constant time, as the pricing route's is. The sweep runs as
+the owning role — it crosses every Org, while a Member's own delete is all the
+policies allow (ADR 0005) — which is why it is a secret-gated route and not
+anything a browser can reach.
+
 ### Storage
 
 Log Artifacts go straight to storage through a presigned PUT; the application

@@ -173,8 +173,16 @@ function Group({
                     can be bookmarked, retried and handed to `curl`, and the
                     route redirects to storage so the bytes never come through
                     the application. */}
+                {/* A new tab, because every failure of the route answers with
+                    a plain message rather than a page: an expired session in a
+                    long-open tab, a transcript the adjacent Delete already
+                    removed, or storage that is not configured would otherwise
+                    replace this page with bare text. On success the
+                    attachment disposition means the tab opens and closes. */}
                 <a
                   href={`/api/logs/download/${session.id}`}
+                  target="_blank"
+                  rel="noopener"
                   className="hover:text-accent-text text-sm underline"
                   aria-label={`Download the transcript of session ${session.sessionId}`}
                 >
