@@ -5,14 +5,15 @@ import { CodeBlock } from './code-block'
 // the Devices surface for a second machine.
 //
 // Ticket 66 owns the install documentation itself, including the marketplace
-// manifest and the no-shell environments. What is here is the two commands
-// with this deployment's own URL substituted, which is the part ticket 45
-// needs to tell a new Owner how to install the Collector, and which the
-// product IA requires be re-enterable rather than shown once.
+// manifest and the no-shell environments. What is here is the two commands and
+// this deployment's own URL, which is the part ticket 45 needs to tell a new
+// Owner how to install the Collector, and which the product IA requires be
+// re-enterable rather than shown once.
 //
-// The key is a placeholder and never a real one. Ticket 28 shows a key in full
-// exactly once, at creation, and stores only a hash — so there is nothing this
-// page could substitute even if it should.
+// No key appears here, as a placeholder or otherwise: the plugin asks for it
+// at its own prompt and Claude Code keeps it in the keychain, and ticket 28
+// shows a key in full exactly once, at creation, storing only a hash — so
+// there is nothing this page could substitute even if it should.
 
 export function InstallCollector({ appUrl }: { appUrl: string }) {
   return (
@@ -36,20 +37,21 @@ export function InstallCollector({ appUrl }: { appUrl: string }) {
       </li>
 
       <li>
-        <h3 className="text-heading">
-          2. Give it your key and this deployment
-        </h3>
+        <h3 className="text-heading">2. Answer the two questions it asks</h3>
         <p className="text-text-secondary mt-1 text-body">
-          In the shell Claude Code runs in. The key is the one you created under
-          Keys; it is shown once, so paste it here rather than looking for it
-          again.
+          Enabling the plugin prompts for a deployment URL and an API key. The
+          URL is this deployment:
         </p>
         <div className="mt-2">
-          <CodeBlock
-            command={`export SESSCLONE_API_KEY=sk_your_key_here\nexport SESSCLONE_URL=${appUrl}`}
-            label="the environment variables"
-          />
+          <CodeBlock command={appUrl} label="the deployment URL" />
         </div>
+        <p className="text-text-secondary mt-2 text-body">
+          The key is the one you created under Keys; it is shown once, so paste
+          it at the prompt rather than looking for it again. Claude Code keeps
+          it in your keychain and gives it to the Collector on every session, so
+          there is nothing to export and nothing to set up again per terminal.
+          To change either answer later, disable the plugin and enable it again.
+        </p>
       </li>
 
       <li>

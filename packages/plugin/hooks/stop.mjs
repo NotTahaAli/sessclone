@@ -22,6 +22,19 @@
 import { readConfiguration } from '../src/configuration.mjs'
 import { debugFailure } from '../src/debug.mjs'
 
+/**
+ * How long this hook may spend flushing, in milliseconds.
+ *
+ * Eight of the ten `hooks.json` gives it. The steady-state flush is one small
+ * request, but the first turn after an install has the session's whole history
+ * behind it, which is several — and a hook that outruns its timeout is killed
+ * mid-request and reported as cancelled in the session. What this cuts off the
+ * next `Stop` or `SessionStart` sweep sends, from the same cursors.
+ */
+const FLUSH_BUDGET_MS = 8000
+
+const deadline = Date.now() + FLUSH_BUDGET_MS
+
 const readStdin = async () => {
   let input = ''
   for await (const chunk of process.stdin) input += chunk
@@ -40,6 +53,7 @@ try {
     sessionId: event.session_id,
     cwd: event.cwd,
     environment: process.env,
+    shouldStop: () => Date.now() >= deadline,
   })
 } catch (error) {
   // Deliberately silent unless somebody is looking: see `src/debug.mjs`.

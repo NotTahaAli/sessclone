@@ -5,7 +5,7 @@ import { join } from 'node:path'
 
 import { afterEach, expect, test, vi } from 'vitest'
 
-import { deliver, sweep } from './report.mjs'
+import { deliver, flush, sweep } from './report.mjs'
 import { enqueue } from './queue.mjs'
 
 // Ticket 39: retry-then-queue and the SessionStart sweep, proven with a faked
@@ -219,4 +219,61 @@ test('the sweep stops when its time budget is spent', async () => {
   })
 
   expect(bodies).toHaveLength(0)
+})
+
+test('a flush out of time stops sending and writes no session_end marker', async () => {
+  // What a hook's timeout does when the budget is not shared: the flush runs
+  // long, Claude Code kills the hook mid-request, and the Member reads "Hook
+  // cancelled" in their session. The deadline is checked between requests
+  // instead, and a flush that stops early is a partial one — so the marker
+  // that says this Session need not be re-read must not be written.
+  const config = configuration()
+  const dir = await configDir({
+    'session-a': [assistant('session-a', 'a1')],
+  })
+
+  const bodies = stubFetch([{ ok: true, status: 200 }])
+  await flush({
+    configuration: config,
+    transcriptPath: join(dir, 'projects', 'home-dev-api', 'session-a.jsonl'),
+    sessionId: 'session-a',
+    cwd: '/home/dev/api',
+    environment: {},
+    shouldStop: () => true,
+    attach: {
+      sessionEnd: {
+        sessionId: 'session-a',
+        occurredAt: '2026-09-21T10:00:00.000Z',
+      },
+    },
+  })
+
+  expect(bodies).toHaveLength(0)
+})
+
+test('a flush inside its budget still sends the session_end marker', async () => {
+  const config = configuration()
+  const dir = await configDir({
+    'session-a': [assistant('session-a', 'a1')],
+  })
+
+  const bodies = stubFetch([{ ok: true, status: 200 }])
+  await flush({
+    configuration: config,
+    transcriptPath: join(dir, 'projects', 'home-dev-api', 'session-a.jsonl'),
+    sessionId: 'session-a',
+    cwd: '/home/dev/api',
+    environment: {},
+    shouldStop: () => false,
+    attach: {
+      sessionEnd: {
+        sessionId: 'session-a',
+        occurredAt: '2026-09-21T10:00:00.000Z',
+      },
+    },
+  })
+
+  // One request of Turns, then the marker in its own.
+  expect(bodies).toHaveLength(2)
+  expect(bodies.at(-1).sessionEnd.sessionId).toBe('session-a')
 })
