@@ -211,6 +211,13 @@ alter table users enable trigger users_guard_platform_admin;
 As the owning role, in a `psql` session. Every later platform admin is granted
 from inside the panel.
 
+To catch up with a later price list, set `PRICING_URL` (see
+[configuration](configuration.md#published-pricing)) and press **Fetch latest
+pricing** on the same page. It lists each model whose published prices differ
+from yours; nothing is written until you tick a model and apply it. A model new
+to your list is priced from 2026-01-01, so the Turns already waiting for it
+price; a changed price holds from the day you apply it.
+
 ## Retention, so transcripts do not accumulate forever
 
 Retention is a window per Org, and nothing enforces it on a schedule because
