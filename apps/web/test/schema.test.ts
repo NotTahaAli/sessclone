@@ -529,3 +529,24 @@ describe('the search path every security definer helper runs on', () => {
     expect(orgs.map((row) => row.org_id)).toEqual([ids.acme])
   })
 })
+
+test('every security definer function pins pg_temp', async () => {
+  // `20260920120600_search_path.sql` exists because ten functions shipped
+  // without the pin: Postgres searches `pg_temp` first for a table unless the
+  // schema is named, every role has temp rights, and a temp `users` or
+  // `members` forged platform-admin or read every Org. Two specific attacks
+  // are proven above; this is the class, so the next function cannot
+  // reintroduce it.
+  const unpinned = await sql<{ name: string; config: string[] | null }[]>`
+    select routine.proname as name, routine.proconfig as config
+      from pg_proc routine
+      join pg_namespace space on space.oid = routine.pronamespace
+     where space.nspname = 'public'
+       and routine.prosecdef
+       and not coalesce(
+             array_to_string(routine.proconfig, ',') like '%pg_temp%', false)
+     order by routine.proname
+  `
+
+  expect(unpinned.map((row) => row.name)).toEqual([])
+})

@@ -1,7 +1,6 @@
-import { createHash, timingSafeEqual } from 'node:crypto'
-
 import { revalidateTag } from 'next/cache'
 
+import { presentedBearer, secretMatches } from '../../../../lib/bearer'
 import { TIERS_TAG } from '../../../../lib/tiers'
 
 // Ticket 80: the other way the public pricing cache is cleared.
@@ -29,27 +28,10 @@ export async function POST(request: Request) {
     )
   }
 
-  if (!matches(presentedSecret(request), expected)) {
+  if (!secretMatches(presentedBearer(request), expected)) {
     return Response.json({ error: 'not authorised' }, { status: 401 })
   }
 
   revalidateTag(TIERS_TAG, 'max')
   return Response.json({ revalidated: TIERS_TAG })
 }
-
-const presentedSecret = (request: Request) => {
-  const header = request.headers.get('authorization')
-  const [scheme, ...rest] = header?.trim().split(/\s+/) ?? []
-  return scheme?.toLowerCase() === 'bearer' ? rest.join(' ') : ''
-}
-
-/**
- * Constant time, and length-independent. Comparing with `===` leaks how much
- * of a secret a guess got right; comparing buffers of different lengths makes
- * `timingSafeEqual` throw, so both sides are hashed first — digests are always
- * 32 bytes, and a hash of the wrong secret is as wrong as the secret is.
- */
-const matches = (presented: string, expected: string) =>
-  timingSafeEqual(digest(presented), digest(expected))
-
-const digest = (value: string) => createHash('sha256').update(value).digest()

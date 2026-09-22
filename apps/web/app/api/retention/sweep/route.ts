@@ -1,5 +1,4 @@
-import { createHash, timingSafeEqual } from 'node:crypto'
-
+import { presentedBearer, secretMatches } from '../../../../lib/bearer'
 import { ingestDb } from '../../../../lib/collector-auth'
 import { expiredCount, sweepRetention } from '../../../../lib/retention'
 import { storageConfigured } from '../../../../lib/storage'
@@ -32,7 +31,7 @@ export async function POST(request: Request) {
     )
   }
 
-  if (!matches(presentedSecret(request), expected)) {
+  if (!secretMatches(presentedBearer(request), expected)) {
     return Response.json({ error: 'not authorised' }, { status: 401 })
   }
 
@@ -56,28 +55,15 @@ export async function POST(request: Request) {
       // backlog knows to call again rather than guessing from `more`.
       remaining: swept.more ? await expiredCount(sql) : 0,
     })
-  } catch (error) {
+  } catch {
     // A storage failure rolled the rows back, so the deployment is unchanged
     // and the answer is "try again" rather than a partial success nobody can
-    // reconstruct.
+    // reconstruct. The cause stays on the server: a bucket name, an endpoint
+    // or a key fragment in the body is more than the caller needs, and the
+    // other secret-gated route does not do it either.
     return Response.json(
-      {
-        error: 'the sweep did not complete; nothing was removed',
-        detail: error instanceof Error ? error.message : undefined,
-      },
+      { error: 'the sweep did not complete; nothing was removed' },
       { status: 503 },
     )
   }
 }
-
-const presentedSecret = (request: Request) => {
-  const header = request.headers.get('authorization')
-  const [scheme, ...rest] = header?.trim().split(/\s+/) ?? []
-  return scheme?.toLowerCase() === 'bearer' ? rest.join(' ') : ''
-}
-
-/** Constant time and length-independent, as the pricing route explains. */
-const matches = (presented: string, expected: string) =>
-  timingSafeEqual(digest(presented), digest(expected))
-
-const digest = (value: string) => createHash('sha256').update(value).digest()

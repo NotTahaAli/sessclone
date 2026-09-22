@@ -183,9 +183,34 @@ an object that is already gone succeeds.
 **Turns are never touched by it.** The spend history is append-only and
 survives every transcript it describes.
 
-| Variable                 | Required | Default | What it is                                                                       |
-| ------------------------ | -------- | ------- | -------------------------------------------------------------------------------- |
-| `RETENTION_SWEEP_SECRET` | no       | —       | Shared secret for `POST /api/retention/sweep`. Unset means the route refuses all |
+| Variable                 | Required | Default | What it is                                                                              |
+| ------------------------ | -------- | ------- | --------------------------------------------------------------------------------------- |
+| `RETENTION_SWEEP_SECRET` | no       | —       | Shared secret for `POST /api/retention/sweep`. Unset means the route refuses every call |
+
+The window is measured from when a transcript was first stored, not from its
+last upload: a growing Session replaces its object and moves `uploaded_at`, so
+a window measured from that would be days since the last write and a busy
+Session would never age out.
+
+The route answers `200` with `{removed, remaining}`, `401` for a wrong secret,
+`503` when the secret is unset, `503` when storage is not configured — nothing
+is removed in that case, because the rows and the objects go together — and
+`503` when the sweep itself failed, which rolls the rows back. Two sweeps at
+once are safe: the second is told there is more to do and removes nothing,
+rather than reading a half-finished picture as an empty backlog.
+
+**Upgrading an existing deployment sets every Org to 90 days.** The column
+arrived with that default, and no Org chose it, so the _first_ sweep on a
+deployment that has been collecting for longer destroys every transcript older
+than 90 days. Nothing happens until the route is called and the route needs
+this secret, so the order is: set the windows, then configure the sweep.
+
+```sql
+update orgs set retention_days = 365;   -- or per Org, before sweeping
+```
+
+Org settings says when retention last ran on the deployment, or that it never
+has, so an Owner reading a window can tell whether anything enforces it.
 
 Unset is the safe default on purpose: this endpoint destroys transcripts, so a
 deployment that has not configured a sweep keeps everything rather than leaving

@@ -50,7 +50,9 @@ export default async function Page() {
         <RetentionSetting
           orgId={viewer.orgId}
           days={retention.days}
+          effective={retention.effective}
           ceiling={retention.ceiling}
+          lastSwept={retention.lastSwept}
         />
       ) : null}
 
@@ -146,14 +148,26 @@ function TimezoneSetting({
  * Both the window and the Tier's ceiling are stated, because a control that
  * silently refuses a number is worse than one that says what the bound is.
  */
+/** A date a person reads, for "retention last ran". */
+const SWEPT = new Intl.DateTimeFormat('en-GB', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+  timeZone: 'UTC',
+})
+
 function RetentionSetting({
   orgId,
   days,
+  effective,
   ceiling,
+  lastSwept,
 }: {
   orgId: string
   days: number
+  /** The window in force, which is lower than `days` after a Tier shrinks. */
+  effective: number
   ceiling: number | null
+  lastSwept: Date | null
 }) {
   return (
     <section aria-labelledby="retention">
@@ -175,7 +189,31 @@ function RetentionSetting({
           : `This Tier allows up to ${ceiling} days.`}
       </p>
 
-      <RetentionForm orgId={orgId} current={days} ceiling={ceiling} />
+      {/* The setting and the window in force part company when a Tier shrinks
+          under an Org: the trigger cannot reach a value already stored, and
+          the sweep applies whichever is lower. Saying so here is the only way
+          an Owner finds out before a transcript they expected is gone. */}
+      {effective < days ? (
+        <p className="text-warn-text mt-2 text-sm">
+          This Org is set to {days} days, and its Tier now allows {ceiling}.{' '}
+          {effective} days is the window in force. Save a number at or under the
+          ceiling to settle it.
+        </p>
+      ) : null}
+
+      {/* Retention needs a scheduler this deployment supplies, so an Owner
+          reading a window has no way to tell whether anything enforces it. */}
+      <p className="text-text-muted mt-2 text-sm">
+        {lastSwept === null
+          ? 'No retention sweep has run on this deployment yet, so nothing has been removed. Whoever runs it schedules POST /api/retention/sweep.'
+          : `Retention last ran ${SWEPT.format(lastSwept)}.`}
+      </p>
+
+      {/* The window in force rather than the stored setting, so the field is
+          never pre-filled with a number above its own `max` — which a browser
+          refuses to submit until it is edited, leaving the form dead exactly
+          for the Org whose Tier has shrunk. */}
+      <RetentionForm orgId={orgId} current={effective} ceiling={ceiling} />
     </section>
   )
 }

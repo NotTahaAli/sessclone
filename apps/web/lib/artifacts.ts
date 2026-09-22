@@ -20,8 +20,31 @@ import { deleteObjects } from './storage'
 // this table — the only thing a deleted row changes there is that the
 // unchanged-hash refusal no longer applies.
 
+/**
+ * Whose transcripts a listing is about (ticket 84).
+ *
+ * `own` is the signed-in person's, which is what `/settings/you` shows. `team`
+ * is every Member the viewer may see, which is what an Owner, an Admin or a
+ * Manager reaches — and it is a different set rather than a wider one only
+ * because the policies say so: the statement asks for
+ * `sessclone_visible_member_ids()` and the policy is still what decides which
+ * ids that returns (ADR 0001). Nothing here names a Role.
+ */
+export type Audience = 'own' | 'team'
+
+const memberIds = (tx: TransactionSql, audience: Audience) =>
+  audience === 'own'
+    ? tx`select sessclone_own_member_ids()`
+    : tx`select sessclone_visible_member_ids()`
+
 export type StoredProject = {
   memberId: string
+  /**
+   * Who it belongs to, for a `team` listing. Null when the viewer may read
+   * the artifact and not the person — left joined rather than inner, so a
+   * listing never silently drops a transcript it is allowed to show.
+   */
+  memberEmail: string | null
   projectId: string | null
   /** Null is the Sessions that ran outside any repository. */
   projectKey: string | null
@@ -57,10 +80,12 @@ export const SESSION_PAGE = 100
  */
 export const storedProjects = async (
   tx: TransactionSql,
+  audience: Audience = 'own',
 ): Promise<StoredProject[]> => {
   const rows = await tx<
     {
       member_id: string
+      member_email: string | null
       project_id: string | null
       project_key: string | null
       sessions: string
@@ -69,6 +94,7 @@ export const storedProjects = async (
     }[]
   >`
     select artifact.member_id,
+           person.email as member_email,
            artifact.project_id,
            project.key as project_key,
            count(*) as sessions,
@@ -76,13 +102,17 @@ export const storedProjects = async (
            max(artifact.uploaded_at) as newest
       from log_artifacts artifact
       left join projects project on project.id = artifact.project_id
-     where artifact.member_id in (select sessclone_own_member_ids())
-     group by artifact.member_id, artifact.project_id, project.key
+      left join members member on member.id = artifact.member_id
+      left join users person on person.id = member.user_id
+     where artifact.member_id in (${memberIds(tx, audience)})
+     group by artifact.member_id, person.email, artifact.project_id,
+              project.key
      order by max(artifact.uploaded_at) desc
   `
 
   return rows.map((row) => ({
     memberId: row.member_id,
+    memberEmail: row.member_email,
     projectId: row.project_id,
     projectKey: row.project_key,
     sessions: Number(row.sessions),
@@ -102,6 +132,7 @@ export const storedProjects = async (
 export const storedSessions = async (
   tx: TransactionSql,
   limit = SESSION_PAGE,
+  audience: Audience = 'own',
 ): Promise<{ sessions: StoredSession[]; more: boolean }> => {
   const rows = await tx<
     {
@@ -117,7 +148,7 @@ export const storedSessions = async (
     select id, member_id, project_id, session_id, agent_id, size_bytes,
            uploaded_at
       from log_artifacts
-     where member_id in (select sessclone_own_member_ids())
+     where member_id in (${memberIds(tx, audience)})
      order by uploaded_at desc, id desc
      limit ${limit + 1}
   `

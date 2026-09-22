@@ -4,7 +4,11 @@ import { expect, test } from 'vitest'
 
 import { ADMIN_DESTINATIONS } from '../app/admin/navigation'
 import { DESTINATIONS, settingsFor } from '../app/(dashboard)/navigation'
-import { reachesOrgSettings, reachesTier } from '../lib/viewer'
+import {
+  reachesOrgSettings,
+  reachesTeamTranscripts,
+  reachesTier,
+} from '../lib/viewer'
 
 // Ticket 45's first criterion — "navigation reflecting what the signed-in Role
 // may reach" — is a branch, and this is the cheapest level it can be checked
@@ -28,6 +32,7 @@ test('Org settings is listed for an Owner and an Admin', () => {
   for (const role of ['owner', 'admin'] as const) {
     expect(settingsFor(role).map((item) => item.href)).toEqual([
       '/settings/you',
+      '/settings/transcripts',
       '/settings/org',
     ])
     expect(reachesOrgSettings(role)).toBe(true)
@@ -38,11 +43,23 @@ test('Org settings is absent for a Manager and a Member, not disabled', () => {
   // Absent rather than refused: a control that cannot be used is a question
   // the reader cannot answer (`docs/design/product-ia.md`).
   for (const role of ['manager', 'member'] as const) {
-    expect(settingsFor(role).map((item) => item.href)).toEqual([
-      '/settings/you',
-    ])
     expect(reachesOrgSettings(role)).toBe(false)
   }
+  expect(settingsFor('member').map((item) => item.href)).toEqual([
+    '/settings/you',
+  ])
+})
+
+test('Team transcripts is listed for a Manager and absent for a Member', () => {
+  // Ticket 84. A Manager is in because their Scope is what the listing is
+  // for; a Member's own transcripts are on Your settings, and a second page
+  // showing the same rows under another name only asks which is the real one.
+  expect(settingsFor('manager').map((item) => item.href)).toEqual([
+    '/settings/you',
+    '/settings/transcripts',
+  ])
+  expect(reachesTeamTranscripts('manager')).toBe(true)
+  expect(reachesTeamTranscripts('member')).toBe(false)
 })
 
 test('the Tier page is the Owner, and not the Admin', () => {

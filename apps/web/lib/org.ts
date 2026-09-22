@@ -89,9 +89,26 @@ export const setOrgTimezone = async (
 export const orgRetention = async (
   tx: TransactionSql,
   orgId: string,
-): Promise<{ days: number; ceiling: number | null } | null> => {
-  const [row] = await tx<{ days: number; ceiling: number | null }[]>`
-    select org.retention_days as days, tier.retention_max_days as ceiling
+): Promise<{
+  days: number
+  ceiling: number | null
+  /**
+   * The window actually in force: the setting, or the ceiling when that is
+   * lower. They differ after a Tier shrinks under an Org — the trigger cannot
+   * reach a stored value retroactively, the sweep applies `least()` of the
+   * two, and this page is the only place that can say so rather than showing
+   * a number nothing honours.
+   */
+  effective: number
+  /** When retention last ran on this deployment, or null if it never has. */
+  lastSwept: Date | null
+} | null> => {
+  const [row] = await tx<
+    { days: number; ceiling: number | null; last_swept: Date | null }[]
+  >`
+    select org.retention_days as days,
+           tier.retention_max_days as ceiling,
+           (select swept_at from retention_sweeps) as last_swept
       from orgs org
       left join subscriptions subscription
              on subscription.org_id = org.id
@@ -99,7 +116,13 @@ export const orgRetention = async (
       left join tiers tier on tier.id = subscription.tier_id
      where org.id = ${orgId}
   `
-  return row ?? null
+  if (!row) return null
+  return {
+    days: row.days,
+    ceiling: row.ceiling,
+    effective: Math.min(row.days, row.ceiling ?? row.days),
+    lastSwept: row.last_swept,
+  }
 }
 
 /**

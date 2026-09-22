@@ -330,3 +330,92 @@ test('the Session list is read from an index rather than sorted', async () => {
   // the scan instead of a sort reading everything first.
   expect(text).not.toContain('Sort Key')
 })
+
+// Ticket 84: the same two reads, for the people a viewer can see rather than
+// for themselves. What decides the set is `sessclone_visible_member_ids()`,
+// so these run as the unprivileged role — under the owning role every row is
+// visible and the assertions would prove nothing.
+
+test('a team listing is what each Role may see, and never more', async () => {
+  const mine = await artifact({ sessionId: 'mine' })
+  const owners = await artifact({
+    memberId: fixture.acme.members.owner,
+    sessionId: 'owners',
+  })
+  await sql`
+    insert into log_artifacts (org_id, member_id, session_id, storage_key,
+                               sha256, size_bytes)
+    values (${fixture.globex.id}, ${fixture.globex.members.member},
+            'globex', 'orgs/globex/session.jsonl', ${'a'.repeat(64)}, 1)
+  `
+
+  const listed = async (role: Parameters<typeof asRole>[1]) =>
+    (
+      await asRole(fixture.acme, role, (tx) => storedSessions(tx, 100, 'team'))
+    ).sessions.map((session) => session.sessionId)
+
+  // An Owner and an Admin see every Member's, and never another Org's.
+  expect((await listed('owner')).toSorted()).toEqual(['mine', 'owners'])
+  expect((await listed('admin')).toSorted()).toEqual(['mine', 'owners'])
+  // The fixture's Scope holds the Member and not the Owner.
+  expect(await listed('manager')).toEqual(['mine'])
+  expect(await listed('managerWithoutScope')).toEqual([])
+  // A Member's own team listing is their own rows: the policy is the whole
+  // answer, so the page they cannot reach would not leak if they did.
+  expect(await listed('member')).toEqual(['mine'])
+
+  expect([mine.id, owners.id]).toHaveLength(2)
+})
+
+test('a team listing names who each project belongs to', async () => {
+  const projectId = await project('github.com/acme/api')
+  await artifact({ projectId })
+
+  const [group] = await asRole(fixture.acme, 'owner', (tx) =>
+    storedProjects(tx, 'team'),
+  )
+
+  expect(group).toMatchObject({
+    memberId: fixture.acme.members.member,
+    memberEmail: 'member@acme.test',
+    sessions: 1,
+  })
+
+  // And a Member's own listing carries their own address rather than null, so
+  // one component renders both.
+  const [own] = await asMember(storedProjects)
+  expect(own?.memberEmail).toBe('member@acme.test')
+})
+
+test('a removed Member’s transcripts stay in the Org’s listing', async () => {
+  // Removing somebody does not destroy what the Org holds (ADR 0005), and an
+  // Owner still answering for it needs to see it.
+  await artifact({ memberId: fixture.acme.members.removed, sessionId: 'left' })
+
+  const { sessions } = await asRole(fixture.acme, 'owner', (tx) =>
+    storedSessions(tx, 100, 'team'),
+  )
+  expect(sessions.map((session) => session.sessionId)).toEqual(['left'])
+})
+
+test('Your settings stays your own, whatever Role you hold', async () => {
+  await artifact({ sessionId: 'the-members' })
+  await artifact({ memberId: fixture.acme.members.owner, sessionId: 'mine' })
+
+  // An Owner can *see* every Member's transcript, so the own listing has to
+  // ask for `sessclone_own_member_ids()` rather than lean on the policy: the
+  // rows on this page each carry a Delete button, and a button on somebody
+  // else's transcript would be refused by `log_artifacts_delete` after the
+  // press.
+  const { sessions } = await asRole(fixture.acme, 'owner', (tx) =>
+    storedSessions(tx),
+  )
+  expect(sessions.map((session) => session.sessionId)).toEqual(['mine'])
+
+  const projects = await asRole(fixture.acme, 'owner', (tx) =>
+    storedProjects(tx),
+  )
+  expect(projects.map((group) => group.memberId)).toEqual([
+    fixture.acme.members.owner,
+  ])
+})

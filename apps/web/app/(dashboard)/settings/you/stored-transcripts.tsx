@@ -43,13 +43,22 @@ export function StoredTranscripts({
   sessions,
   more,
   orgNames,
+  audience = 'own',
 }: {
   projects: StoredProject[]
   sessions: StoredSession[]
   more: boolean
   /** Member id to Org name, and empty when the viewer is in one Org. */
   orgNames: Map<string, string>
+  /**
+   * Whose transcripts these are (ticket 84). A `team` listing names the
+   * Member each group belongs to and carries no Delete control at all:
+   * `log_artifacts_delete` is the Member's own rows alone (ADR 0005), so a
+   * button an Admin can see and never use is a button that lies.
+   */
+  audience?: 'own' | 'team'
 }) {
+  const own = audience === 'own'
   // Grouped once rather than filtered per Project, which would be a pass over
   // every Session per group — and a new array in a prop on every render.
   const byGroup = new Map<string, StoredSession[]>()
@@ -61,23 +70,38 @@ export function StoredTranscripts({
   }
 
   return (
-    <section aria-labelledby="stored" className="mt-8">
-      <h2 id="stored" className="text-heading-lg">
-        Stored transcripts
-      </h2>
-      <p className="text-text-secondary mt-2 text-sm">
-        What has already been uploaded. Deleting one destroys the transcript
-        itself, not the session&apos;s usage or cost — those are always
-        reported. This cannot be undone.
-      </p>
+    <section
+      aria-labelledby={own ? 'stored' : undefined}
+      aria-label={own ? undefined : 'Stored transcripts'}
+      className={own ? 'mt-8' : ''}
+    >
+      {/* On a team listing the page's own title says this already, and a
+          second heading with a third wording of it reads as a second list. */}
+      {own ? (
+        <>
+          <h2 id="stored" className="text-heading-lg">
+            Stored transcripts
+          </h2>
+          <p className="text-text-secondary mt-2 text-sm">
+            What has already been uploaded. Deleting one destroys the transcript
+            itself, not the session&apos;s usage or cost — those are always
+            reported. This cannot be undone.
+          </p>
+        </>
+      ) : null}
 
       {projects.length === 0 ? (
-        <p className="border-rule text-text-muted mt-4 rounded border border-dashed p-6 text-sm">
-          Nothing stored. Transcripts appear here once archival is on and a
-          session has finished.
+        <p
+          className={`border-rule text-text-muted rounded border border-dashed p-6 text-sm${
+            own ? ' mt-4' : ''
+          }`}
+        >
+          {own
+            ? 'Nothing stored. Transcripts appear here once archival is on and a session has finished.'
+            : 'Nothing stored. A transcript appears here once a Member turns archival on and one of their sessions has finished.'}
         </p>
       ) : (
-        <ul className="mt-4 flex flex-col gap-4">
+        <ul className={`flex flex-col gap-4${own ? ' mt-4' : ''}`}>
           {projects.map((project) => (
             <li
               key={groupKey(project.memberId, project.projectId)}
@@ -85,6 +109,7 @@ export function StoredTranscripts({
             >
               <Group
                 project={project}
+                own={own}
                 orgName={orgNames.get(project.memberId)}
                 sessions={
                   byGroup.get(groupKey(project.memberId, project.projectId)) ??
@@ -98,8 +123,9 @@ export function StoredTranscripts({
 
       {more ? (
         <p className="text-text-muted mt-4 text-sm">
-          Only your most recent sessions are listed. Deleting a whole project
-          covers every session in it, listed or not.
+          {own
+            ? 'Only your most recent sessions are listed. Deleting a whole project covers every session in it, listed or not.'
+            : 'Only the most recent sessions are listed. The counts above each project cover every session in it, listed or not.'}
         </p>
       ) : null}
     </section>
@@ -110,10 +136,12 @@ function Group({
   project,
   sessions,
   orgName,
+  own,
 }: {
   project: StoredProject
   sessions: StoredSession[]
   orgName: string | undefined
+  own: boolean
 }) {
   const name = project.projectKey ?? 'Sessions outside a repository'
 
@@ -131,25 +159,28 @@ function Group({
             {name}
           </p>
           <p className="text-text-muted mt-1 text-sm">
+            {own ? '' : `${project.memberEmail ?? 'A Member'} · `}
             {project.sessions} session{project.sessions === 1 ? '' : 's'} ·{' '}
             {size(project.bytes)} · newest {DAY.format(project.newest)}
             {orgName ? ` · ${orgName}` : ''}
           </p>
         </div>
 
-        <Confirm
-          summary="Delete all"
-          // Named rather than counted in the button: the count is above it,
-          // and a button that says what it destroys is what a person reads
-          // before pressing.
-          question={`Delete all ${project.sessions} transcript${
-            project.sessions === 1 ? '' : 's'
-          } stored for ${name}? This cannot be undone.`}
-          action={deleteProject}
-          label={`Delete every stored transcript for ${name}`}
-          memberId={project.memberId}
-          projectId={project.projectId ?? 'none'}
-        />
+        {own ? (
+          <Confirm
+            summary="Delete all"
+            // Named rather than counted in the button: the count is above it,
+            // and a button that says what it destroys is what a person reads
+            // before pressing.
+            question={`Delete all ${project.sessions} transcript${
+              project.sessions === 1 ? '' : 's'
+            } stored for ${name}? This cannot be undone.`}
+            action={deleteProject}
+            label={`Delete every stored transcript for ${name}`}
+            memberId={project.memberId}
+            projectId={project.projectId ?? 'none'}
+          />
+        ) : null}
       </div>
 
       {sessions.length === 0 ? null : (
@@ -188,13 +219,15 @@ function Group({
                 >
                   Download
                 </a>
-                <Confirm
-                  summary="Delete"
-                  question={`Delete the transcript of session ${session.sessionId}? This cannot be undone.`}
-                  action={deleteSession}
-                  label={`Delete the transcript of session ${session.sessionId}`}
-                  artifactId={session.id}
-                />
+                {own ? (
+                  <Confirm
+                    summary="Delete"
+                    question={`Delete the transcript of session ${session.sessionId}? This cannot be undone.`}
+                    action={deleteSession}
+                    label={`Delete the transcript of session ${session.sessionId}`}
+                    artifactId={session.id}
+                  />
+                ) : null}
               </div>
             </li>
           ))}

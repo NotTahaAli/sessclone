@@ -1,4 +1,4 @@
-import { beforeEach, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 import { orgRetention, setOrgRetention } from '../lib/org'
 import { expiredCount, sweepRetention } from '../lib/retention'
@@ -48,7 +48,13 @@ const withTier = async (
   `
 }
 
-/** An artifact uploaded `age` days ago. */
+afterEach(() => {
+  // Set inline by the route tests. Left behind by a failure between the two
+  // statements, it is a live secret for every sibling test in the process.
+  delete process.env.RETENTION_SWEEP_SECRET
+})
+
+/** An artifact first stored `age` days ago. */
 const seedArtifact = async ({
   org = '',
   memberId = '',
@@ -70,7 +76,11 @@ const seedArtifact = async ({
       storage_key: key,
       sha256: 'a'.repeat(64),
       size_bytes: 1024,
-      uploaded_at: new Date(Date.now() - age * 86_400_000),
+      created_at: new Date(Date.now() - age * 86_400_000),
+      // Re-uploaded just now, which is the case that used to defeat the
+      // window: the sweep measures `created_at` and this moves on every
+      // replacement.
+      uploaded_at: new Date(),
     })}
   `
   return key
@@ -330,4 +340,92 @@ test('the endpoint answers the backlog, and removes nothing it cannot delete', a
   expect(await (await ask()).json()).toEqual({ removed: 1, remaining: 0 })
 
   delete process.env.RETENTION_SWEEP_SECRET
+})
+
+test('a transcript that keeps being re-uploaded still ages out', async () => {
+  // `uploaded_at` moves every time a growing Session replaces its object
+  // (ADR 0003), so a window measured from it is days since the last write and
+  // a busy Session is kept forever. `seedArtifact` re-uploads every row it
+  // writes, so this is really asserted by every case above — stated once here
+  // because it is the anchor the ticket's window depends on.
+  await sql`update orgs set retention_days = 30 where id = ${fixture.acme.id}`
+  const old = await seedArtifact({ age: 400 })
+
+  expect((await sweepRetention(sql)).removed).toBe(1)
+  expect(bucket.deleted).toEqual([old])
+})
+
+test('an object no row names is deleted by the sweep', async () => {
+  // What `POST /api/logs/confirm` records when it cannot delete the object a
+  // Session left behind after its Project changed: the row has moved to the
+  // new key, so nothing else could ever reach these bytes.
+  await sql`
+    insert into storage_orphans (storage_key)
+    values ('orgs/a/members/b/projects/old/session-1.jsonl')
+  `
+
+  const swept = await sweepRetention(sql)
+
+  // Not counted as removed — no transcript went — but the bytes are gone.
+  expect(swept.removed).toBe(0)
+  expect(bucket.deleted).toEqual([
+    'orgs/a/members/b/projects/old/session-1.jsonl',
+  ])
+  expect(await sql`select storage_key from storage_orphans`).toHaveLength(0)
+})
+
+test('a bucket that refuses keeps the orphan too', async () => {
+  await sql`insert into storage_orphans (storage_key) values ('orphan.jsonl')`
+  bucket.fails = true
+
+  await expect(sweepRetention(sql)).rejects.toThrow(/refused/)
+
+  // Rolled back with the rows: an orphan forgotten after a failed delete is
+  // a transcript nothing can reach again.
+  expect(await sql`select storage_key from storage_orphans`).toHaveLength(1)
+})
+
+test('a sweep already running is told there is more, not that it is done', async () => {
+  await sql`update orgs set retention_days = 1 where id = ${fixture.acme.id}`
+  await seedArtifact({ age: 10 })
+
+  // Deterministic stand-in for the second of two overlapping sweeps: hold the
+  // same advisory lock and call. Without the lock that sweep would choose its
+  // rows from a snapshot still showing the first one's, delete fewer than it
+  // selected, and read that as an empty backlog — stopping a drain that has
+  // thousands left.
+  const swept = await sql.begin(async (holder) => {
+    await holder`
+      select pg_advisory_xact_lock(hashtext('sessclone_retention_sweep'))
+    `
+    return sweepRetention(sql)
+  })
+
+  expect(swept).toEqual({ removed: 0, more: true })
+  expect(bucket.deleted).toEqual([])
+  // And the row is still there for the sweep that holds the lock.
+  expect(await sql`select id from log_artifacts`).toHaveLength(1)
+})
+
+test('a sweep records that it ran, even when it removed nothing', async () => {
+  expect(await sql`select * from retention_sweeps`).toHaveLength(0)
+
+  await sweepRetention(sql)
+
+  // "Has retention ever run here" is the question the settings page answers,
+  // and a deployment with no scheduler promises a window nothing enforces.
+  const [row] = await sql<{ removed: number }[]>`
+    select removed from retention_sweeps
+  `
+  expect(row?.removed).toBe(0)
+
+  await sql`update orgs set retention_days = 1 where id = ${fixture.acme.id}`
+  await seedArtifact({ age: 10 })
+  await sweepRetention(sql)
+
+  const rows = await sql<{ removed: number }[]>`
+    select removed from retention_sweeps
+  `
+  // One row, replaced: a log of every sweep is a table nobody reads.
+  expect(rows.map((one) => one.removed)).toEqual([1])
 })

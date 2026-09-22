@@ -50,10 +50,12 @@ export const setTimezone = async (
     if (!written) {
       return { error: 'You do not have permission to change this setting.' }
     }
-  } catch {
+  } catch (error) {
     // The trigger refuses a name the timezone database does not know, and one
     // that is a fixed offset wearing a name. Either way the Owner needs the
-    // sentence rather than an error page.
+    // sentence rather than an error page — and anything that is not the
+    // trigger is not this sentence, so it is rethrown.
+    if (!isValueRefused(error)) throw error
     return { error: 'That is not a timezone this deployment knows.' }
   }
 
@@ -97,9 +99,13 @@ export const setRetention = async (
     if (!written) {
       return { error: 'You do not have permission to change this setting.' }
     }
-  } catch {
-    // The trigger raises when the window is past the Tier's ceiling — which
-    // can happen to a form that was rendered before the Tier changed.
+  } catch (error) {
+    // The trigger raises `check_violation` when the window is past the Tier's
+    // ceiling, which happens to a form rendered before the Tier changed.
+    // Narrowed on that code rather than catching everything: a database that
+    // is down would otherwise be reported as a Tier limit, and the Owner
+    // would lower the number and be refused again with no trace anywhere.
+    if (!isValueRefused(error)) throw error
     return {
       error:
         'That is longer than this Org’s Tier allows. The Tier page states the ceiling.',
@@ -109,3 +115,22 @@ export const setRetention = async (
   revalidatePath('/settings/org')
   return { saved: days.data }
 }
+
+/**
+ * Whether the database refused the value itself, rather than anything else
+ * that can go wrong on the way to a statement.
+ *
+ * `23514` is `check_violation`, which the retention trigger raises explicitly;
+ * `P0001` is `raise_exception`, the default a `raise` carries, which is what
+ * the two timezone guards raise. Everything else — a connection that died, a
+ * statement timeout, a constraint added later — belongs in the logs and on an
+ * error page rather than behind a sentence about one setting.
+ */
+const REFUSALS = new Set(['23514', 'P0001'])
+
+const isValueRefused = (error: unknown) =>
+  typeof error === 'object' &&
+  error !== null &&
+  'code' in error &&
+  typeof error.code === 'string' &&
+  REFUSALS.has(error.code)

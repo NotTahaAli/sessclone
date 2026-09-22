@@ -33,7 +33,7 @@ comment on column orgs.retention_days is
 -- page beside it already states the ceiling.
 create or replace function sessclone_guard_org_retention() returns trigger
   language plpgsql security definer
-  set search_path = public, pg_temp as $$
+  set search_path = pg_catalog, public, pg_temp as $$
 declare
   ceiling integer;
 begin

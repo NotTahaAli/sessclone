@@ -118,6 +118,17 @@ export const reachesOrgSettings = (role: Role) =>
   role === 'owner' || role === 'admin'
 
 /**
+ * Whether this Role reaches the Org-wide transcript listing (ticket 84).
+ *
+ * Owner, Admin and Manager: a Manager is in because their Scope is exactly
+ * what the listing is for. Absent for a Member rather than present and empty,
+ * since their own transcripts are on Your settings and a second page showing
+ * the same rows under a different name only invites the question of which one
+ * is the real list.
+ */
+export const reachesTeamTranscripts = (role: Role) => role !== 'member'
+
+/**
  * Whether this Role reaches the Tier page.
  *
  * Owner only, and the entry is *absent* for an Admin rather than present and

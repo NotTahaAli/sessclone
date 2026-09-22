@@ -217,10 +217,23 @@ export async function POST(request: Request) {
 
   if (replaced?.previous && replaced.previous !== decision.storageKey) {
     // After the row, never before: an orphaned object costs storage, and a
-    // deleted object with a row still naming it costs the transcript. A
-    // failure here is left for ticket 61's sweep rather than failing a
-    // recorded upload.
-    await deleteObjects([replaced.previous]).catch(() => {})
+    // deleted object with a row still naming it costs the transcript.
+    //
+    // A failure here cannot fail a recorded upload, and it must not be
+    // swallowed either: the row has already moved to the new key, so nothing
+    // names the old object and no sweep could ever reach it — a transcript,
+    // which is source code and sometimes a credential, kept forever. Recorded
+    // instead, and the retention sweep deletes it (ticket 61).
+    await deleteObjects([replaced.previous]).catch(async () => {
+      await sql`
+        insert into storage_orphans (storage_key) values (${replaced.previous})
+        on conflict (storage_key) do nothing
+      `.catch(() => {
+        // Nothing left to do: the object stays, and the operator's bucket
+        // lifecycle is the only thing that will reach it. Not worth failing an
+        // upload that is recorded and complete.
+      })
+    })
   }
 
   return Response.json({

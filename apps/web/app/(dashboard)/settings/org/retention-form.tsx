@@ -55,16 +55,21 @@ export function RetentionForm({
         </button>
       </form>
 
-      {state && 'error' in state ? (
-        <p className="text-bad-text mt-3 text-sm">{state.error}</p>
-      ) : null}
-      {state && 'saved' in state ? (
-        <p className="text-ok-text mt-3 text-sm">
-          Transcripts are now kept for {state.saved} day
-          {state.saved === 1 ? '' : 's'}. Anything already past that is removed
-          by the next sweep, not immediately.
-        </p>
-      ) : null}
+      {/* Announced rather than only rendered: the result of changing how long
+          transcripts are kept is not something to leave a screen-reader user
+          to go looking for. */}
+      <div aria-live="polite">
+        {state && 'error' in state ? (
+          <p className="text-bad-text mt-3 text-sm">{state.error}</p>
+        ) : null}
+        {state && 'saved' in state ? (
+          <p className="text-ok-text mt-3 text-sm">
+            Transcripts are now kept for {state.saved} day
+            {state.saved === 1 ? '' : 's'}. Anything already past that is
+            removed by the next sweep, not immediately.
+          </p>
+        ) : null}
+      </div>
     </>
   )
 }
