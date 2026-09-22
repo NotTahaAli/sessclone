@@ -31,10 +31,6 @@ const mailerConfig = (): MailerConfig | null => {
   return url && from ? { url, from } : null
 }
 
-/** Whether this deployment can send mail at all — read by the invite action so
- * it can tell the inviter the link is the only route before it even tries. */
-export const mailConfigured = () => mailerConfig() !== null
-
 /**
  * What one delivery attempt did:
  * - `sent`: the server accepted the message.
@@ -109,17 +105,25 @@ export const sendInviteEmail = async (
   const config = mailerConfig()
   if (!config) return 'not-configured'
 
-  const transporter = createTransport(config.url)
   try {
-    await transporter.sendMail({ from: config.from, ...renderInvite(email) })
-    return 'sent'
+    // Inside the try on purpose: `createTransport` throws *synchronously* on a
+    // malformed URL — a missing scheme, a non-numeric port — which is an
+    // ordinary self-host typo, not an exceptional one. Building it outside
+    // would let that throw escape and reject the action, orphaning the
+    // invitation whose link the inviter never then sees. A bad URL is a
+    // `failed` delivery like any other: the link is still shown to copy.
+    const transporter = createTransport(config.url)
+    try {
+      await transporter.sendMail({ from: config.from, ...renderInvite(email) })
+      return 'sent'
+    } finally {
+      transporter.close()
+    }
   } catch {
     // The reason is not surfaced: an SMTP error can echo the recipient and the
     // server's banner, and the inviter's remedy is the same whatever it was —
     // copy the link. The deployment's operator reads the cause in their own
     // mail server's logs, not in a page a Member sees.
     return 'failed'
-  } finally {
-    transporter.close()
   }
 }

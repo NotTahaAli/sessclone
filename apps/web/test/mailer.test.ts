@@ -2,7 +2,8 @@ import { SMTPServer } from 'smtp-server'
 
 import { afterEach, expect, test, vi } from 'vitest'
 
-import { mailConfigured, renderInvite, sendInviteEmail } from '../lib/mailer'
+import { renderInvite, sendInviteEmail } from '../lib/mailer'
+import { deliveryLine } from '../app/(dashboard)/settings/org/members/invite-form'
 
 // Ticket 82: the invitation email, verified against a real SMTP server rather
 // than a mocked transport. `smtp-server` (the nodemailer project's own) stands
@@ -64,23 +65,44 @@ const invite = {
   invitedByEmail: 'owner@acme.test',
 }
 
-test('mailConfigured is false until both variables are set', () => {
-  vi.stubEnv('SMTP_URL', '')
-  vi.stubEnv('SMTP_FROM', '')
-  expect(mailConfigured()).toBe(false)
-
-  vi.stubEnv('SMTP_URL', 'smtp://127.0.0.1:2525')
-  vi.stubEnv('SMTP_FROM', '')
-  expect(mailConfigured()).toBe(false)
-
-  vi.stubEnv('SMTP_FROM', 'sessclone <no-reply@example.com>')
-  expect(mailConfigured()).toBe(true)
-})
-
-test('with no SMTP configured, nothing is sent and it says so', async () => {
+test('with either variable unset, nothing is sent and it says so', async () => {
   vi.stubEnv('SMTP_URL', '')
   vi.stubEnv('SMTP_FROM', '')
   expect(await sendInviteEmail(invite)).toBe('not-configured')
+
+  // A URL with no From is a mailer that cannot address a message: unconfigured,
+  // not half-configured.
+  vi.stubEnv('SMTP_URL', 'smtp://127.0.0.1:2525')
+  vi.stubEnv('SMTP_FROM', '')
+  expect(await sendInviteEmail(invite)).toBe('not-configured')
+})
+
+test('a malformed SMTP_URL is a failed delivery, never a throw', async () => {
+  // `createTransport` throws synchronously on a bad URL — a self-host typo, not
+  // an exceptional case. It must be caught: the invitation is already created,
+  // and letting it escape would orphan it and hide the link.
+  vi.stubEnv('SMTP_FROM', 'sessclone <no-reply@example.com>')
+  for (const bad of [
+    'smtp.example.com:587',
+    'smtp://u:p@h:notaport',
+    'garbage',
+  ]) {
+    vi.stubEnv('SMTP_URL', bad)
+    // eslint-disable-next-line no-await-in-loop -- each asserts one bad URL in turn
+    expect(await sendInviteEmail(invite)).toBe('failed')
+  }
+})
+
+test('deliveryLine names the outcome and always points at the link', () => {
+  expect(deliveryLine('sent', 'a@b.test')).toContain('emailed to a@b.test')
+  expect(deliveryLine('not-configured', 'a@b.test')).toContain(
+    'does not send email',
+  )
+  expect(deliveryLine('failed', 'a@b.test')).toContain('could not be sent')
+  // Every case tells the inviter they can send the link themselves.
+  for (const d of ['sent', 'not-configured', 'failed'] as const) {
+    expect(deliveryLine(d, 'a@b.test').toLowerCase()).toContain('link')
+  }
 })
 
 test('the invitation is delivered to a real SMTP server, carrying the link', async () => {

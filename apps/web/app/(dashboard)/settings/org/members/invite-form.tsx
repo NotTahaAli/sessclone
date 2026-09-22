@@ -8,7 +8,7 @@ import type { Delivery } from '../../../../../lib/mailer'
 // What sits above the copyable link, given what delivery did (ticket 82). The
 // link is shown in every case — it is the same token the email carries — so
 // this only sets expectation: was it emailed, or must the inviter pass it on.
-const deliveryLine = (delivery: Delivery, email: string) => {
+export const deliveryLine = (delivery: Delivery, email: string) => {
   const suffix =
     ' The link is shown once, works for seven days, and only works for that address.'
   if (delivery === 'sent') {
