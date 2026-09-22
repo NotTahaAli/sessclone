@@ -22,4 +22,4 @@ Worse, it was invisible. A 4xx is final, so a refused report writes no cursor an
 - [x] Session start prints the refusal (only one from this sweep, so a fixed key is not blamed); the install check prints the last answer
 - [x] `verify-collector.mjs` probes `/api/ingest` with the key through the same route the hooks take, and prints whether a proxy is set and used. It used to GET the base URL, which answered 200 while ingest refused every report
 - [x] `docs/configuration.md` and `docs/install.md` updated
-- [ ] A fresh cloud container reports Turns with only the setup script and the credential, seen on production by Taha
+- [x] A fresh cloud container reports Turns with only the setup script and the credential, seen on production by Taha (2026-09-22: its Session's transcript downloaded from the dashboard, which presign allows only once Turns exist)

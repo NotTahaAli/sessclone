@@ -17,4 +17,4 @@
 - [x] `archivesEveryTurn` tested for cloud and local; the manifest test pins the hook as the only async `Stop` entry
 - [x] Checked from a cloud container: presign answered through the proxy, and the storage host is reachable
 - [x] `docs/install.md` and `docs/configuration.md` updated
-- [ ] A cloud Session's transcript downloads from the dashboard, seen on production by Taha
+- [x] A cloud Session's transcript downloads from the dashboard, seen on production by Taha (2026-09-22: 808 KB, 114 lines, ending at that Session's last turn)
