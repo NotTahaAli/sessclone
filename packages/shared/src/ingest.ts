@@ -86,6 +86,12 @@ export const ReportedTurn = z.object({
   gitBranch: optionalText,
   requestId: optionalText,
   complete: z.boolean(),
+  /**
+   * How deep the Agent Run that produced this Turn was spawned, read by the
+   * Collector from the sidecar beside the run's transcript (tickets 35, 36).
+   * Optional and nullable: a main Session has none, and some runs state none.
+   */
+  spawnDepth: counter.nullable().default(null),
   usage: ReportedUsage,
   entryUuids: z.array(z.string()),
 })

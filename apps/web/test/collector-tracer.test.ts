@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
@@ -318,6 +318,140 @@ test('the credential travels in the header and never in the body', async () => {
   expect(received[0]!.authorization).toBe(`Bearer ${key}`)
   expect(received[0]!.body).not.toContain('sk_')
   expect(received[0]!.body).not.toContain(key)
+})
+
+test('an Agent Run reaches the database as its own Turns, under its parent Session', async () => {
+  // Tickets 35 and 36 end to end: the hook is given the Session's own file, and
+  // the runs it spawned are found beside it, read from their own transcripts
+  // and filed under their own `agentId` — a workflow's run on the same path as
+  // any other, which is why one of the two here is one.
+  const key = await issueKey()
+  const config = mkdtempSync(join(tmpdir(), 'sessclone-claude-'))
+  const project = join(config, 'projects', '-home-user-sessclone')
+  const sessionId = '456e47f6-e387-59c4-b84c-21c031bb3504'
+  mkdirSync(join(project, sessionId, 'subagents'), { recursive: true })
+
+  const parent = await readFile(
+    new URL('multi-iteration-turn.jsonl', CORPUS),
+    'utf8',
+  )
+  const captured = JSON.parse(parent.split('\n').find(Boolean)!).sessionId
+  const main = join(project, `${sessionId}.jsonl`)
+  writeFileSync(main, parent.replaceAll(captured, sessionId))
+
+  await Promise.all(
+    (
+      [
+        ['agent-run.jsonl', 'a4a571530bd42856c', 1],
+        ['workflow-agent-run.jsonl', 'a38fc2c136a5f46a3', 2],
+      ] as const
+    ).map(async ([name, agentId, spawnDepth]) => {
+      writeFileSync(
+        join(project, sessionId, 'subagents', `agent-${agentId}.jsonl`),
+        await readFile(new URL(name, CORPUS), 'utf8'),
+      )
+      writeFileSync(
+        join(project, sessionId, 'subagents', `agent-${agentId}.meta.json`),
+        JSON.stringify({ spawnDepth }),
+      )
+    }),
+  )
+
+  await runHook(
+    {
+      session_id: sessionId,
+      transcript_path: main,
+      cwd: '/home/user/sessclone',
+    },
+    { SESSCLONE_URL: url, SESSCLONE_API_KEY: key, CLAUDE_CONFIG_DIR: config },
+  )
+
+  const stored = await sql<
+    { agent_id: string | null; spawn_depth: number | null; turns: number }[]
+  >`
+    select agent_id, spawn_depth, count(*)::int as turns
+      from turns
+     where session_id = ${sessionId}
+     group by agent_id, spawn_depth
+     order by agent_id nulls first
+  `
+
+  expect(stored.map((row) => [row.agent_id, row.spawn_depth])).toEqual([
+    [null, null],
+    ['a38fc2c136a5f46a3', 2],
+    ['a4a571530bd42856c', 1],
+  ])
+  expect(stored.every((row) => row.turns > 0)).toBe(true)
+})
+
+test('a second Stop on an unchanged transcript sends nothing at all', async () => {
+  // Ticket 37, end to end: the cursor is stored under `SESSCLONE_STATE_DIR`
+  // after the deployment accepted the report, and the next Stop reads the file
+  // from there — so a steady-state turn costs a few hundred bytes rather than
+  // a resend of the session, and an unchanged transcript costs no request.
+  const key = await issueKey()
+  const { path, text } = await transcript('multi-iteration-turn.jsonl')
+  const sessionId = JSON.parse(text.split('\n').find(Boolean)!).sessionId
+  const stateDir = mkdtempSync(join(tmpdir(), 'sessclone-state-'))
+
+  const environment = {
+    SESSCLONE_URL: url,
+    SESSCLONE_API_KEY: key,
+    SESSCLONE_STATE_DIR: stateDir,
+  }
+  const event = {
+    session_id: sessionId,
+    transcript_path: path,
+    cwd: '/home/dev/api',
+  }
+
+  await runHook(event, environment)
+  expect(received).toHaveLength(1)
+
+  const [first] = await sql<{ count: number }[]>`
+    select count(*)::int as count from turns
+  `
+
+  await runHook(event, environment)
+  expect(received).toHaveLength(1)
+
+  const [second] = await sql<{ count: number }[]>`
+    select count(*)::int as count from turns
+  `
+  expect(second!.count).toBe(first!.count)
+})
+
+test('a report the deployment refused leaves the cursor where it was', async () => {
+  // The one mistake that loses a Turn: advancing a cursor past Turns nobody
+  // accepted. The key here is well-formed and unknown, so ingest answers 401.
+  const { path, text } = await transcript('multi-iteration-turn.jsonl')
+  const sessionId = JSON.parse(text.split('\n').find(Boolean)!).sessionId
+  const stateDir = mkdtempSync(join(tmpdir(), 'sessclone-state-'))
+  const event = {
+    session_id: sessionId,
+    transcript_path: path,
+    cwd: '/home/dev/api',
+  }
+
+  await runHook(event, {
+    SESSCLONE_URL: url,
+    SESSCLONE_API_KEY: `sk_${'a'.repeat(43)}`,
+    SESSCLONE_STATE_DIR: stateDir,
+  })
+
+  // Nothing stored, and nothing acknowledged — so a key fixed tomorrow
+  // reports everything that was refused today.
+  const key = await issueKey()
+  await runHook(event, {
+    SESSCLONE_URL: url,
+    SESSCLONE_API_KEY: key,
+    SESSCLONE_STATE_DIR: stateDir,
+  })
+
+  const [stored] = await sql<{ count: number }[]>`
+    select count(*)::int as count from turns
+  `
+  expect(stored!.count).toBeGreaterThan(0)
 })
 
 test('a session whose deployment is unreachable fails quietly and stores nothing', async () => {

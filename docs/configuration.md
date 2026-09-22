@@ -237,6 +237,15 @@ reason as above.
 | `SESSCLONE_STATE_DIR` | no             | platform-dependent \*\* | Where the cursor and the retry queue are kept                                       |
 | `SESSCLONE_DEVICE`    | no             | derived \*\*\*          | Pins this environment's Device key instead of deriving one                          |
 
+The Collector keeps one cursor per transcript under
+`<state dir>/cursors/<hash>.json`: per file rather than per Session, because a
+subagent's transcript and its parent's are appended to independently (finding
+74), and named by a hash because a transcript path carries the Member's own
+directory names. A cursor is a cache and never a record — missing, unreadable
+or past the end of a replaced file all mean "read from the top", which costs
+bandwidth and never a Turn. It is stored only after the deployment accepted
+the report carrying it.
+
 One request carries at most 100 reports of at most 5,000 Turns each
 (`packages/shared/src/limits.ts`, which both ends import). The Collector
 splits a long transcript across requests itself rather than sending one the

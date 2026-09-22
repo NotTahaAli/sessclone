@@ -32,19 +32,28 @@ try {
   const configuration = readConfiguration()
 
   const { buildPayloads, send } = await import('../src/report.mjs')
+  const { writeCursor } = await import('../src/cursors.mjs')
 
-  const payloads = await buildPayloads({
+  const plans = await buildPayloads({
     transcriptPath: event.transcript_path,
     sessionId: event.session_id,
     cwd: event.cwd,
     environment: process.env,
+    stateDir: configuration.stateDir,
   })
 
   /* oxlint-disable no-await-in-loop -- one request at a time: a transcript
      needing several is already large, and firing them together is how a
-     Collector takes a deployment down. */
-  for (const payload of payloads) {
-    await send({ configuration, payload })
+     Collector takes a deployment down. And a cursor is stored only after the
+     request carrying it was accepted, so the two cannot be reordered. */
+  for (const { payload, advance } of plans) {
+    const { ok } = await send({ configuration, payload })
+    // A report that was not accepted is one the next Stop re-sends from the
+    // same place. Advancing here is the one mistake that loses a Turn.
+    if (!ok) continue
+    for (const { path, cursor } of advance) {
+      if (cursor) await writeCursor(configuration.stateDir, path, cursor)
+    }
   }
   /* oxlint-enable no-await-in-loop */
 } catch {

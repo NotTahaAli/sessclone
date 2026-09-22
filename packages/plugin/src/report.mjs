@@ -21,10 +21,12 @@
 // 0006), which is exactly the property a cursor is an optimisation over.
 
 import { execFile } from 'node:child_process'
-import { readFile } from 'node:fs/promises'
+import { open } from 'node:fs/promises'
 import { hostname } from 'node:os'
 import { promisify } from 'node:util'
 
+import { readCursor } from './cursors.mjs'
+import { sessionTranscripts } from './transcripts.mjs'
 import { parseTranscript } from '../../shared/src/turns.ts'
 import { deviceKey, projectKey } from '../../shared/src/identity.ts'
 import {
@@ -104,6 +106,58 @@ export const originRemote = async (cwd, environment = process.env) => {
 }
 
 /**
+ * The transcript from `start` onwards, and the offset that text ends at.
+ *
+ * A transcript is append-only, so everything before the cursor has been
+ * reported already and re-reading it is the cost ticket 37 exists to remove:
+ * a steady-state Stop now reads the bytes of one turn rather than of the whole
+ * session. A file shorter than the cursor was replaced rather than appended
+ * to — a `--resume` into a rotated transcript, or a restored container — and
+ * is read from the top, because a stale offset would otherwise skip whatever
+ * is now in front of it.
+ *
+ * @param {string} path
+ * @param {number} start
+ * @returns {Promise<{ text: string, byteOffset: number }>}
+ */
+const readFrom = async (path, start) => {
+  const handle = await open(path, 'r')
+  try {
+    const { size } = await handle.stat()
+    const from = start > 0 && start <= size ? start : 0
+    const { buffer, bytesRead } = await handle.read({
+      buffer: Buffer.alloc(Math.max(size - from, 0)),
+      position: from,
+    })
+    return {
+      text: buffer.subarray(0, bytesRead).toString('utf8'),
+      byteOffset: from + bytesRead,
+    }
+  } finally {
+    await handle.close()
+  }
+}
+
+/**
+ * Groups in first-seen order, which is file order.
+ *
+ * @template T, K
+ * @param {T[]} items
+ * @param {(item: T) => K} key
+ * @returns {Map<K, T[]>}
+ */
+const groupBy = (items, key) => {
+  const groups = new Map()
+  for (const item of items) {
+    const at = key(item)
+    const group = groups.get(at)
+    if (group) group.push(item)
+    else groups.set(at, [item])
+  }
+  return groups
+}
+
+/**
  * The Turns of one transcript, grouped by the Project they ran in, in file
  * order.
  *
@@ -149,8 +203,87 @@ const byProject = async (turns, cwd, environment) => {
 }
 
 /**
- * The payloads for one finished transcript. Empty when there is nothing to
- * report.
+ * The reports one transcript file is worth, in file order.
+ *
+ * One file is one Session or one Agent Run, but a report is per *identity*:
+ * the Turns of a run are grouped by the `agentId` their own entries carry
+ * (tickets 35 and 36 — a run is read from its own transcript, never inferred
+ * from its parent's), then by the Project each Turn ran in, and then sliced to
+ * the wire limit.
+ *
+ * @param {object} input
+ * @param {{ path: string, agentRun: boolean, spawnDepth: number | null }} input.file
+ * @param {string} input.sessionId
+ * @param {string | undefined} input.cwd
+ * @param {Record<string, string | undefined>} input.environment
+ * @param {string} input.stateDir
+ */
+const reportsFor = async ({ file, sessionId, cwd, environment, stateDir }) => {
+  const from = await readCursor(stateDir, file.path)
+  const { text, byteOffset } = await readFrom(file.path, from?.byteOffset ?? 0)
+  const turns = parseTranscript(text)
+
+  // A Session's own file holds the main run only: a subagent's Turns are
+  // reported from the file they were written to, so taking them from here as
+  // well would file the same Turn twice — harmlessly, thanks to ADR 0006's
+  // index, but with a cursor that acknowledges a position in the wrong file.
+  const own = turns.filter(
+    (turn) =>
+      turn.sessionId === sessionId &&
+      (file.agentRun ? turn.agentId !== null : turn.agentId === null),
+  )
+  if (own.length === 0) return { reports: [], advance: null }
+
+  const last = own.at(-1)
+
+  const reports = []
+  /* oxlint-disable no-await-in-loop -- the `git` reads inside are cached per
+     directory, and a run's Projects are resolved in file order. */
+  for (const [agentId, theirs] of groupBy(own, (turn) => turn.agentId)) {
+    for (const { project, turns: here } of await byProject(
+      theirs,
+      cwd,
+      environment,
+    )) {
+      for (let at = 0; at < here.length; at += TURNS_PER_REPORT) {
+        const slice = here.slice(at, at + TURNS_PER_REPORT)
+        reports.push({
+          sessionId,
+          agentId,
+          project: { key: project.key, remote: project.remote },
+          cursor: {
+            messageId: slice.at(-1).messageId,
+            // Only the report carrying this file's last Turn has read to the
+            // end of it. Every other one acknowledges no position at all
+            // rather than one it cannot know, so a cursor can never advance
+            // past Turns that were refused.
+            byteOffset: slice.includes(last) ? byteOffset : 0,
+          },
+          // Read from the sidecar beside the transcript, never assumed to be
+          // one: a run spawned by a run is deeper, and some runs state none.
+          turns: slice.map((turn) => ({
+            ...turn,
+            spawnDepth: file.spawnDepth,
+          })),
+        })
+      }
+    }
+  }
+  /* oxlint-enable no-await-in-loop */
+  return {
+    reports,
+    // Where this file has been read to, to be stored once the deployment has
+    // accepted every report carrying it (ticket 37).
+    advance: {
+      path: file.path,
+      cursor: { messageId: last.messageId, byteOffset },
+    },
+  }
+}
+
+/**
+ * The payloads for the Session that just finished, and every Agent Run it
+ * spawned. Empty when there is nothing to report.
  *
  * Several rather than one, because both wire limits are real and a report that
  * breaks one is a 400 that nothing looks at: a session past
@@ -169,65 +302,58 @@ const byProject = async (turns, cwd, environment) => {
  * @param {string} input.sessionId
  * @param {string | undefined} input.cwd
  * @param {Record<string, string | undefined>} input.environment
- * @returns {Promise<import('@sessclone/shared').IngestPayload[]>}
+ * @param {string} input.stateDir Where the cursors live.
+ * @returns {Promise<{ payload: import('@sessclone/shared').IngestPayload, advance: { path: string, cursor: { messageId: string, byteOffset: number } }[] }[]>}
  */
 export const buildPayloads = async ({
   transcriptPath,
   sessionId,
   cwd,
   environment,
+  stateDir,
 }) => {
-  const text = await readFile(transcriptPath, 'utf8')
-
-  const turns = parseTranscript(text)
-  // The main Session only, until ticket 35: a subagent writes its own file,
-  // and reporting its turns from here would file them under the wrong
-  // transcript.
-  const own = turns.filter(
-    (turn) => turn.agentId === null && turn.sessionId === sessionId,
-  )
-  if (own.length === 0) return []
-
-  // The whole file was read, so the position is the whole file — measured off
-  // the text that was parsed rather than off a `stat` that races the read:
-  // Claude Code appends the next entry the moment the turn ends, and a
-  // `size` larger than what was parsed would acknowledge Turns nobody sent.
-  // Ticket 37 is where this becomes a position to resume from rather than a
-  // fact about a file that was read end to end.
-  const byteOffset = Buffer.byteLength(text)
-  const last = own.at(-1)
+  const files = await sessionTranscripts({
+    transcriptPath,
+    sessionId,
+    environment,
+  })
 
   const reports = []
-  for (const { project, turns: theirs } of await byProject(
-    own,
-    cwd,
-    environment,
-  )) {
-    for (let at = 0; at < theirs.length; at += TURNS_PER_REPORT) {
-      const slice = theirs.slice(at, at + TURNS_PER_REPORT)
-      reports.push({
-        sessionId,
-        agentId: null,
-        project: { key: project.key, remote: project.remote },
-        cursor: {
-          messageId: slice.at(-1).messageId,
-          // Only the report carrying the file's last Turn has read to the end
-          // of the file. Every other one acknowledges no position at all
-          // rather than a position it cannot know, so a cursor can never
-          // advance past Turns that were refused.
-          byteOffset: slice.includes(last) ? byteOffset : 0,
-        },
-        turns: slice,
-      })
+  /** Which file each report came from, so a cursor advances only on success. */
+  const sources = []
+  const advances = new Map()
+
+  for (const file of files) {
+    // eslint-disable-next-line no-await-in-loop -- a handful of files, read in order
+    const { reports: theirs, advance } = await reportsFor({
+      file,
+      sessionId,
+      cwd,
+      environment,
+      stateDir,
+    })
+    if (advance) advances.set(advance.path, advance.cursor)
+    for (const report of theirs) {
+      reports.push(report)
+      sources.push(file.path)
     }
   }
+  if (reports.length === 0) return []
 
   const device = { key: deviceKey({ hostname: hostname(), environment }) }
   const payloads = []
   for (let at = 0; at < reports.length; at += REPORTS_PER_PAYLOAD) {
+    const carried = sources.slice(at, at + REPORTS_PER_PAYLOAD)
     payloads.push({
-      device,
-      reports: reports.slice(at, at + REPORTS_PER_PAYLOAD),
+      payload: {
+        device,
+        reports: reports.slice(at, at + REPORTS_PER_PAYLOAD),
+      },
+      /** The transcripts this request carries, and where each was read to. */
+      advance: [...new Set(carried)].map((path) => ({
+        path,
+        cursor: advances.get(path),
+      })),
     })
   }
   return payloads

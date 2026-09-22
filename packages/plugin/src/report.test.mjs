@@ -48,7 +48,7 @@ const assistant = ({
 test('a report names the session, its Device and its Project', async () => {
   const path = transcript([assistant(), assistant({ messageId: 'msg_2' })])
 
-  const [payload] = await buildPayloads({
+  const [{ payload }] = await buildPayloads({
     transcriptPath: path,
     sessionId: 'session-1',
     cwd: '/home/dev/api',
@@ -76,7 +76,7 @@ test('a subagent’s turns are left for the transcript they belong to', async ()
     assistant({ messageId: 'msg_agent', agentId: 'agent-7' }),
   ])
 
-  const [payload] = await buildPayloads({
+  const [{ payload }] = await buildPayloads({
     transcriptPath: path,
     sessionId: 'session-1',
     cwd: '/home/dev/api',
@@ -107,7 +107,7 @@ test('a session that produced no turn of its own is not a report', async () => {
 test('the Project is keyed by the directory the turns ran in', async () => {
   const path = transcript([assistant({ cwd: '/home/dev/elsewhere' })])
 
-  const [payload] = await buildPayloads({
+  const [{ payload }] = await buildPayloads({
     transcriptPath: path,
     sessionId: 'session-1',
     // The event says where the session started; the entry says where it ran.
@@ -140,7 +140,7 @@ test('a session past the wire limit is chunked, not refused forever', async () =
   )
   const path = transcript(lines)
 
-  const [payload] = await buildPayloads({
+  const [{ payload }] = await buildPayloads({
     transcriptPath: path,
     sessionId: 'session-1',
     cwd: '/home/dev/api',
@@ -167,7 +167,7 @@ test('a session that moved between repositories reports each Project’s own tur
     assistant({ messageId: 'msg_api_2', cwd: '/home/dev/api' }),
   ])
 
-  const [payload] = await buildPayloads({
+  const [{ payload }] = await buildPayloads({
     transcriptPath: path,
     sessionId: 'session-1',
     cwd: '/home/dev/api',
