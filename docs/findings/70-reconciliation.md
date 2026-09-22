@@ -50,7 +50,7 @@ what ticket 51's day boundary uses).
 | Environment                                | Unique Turns counted by hand | Dashboard |
 | ------------------------------------------ | ---------------------------- | --------- |
 | Claude Projects container, Session `fd21…` | 977                          | 950       |
-| macOS, `host:muhammads-macbook-pro.local`  | not counted                  | 14        |
+| macOS, `host:muhammads-macbook-pro.local`  | 15                           | 15        |
 | Other containers, same Device key          | not countable (see below)    | 561       |
 | **Deployment, all time**                   | —                            | **6,833** |
 
@@ -114,18 +114,35 @@ The split divides a Session's Turns; it does not duplicate any.
 
 ## Three environments at once
 
-Open. Two environments reported within the same minute on 2026-09-22 —
-Sessions `fd21…` and `e61f75…`, two separate containers, last received
-10:16:32Z and 10:16:28Z — and the Mac reported the same day, last at 09:30Z.
-The checkbox asks for three **at once**, and the Mac was not live in that
-window.
+Three environments of the same Member reported inside one window on
+2026-09-22, between 10:00Z and 10:41Z:
 
-What closes it: one ordinary session on the Mac while two containers are
-running, then
+| Environment                  | Device key                                   | Session      | Turns in the window        |
+| ---------------------------- | -------------------------------------------- | ------------ | -------------------------- |
+| Claude Projects, container A | `cloud:6c6ec04b-15a2-4eba-915f-ae53ff0e1e8d` | `fd211903-…` | 67, 10:01:03Z to 10:28:25Z |
+| Claude Projects, container B | `cloud:6c6ec04b-15a2-4eba-915f-ae53ff0e1e8d` | `e61f7535-…` | 9, 10:00:12Z to 10:41:18Z  |
+| macOS                        | `host:muhammads-macbook-pro.local`           | `faa17eb1-…` | 1, at 10:22:19Z            |
+
+Three machines, **two** Device rows, because the two containers are one Device
+by design — the account outlives the container, so a `cloud:` key names the
+account and not the machine. Nothing merged across them: each Session's Turns
+stayed under its own Session, and the Mac's stayed under the `host:` Device.
+
+The Mac's own hand count, run by its operator, is the clean case the container
+could not be:
 
 ```
-node scripts/verify-collector.mjs --reconcile --day <date> --tz UTC
+| Transcripts read | 727 |
+| Turns in window | 15 |
+| **Unique Turns — compare this with the dashboard** | **15** |
+| Repeats collapsed by identity | 0 |
 ```
 
-on the Mac, so its Sessions can be reconciled row by row the way the
-container's were. Nothing else is outstanding.
+The dashboard holds **15** Turns for that Device on that day, across 11
+Sessions. Fifteen and fifteen, with nothing to explain — because that hand
+count was taken between sessions rather than inside a live one, which is
+exactly the difference the container's 977-against-950 reading measured.
+
+727 transcripts read against 11 Sessions that day is not a discrepancy: the
+count walks every transcript the machine has ever written and then keeps only
+the Turns that fall in the day.
