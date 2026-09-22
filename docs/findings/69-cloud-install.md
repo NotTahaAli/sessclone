@@ -140,5 +140,31 @@ every session does.
 Both also show the backfill: roughly a minute separates the first Turn from the
 moment the batch was received, because nothing is sent until a turn ends.
 
-Still unrun: a container killed mid-session (point 4), and any Session whose
-subagent transcripts sit one directory deeper — neither container spawned one.
+## Fourth and fifth readings: a subagent, and an abandoned container
+
+**Subagent transcripts are collected.** A container that dispatched one Agent
+call reported 4 Turns of its own and **21 Turns carrying `agent_id`
+`a2d41318044478be1` at `spawn_depth` 1**, all under the same `session_id` and
+the same Device. Finding 74's layout holds in a cloud container: the subagent's
+transcript sits one directory deeper, `sessionTranscripts` finds it, and its
+usage is attributed to the Agent Run rather than folded into the parent. That is
+the last clause of point 5.
+
+**An abandoned container loses nothing it had finished.** A container did one
+turn and was then left alone, with nobody to message it again: its 4 Turns
+arrived on that turn's own `Stop` hook. This is the expected result rather than
+a surprise, and it is worth stating plainly because the reverse is easy to
+assume — a flush happens at every turn boundary, not at session end, so
+abandonment costs nothing once a turn has ended.
+
+**What is still unstaged is the mid-turn kill.** Finding 05 predicts `SessionEnd`
+fires about 180 ms after a `SIGTERM` and not at all under a `SIGKILL`, so a
+container killed _during_ a turn loses that turn. Nothing here reproduced that
+deliberately, and the row says so rather than claiming it was tested.
+
+It is worth recording what that hole costs in cloud specifically, because it is
+larger than on a laptop and nothing in the design says so out loud: a container's
+state directory and its transcripts both die with it. On a Mac an unflushed tail
+is recovered by the next `SessionStart`, which re-reads the transcript from its
+cursor. In a cloud container there is no next start — the cursors are gone, the
+transcript is gone, and an unflushed turn has nothing left to be recovered from.
