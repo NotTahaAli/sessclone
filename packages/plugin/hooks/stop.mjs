@@ -42,17 +42,30 @@ try {
     stateDir: configuration.stateDir,
   })
 
+  /** Where each transcript has been read to, and which ones were refused. */
+  const acknowledged = new Map()
+  const refused = new Set()
+
   /* oxlint-disable no-await-in-loop -- one request at a time: a transcript
      needing several is already large, and firing them together is how a
-     Collector takes a deployment down. And a cursor is stored only after the
-     request carrying it was accepted, so the two cannot be reordered. */
+     Collector takes a deployment down. And a cursor is stored only after every
+     request carrying that transcript was accepted, so the two cannot be
+     reordered. */
   for (const { payload, advance } of plans) {
     const { ok } = await send({ configuration, payload })
-    // A report that was not accepted is one the next Stop re-sends from the
-    // same place. Advancing here is the one mistake that loses a Turn.
-    if (!ok) continue
     for (const { path, cursor } of advance) {
-      if (cursor) await writeCursor(configuration.stateDir, path, cursor)
+      if (ok) acknowledged.set(path, cursor)
+      // One transcript's reports can span two requests, and the second can be
+      // the one that is refused. Advancing on the first would step the cursor
+      // past Turns nobody accepted, which is the one mistake here that loses
+      // data — so a refusal disqualifies the whole file, not just that request.
+      else refused.add(path)
+    }
+  }
+
+  for (const [path, cursor] of acknowledged) {
+    if (cursor && !refused.has(path)) {
+      await writeCursor(configuration.stateDir, path, cursor)
     }
   }
   /* oxlint-enable no-await-in-loop */

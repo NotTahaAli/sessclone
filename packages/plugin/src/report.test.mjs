@@ -53,6 +53,7 @@ test('a report names the session, its Device and its Project', async () => {
     sessionId: 'session-1',
     cwd: '/home/dev/api',
     environment: { SESSCLONE_DEVICE: 'host:build-box' },
+    stateDir: mkdtempSync(join(tmpdir(), 'sessclone-state-')),
   })
 
   expect(payload.device.key).toBe('host:build-box')
@@ -81,11 +82,17 @@ test('a subagent’s turns are left for the transcript they belong to', async ()
     sessionId: 'session-1',
     cwd: '/home/dev/api',
     environment: {},
+    stateDir: mkdtempSync(join(tmpdir(), 'sessclone-state-')),
   })
 
-  expect(payload.reports[0].turns.map((turn) => turn.messageId)).toEqual([
-    'msg_1',
-  ])
+  // Across every report, not just the first: reported from here the subagent's
+  // Turn lands in a second report under its own `agentId`, which an assertion
+  // on `reports[0]` would not notice.
+  expect(
+    payload.reports.flatMap((report) =>
+      report.turns.map((turn) => turn.messageId),
+    ),
+  ).toEqual(['msg_1'])
 })
 
 test('a session that produced no turn of its own is not a report', async () => {
@@ -113,6 +120,7 @@ test('the Project is keyed by the directory the turns ran in', async () => {
     // The event says where the session started; the entry says where it ran.
     cwd: '/home/dev/api',
     environment: {},
+    stateDir: mkdtempSync(join(tmpdir(), 'sessclone-state-')),
   })
 
   expect(payload.reports[0].project.key).toContain('/home/dev/elsewhere')
@@ -145,6 +153,7 @@ test('a session past the wire limit is chunked, not refused forever', async () =
     sessionId: 'session-1',
     cwd: '/home/dev/api',
     environment: {},
+    stateDir: mkdtempSync(join(tmpdir(), 'sessclone-state-')),
   })
 
   expect(payload.reports).toHaveLength(2)
@@ -172,6 +181,7 @@ test('a session that moved between repositories reports each Project’s own tur
     sessionId: 'session-1',
     cwd: '/home/dev/api',
     environment: {},
+    stateDir: mkdtempSync(join(tmpdir(), 'sessclone-state-')),
   })
 
   expect(payload.reports).toHaveLength(2)

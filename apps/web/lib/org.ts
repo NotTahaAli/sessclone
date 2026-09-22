@@ -45,9 +45,13 @@ export const listTimezones = async (
        and name not like 'posix/%'
        and name not like 'right/%'
        and name not like 'Etc/%'
-     order by name
   `
-  return (cached = rows.map((row) => row.name))
+  // Sorted here rather than by `order by name`, which sorts by the database's
+  // collation: under `en_US.utf8` punctuation is weighed differently to
+  // `C`, so the same deployment code produced a differently ordered `<select>`
+  // depending on how the cluster was initialised. One order, decided by the
+  // app.
+  return (cached = rows.map((row) => row.name).toSorted())
 }
 
 /**

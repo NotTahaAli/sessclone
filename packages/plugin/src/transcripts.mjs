@@ -100,28 +100,36 @@ export const sessionTranscripts = async ({
   /** Keyed by path: one Session can be reached through two of the above. */
   const found = new Map()
 
-  for (const directory of directories) {
-    const main = join(directory, `${sessionId}.jsonl`)
-    // eslint-disable-next-line no-await-in-loop -- one stat per project directory
-    if (await isFile(main)) {
-      found.set(main, { path: main, agentRun: false, spawnDepth: null })
-    }
+  const perDirectory = await Promise.all(
+    [...directories].map(async (directory) => {
+      const here = []
 
-    const runs = join(directory, sessionId, 'subagents')
-    // eslint-disable-next-line no-await-in-loop -- as above
-    for (const name of await list(runs)) {
-      if (!name.endsWith('.jsonl')) continue
-      const path = join(runs, name)
-      found.set(path, {
-        path,
-        // Which run it is comes from the entries, which name their own
-        // `agentId`; the filename is only where to look.
-        agentRun: true,
-        // eslint-disable-next-line no-await-in-loop -- one read per Agent Run
-        spawnDepth: await spawnDepthOf(path),
-      })
-    }
-  }
+      const main = join(directory, `${sessionId}.jsonl`)
+      if (await isFile(main)) {
+        here.push({ path: main, agentRun: false, spawnDepth: null })
+      }
+
+      const runs = join(directory, sessionId, 'subagents')
+      const transcripts = (await list(runs)).filter((name) =>
+        name.endsWith('.jsonl'),
+      )
+      here.push(
+        ...(await Promise.all(
+          transcripts.map(async (name) => ({
+            path: join(runs, name),
+            // Which run it is comes from the entries, which name their own
+            // `agentId`; the filename is only where to look.
+            agentRun: true,
+            spawnDepth: await spawnDepthOf(join(runs, name)),
+          })),
+        )),
+      )
+
+      return here
+    }),
+  )
+
+  for (const file of perDirectory.flat()) found.set(file.path, file)
 
   if (transcriptPath && !found.has(transcriptPath)) {
     found.set(transcriptPath, {

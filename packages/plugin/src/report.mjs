@@ -49,6 +49,18 @@ const GIT_TIMEOUT_MS = 2000
 const REQUEST_TIMEOUT_MS = 6000
 
 /**
+ * How much of one transcript a single Stop reads.
+ *
+ * The delta is held in memory — as a buffer, a string, an array of lines and
+ * then a payload — so an unbounded read is four unbounded allocations, and a
+ * string past V8's ceiling throws into a hook that swallows everything. 32 MB
+ * is far more than a turn and far less than a problem; what it does not reach
+ * is reported by the next Stop, because the cursor it leaves behind is a real
+ * position in the file.
+ */
+const READ_LIMIT = 32 * 1024 * 1024
+
+/**
  * What a child process is allowed to see.
  *
  * `execFile` hands the child `process.env` by default, and this process holds
@@ -111,10 +123,31 @@ export const originRemote = async (cwd, environment = process.env) => {
  * A transcript is append-only, so everything before the cursor has been
  * reported already and re-reading it is the cost ticket 37 exists to remove:
  * a steady-state Stop now reads the bytes of one turn rather than of the whole
- * session. A file shorter than the cursor was replaced rather than appended
- * to — a `--resume` into a rotated transcript, or a restored container — and
- * is read from the top, because a stale offset would otherwise skip whatever
- * is now in front of it.
+ * session.
+ *
+ * Three rules decide what may be acknowledged, and all three exist to make a
+ * lost Turn impossible:
+ *
+ * - **Only whole lines count.** A read races the writer — the session's own,
+ *   and a subagent's file still being appended to while the parent's Stop
+ *   scans for it — so the tail can be half an entry. `parseTranscript` drops a
+ *   line that does not parse, so acknowledging those bytes would drop the Turn
+ *   *and* step past it: the next Stop would read the remainder alone, which
+ *   does not parse either, and that Turn would never be reported by anybody.
+ *   The offset is therefore the last newline, and a complete final line with
+ *   no newline is re-read once and absorbed by ADR 0006's index. It also keeps
+ *   every offset line-aligned, so a multi-byte character cannot be split
+ *   across two reads.
+ * - **The offset has to land on a line boundary in *this* file.** A file
+ *   shorter than the cursor was replaced rather than appended to, and so is a
+ *   file of the same length whose bytes are different — a `--resume` into a
+ *   rotated transcript, a restored container, a fork. Either way the byte
+ *   before the offset is not a newline, and the file is read from the top.
+ * - **One Stop reads a bounded amount.** The first report after an install
+ *   carries a whole session; `READ_LIMIT` keeps that a bounded read rather
+ *   than a file of unknown size in memory several times over. The rest is
+ *   reported by the next Stop, from a cursor that is line-aligned by the rule
+ *   above.
  *
  * @param {string} path
  * @param {number} start
@@ -124,18 +157,39 @@ const readFrom = async (path, start) => {
   const handle = await open(path, 'r')
   try {
     const { size } = await handle.stat()
-    const from = start > 0 && start <= size ? start : 0
+    const from = (await resumable(handle, start, size)) ? start : 0
     const { buffer, bytesRead } = await handle.read({
-      buffer: Buffer.alloc(Math.max(size - from, 0)),
+      buffer: Buffer.alloc(Math.min(Math.max(size - from, 0), READ_LIMIT)),
       position: from,
     })
+
+    const chunk = buffer.subarray(0, bytesRead)
     return {
-      text: buffer.subarray(0, bytesRead).toString('utf8'),
-      byteOffset: from + bytesRead,
+      text: chunk.toString('utf8'),
+      // A chunk with no newline in it acknowledges nothing: `lastIndexOf`
+      // answers -1 and the offset stays where it was.
+      byteOffset: from + chunk.lastIndexOf(0x0a) + 1,
     }
   } finally {
     await handle.close()
   }
+}
+
+/**
+ * Whether `start` is a position in this file that can be resumed from: inside
+ * it, and just past a newline. See `readFrom`.
+ *
+ * @param {import('node:fs/promises').FileHandle} handle
+ * @param {number} start
+ * @param {number} size
+ */
+const resumable = async (handle, start, size) => {
+  if (start <= 0 || start > size) return false
+  const { buffer, bytesRead } = await handle.read({
+    buffer: Buffer.alloc(1),
+    position: start - 1,
+  })
+  return bytesRead === 1 && buffer[0] === 0x0a
 }
 
 /**
@@ -219,8 +273,18 @@ const byProject = async (turns, cwd, environment) => {
  * @param {string} input.stateDir
  */
 const reportsFor = async ({ file, sessionId, cwd, environment, stateDir }) => {
-  const from = await readCursor(stateDir, file.path)
-  const { text, byteOffset } = await readFrom(file.path, from?.byteOffset ?? 0)
+  let read
+  try {
+    const from = await readCursor(stateDir, file.path)
+    read = await readFrom(file.path, from?.byteOffset ?? 0)
+  } catch {
+    // The files were listed a moment ago and are opened now: one can be gone
+    // (Claude Code sweeps its own transcripts), locked on Windows, or
+    // unreadable. Skipping it costs that file's Turns until the next Stop;
+    // throwing would cost every file's, this Session's own included.
+    return { reports: [], advance: null }
+  }
+  const { text, byteOffset } = read
   const turns = parseTranscript(text)
 
   // A Session's own file holds the main run only: a subagent's Turns are

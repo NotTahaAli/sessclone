@@ -444,7 +444,9 @@ test('a report the deployment refused leaves the cursor where it was', async () 
   })
 
   // Nothing stored, and nothing acknowledged — so a key fixed tomorrow
-  // reports everything that was refused today.
+  // reports everything that was refused today. Compared against a run that
+  // was never refused, because a cursor that advanced part of the way would
+  // store some of the Turns and look fine on a count of "more than none".
   const key = await issueKey()
   await runHook(event, {
     SESSCLONE_URL: url,
@@ -452,10 +454,22 @@ test('a report the deployment refused leaves the cursor where it was', async () 
     SESSCLONE_STATE_DIR: stateDir,
   })
 
-  const [stored] = await sql<{ count: number }[]>`
-    select count(*)::int as count from turns
+  const stored = await sql<{ message_id: string }[]>`
+    select message_id from turns order by message_id
   `
-  expect(stored!.count).toBeGreaterThan(0)
+
+  await sql`delete from turns`
+  await runHook(event, {
+    SESSCLONE_URL: url,
+    SESSCLONE_API_KEY: key,
+    SESSCLONE_STATE_DIR: mkdtempSync(join(tmpdir(), 'sessclone-state-')),
+  })
+  const whole = await sql<{ message_id: string }[]>`
+    select message_id from turns order by message_id
+  `
+
+  expect(whole.length).toBeGreaterThan(0)
+  expect(stored).toEqual(whole)
 })
 
 test('a session whose deployment is unreachable fails quietly and stores nothing', async () => {

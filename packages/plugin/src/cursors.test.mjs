@@ -96,10 +96,13 @@ test('a routine report carries only the Turns past the cursor', async () => {
   expect(reported.every((messageId) => messageId.startsWith('later_'))).toBe(
     true,
   )
-  // And the cursor it wants acknowledged is the end of the file, not the end
-  // of what it happened to read.
+  // And the cursor it wants acknowledged is the last complete line, not the
+  // end of what it happened to read: the tail of a file being appended to can
+  // be half an entry, and acknowledging those bytes would step past a Turn
+  // nobody ever reported.
+  const grown_text = readFileSync(box.path, 'utf8')
   expect(plan.advance[0].cursor.byteOffset).toBe(
-    Buffer.byteLength(readFileSync(box.path, 'utf8')),
+    grown_text.lastIndexOf('\n') + 1,
   )
 })
 
@@ -171,4 +174,73 @@ test('an unwritable state directory costs bandwidth, not Turns', async () => {
     }),
   ).resolves.toBeUndefined()
   expect(await readCursor(blocked, '/home/dev/api/session.jsonl')).toBeNull()
+})
+
+test('a half-written line at the end is not acknowledged', async () => {
+  // The read races the writer — the session's own, and a subagent's file still
+  // being appended to while the parent's Stop scans for it. A torn tail is
+  // dropped by the parser, so acknowledging its bytes would step past a Turn
+  // that no Stop would ever report again: the next one would read the
+  // remainder alone, which does not parse either.
+  const box = await machine()
+  await acknowledge(box.stateDir, await report(box))
+
+  const complete = JSON.parse(box.text.split('\n').filter(Boolean).at(-2))
+  complete.uuid = 'later-1'
+  complete.message.id = 'later_1'
+  const torn = JSON.parse(JSON.stringify(complete))
+  torn.uuid = 'later-2'
+  torn.message.id = 'later_2'
+  const half = JSON.stringify(torn).slice(0, 40)
+  writeFileSync(box.path, `${box.text}\n${JSON.stringify(complete)}\n${half}`)
+
+  const [plan] = await report(box)
+  expect(
+    plan.payload.reports.flatMap((one) =>
+      one.turns.map((turn) => turn.messageId),
+    ),
+  ).toEqual(['later_1'])
+  await acknowledge(box.stateDir, [plan])
+
+  // The writer finishes the line it was in the middle of.
+  writeFileSync(
+    box.path,
+    `${box.text}\n${JSON.stringify(complete)}\n${JSON.stringify(torn)}`,
+  )
+
+  const [after] = await report(box)
+  expect(
+    after.payload.reports.flatMap((one) =>
+      one.turns.map((turn) => turn.messageId),
+    ),
+  ).toEqual(['later_2'])
+})
+
+test('a file replaced by a different one of the same length is read from the top', async () => {
+  // The offset is only meaningful in the file it was taken from. A rotated or
+  // forked transcript of the same size would otherwise be resumed mid-file,
+  // and everything before that point skipped for good.
+  const box = await machine()
+  await acknowledge(box.stateDir, await report(box))
+
+  const lines = box.text.split('\n').filter(Boolean)
+  // Same byte count, different content: the last line moves to the front.
+  writeFileSync(box.path, [lines.at(-1), ...lines.slice(0, -1)].join('\n'))
+
+  // Every Turn in the new file, not whatever happened to sit past a stale
+  // offset — which is what resuming into a rotated file would report.
+  const whole = await report({
+    ...box,
+    stateDir: mkdtempSync(join(tmpdir(), 'sessclone-state-')),
+  })
+  const expected = whole[0].payload.reports.flatMap((one) =>
+    one.turns.map((turn) => turn.messageId),
+  )
+
+  const [plan] = await report(box)
+  expect(
+    plan.payload.reports.flatMap((one) =>
+      one.turns.map((turn) => turn.messageId),
+    ),
+  ).toEqual(expected)
 })

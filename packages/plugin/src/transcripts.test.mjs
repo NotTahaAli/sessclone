@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
 import { expect, test } from 'vitest'
 
@@ -183,6 +183,7 @@ test('each Agent Run is reported under its own id, against its parent Session', 
     sessionId: SESSION,
     cwd: '/home/user/sessclone',
     environment: { CLAUDE_CONFIG_DIR: config },
+    stateDir: mkdtempSync(join(tmpdir(), 'sessclone-state-')),
   })
 
   // Every report is this Session's; the runs are told apart by `agentId`, and
@@ -219,4 +220,52 @@ test('the config directory follows CLAUDE_CONFIG_DIR, then HOME', () => {
   expect(configDirectory({ CLAUDE_CONFIG_DIR: '  ', HOME: '/home/dev' })).toBe(
     '/home/dev/.claude',
   )
+})
+
+test('a sidecar that states a depth badly states none', async () => {
+  // `spawnDepth` is validated as a non-negative integer at the route, so a
+  // sidecar carrying `"1"` or `1.5` would 400 the whole payload — every Turn
+  // in it, on every Stop, until somebody edited a file they never wrote.
+  const depths = await Promise.all(
+    [{ spawnDepth: '1' }, { spawnDepth: 1.5 }, { spawnDepth: -1 }, {}].map(
+      async (meta) => {
+        const { config, main } = await layout({
+          runs: [
+            { name: 'agent-run.jsonl', agentId: 'a4a571530bd42856c', meta },
+          ],
+        })
+
+        const found = await sessionTranscripts({
+          transcriptPath: main,
+          sessionId: SESSION,
+          environment: { CLAUDE_CONFIG_DIR: config },
+        })
+
+        return found.find((file) => file.agentRun)?.spawnDepth
+      },
+    ),
+  )
+
+  expect(depths).toEqual([null, null, null, null])
+})
+
+test('the directory the hook names is searched, whatever the config directory says', async () => {
+  // A Member whose `CLAUDE_CONFIG_DIR` this process does not know about. The
+  // hook names one real path, and that is enough for the Session and for the
+  // runs beside it — the search is a way to find more files, never the only
+  // way to find any.
+  const { main } = await layout({
+    runs: [{ name: 'agent-run.jsonl', agentId: 'a4a571530bd42856c' }],
+  })
+
+  const found = await sessionTranscripts({
+    transcriptPath: main,
+    sessionId: SESSION,
+    environment: { CLAUDE_CONFIG_DIR: '/nowhere/at/all' },
+  })
+
+  expect(found.map((file) => file.path)).toEqual([
+    main,
+    join(dirname(main), SESSION, 'subagents', 'agent-a4a571530bd42856c.jsonl'),
+  ])
 })

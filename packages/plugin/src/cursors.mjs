@@ -12,7 +12,15 @@
 // cursor" and a full re-report, and never to a Turn that is not sent.
 
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import {
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  stat,
+  unlink,
+  writeFile,
+} from 'node:fs/promises'
 import { join } from 'node:path'
 
 /**
@@ -58,6 +66,47 @@ export const readCursor = async (stateDir, transcriptPath) => {
 }
 
 /**
+ * How long a cursor outlives the transcript it points into.
+ *
+ * Claude Code deletes a transcript once it is older than its own retention
+ * window, which defaults to 30 days — and a cursor is named by a hash of the
+ * path, so nothing here can ask whether that file still exists. Without this
+ * the directory grows by one file per Session *and per Agent Run* forever
+ * (finding 06 measured 149 runs in one project). A cursor this old is also
+ * useless: the transcript it belongs to is gone.
+ */
+const CURSOR_TTL_MS = 45 * 24 * 60 * 60 * 1000
+
+/** One in this many writes pays for the sweep, which is a directory listing. */
+const SWEEP_ODDS = 50
+
+/**
+ * Drops cursors, and abandoned temporary files, older than the window above.
+ *
+ * Occasional rather than every write: the cost is a `readdir` plus a `stat`
+ * per entry, and nothing here is urgent — the directory has to be a year of
+ * Sessions before it is even large.
+ *
+ * @param {string} directory
+ */
+const sweep = async (directory) => {
+  if (Math.random() * SWEEP_ODDS >= 1) return
+  const oldest = Date.now() - CURSOR_TTL_MS
+  try {
+    const names = await readdir(directory)
+    await Promise.all(
+      names.map(async (name) => {
+        const path = join(directory, name)
+        const { mtimeMs } = await stat(path)
+        if (mtimeMs < oldest) await unlink(path)
+      }),
+    )
+  } catch {
+    // A cursor that outlives its transcript costs a few hundred bytes of disk.
+  }
+}
+
+/**
  * Records what the deployment acknowledged. Resolves either way.
  *
  * Written to a temporary file and renamed, which is atomic within a directory:
@@ -73,6 +122,7 @@ export const writeCursor = async (stateDir, transcriptPath, cursor) => {
   const path = cursorPath(stateDir, transcriptPath)
   try {
     await mkdir(join(stateDir, 'cursors'), { recursive: true })
+    await sweep(join(stateDir, 'cursors'))
     const temporary = `${path}.${process.pid}.tmp`
     await writeFile(temporary, JSON.stringify(cursor), { mode: 0o600 })
     await rename(temporary, path)
