@@ -456,7 +456,17 @@ export const buildPayloads = async ({
  * @param {string} input.sessionId
  * @param {string | undefined} input.cwd
  * @param {Record<string, string | undefined>} input.environment
+ * `shouldStop` is the caller's deadline, checked before each request rather
+ * than during one. A hook is killed at the timeout `hooks.json` gives it, and
+ * a session whose whole history is still unflushed is several requests of
+ * several seconds each — so without a deadline the last one is cut off mid-
+ * flight and Claude Code reports the hook as cancelled, which is what a Member
+ * sees. Stopping early costs nothing: the cursors for what was not sent stay
+ * where they are, and the next `Stop` or `SessionStart` sweep sends the rest.
+ * A stopped flush is a partial flush, so it writes no marker either.
+ *
  * @param {Partial<import('@sessclone/shared').IngestPayload>} [input.attach]
+ * @param {() => boolean} [input.shouldStop]
  */
 export const flush = async ({
   configuration,
@@ -465,6 +475,7 @@ export const flush = async ({
   cwd,
   environment,
   attach = {},
+  shouldStop = () => false,
 }) => {
   const plans = await buildPayloads({
     transcriptPath,
@@ -478,7 +489,15 @@ export const flush = async ({
   const acknowledged = new Map()
   const refused = new Set()
 
+  /** Whether the deadline ended the flush with requests still unsent. */
+  let stopped = false
+
   for (const { payload, advance } of plans) {
+    if (shouldStop()) {
+      stopped = true
+      break
+    }
+
     // eslint-disable-next-line no-await-in-loop -- one request at a time; firing them together is how a Collector takes a deployment down
     const { ok } = await send({ configuration, payload })
     for (const { path, cursor } of advance) {
@@ -505,7 +524,7 @@ export const flush = async ({
   // use `send`, because their cursor held on a failure and the next `Stop` or
   // the sweep re-reads them, so queueing them too would only duplicate what the
   // cursor already recovers.
-  if (Object.keys(attach).length > 0 && refused.size === 0) {
+  if (Object.keys(attach).length > 0 && refused.size === 0 && !stopped) {
     await deliver({
       configuration,
       payload: {

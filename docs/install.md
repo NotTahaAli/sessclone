@@ -1,8 +1,8 @@
 # Installing the Collector
 
-The Collector is a Claude Code plugin. Installing it is two commands, one
-environment variable and a restart — and the restart is the step people skip,
-so it has its own section below.
+The Collector is a Claude Code plugin. Installing it is two commands, two
+answers and a restart — and the restart is the step people skip, so it has its
+own section below.
 
 It reports **usage only**: token counts, models, timings, and the Session,
 Project and Device they belong to — plus, per Turn, the working directory it
@@ -16,7 +16,7 @@ run as `node <file>.mjs` with no build step and import TypeScript directly.
 On an older Node the plugin installs, starts cleanly and reports nothing; the
 session-start check names the problem.
 
-## On a machine you have a shell on
+## Installing it
 
 ```
 /plugin marketplace add NotTahaAli/sessclone
@@ -29,18 +29,39 @@ and nothing to clone. `sessclone@sessclone` is the plugin named `sessclone`
 from the marketplace named `sessclone`; the bare `/plugin install sessclone`
 works too while no other marketplace you have added offers that name.
 
-Then, in the shell Claude Code runs in:
+Enabling the plugin prompts for two values, and answering them is the whole
+setup:
+
+- **Deployment URL** — where this machine reports to, the same address you
+  read this dashboard at.
+- **API key** — issued in the dashboard under **Keys**, and shown once. It is
+  stored as a hash, so nobody, including the deployment, can show it to you
+  again.
+
+Claude Code keeps the key in the OS keychain rather than in a file, and hands
+both to the hooks on every session afterwards. Nothing to export, nothing to
+re-do per shell, and nothing plain-text on disk. To change an answer later,
+`/plugin`, disable `sessclone` and enable it again.
+
+This is also the only route that works in the desktop app, which runs Claude
+Code with the environment a GUI application is given rather than the one your
+`~/.zshrc` builds.
+
+`docs/configuration.md` has the full list of settings, including where the
+cursor and the retry queue are kept and how the Device key is derived.
+
+## Without answering the prompt
+
+Both values can come from the environment instead, and an exported one **wins
+over the answer given at the prompt** — which is how one terminal is pointed
+at a second deployment while the machine's own answers stay as they are:
 
 ```bash
 export SESSCLONE_API_KEY=sk_your_key_here
 export SESSCLONE_URL=https://sessclone.example.com
 ```
 
-The key is issued in the dashboard under **Keys**, and is shown once — it is
-stored as a hash, so nobody, including the deployment, can show it to you
-again.
-
-Put both in the profile your shell actually loads (`~/.zshrc`, `~/.bashrc`,
+Put them in the profile your shell actually loads (`~/.zshrc`, `~/.bashrc`,
 your shell's env file) **and** in the terminal you are in, or open a new one:
 editing a profile does not change the shell that is already running, and
 restarting Claude Code inside that shell inherits the old environment. Check
@@ -49,14 +70,33 @@ They go in your shell's environment, not in a file in the repository: the
 Collector reads the environment only and never loads a `.env`, so a key
 committed to one is a leaked key that does not even work.
 
-**`SESSCLONE_URL` is not checked for being present.** Unset, it falls back to
-`http://127.0.0.1:3000` and the session start says nothing — so a Member who
-sets only the key gets a clean start and reports into their own laptop
-forever, which looks exactly like the key-never-used state below. Setting it
-is how that is avoided.
+**`SESSCLONE_URL` is not checked for being present.** With neither the answer
+nor the variable it falls back to `http://127.0.0.1:3000` and the session start
+says nothing — so a machine that has only a key reports into its own laptop
+forever, which looks exactly like the key-never-used state above.
 
-`docs/configuration.md` has the full list, including where the cursor and the
-retry queue are kept and how the Device key is derived.
+Claude Code's own settings file takes the same two values, applied to every
+session and to the subprocesses a session starts — which is what the hooks
+are:
+
+```json
+{
+  "env": {
+    "SESSCLONE_API_KEY": "sk_your_key_here",
+    "SESSCLONE_URL": "https://sessclone.example.com"
+  }
+}
+```
+
+That goes in `~/.claude/settings.json` (`%USERPROFILE%\.claude\settings.json`
+on Windows). Create it if it is not there; if it is, add the `env` key beside
+whatever it already holds. It is strict JSON, so a trailing comma or a `//`
+comment is a syntax error and Claude Code reports the file as a Settings Error
+at the next start. The key is then in a plain file, which the keychain route
+avoids — that is the trade.
+
+Either way, restart Claude Code afterwards: the hooks take effect on the next
+start.
 
 ## Restart Claude Code
 
@@ -129,42 +169,6 @@ with an unknown or revoked key writes nothing and is answered the same way as
 one with no key at all, which is deliberate — ingest is not an oracle for which
 keys exist. If the key is the suspect, issue a new one.
 
-## In the desktop app, or anywhere you would rather not export anything
-
-The plugin asks for both values itself. `/plugin` → enable `sessclone`, and
-Claude Code prompts for the deployment URL and the API key, which it keeps in
-the OS keychain rather than in a file and hands to the hooks on every session.
-This is the whole setup on a machine where there is nothing to export in — the
-desktop app runs Claude Code with the environment a GUI application is given,
-not the one your `~/.zshrc` builds — and it is the better route anywhere:
-nothing plain-text, nothing to re-do per shell.
-
-An exported `SESSCLONE_API_KEY` or `SESSCLONE_URL` wins over the answer given
-there, so a terminal pointed at a second deployment stays pointed at it.
-
-If you would rather not answer a prompt, Claude Code's own settings file takes
-the same two values, applied to every session and to the subprocesses a session
-starts — which is what the hooks are:
-
-```json
-{
-  "env": {
-    "SESSCLONE_API_KEY": "sk_your_key_here",
-    "SESSCLONE_URL": "https://sessclone.example.com"
-  }
-}
-```
-
-That goes in `~/.claude/settings.json` (`%USERPROFILE%\.claude\settings.json`
-on Windows). Create it if it is not there; if it is, add the `env` key beside
-whatever it already holds. It is strict JSON, so a trailing comma or a `//`
-comment is a syntax error and Claude Code reports the file as a Settings Error
-at the next start. The key is then in a plain file, which the keychain route
-avoids — that is the trade.
-
-Either way, restart Claude Code afterwards: the hooks take effect on the next
-start.
-
 ## In an environment with no shell you can reach
 
 Claude Code Cloud and Claude Projects have no persistent shell for a Member to
@@ -221,7 +225,9 @@ the same clone, so nothing in it names this repository. Your team's
 differs, and nothing needs editing inside the vendored plugin — which is the
 point of reading the configuration from the environment.
 
-An install that copies **only** the plugin directory does not work: the hooks
-import the parser and the identity rules from `packages/shared` by relative
-path, and without that directory beside them they report nothing, silently.
-Install from a clone or a fork of the whole repository.
+An install copies **only** `packages/plugin`, with no `node_modules` beside
+it. Everything the hooks load at runtime lives inside that directory for that
+reason, and `packages/plugin/src/installable.test.mjs` fails on any import
+that leaves it — so a module moved out of the plugin, or a dependency added to
+one of its hooks, is caught here rather than by a fork that silently collects
+nothing.

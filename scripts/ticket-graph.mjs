@@ -114,6 +114,13 @@ const PHASES = [
     pos: [1190, 341],
     range: [74, 76],
   },
+  {
+    id: 'drilldown',
+    label: 'Session Views',
+    type: 'frontend',
+    pos: [1190, 800],
+    range: [85, 88],
+  },
 ]
 
 const phaseOf = (n) =>
