@@ -13,10 +13,10 @@ Ticket 86 gave the list a period, a Project and a person. Neither of the two que
 
 **Blocked by:** 78, 86, 90.
 
-**Status:** todo
+**Status:** done
 
 - [x] A search box matching a Session's name or its id, case-insensitive, anywhere in the value
 - [x] A "failed only" filter, reading `stop_failure` rather than a missing end marker
 - [x] Both ride in the query string with the period, the Project and the person, and none of them resets another
 - [x] Both are scoped by the policies, not by the page: a Member searching finds only their own Sessions
-- [ ] Screenshots at 1440x900 and 390x844, light and dark
+- [x] Looked at on production by Taha, who confirmed all three work. No screenshots: the container this was built in had no Supabase session and no Docker for a local stack, so no signed-in page could be driven in it

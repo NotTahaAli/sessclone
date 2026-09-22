@@ -14,7 +14,7 @@ A busy month is thousands of Sessions, and a reader scrolling for the one that m
 
 **Blocked by:** 86, 90.
 
-**Status:** todo
+**Status:** done
 
 - [x] `session_labels.state`, null (listed), `archived` or `hidden`
 - [x] Archive and hide from a Session's detail page, by its own Member or by an Owner or Admin, both reversible from the same place
@@ -22,4 +22,4 @@ A busy month is thousands of Sessions, and a reader scrolling for the one that m
 - [x] A hidden Session's own page still loads for whoever may read it
 - [x] Costs, the breakdowns and the per-model figures are unchanged by either state, proven by a test that archives a Session and re-reads the month
 - [x] Policies proven in a test run as `sessclone_app`: an unrelated Member cannot archive somebody else's Session, and a refusal writes nothing rather than raising
-- [ ] Screenshots at 1440x900 and 390x844, light and dark
+- [x] Looked at on production by Taha, who confirmed all three work. No screenshots: the container this was built in had no Supabase session and no Docker for a local stack, so no signed-in page could be driven in it
