@@ -42,6 +42,13 @@ per run, the database is emptied between tests so order does not matter, and
 `seedFixture()` creates two Orgs with a person in every Role — including a
 Manager with a Scope and one without.
 
+### Installing the Collector
+
+`docs/install.md` is the install path a Member follows: the two commands, the
+key, the restart that hooks only take effect after, and what the first sweep
+backfills. It also covers the two paths that are not a shell on a laptop — an
+environment configured from claude.ai, and a self-hoster's own fork.
+
 ### Configuration
 
 `docs/configuration.md` names every environment variable the server and the

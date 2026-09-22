@@ -243,6 +243,10 @@ and says nothing, rather than printing a stack trace on every turn into the
 transcript this product then uploads. The session-start check names the
 problem instead, beside the variables below.
 
+`docs/install.md` is the install path itself — the two commands, the restart,
+the backfill, and the environments with no shell to export a variable in. This
+section is the variables it sets.
+
 The hooks import those modules by relative path, which reaches outside the
 plugin directory into the same clone. That is how the marketplace entry
 installs it (`.claude-plugin/marketplace.json` points at `./packages/plugin`
