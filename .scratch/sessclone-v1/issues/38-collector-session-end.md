@@ -25,7 +25,7 @@ local marker beside the cursor would be written on the machine that ran the
 session and lost with it — which is the exact case a sweep exists for. Finding
 05 measured that a container reclaimed by `SIGKILL` fires no `SessionEnd` at
 all (and `SIGTERM` fires it ~180 ms later, flushing nothing extra, because the
-in-flight turn was never written to disk). So the record *never being written*
+in-flight turn was never written to disk). So the record _never being written_
 is itself the signal of an abnormal end, and that signal has to outlive the
 container to be read. The cost: one small row per clean session end; and, when
 a container dies, a Session that is never marked complete and so is re-read by

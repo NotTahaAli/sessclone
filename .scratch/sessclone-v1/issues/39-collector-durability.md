@@ -24,6 +24,7 @@ is nothing that re-reads it — the queue is its only durability. Same for a
 `session_end` marker when it rides a request of its own.
 
 Two requirements follow:
+
 - The queue must hold whole payloads (failures and the session-end marker
   included), not just transcript positions.
 - A queued failure or marker must be re-sent **byte-identical**, `occurredAt`
