@@ -169,41 +169,73 @@ with an unknown or revoked key writes nothing and is answered the same way as
 one with no key at all, which is deliberate — ingest is not an oracle for which
 keys exist. If the key is the suspect, issue a new one.
 
-## In an environment with no shell you can reach
+## In a Claude Code cloud environment
 
 Claude Code Cloud and Claude Projects have no persistent shell for a Member to
 export a variable in, and the container is replaced under you. Both are
 configured **per environment, from claude.ai, before a session starts** rather
-than from inside one (finding 74):
+than from inside one (finding 74). Open the environment for editing at
+claude.ai/code.
 
-1. **The plugin** goes in the environment's **init script**, which runs on
-   every container boot:
+1. **Setup script.** Paste these two lines. The key on the second line is a
+   placeholder and stays exactly as written; step 2 is what puts the real key
+   on the wire.
 
    ```bash
    claude plugin marketplace add NotTahaAli/sessclone
-   claude plugin install sessclone@sessclone
+   claude plugin install sessclone --config url=https://sessclone.vercel.app --config api_key=sk_0000000000000000000000000000000000000000000
    ```
 
-2. **The key and the URL** go in the environment's **settings**, as
-   `SESSCLONE_API_KEY` and `SESSCLONE_URL`. A variable set inside a session
-   dies with the container that set it.
+2. **API credential.** Under **API credentials**, select **Add credential**
+   ([Claude's docs](https://code.claude.com/docs/en/cloud-environments#add-api-credentials)):
+
+   - **Name**: `SessClone`
+   - **Credential type**: Bearer
+   - **Allowed websites**: `sessclone.vercel.app`
+   - **Custom headers**: name `Authorization`, prefix `Bearer`, and your key
+     from **Keys** as the value
+
+Anthropic's agent proxy replaces the `Authorization` header on every request to
+that host after it leaves the container. The placeholder is what the Collector
+sends; the proxy swaps in the real key. So the key never reaches the
+container, the session, Claude, or the setup script, which anyone using the
+environment can read. The placeholder has the shape of a real key (`sk_` and 43
+more, 46 in all) so the session-start check passes; it is not a key and matches
+nothing on the deployment.
+
+A self-hosted deployment uses its own `NEXT_PUBLIC_APP_URL` in the command and
+its own host in **Allowed websites**.
+
+The Collector reaches the proxy on its own: a hook that finds `HTTPS_PROXY`
+set restarts itself with `NODE_USE_ENV_PROXY=1` (`docs/configuration.md`). If
+the credential is missing or wrong, the deployment answers 401 and the next
+session start prints a line saying the key was refused.
+
+Claude offers API credentials on Pro and Max plans only, not yet on Team or
+Enterprise, and not on a self-hosted environment.
 
 Ticket 32's "one setup step per machine" reads as "one setup step per
 environment" here, performed in a browser.
 
-Two behaviours are particular to these environments:
+### What differs in a cloud environment
 
+- **No Session ever records an end.** Claude Code does not run the
+  `SessionEnd` hook when a cloud container is archived, reclaimed or stopped,
+  so the dashboard shows a cloud Session's last Turn instead of an end time.
+  Nothing is lost by it: the Collector reports at every turn boundary, not at
+  session end. The one loss is a turn still in flight when the container is
+  killed, which cloud cannot recover because the transcript dies with the
+  container (finding 69).
 - **Every container collapses into one Device.** The Device key is derived from
   the account (`cloud:<account uuid>`), which outlives the container, rather
   than from anything the container mints — so burning through containers does
   not litter the Devices list. The cost is granularity: one account running
   several environments is one Device. Set `SESSCLONE_DEVICE` in the
-  environment's settings to count them apart.
+  environment's variables to count them apart.
 - **The state directory is inside the container.** The cursor and the retry
-  queue do not survive a reclaim, so a Turn queued by a failed report in a
-  container that is then reclaimed is re-read from its transcript by the next
-  sweep — but a queued session-end marker is not. Usage is still counted from
-  the Turns themselves.
+  queue do not survive a reclaim. A report that failed is retried at a later
+  turn boundary in the same container; a container reclaimed before then
+  takes the retry with it.
 
 ## A self-hoster's fork
 

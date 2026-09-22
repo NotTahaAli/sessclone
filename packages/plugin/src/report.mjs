@@ -29,6 +29,7 @@ import { archiveSession } from './archive.mjs'
 import { NO_DEADLINE, expired, requestSignal } from './deadline.mjs'
 import { readCursor, writeCursor } from './cursors.mjs'
 import { drainQueue, enqueue } from './queue.mjs'
+import { recordAnswer } from './last-answer.mjs'
 import { allSessions, sessionTranscripts } from './transcripts.mjs'
 import { parseTranscript } from './shared/turns.ts'
 import { deviceKey, projectKey } from './shared/identity.ts'
@@ -723,8 +724,13 @@ export const send = async ({
       body: JSON.stringify(payload),
       signal: requestSignal(REQUEST_TIMEOUT_MS, deadline),
     })
+    await recordAnswer(configuration.stateDir, answer.status)
     return { ok: answer.ok, status: answer.status }
-  } catch {
+  } catch (error) {
+    // The hook's own deadline is not the deployment's answer, and recording it
+    // would overwrite a real refusal with "unreachable".
+    const aborted = ['AbortError', 'TimeoutError'].includes(error?.name)
+    if (!aborted) await recordAnswer(configuration.stateDir, null)
     // A deployment that is down, a laptop on a train. Ticket 39 is the queue
     // that makes this recoverable; until then the next Stop re-reports the
     // whole transcript, which ingest absorbs.

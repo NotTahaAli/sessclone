@@ -59,6 +59,15 @@ export type SessionRow = {
    * Turn's time would be inventing an ending.
    */
   endedAt: string | null
+  /**
+   * Whether the Session ran on a cloud Device, whose key starts `cloud:`
+   * (`deviceKey` in `packages/shared`). Claude Code never runs `SessionEnd`
+   * in a cloud container, archived or reclaimed alike (Taha, 2026-09-22), so
+   * a missing end there is the normal state rather than a warning. A cloud
+   * environment that sets `SESSCLONE_DEVICE` loses the prefix and reads as a
+   * machine: the key is all the server knows about where a Turn ran.
+   */
+  cloud: boolean
   turns: number
   /** Distinct `agent_id`s under this Session: its subagent runs. */
   agentRuns: number
@@ -78,6 +87,7 @@ type RawSession = {
   label: string | null
   state: SessionState | null
   device_label: string | null
+  cloud: boolean
   started_at: Date
   last_turn_at: Date
   turns: string
@@ -109,6 +119,7 @@ const AGGREGATES = (tx: TransactionSql) => tx`
   max(naming.label) as label,
   max(naming.state) as state,
   max(coalesce(device.nickname, device.key)) as device_label,
+  coalesce(bool_or(device.key like 'cloud:%'), false) as cloud,
   min(turn.occurred_at) as started_at,
   max(turn.occurred_at) as last_turn_at,
   count(*) as turns,
@@ -300,6 +311,7 @@ const asSession = (row: RawSession): SessionRow => ({
   label: row.label,
   state: row.state,
   deviceLabel: row.device_label,
+  cloud: row.cloud,
   startedAt: row.started_at.toISOString(),
   lastTurnAt: row.last_turn_at.toISOString(),
   endedAt: null,

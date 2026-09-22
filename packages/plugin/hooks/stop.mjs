@@ -22,6 +22,10 @@
 import { readConfiguration } from '../src/configuration.mjs'
 import { debugFailure } from '../src/debug.mjs'
 import { deadlineIn } from '../src/deadline.mjs'
+import { throughProxy } from '../src/proxy.mjs'
+
+// Ticket 98: before anything is read or sent, so the child gets stdin whole.
+throughProxy()
 
 /**
  * How long this hook may spend flushing, in milliseconds.

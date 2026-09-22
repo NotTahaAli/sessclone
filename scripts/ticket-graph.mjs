@@ -94,7 +94,7 @@ const PHASES = [
     type: 'external',
     pos: [1190, 122],
     range: [66, 71],
-    also: [79],
+    also: [79, 96, 98],
   },
   {
     id: 'archival',
@@ -123,6 +123,7 @@ const PHASES = [
     // friendly names for a Project, a Session and a person, and the archiving,
     // hiding and searching that make a month of Sessions navigable.
     range: [85, 94],
+    also: [95],
   },
 ]
 

@@ -121,6 +121,10 @@ function Revealed({ apiKey, appUrl }: { apiKey: string; appUrl: string }) {
       <p className="text-text text-sm font-medium">
         Copy this key now. It is not stored and cannot be shown again.
       </p>
+      <p className="text-text-secondary mt-1 text-sm">
+        For a cloud environment, this key is the API credential&apos;s value:
+        see the Cloud environment tab below.
+      </p>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <code className="border-rule bg-surface text-text rounded border px-3 py-2 font-mono text-sm break-all">
           {apiKey}

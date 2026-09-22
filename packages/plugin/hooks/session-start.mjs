@@ -30,6 +30,10 @@
 
 import { ConfigurationError, readConfiguration } from '../src/configuration.mjs'
 import { debugFailure } from '../src/debug.mjs'
+import { throughProxy } from '../src/proxy.mjs'
+
+// Ticket 98: before anything is read or sent, so the child gets stdin whole.
+throughProxy()
 
 let configuration
 try {
@@ -52,7 +56,17 @@ try {
 // and a hook's stderr lands in the transcript this product uploads.
 try {
   const { sweep } = await import('../src/report.mjs')
+  const swept = new Date()
   await sweep({ configuration, environment: process.env })
+
+  // Ticket 98: a refused key is otherwise silent forever. Exit 2 shows this
+  // line to the person and blocks nothing, as the configuration check does.
+  const { readAnswer, refusalNotice } = await import('../src/last-answer.mjs')
+  const notice = refusalNotice(await readAnswer(configuration.stateDir), swept)
+  if (notice) {
+    process.stderr.write(`${notice}\n`)
+    process.exitCode = 2
+  }
 } catch (error) {
   // Deliberately silent unless somebody is looking: see `src/debug.mjs`.
   debugFailure('the SessionStart sweep', error)

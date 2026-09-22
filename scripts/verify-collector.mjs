@@ -17,12 +17,16 @@
 // `scripts/` directory and no `node_modules` beside it (PR #12), so there is no
 // copy of this file on an installed machine to run instead.
 
+import { throughProxy } from '../packages/plugin/src/proxy.mjs'
 import {
   format,
   formatCount,
   collect,
   handCount,
 } from '../packages/plugin/src/verify.mjs'
+
+// Ticket 98: the probe takes the route the hooks take, proxy included.
+throughProxy()
 
 const argv = process.argv.slice(2)
 const flag = (name) => argv.includes(`--${name}`)
