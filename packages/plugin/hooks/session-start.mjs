@@ -29,6 +29,7 @@
 // of their own.
 
 import { ConfigurationError, readConfiguration } from '../src/configuration.mjs'
+import { debugFailure } from '../src/debug.mjs'
 
 let configuration
 try {
@@ -52,6 +53,7 @@ try {
 try {
   const { sweep } = await import('../src/report.mjs')
   await sweep({ configuration, environment: process.env })
-} catch {
-  // Deliberately silent: see above.
+} catch (error) {
+  // Deliberately silent unless somebody is looking: see `src/debug.mjs`.
+  debugFailure('the SessionStart sweep', error)
 }

@@ -146,6 +146,32 @@ const readUrl = (raw) => {
 }
 
 /**
+ * A value from the environment, taking the plugin's own configuration where
+ * the variable is unset.
+ *
+ * Claude Code prompts for what `.claude-plugin/plugin.json` declares under
+ * `userConfig` when the plugin is enabled, and hands each answer to a hook as
+ * `CLAUDE_PLUGIN_OPTION_<KEY>`. That is the only setup route on a machine
+ * where nobody can export anything — the desktop app runs with the
+ * environment a GUI application is given, not the one a shell profile builds —
+ * and it is the better one anywhere: an answer marked `sensitive` is kept in
+ * the OS keychain rather than in a file, and nobody edits JSON by hand.
+ *
+ * The variable wins where both are set, because a person exporting one is
+ * doing it deliberately and usually to point one shell at a second deployment.
+ * The key's casing is not documented as either, so both spellings are read.
+ *
+ * @param {Record<string, string | undefined>} env
+ * @param {string} variable The `SESSCLONE_` variable.
+ * @param {string} option The `userConfig` key, as `plugin.json` spells it.
+ */
+const setting = (env, variable, option) =>
+  env[variable]?.trim() ||
+  env[`CLAUDE_PLUGIN_OPTION_${option.toUpperCase()}`]?.trim() ||
+  env[`CLAUDE_PLUGIN_OPTION_${option}`]?.trim() ||
+  undefined
+
+/**
  * @typedef {object} CollectorConfiguration
  * @property {string} apiKey The Member's key. Never logged, never reported.
  * @property {string} url Base URL of the deployment, no trailing slash.
@@ -176,21 +202,21 @@ export const readConfiguration = (
   /** @type {string[]} */
   const problems = []
 
-  const apiKey = env.SESSCLONE_API_KEY?.trim()
+  const apiKey = setting(env, 'SESSCLONE_API_KEY', 'api_key')
   if (!apiKey) {
     problems.push(
-      'SESSCLONE_API_KEY is not set. Create a key in the dashboard under Keys, then either export it in the shell Claude Code runs in, or — on a machine with no shell to export it in, such as the desktop app — put it in the "env" block of ~/.claude/settings.json, which applies to every session and the hooks it starts. See docs/install.md.',
+      "No API key. Create one in the dashboard under Keys, then give it to the Collector either by answering the plugin's own setup prompt (`/plugin` — the key is kept in the keychain) or by exporting SESSCLONE_API_KEY in the shell Claude Code runs in. See docs/install.md.",
     )
   } else if (!KEY_PATTERN.test(apiKey)) {
     // The length and the prefix, and never the key itself: those two are
     // enough to tell a truncated paste from a wrapped one, and neither is
     // secret.
     problems.push(
-      `SESSCLONE_API_KEY is not a sessclone key: it starts "${apiKey.slice(0, 3)}" and is ${apiKey.length} characters, where a key starts "sk_" and is 46. Copy it again from the dashboard.`,
+      `That is not a sessclone key: it starts "${apiKey.slice(0, 3)}" and is ${apiKey.length} characters, where a key starts "sk_" and is 46. Copy it again from the dashboard.`,
     )
   }
 
-  const url = readUrl(env.SESSCLONE_URL)
+  const url = readUrl(setting(env, 'SESSCLONE_URL', 'url'))
   if ('problem' in url) problems.push(url.problem)
 
   const node = nodeProblem(process.versions.node)

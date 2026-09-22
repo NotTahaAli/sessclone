@@ -29,12 +29,9 @@ import { archiveSession } from './archive.mjs'
 import { readCursor, writeCursor } from './cursors.mjs'
 import { drainQueue, enqueue } from './queue.mjs'
 import { allSessions, sessionTranscripts } from './transcripts.mjs'
-import { parseTranscript } from '../../shared/src/turns.ts'
-import { deviceKey, projectKey } from '../../shared/src/identity.ts'
-import {
-  REPORTS_PER_PAYLOAD,
-  TURNS_PER_REPORT,
-} from '../../shared/src/limits.ts'
+import { parseTranscript } from './shared/turns.ts'
+import { deviceKey, projectKey } from './shared/identity.ts'
+import { REPORTS_PER_PAYLOAD, TURNS_PER_REPORT } from './shared/limits.ts'
 
 const run = promisify(execFile)
 

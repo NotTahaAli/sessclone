@@ -331,12 +331,13 @@ inside this repository), but an install that copies only the plugin directory
 has no `packages/shared` to reach and reports nothing — silently, for the same
 reason as above.
 
-| Variable              | Required       | Default                 | What it is                                                                          |
-| --------------------- | -------------- | ----------------------- | ----------------------------------------------------------------------------------- |
-| `SESSCLONE_URL`       | in practice \* | `http://127.0.0.1:3000` | Base URL of the deployment to report to. Matches the server's `NEXT_PUBLIC_APP_URL` |
-| `SESSCLONE_API_KEY`   | yes            | —                       | The Member's API key, issued in the dashboard. Identifies the Member and the Org    |
-| `SESSCLONE_STATE_DIR` | no             | platform-dependent \*\* | Where the cursor and the retry queue are kept                                       |
-| `SESSCLONE_DEVICE`    | no             | derived \*\*\*          | Pins this environment's Device key instead of deriving one                          |
+| Variable              | Required       | Default                 | What it is                                                                           |
+| --------------------- | -------------- | ----------------------- | ------------------------------------------------------------------------------------ |
+| `SESSCLONE_URL`       | in practice \* | `http://127.0.0.1:3000` | Base URL of the deployment to report to. Matches the server's `NEXT_PUBLIC_APP_URL`  |
+| `SESSCLONE_API_KEY`   | yes            | —                       | The Member's API key, issued in the dashboard. Identifies the Member and the Org     |
+| `SESSCLONE_STATE_DIR` | no             | platform-dependent \*\* | Where the cursor and the retry queue are kept                                        |
+| `SESSCLONE_DEVICE`    | no             | derived \*\*\*          | Pins this environment's Device key instead of deriving one                           |
+| `SESSCLONE_DEBUG`     | no             | —                       | Set to anything to print a hook's swallowed failure to stderr. Off, a hook is silent |
 
 The Collector keeps one cursor per transcript under
 `<state dir>/cursors/<hash>.json`: per file rather than per Session, because a

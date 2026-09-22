@@ -92,9 +92,10 @@ they actually landed, the Device key, and the transcripts on disk:
 node scripts/verify-collector.mjs
 ```
 
-Run it from a clone, or from the plugin's own checkout: the plugin installs the
-whole repository, so `<config dir>/plugins/**/sessclone*/scripts` holds a copy
-with the modules it imports beside it. It prints a key's first three characters
+Run it from a clone of this repository. An installed plugin is not one: Claude
+Code copies `packages/plugin` alone into
+`<config dir>/plugins/cache/<marketplace>/<plugin>/<version>/`, and this script
+is not in it. It prints a key's first three characters
 and its length and never more, so the output is safe to paste to whoever is
 helping. `--reconcile --day <date> --tz <zone>` counts a day of Turns off the
 transcripts, for checking a dashboard total by hand.
@@ -128,16 +129,22 @@ with an unknown or revoked key writes nothing and is answered the same way as
 one with no key at all, which is deliberate — ingest is not an oracle for which
 keys exist. If the key is the suspect, issue a new one.
 
-## In the desktop app, where there is no shell to export in
+## In the desktop app, or anywhere you would rather not export anything
 
-The desktop app runs Claude Code with the environment it was launched with,
-which is the one macOS or Windows gives a GUI application — not the one your
-`~/.zshrc` builds. Exporting the two variables in a terminal therefore changes
-nothing for it, and there is no terminal inside the app to export them in.
+The plugin asks for both values itself. `/plugin` → enable `sessclone`, and
+Claude Code prompts for the deployment URL and the API key, which it keeps in
+the OS keychain rather than in a file and hands to the hooks on every session.
+This is the whole setup on a machine where there is nothing to export in — the
+desktop app runs Claude Code with the environment a GUI application is given,
+not the one your `~/.zshrc` builds — and it is the better route anywhere:
+nothing plain-text, nothing to re-do per shell.
 
-Claude Code's own settings file is the way in. An `env` block there is applied
-to every session **and to the subprocesses a session starts**, which is what
-the hooks are:
+An exported `SESSCLONE_API_KEY` or `SESSCLONE_URL` wins over the answer given
+there, so a terminal pointed at a second deployment stays pointed at it.
+
+If you would rather not answer a prompt, Claude Code's own settings file takes
+the same two values, applied to every session and to the subprocesses a session
+starts — which is what the hooks are:
 
 ```json
 {
@@ -148,30 +155,15 @@ the hooks are:
 }
 ```
 
-It goes in `~/.claude/settings.json` (`%USERPROFILE%\.claude\settings.json` on
-Windows), which is the file that applies to you in every project. Create it if
-it is not there; if it is, add the `env` key beside whatever it already holds
-rather than replacing the file. It is strict JSON, so a trailing comma or a
-`//` comment is a syntax error and Claude Code reports the file as a Settings
-Error at the next start.
+That goes in `~/.claude/settings.json` (`%USERPROFILE%\.claude\settings.json`
+on Windows). Create it if it is not there; if it is, add the `env` key beside
+whatever it already holds. It is strict JSON, so a trailing comma or a `//`
+comment is a syntax error and Claude Code reports the file as a Settings Error
+at the next start. The key is then in a plain file, which the keychain route
+avoids — that is the trade.
 
-The plugin itself installs the same way as anywhere else, with `/plugin` inside
-the app.
-
-Then restart the app — as with a shell, the hooks take effect on the next
+Either way, restart Claude Code afterwards: the hooks take effect on the next
 start.
-
-Two things worth knowing before choosing this over a shell export:
-
-- **The key is on disk in a plain file.** So is anything else in that settings
-  file; it is a per-user file with your user's permissions. A key in a shell
-  profile is on disk too, and both are readable by anything running as you.
-- **Set it in one place, not both.** Which of a shell export and an `env`
-  block wins is Claude Code's to decide and is not something this plugin can
-  promise; two different keys in the two places is a machine whose Turns land
-  under whichever one won that day. The check below prints the key's first
-  three characters and its length, which is enough to tell which one is in
-  force.
 
 ## In an environment with no shell you can reach
 
