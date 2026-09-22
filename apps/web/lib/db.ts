@@ -16,6 +16,34 @@ import postgres from 'postgres'
 
 let client: postgres.Sql | undefined
 
+/**
+ * The options every connection in this app is opened with.
+ *
+ * Both exist for one deployment shape — this app on a serverless host, reading
+ * Postgres through a transaction-mode pooler (Supabase's Supavisor on 6543,
+ * PgBouncer, or a managed equivalent). Neither costs anything on a long-lived
+ * server against a direct connection, which is why they are unconditional
+ * rather than a variable a self-hoster has to know to set.
+ *
+ * `prepare: false` because a transaction-mode pooler does not support named
+ * prepared statements: the pooler hands the next statement to a different
+ * backend connection, and the app fails with `prepared statement "…" already
+ * exists` — Supabase documents disabling them as the fix. Every query here is
+ * already inside a transaction, which is what makes transaction pooling the
+ * right mode in the first place; only the prepared-statement cache is not.
+ *
+ * `idle_timeout` because a serverless instance is frozen between requests. Its
+ * TCP keepalive timers freeze with it while the pooler, or a NAT in between,
+ * drops the connection it is holding — and the next request resumes and writes
+ * into a socket nobody is reading, which hangs until the function times out.
+ * Closing an idle connection after twenty seconds means the instance opens a
+ * fresh one instead of waking with a dead one.
+ */
+export const poolOptions: postgres.Options<Record<string, never>> = {
+  prepare: false,
+  idle_timeout: 20,
+}
+
 // Lazily, and once: a connection per request would exhaust the pool under any
 // load, and one opened at module scope would connect during `next build`.
 const pool = () => {
@@ -24,7 +52,7 @@ const pool = () => {
   // down. Say what is missing instead.
   const url = process.env.DATABASE_URL
   if (!url) throw new Error('DATABASE_URL is not set')
-  return (client ??= postgres(url))
+  return (client ??= postgres(url, poolOptions))
 }
 
 /**

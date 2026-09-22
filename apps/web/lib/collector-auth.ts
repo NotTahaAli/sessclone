@@ -1,6 +1,7 @@
 import postgres from 'postgres'
 
 import { hashApiKey } from './api-keys'
+import { poolOptions } from './db'
 
 // Ticket 34's verification, in one place because ticket 58 is the second route
 // that needs it: a Collector presents an API key, and the key alone decides
@@ -28,7 +29,7 @@ export const ingestDb = () => {
   // exist` three layers down. Say what is missing instead.
   const url = process.env.INGEST_DATABASE_URL
   if (!url) throw new Error('INGEST_DATABASE_URL is not set')
-  return (client ??= postgres(url))
+  return (client ??= postgres(url, poolOptions))
 }
 
 /**
