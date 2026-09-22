@@ -35,6 +35,7 @@ import {
   readConfiguration,
 } from './configuration.mjs'
 import { configDirectory, sessionTranscripts } from './transcripts.mjs'
+import { readAnswer } from './last-answer.mjs'
 
 /** How many of the newest Sessions are opened for their Agent Runs. */
 const SESSIONS_INSPECTED = 20
@@ -274,20 +275,31 @@ const transcriptEvidence = async (environment) => {
 }
 
 /**
- * Whether the deployment answers at all, with no key attached.
+ * Whether ingest accepts this machine's key, without reporting anything.
  *
- * This separates "the Collector cannot reach the deployment" from "the
- * deployment refused the report", which the install guide calls out as the two
- * failures that look identical from a Member's chair. A plain GET of the base
- * URL is enough for that and carries nothing secret, so the answer is safe to
- * paste.
+ * An empty body to `/api/ingest`: the route checks the key before the payload,
+ * so 401 is a refused key and 400 is an accepted key with nothing to report.
+ * Ticket 97 replaced a plain GET of the base URL here, which answered 200 in a
+ * cloud container while ingest refused every report — the key was never on
+ * the probe, and the probe never went through the proxy that adds it.
+ *
+ * The key goes only in the header, as `send` sends it. With no key set here,
+ * none is sent, which is still a fair test in a cloud environment: the proxy
+ * adds the credential either way. It stamps the key's last use, as any report
+ * would: the probe did reach the deployment with it.
  *
  * @param {string} url
+ * @param {string | undefined} apiKey
  */
-const reachable = async (url) => {
+const ingestProbe = async (url, apiKey) => {
   try {
-    const response = await fetch(url, {
-      method: 'GET',
+    const response = await fetch(`${url}/api/ingest`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}),
+      },
+      body: '{}',
       redirect: 'manual',
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     })
@@ -302,6 +314,16 @@ const reachable = async (url) => {
     }
   }
 }
+
+/** What an ingest probe's status means, in words a person can act on. */
+export const probeVerdict = (status) =>
+  status === 400
+    ? 'key accepted'
+    : status === 401
+      ? '**key refused**'
+      : status === 404
+        ? '**no ingest route here** — wrong URL'
+        : 'unexpected answer'
 
 /**
  * Everything tickets 68 and 69 ask a person to observe, in one object.
@@ -356,6 +378,8 @@ export const collect = async ({
         }))),
         cursors: await directoryEvidence(join(stateDir, 'cursors')),
         queue: await directoryEvidence(join(stateDir, 'queue')),
+        // Ticket 97: the one trace a refused report leaves.
+        lastAnswer: await readAnswer(stateDir),
       }
     : null
 
@@ -384,7 +408,18 @@ export const collect = async ({
     state,
     transcripts: await transcriptEvidence(environment),
     deployment:
-      probe && configuration?.url ? await reachable(configuration.url) : null,
+      probe && configuration?.url
+        ? await ingestProbe(
+            configuration.url,
+            configuration?.apiKey ?? environment.SESSCLONE_API_KEY,
+          )
+        : null,
+    // Ticket 97: whether a proxy is set, and whether this process's `fetch`
+    // goes through it. The hooks restart themselves to make that yes.
+    proxy: {
+      set: Boolean(environment.HTTPS_PROXY || environment.https_proxy),
+      used: environment.NODE_USE_ENV_PROXY === '1',
+    },
   }
 }
 
@@ -603,9 +638,12 @@ export const format = (report) => {
   )
   if (report.deployment) {
     say(
-      `| Deployment | ${report.deployment.reached ? `answered ${report.deployment.status}` : `**unreachable** (${report.deployment.error})`} |`,
+      `| Ingest | ${report.deployment.reached ? `answered ${report.deployment.status}, ${probeVerdict(report.deployment.status)}` : `**unreachable** (${report.deployment.error})`} |`,
     )
   }
+  say(
+    `| Proxy | ${report.proxy.set ? `HTTPS_PROXY set, fetch ${report.proxy.used ? 'goes through it' : '**connects directly**'}` : 'none'} |`,
+  )
 
   say()
   if (report.configuration.problems.length > 0) {
@@ -641,6 +679,15 @@ export const format = (report) => {
     say()
     say(directoryLine('Cursors', report.state.cursors))
     say(directoryLine('Queue', report.state.queue))
+    say(
+      `- Last answer from the deployment: ${
+        !report.state.lastAnswer
+          ? 'none recorded — no hook has reported from this machine'
+          : report.state.lastAnswer.status === null
+            ? `unreachable, ${report.state.lastAnswer.at}`
+            : `${report.state.lastAnswer.status}, ${report.state.lastAnswer.at}${report.state.lastAnswer.status === 401 ? ' — **the key was refused**' : ''}`
+      }`,
+    )
   }
 
   say()

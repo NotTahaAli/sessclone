@@ -399,6 +399,27 @@ a fresh install over a year of existing history, say — is caught up oldest-war
 across several sessions rather than all in one; each recovered session is
 reported in full, and the ones not yet reached carry over to the next start.
 
+**When the deployment refuses the key, it says so (ticket 97).** A refusal is
+final, so it writes no cursor and queues nothing, and before ticket 97 a
+Collector refused on every report left no trace at all: not even the state
+directory. Now every report overwrites `<state dir>/last-answer.json` with the
+status and the time, `node scripts/verify-collector.mjs` prints it, and a
+session that starts after a `401` prints one line saying the key was refused.
+
+**Behind a proxy, the Collector goes through it (ticket 97).** Node's `fetch`
+ignores `HTTPS_PROXY` unless Node was started with `NODE_USE_ENV_PROXY=1`, and
+the variable is read only at startup. So a hook that finds `HTTPS_PROXY` set
+starts itself again with `NODE_USE_ENV_PROXY=1`, which also honours
+`NO_PROXY`. It needs a Node that has the switch, 22.21 or newer; an older Node
+connects directly, as before. This is what lets a Claude Code cloud
+environment's API credential reach ingest: the credential is added by the
+proxy, so a direct connection arrives with the placeholder key and is refused.
+
+On a laptop behind a corporate proxy this changes the route too. A proxy that
+inspects TLS needs its CA in `NODE_EXTRA_CA_CERTS`, and a proxy that wants
+NTLM or Kerberos is not supported (only credentials in the proxy URL are). To
+keep the old direct connection, put the deployment's host in `NO_PROXY`.
+
 The residual gap — the one thing this does not guarantee — is a **stop failure
 or a session-end marker** that is queued and then never drained, because the
 state directory is read-only, the queue's 14-day age limit or 500-entry cap is

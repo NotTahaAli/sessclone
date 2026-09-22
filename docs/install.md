@@ -206,6 +206,11 @@ nothing on the deployment.
 A self-hosted deployment uses its own `NEXT_PUBLIC_APP_URL` in the command and
 its own host in **Allowed websites**.
 
+The Collector reaches the proxy on its own: a hook that finds `HTTPS_PROXY`
+set restarts itself with `NODE_USE_ENV_PROXY=1` (`docs/configuration.md`). If
+the credential is missing or wrong, the deployment answers 401 and the next
+session start prints a line saying the key was refused.
+
 Claude offers API credentials on Pro and Max plans only, not yet on Team or
 Enterprise, and not on a self-hosted environment.
 
