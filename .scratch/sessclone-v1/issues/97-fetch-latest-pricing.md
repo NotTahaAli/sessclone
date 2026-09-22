@@ -22,4 +22,4 @@
 - [x] A class with a future-dated row is left alone; a name that is not a plain model id, or a repeated one, fails the fetch
 - [x] Tests against Postgres: parse the page rows verbatim, propose epoch for a new model and today for a change, apply as the operator, refused as an Org Owner with nothing written
 - [x] No migration: it writes the existing `rates` table
-- [ ] Looked at on production by Taha. No screenshots: this container has no Supabase session, so no admin page can be driven here
+- [x] Looked at on production by Taha, who confirmed it works (2026-09-22). No screenshots: this container has no Supabase session, so no admin page can be driven here
