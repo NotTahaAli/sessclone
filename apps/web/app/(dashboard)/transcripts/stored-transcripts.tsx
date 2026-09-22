@@ -187,8 +187,7 @@ function Group({
           <p className="text-text-muted mt-1 text-sm">
             {own ? '' : `${project.memberEmail ?? 'A Member'} · `}
             {project.sessions} session{project.sessions === 1 ? '' : 's'} ·{' '}
-            {size(project.bytes)} · last upload{' '}
-            {stamp.format(project.newest)}
+            {size(project.bytes)} · last upload {stamp.format(project.newest)}
             {orgName ? ` · ${orgName}` : ''}
           </p>
         </div>

@@ -259,18 +259,16 @@ export const storedSessions = async (
     sessions: page.map((session) => ({
       ...session,
       lastTurnAt:
-        last.get(turnKey(session.memberId, session.sessionId, session.agentId)) ??
-        null,
+        last.get(
+          turnKey(session.memberId, session.sessionId, session.agentId),
+        ) ?? null,
     })),
     more: rows.length > limit,
   }
 }
 
-const turnKey = (
-  memberId: string,
-  sessionId: string,
-  agentId: string | null,
-) => `${memberId}:${sessionId}:${agentId ?? ''}`
+const turnKey = (memberId: string, sessionId: string, agentId: string | null) =>
+  `${memberId}:${sessionId}:${agentId ?? ''}`
 
 /**
  * The last Turn of each of these transcripts, in one statement.
