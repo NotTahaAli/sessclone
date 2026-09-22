@@ -107,9 +107,9 @@ test('every hook the plugin registers runs a script that is there', async () => 
       // The hook's own deadline has to leave room for the sweep it starts,
       // which is the invariant rather than any particular number of seconds.
       // The async archive starts no sweep, and nothing enforces its timeout.
-    if (!isArchive(entry)) {
-      expect(entry.timeout * 1000).toBeGreaterThan(SWEEP_BUDGET_MS)
-    }
+      if (!isArchive(entry)) {
+        expect(entry.timeout * 1000).toBeGreaterThan(SWEEP_BUDGET_MS)
+      }
     }
   }
 })

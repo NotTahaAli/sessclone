@@ -439,10 +439,7 @@ test('a first turn that beats its own flush is asked again', async () => {
   // Session's first turn the presign can arrive before any Turn has, and is
   // refused `no_turns`. Without a second ask a single-turn cloud Session is
   // never archived.
-  const { steps, input } = await turnFixture([
-    { refused: 'no_turns' },
-    ISSUED,
-  ])
+  const { steps, input } = await turnFixture([{ refused: 'no_turns' }, ISSUED])
   const result = await archiveAfterTurn(input)
   expect(result.archived).toBe(1)
   expect(steps).toEqual(['presign', 'presign', 'put', 'confirm'])

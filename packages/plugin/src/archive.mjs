@@ -28,7 +28,15 @@
 // keeps a sweep over a year of history from re-uploading all of it.
 
 import { createReadStream } from 'node:fs'
-import { mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import {
+  mkdir,
+  open,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import { basename, dirname, join } from 'node:path'
 import { Readable } from 'node:stream'
