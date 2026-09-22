@@ -50,9 +50,22 @@ export function AccountMenu({ viewer }: { viewer: Viewer }) {
         <span className="text-text-secondary truncate">{viewer.email}</span>
       </summary>
 
-      {/* Right-aligned and above the bottom bar on a phone, which is where
-          the summary sits on that width. */}
-      <div className="bg-surface border-rule shadow-overlay absolute right-0 bottom-full z-10 mb-1 w-64 rounded-md border p-3 lg:top-full lg:bottom-auto lg:mt-1 lg:mb-0">
+      {/* The panel opens away from the edge the summary sits against, and
+          that edge is different at the two widths (`(dashboard)/layout.tsx`).
+
+          On a phone the summary is in the header at the top of the window, so
+          the panel drops below it and is hung from its right edge, the header
+          putting the summary against the right of the window.
+
+          From `lg` up the summary is at the foot of the 232px sidebar, so the
+          panel rises above it — dropping it below would put it under the
+          bottom of the window — and is hung from its left edge: a panel wider
+          than the sidebar hung from the right runs off the left of the
+          window, which is what this looked like. Hung from the left it
+          overhangs into the content column instead, which is what an overlay
+          is for. The width is capped at the window either way, for the
+          narrowest phone. */}
+      <div className="bg-surface border-rule shadow-overlay absolute top-full right-0 z-10 mt-1 w-64 max-w-[calc(100vw-2rem)] rounded-md border p-3 lg:top-auto lg:right-auto lg:bottom-full lg:left-0 lg:mt-0 lg:mb-1">
         <p className="text-text truncate text-body">{viewer.email}</p>
         <p className="text-text-muted mt-1 truncate text-caption">
           {viewer.orgName}

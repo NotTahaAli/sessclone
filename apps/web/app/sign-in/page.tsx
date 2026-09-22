@@ -7,6 +7,7 @@ import { logoPath } from '../../lib/org-logo'
 import { OrgMark } from '../org-mark'
 import { invitationToken, safeNext } from '../../lib/auth/next-path'
 import { ProviderError } from './provider-error'
+import { PanelCredit } from '../(dashboard)/credit'
 
 // Ticket 83: the page prerenders, and the query string streams into it.
 //
@@ -17,11 +18,10 @@ import { ProviderError } from './provider-error'
 // `searchParams`, so they sit behind a Suspense boundary and the rest of the
 // page is prerendered.
 
-// Deliberately unstyled. The design system (ticket 16) is documented and not
-// yet built — there is no Tailwind, no `globals.css` and no shell in this app
-// — and ticket 45 is where the shell and these tokens land. Markup first, so
-// that ticket dresses a page that already works rather than one that has to be
-// rewritten to.
+// Styled from the design system's tokens (ticket 16), in the same one-column
+// frame `app/join/[token]/page.tsx` uses: both are pages a visitor reaches
+// before they are in any Org, so neither has a shell to sit in and both carry
+// the panel's Appropriate Legal Notices themselves (ticket 79).
 
 const MESSAGES: Record<string, string> = {
   github: 'GitHub sign-in could not be started. Try again, or use a link.',
@@ -37,6 +37,10 @@ const MESSAGES: Record<string, string> = {
 
 // Matched, never rendered as it arrives — see `app/auth/callback/route.ts`.
 const PROVIDER_CODE = /^[a-z_]{1,64}$/
+
+/** The one control both forms submit through, so they read as one choice. */
+const BUTTON =
+  'inline-flex h-[var(--control-h)] w-full items-center justify-center rounded-md px-4 text-body'
 
 type Query = Promise<{
   error?: string
@@ -74,14 +78,14 @@ async function InvitedBy({ searchParams }: { searchParams: Query }) {
   if (!invitation) return null
 
   return (
-    <p>
+    <p className="text-text-secondary mt-4 flex items-center gap-2 text-body">
       <OrgMark
         name={invitation.orgName}
         src={
           invitation.logo ? logoPath(invitation.orgId, invitation.logo) : null
         }
         size={32}
-      />{' '}
+      />
       You were invited to {invitation.orgName}.
     </p>
   )
@@ -94,18 +98,29 @@ async function Notices({ searchParams }: { searchParams: Query }) {
   return (
     <>
       {error === 'provider' ? (
-        <p role="alert">
+        <p
+          role="alert"
+          className="border-bad-border bg-bad-bg text-bad-text mt-4 rounded-md border px-3 py-2 text-caption"
+        >
           The provider refused the sign-in (
           {code && PROVIDER_CODE.test(code) ? code : 'unknown'}). Nothing is
           wrong with your account. Check the provider&apos;s settings in
           Supabase, or use a link instead.
         </p>
       ) : error ? (
-        <p role="alert">{MESSAGES[error] ?? 'Something went wrong.'}</p>
+        <p
+          role="alert"
+          className="border-bad-border bg-bad-bg text-bad-text mt-4 rounded-md border px-3 py-2 text-caption"
+        >
+          {MESSAGES[error] ?? 'Something went wrong.'}
+        </p>
       ) : null}
 
       {sent ? (
-        <p role="status">
+        <p
+          role="status"
+          className="border-ok-border bg-ok-bg text-ok-text mt-4 rounded-md border px-3 py-2 text-caption"
+        >
           If that address has an account, a sign-in link is on its way. The link
           works once and expires.
         </p>
@@ -116,8 +131,8 @@ async function Notices({ searchParams }: { searchParams: Query }) {
 
 export default function SignIn({ searchParams }: { searchParams: Query }) {
   return (
-    <main>
-      <h1>Sign in to sessclone</h1>
+    <main className="mx-auto flex max-w-md flex-col px-4 py-16">
+      <h1 className="text-heading-lg">Sign in to sessclone</h1>
 
       <Suspense fallback={null}>
         <InvitedBy searchParams={searchParams} />
@@ -130,18 +145,28 @@ export default function SignIn({ searchParams }: { searchParams: Query }) {
       {/* The same failure, when Supabase reported it in the fragment. */}
       <ProviderError />
 
-      <form action={signInWithGitHub}>
+      <form action={signInWithGitHub} className="mt-6">
         <Suspense fallback={null}>
           <ReturnTo searchParams={searchParams} />
         </Suspense>
-        <button type="submit">Continue with GitHub</button>
+        <button
+          type="submit"
+          className={`${BUTTON} bg-accent-fill text-accent-on-fill`}
+        >
+          Continue with GitHub
+        </button>
       </form>
 
-      <form action={sendMagicLink}>
+      <form
+        action={sendMagicLink}
+        className="border-rule bg-surface mt-6 flex flex-col gap-2 rounded-md border p-4"
+      >
         <Suspense fallback={null}>
           <ReturnTo searchParams={searchParams} />
         </Suspense>
-        <label htmlFor="email">Or get a sign-in link by email</label>
+        <label htmlFor="email" className="text-text-secondary text-caption">
+          Or get a sign-in link by email
+        </label>
         <input
           id="email"
           name="email"
@@ -149,14 +174,24 @@ export default function SignIn({ searchParams }: { searchParams: Query }) {
           autoComplete="email"
           required
           placeholder="you@example.com"
+          className="border-control-border text-text h-[var(--control-h)] w-full rounded border px-3 text-body"
         />
-        <button type="submit">Email me a link</button>
+        <button
+          type="submit"
+          className={`${BUTTON} border-control-border text-text border`}
+        >
+          Email me a link
+        </button>
       </form>
 
-      <p>
+      <p className="text-text-muted mt-6 text-caption">
         There is no password to set or forget. Signing in for the first time
         creates an organisation with you as its owner.
       </p>
+
+      <div className="mt-12">
+        <PanelCredit />
+      </div>
     </main>
   )
 }
