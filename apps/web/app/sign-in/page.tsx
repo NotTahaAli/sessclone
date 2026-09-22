@@ -1,6 +1,10 @@
 import { Suspense } from 'react'
 
 import { sendMagicLink, signInWithGitHub } from './actions'
+import { readAnonymously } from '../../lib/db'
+import { invitationOrg } from '../../lib/invitations'
+import { logoPath } from '../../lib/org-logo'
+import { OrgMark } from '../org-mark'
 import { safeNext } from '../../lib/auth/next-path'
 import { ProviderError } from './provider-error'
 
@@ -53,6 +57,39 @@ async function ReturnTo({ searchParams }: { searchParams: Query }) {
   return returnTo ? <input type="hidden" name="next" value={returnTo} /> : null
 }
 
+/**
+ * The Org's mark, when this page was reached from an invitation (ticket 77).
+ *
+ * Only then: `/sign-in` on its own belongs to the deployment, not to an Org,
+ * and a signed-out visitor has no Org for it to show. The token is already in
+ * the URL the visitor followed, so nothing is disclosed by resolving it — and
+ * a token that is spent, revoked or invented resolves to nothing, which
+ * renders nothing.
+ */
+async function InvitedBy({ searchParams }: { searchParams: Query }) {
+  const returnTo = safeNext((await searchParams).next)
+  const token = returnTo?.startsWith('/join/')
+    ? decodeURIComponent(returnTo.slice('/join/'.length))
+    : null
+  if (!token) return null
+
+  const invitation = await readAnonymously((tx) => invitationOrg(tx, token))
+  if (!invitation) return null
+
+  return (
+    <p>
+      <OrgMark
+        name={invitation.orgName}
+        src={
+          invitation.logo ? logoPath(invitation.orgId, invitation.logo) : null
+        }
+        size={32}
+      />{' '}
+      You were invited to {invitation.orgName}.
+    </p>
+  )
+}
+
 /** What a failed round trip left in the query string, if anything. */
 async function Notices({ searchParams }: { searchParams: Query }) {
   const { error, sent, code } = await searchParams
@@ -84,6 +121,10 @@ export default function SignIn({ searchParams }: { searchParams: Query }) {
   return (
     <main>
       <h1>Sign in to sessclone</h1>
+
+      <Suspense fallback={null}>
+        <InvitedBy searchParams={searchParams} />
+      </Suspense>
 
       <Suspense fallback={null}>
         <Notices searchParams={searchParams} />

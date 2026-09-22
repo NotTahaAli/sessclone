@@ -7,6 +7,13 @@ import {
   EmailBelongsToAnotherAccount,
   ensureOrgForSigner,
 } from '../../../lib/auth/bootstrap'
+import {
+  APPEARANCE_COOKIE,
+  APPEARANCE_COOKIE_MAX_AGE,
+  encodeAppearance,
+  viewerAppearance,
+} from '../../../lib/appearance'
+import { asViewer } from '../../../lib/db'
 import { supabaseServer } from '../../../lib/supabase/server'
 
 // Where both ways in come back to.
@@ -126,5 +133,28 @@ export async function GET(request: NextRequest) {
   const destination = request.nextUrl.clone()
   destination.pathname = next
   destination.search = ''
-  return NextResponse.redirect(destination)
+  const answer = NextResponse.redirect(destination)
+
+  // Ticket 77: the theme and the accent, onto this browser, before the first
+  // page is asked for. A route handler is one of the two places a cookie can
+  // be written, and this is the one that runs on a browser that has never
+  // been here — so a Member who signed in on their phone gets their own theme
+  // on the very first paint rather than after a correction.
+  //
+  // Failure here is not a failed sign-in. The cookie is presentation: without
+  // it the shell notices on the next load and applies it then.
+  try {
+    const appearance = await asViewer(claims.sub, viewerAppearance)
+    answer.cookies.set(APPEARANCE_COOKIE, encodeAppearance(appearance), {
+      path: '/',
+      maxAge: APPEARANCE_COOKIE_MAX_AGE,
+      sameSite: 'lax',
+      // Read by the inline script in `<head>`, so deliberately not httpOnly.
+      secure: destination.protocol === 'https:',
+    })
+  } catch (cause) {
+    console.error('sign-in: could not read the signer’s appearance', cause)
+  }
+
+  return answer
 }

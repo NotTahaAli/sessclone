@@ -1,10 +1,14 @@
 import { Suspense, type ReactNode } from 'react'
 
 import { AccountMenu } from './account'
+import { AppearanceSync } from './appearance-sync'
+import { OrgMark } from '../org-mark'
 import { PanelCredit } from './credit'
 import { BottomBarLinks, SidebarLinks } from './nav-links'
 import { DESTINATIONS } from './navigation'
 import Loading from './loading'
+import { asViewer } from '../../lib/db'
+import { orgLogoSrc } from '../../lib/org-logo'
 import { currentViewer } from '../../lib/viewer'
 
 // Ticket 83: this layout prerenders a static shell.
@@ -107,9 +111,21 @@ function Inactive({
 /** The Org name, which every figure under here belongs to. */
 async function OrgName({ className }: { className: string }) {
   const viewer = await currentViewer()
+  if (!viewer) return <span className={className}>No Org</span>
+
+  // Ticket 77: the mark sits beside the name wherever the name is, which is
+  // the design system's rule for OrgMark — never instead of it, since a logo
+  // is not a label.
+  const logo = await asViewer(viewer.userId, (tx) =>
+    orgLogoSrc(tx, viewer.orgId),
+  )
+
   return (
-    <span className={className} title={viewer?.orgName}>
-      {viewer?.orgName ?? 'No Org'}
+    <span className="flex items-center gap-2">
+      <OrgMark name={viewer.orgName} src={logo} size={20} />
+      <span className={className} title={viewer.orgName}>
+        {viewer.orgName}
+      </span>
     </span>
   )
 }
@@ -211,6 +227,14 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           <Account />
         </Suspense>
       </header>
+
+      {/* Renders nothing unless the cookie carrying the theme has fallen
+          behind the database — which happens when somebody else changed the
+          Org's colour. Inside a boundary of its own so it never delays the
+          frame or the page. */}
+      <Suspense fallback={null}>
+        <AppearanceSync />
+      </Suspense>
 
       {/* The bottom bar is fixed, so the content column reserves room for it
           rather than ending underneath it. */}

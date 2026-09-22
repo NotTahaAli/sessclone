@@ -1,9 +1,15 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { setOrgSeed } from './appearance-actions'
+import { LockForm } from './lock-form'
 import { RetentionForm } from './retention-form'
 import { TimezoneForm } from './timezone-form'
-import { EmptyState } from '../../empty-state'
+import { AccentPreview } from '../appearance-preview'
+import { SeedPicker } from '../seed-picker'
+import { LogoForm } from './logo-form'
 import { PageHeader } from '../../page-header'
+import { viewerAppearance } from '../../../../lib/appearance'
+import { orgLogoSrc } from '../../../../lib/org-logo'
 import { asViewer } from '../../../../lib/db'
 import { listTimezones, orgRetention } from '../../../../lib/org'
 import {
@@ -31,8 +37,15 @@ export default async function Page() {
   const viewer = await currentViewer()
   if (!viewer || !reachesOrgSettings(viewer.role)) notFound()
 
-  const [zones, retention] = await asViewer(viewer.userId, (tx) =>
-    Promise.all([listTimezones(tx), orgRetention(tx, viewer.orgId)]),
+  const [zones, retention, appearance, logo] = await asViewer(
+    viewer.userId,
+    (tx) =>
+      Promise.all([
+        listTimezones(tx),
+        orgRetention(tx, viewer.orgId),
+        viewerAppearance(tx),
+        orgLogoSrc(tx, viewer.orgId),
+      ]),
   )
 
   return (
@@ -55,6 +68,34 @@ export default async function Page() {
           lastSwept={retention.lastSwept}
         />
       ) : null}
+
+      <section aria-labelledby="appearance" className="mt-8">
+        <h2 id="appearance" className="text-heading-lg">
+          Appearance
+        </h2>
+        <p className="text-text-secondary mt-2 text-sm">
+          One colour decides the product&apos;s accent: buttons, links, the
+          active navigation underline and a single-series chart. Everything else
+          — the ground, the text, the status colours and the chart palette — is
+          fixed, so changing this recolours the product without recolouring what
+          it means.
+        </p>
+
+        <SeedPicker
+          action={setOrgSeed}
+          field="orgId"
+          rowId={viewer.orgId}
+          current={appearance.orgSeed}
+          orgSeed={appearance.orgSeed}
+          label="The Org’s accent colour"
+        />
+
+        <LockForm orgId={viewer.orgId} locked={appearance.locked} />
+
+        {/* The Org's own colour, not the viewer's: an Owner who chose a
+            different seed for themselves is still editing the Org's here. */}
+        <AccentPreview seed={appearance.orgSeed} tones={appearance.orgTones} />
+      </section>
 
       <Link
         href="/settings/org/members"
@@ -79,9 +120,18 @@ export default async function Page() {
         </Link>
       ) : null}
 
-      <EmptyState headline="More to come">
-        Appearance defaults and invitations will live here.
-      </EmptyState>
+      <section aria-labelledby="logo" className="mt-8">
+        <h2 id="logo" className="text-heading-lg">
+          Logo
+        </h2>
+        <p className="text-text-secondary mt-2 text-sm">
+          The mark beside {viewer.orgName} in the navigation, on the sign-in
+          page somebody reaches from an invitation, and in the invitation email
+          itself. Only an Owner or an Admin can change or remove it.
+        </p>
+
+        <LogoForm orgId={viewer.orgId} orgName={viewer.orgName} src={logo} />
+      </section>
     </div>
   )
 }

@@ -28,19 +28,27 @@ const pool = () => {
 }
 
 /**
- * The published Tiers, read with no viewer at all.
+ * The two public tables, read with no viewer at all: the published Tiers, and
+ * an Org's logo.
  *
- * The one exception to the rule above, and deliberately not a general one:
- * this takes no query, so "a connection with no claim" is not a capability a
- * page can ask for — there is still no exported path that hands back a bare
- * connection (ADR 0007, amended for this).
+ * The one exception to the rule above, and deliberately not a general one.
+ * It is safe because of what it can reach, not because of where it is called
+ * from: `tiers_read` and `org_logos_read` are the only `using (true)` read
+ * policies in the schema, every other read policy tests
+ * `sessclone_user_id()`, which is null here, and so does every write policy on
+ * a table this role may write to. So a caller who passed a query for anything
+ * else would read nothing — which is why this stayed one function when ticket
+ * 77 added the second table rather than becoming a pair that differ only in
+ * their name.
  *
- * It is safe because of what it reads, not because of where it is called
- * from. `tiers_read` is the only `using (true)` policy in the schema; every
- * other read policy tests `sessclone_user_id()`, which is null here, and
- * every write policy on a table this role may write to tests it too. A second
- * public table would need its own named function beside this one, and would
- * get the same paragraph.
+ * Why a logo is public at all is argued in `20260922130000_org_logo.sql`: it
+ * is fetched by mail clients and by visitors who have not signed in, and it
+ * carries nothing but the picture.
+ *
+ * The same file's `sessclone_invitation_org` is reached this way too, and is
+ * the reason the sentence above says "what it can reach" rather than "which
+ * tables": a `security definer` function is authorised by what it is given,
+ * and that one is given a token's hash.
  */
 export const readAnonymously = <T>(
   query: (tx: postgres.TransactionSql) => Promise<T>,

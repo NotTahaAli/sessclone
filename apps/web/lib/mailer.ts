@@ -50,6 +50,13 @@ export type InviteEmail = {
   orgName: string
   /** Who sent it, for the person deciding whether to trust the link. */
   invitedByEmail: string
+  /**
+   * The Org's logo, as an absolute URL, or nothing (ticket 77). Absolute
+   * because a mail client has no origin to resolve a path against — and it is
+   * the only image in the message, which is why it is 24px and beside the
+   * name rather than a banner across the top.
+   */
+  logoUrl?: string | null
 }
 
 /** A subject and body that name the Org and the inviter and carry the link.
@@ -61,6 +68,7 @@ export const renderInvite = ({
   link,
   orgName,
   invitedByEmail,
+  logoUrl,
 }: InviteEmail) => ({
   to,
   subject: `You are invited to ${orgName} on sessclone`,
@@ -72,10 +80,19 @@ export const renderInvite = ({
     'The link works once and expires. If you did not expect it, ignore this email.',
   ].join('\n'),
   html: [
+    // Images are blocked by default in most mail clients, so the mark is
+    // decoration with an empty `alt` and the sentence beside it says the Org's
+    // name in text. A blocked logo leaves the invitation reading exactly as it
+    // did before ticket 77.
+    logoUrl
+      ? `<p><img src="${escapeHtml(logoUrl)}" alt="" width="24" height="24" style="vertical-align:middle;border-radius:2px"></p>`
+      : '',
     `<p>${escapeHtml(invitedByEmail)} invited you to join <strong>${escapeHtml(orgName)}</strong> on sessclone.</p>`,
     `<p><a href="${escapeHtml(link)}">Accept the invitation</a></p>`,
     `<p>The link works once and expires. If you did not expect it, ignore this email.</p>`,
-  ].join('\n'),
+  ]
+    .filter(Boolean)
+    .join('\n'),
 })
 
 /** The invitee address, the Org name and the inviter address are all data from

@@ -12,6 +12,7 @@ import {
   type InvitedRole,
 } from '../../../../../lib/invitations'
 import { sendInviteEmail, type Delivery } from '../../../../../lib/mailer'
+import { orgLogoSrc } from '../../../../../lib/org-logo'
 import { setMemberRemoved, setMemberRole } from '../../../../../lib/members'
 import {
   currentViewer,
@@ -70,9 +71,18 @@ export const sendInvite = async (
   if (!role.success) return { error: 'Pick a Role for the invitation.' }
 
   try {
-    const { token } = await asViewer(viewer.userId, (tx) =>
-      invite(tx, viewer.orgId, email.data, role.data, viewer.memberId),
-    )
+    const { token, logo } = await asViewer(viewer.userId, async (tx) => ({
+      ...(await invite(
+        tx,
+        viewer.orgId,
+        email.data,
+        role.data,
+        viewer.memberId,
+      )),
+      // Read in the same transaction as the invitation, so the email carries
+      // the logo the Org had when it was sent.
+      logo: await orgLogoSrc(tx, viewer.orgId),
+    }))
     revalidatePath('/settings/org/members')
 
     // Deliver it, and report what delivery did. The email and the copyable
@@ -85,6 +95,7 @@ export const sendInvite = async (
       link: `${appUrl()}${link}`,
       orgName: viewer.orgName,
       invitedByEmail: viewer.email,
+      logoUrl: logo ? `${appUrl()}${logo}` : null,
     })
     return { link, email: email.data, delivery }
   } catch (error) {

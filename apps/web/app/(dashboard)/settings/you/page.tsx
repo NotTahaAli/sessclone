@@ -1,4 +1,6 @@
 import { setArchival, setProject } from './actions'
+import { setOwnAccent } from './appearance-actions'
+import { ThemeForm } from './theme-form'
 import {
   listArchivalMemberships,
   listArchivalProjects,
@@ -9,6 +11,9 @@ import { storedProjects, storedSessions } from '../../../../lib/artifacts'
 import { ownScopes, type OwnScope } from '../../../../lib/scopes'
 import { StoredTranscripts } from './stored-transcripts'
 import { PageHeader } from '../../page-header'
+import { AccentPreview } from '../appearance-preview'
+import { SeedPicker } from '../seed-picker'
+import { viewerAppearance } from '../../../../lib/appearance'
 import { asViewer } from '../../../../lib/db'
 import { signedInUser } from '../../../../lib/supabase/server'
 
@@ -35,17 +40,17 @@ export default async function YourSettings() {
 
   // One transaction, which is what `asViewer` opens and what carries the
   // viewer's claim. The two statements are independent, so they go together.
-  const [memberships, projects, scopes, stored, sessions] = await asViewer(
-    user.id,
-    (tx) =>
+  const [memberships, projects, scopes, stored, sessions, appearance] =
+    await asViewer(user.id, (tx) =>
       Promise.all([
         listArchivalMemberships(tx),
         listArchivalProjects(tx),
         ownScopes(tx),
         storedProjects(tx),
         storedSessions(tx),
+        viewerAppearance(tx),
       ]),
-  )
+    )
 
   // Grouped once here rather than filtered inside the render, which would be
   // a pass over the whole list per membership. One pass, one array each, and
@@ -65,6 +70,54 @@ export default async function YourSettings() {
       <PageHeader title="Your settings" />
 
       <YourScopes scopes={scopes} />
+
+      {/* Ticket 77. First of the personal settings because it is the one that
+          changes what the rest of them look like, and the only one somebody
+          might come here for on their first visit. */}
+      {memberships[0] ? (
+        <section aria-labelledby="appearance" className="mt-8">
+          <h2 id="appearance" className="text-heading-lg">
+            Appearance
+          </h2>
+          <p className="text-text-secondary mt-2 text-sm">
+            Light or dark is always yours. The accent colour is yours unless
+            your Org has locked it, and either way it only paints buttons, links
+            and the active navigation underline — never the status colours or a
+            breakdown&apos;s chart series, which have to mean the same thing
+            across a desk.
+          </p>
+
+          <ThemeForm
+            memberId={memberships[0].member_id}
+            current={appearance.theme}
+          />
+
+          {appearance.locked ? (
+            <p className="border-rule text-text-secondary mt-6 rounded border border-dashed p-4 text-sm">
+              Your Org has locked its accent colour, so everybody sees{' '}
+              <span className="font-mono">{appearance.orgSeed}</span>. If you
+              had chosen one it is still stored, and it applies again if the
+              lock is lifted.
+            </p>
+          ) : (
+            <SeedPicker
+              action={setOwnAccent}
+              field="memberId"
+              rowId={memberships[0].member_id}
+              current={appearance.ownSeed}
+              orgSeed={appearance.orgSeed}
+              inheritable
+              label={
+                appearance.ownSeed
+                  ? 'Your accent colour'
+                  : 'Your accent colour, currently your Org’s'
+              }
+            />
+          )}
+
+          <AccentPreview seed={appearance.seed} tones={appearance.tones} />
+        </section>
+      ) : null}
 
       <section aria-labelledby="archival" className="mt-8">
         <h2 id="archival" className="text-heading-lg">

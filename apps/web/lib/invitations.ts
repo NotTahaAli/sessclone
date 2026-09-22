@@ -55,6 +55,27 @@ export const generateInviteToken = () => {
   return { token, hash: hashToken(token) }
 }
 
+/**
+ * The Org an invitation names, for the sign-in page somebody reached from one
+ * (ticket 77). Null for a token that is spent, revoked, expired or invented —
+ * one answer for all four, as everything else about an invitation gives.
+ *
+ * Runs with no viewer: whoever is following the link is signed out, which is
+ * why `sessclone_invitation_org` is `security definer` and why the token's
+ * hash is the only thing authorising it.
+ */
+export const invitationOrg = async (
+  tx: TransactionSql,
+  token: string,
+): Promise<{ orgId: string; orgName: string; logo: Date | null } | null> => {
+  const [row] = await tx<
+    { org_id: string; org_name: string; logo_updated_at: Date | null }[]
+  >`select * from sessclone_invitation_org(${hashToken(token)})`
+  return row
+    ? { orgId: row.org_id, orgName: row.org_name, logo: row.logo_updated_at }
+    : null
+}
+
 /** Where an invitation is accepted. Relative: the caller knows the origin. */
 export const invitePath = (token: string) =>
   `/join/${encodeURIComponent(token)}`
