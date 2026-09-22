@@ -7,16 +7,24 @@ import type { Dimension } from '../../../lib/breakdown'
 // a link to a breakdown is a link to that breakdown — and the range survives
 // the switch, because the reader is changing the cut and not the question.
 
-export type View = 'time' | Dimension
+export type View = 'time' | Dimension | 'failures'
 
 export const VIEWS: { key: View; label: string }[] = [
   { key: 'time', label: 'Over time' },
   { key: 'members', label: 'People' },
   { key: 'projects', label: 'Projects' },
   { key: 'devices', label: 'Devices' },
+  // Ticket 78: a fifth tab, because "why did nothing arrive" is a question
+  // about the same period as "what did we spend". It carries a count badge
+  // when the range holds any failure.
+  { key: 'failures', label: 'Failures' },
 ]
 
 export const DEFAULT_VIEW: View = 'time'
+
+/** The three breakdown dimensions, apart from `time` and `failures`. */
+export const isDimension = (view: View): view is Dimension =>
+  view === 'members' || view === 'projects' || view === 'devices'
 
 /** The view the URL names, or the default. Never an error: it is a URL. */
 export const resolveView = (value: string | string[] | undefined): View => {

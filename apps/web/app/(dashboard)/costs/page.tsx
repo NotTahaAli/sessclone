@@ -1,7 +1,15 @@
+import { FailuresList } from './failures-list'
 import { RangeControl } from './range-control'
 import { RankedList } from './ranked-list'
 import { SpendChart } from './spend-chart'
-import { DEFAULT_VIEW, resolveView, viewHref, VIEWS, type View } from './views'
+import {
+  DEFAULT_VIEW,
+  isDimension,
+  resolveView,
+  viewHref,
+  VIEWS,
+  type View,
+} from './views'
 import { EmptyState } from '../empty-state'
 import { InstallCollector } from '../install-collector'
 import { PageHeader } from '../page-header'
@@ -17,6 +25,11 @@ import {
   type Breakdown,
   type Dimension,
 } from '../../../lib/breakdown'
+import {
+  countFailures,
+  sessionFailures,
+  type Failures,
+} from '../../../lib/failures'
 import { resolveRange, type RangeParams } from '../../../lib/range'
 import { dailySpend, spendSeries, type SpendSeries } from '../../../lib/series'
 import { currentViewer } from '../../../lib/viewer'
@@ -179,27 +192,39 @@ function Tile({
 function ViewTabs({
   current,
   params,
+  failuresCount,
 }: {
   current: View
   params: Record<string, string | string[] | undefined>
+  /** Drawn as a badge on the Failures tab when the period holds any. */
+  failuresCount: number
 }) {
   return (
     <nav aria-label="Costs views">
-      <ul className="border-rule flex gap-1 border-b">
+      <ul className="border-rule flex gap-1 overflow-x-auto border-b">
         {VIEWS.map((view) => {
           const active = view.key === current
+          const badge = view.key === 'failures' && failuresCount > 0
           return (
             <li key={view.key}>
               <Link
                 href={viewHref('/costs', view.key, params)}
                 aria-current={active ? 'page' : undefined}
-                className={`-mb-px flex h-9 items-center border-b-2 px-3 text-body ${
+                className={`-mb-px flex h-9 items-center gap-1.5 border-b-2 px-3 text-body whitespace-nowrap ${
                   active
                     ? 'border-accent-border text-accent-text'
                     : 'text-text-secondary border-transparent'
                 }`}
               >
                 {view.label}
+                {badge ? (
+                  <span
+                    className="bg-bad-bg text-bad-text rounded-full px-1.5 font-mono text-micro"
+                    aria-label={`${failuresCount} in this period`}
+                  >
+                    {failuresCount > 99 ? '99+' : failuresCount}
+                  </span>
+                ) : null}
               </Link>
             </li>
           )
@@ -232,21 +257,36 @@ export default async function Costs({
   const { range } = resolved
   const view = resolveView(params.view)
 
-  // One transaction, and only the read this view needs beside the facts that
-  // decide whether there is anything to draw at all. The two reads are
-  // independent, so they go together rather than one after the other.
-  const [facts, days, ranked] = await asViewer(viewer.userId, (tx) =>
-    Promise.all([
-      onboardingFacts(tx, viewer.orgId),
-      view === 'time'
-        ? dailySpend(tx, viewer.orgId, viewer.orgTimezone, range)
-        : null,
-      view === 'time'
-        ? null
-        : breakdown(tx, viewer.orgId, viewer.orgTimezone, range, view),
-    ]),
+  // One transaction, and only the reads this view needs beside the facts that
+  // decide whether there is anything to draw at all. The failures count is
+  // always read — it is the tab's badge, shown on every view — while the rows
+  // and the spend/breakdown are read only for the view being shown. The reads
+  // are independent, so they go together rather than one after the other.
+  const [facts, days, ranked, failuresCount, failures] = await asViewer(
+    viewer.userId,
+    (tx) =>
+      Promise.all([
+        onboardingFacts(tx, viewer.orgId),
+        view === 'time'
+          ? dailySpend(tx, viewer.orgId, viewer.orgTimezone, range)
+          : null,
+        isDimension(view)
+          ? breakdown(tx, viewer.orgId, viewer.orgTimezone, range, view)
+          : null,
+        countFailures(tx, viewer.orgId, viewer.orgTimezone, range),
+        view === 'failures'
+          ? sessionFailures(tx, viewer.orgId, viewer.orgTimezone, range)
+          : null,
+      ]),
   )
   const spend = days === null ? null : spendSeries(days, range)
+
+  // The failures view (and its link from the waiting surface) is reachable
+  // whenever a key exists, since a failure can arrive before the first Turn —
+  // that is exactly the stalled-Collector case worth surfacing.
+  const state = onboardingState(facts)
+  const showFailures = view === 'failures' && state !== 'no-key'
+  const showChrome = state === 'collecting' || showFailures
 
   return (
     <div className="flex flex-col gap-6">
@@ -254,9 +294,13 @@ export default async function Costs({
         title="Costs"
         description={`What ${viewer.orgName} is spending, estimated from usage and published prices.`}
       />
-      {onboardingState(facts) === 'collecting' ? (
+      {showChrome ? (
         <>
-          <ViewTabs current={view} params={params} />
+          <ViewTabs
+            current={view}
+            params={params}
+            failuresCount={failuresCount}
+          />
           <RangeControl
             path="/costs"
             resolved={resolved}
@@ -264,7 +308,15 @@ export default async function Costs({
           />
         </>
       ) : null}
-      <Body facts={facts} view={view} spend={spend} ranked={ranked} />
+      <Body
+        facts={facts}
+        view={view}
+        spend={spend}
+        ranked={ranked}
+        failures={failures}
+        failuresCount={failuresCount}
+        timezone={viewer.orgTimezone}
+      />
     </div>
   )
 }
@@ -274,24 +326,38 @@ function Body({
   view,
   spend,
   ranked,
+  failures,
+  failuresCount,
+  timezone,
 }: {
   facts: OnboardingFacts
   view: View
   spend: SpendSeries | null
   ranked: Breakdown | null
+  failures: Failures | null
+  failuresCount: number
+  timezone: string
 }) {
+  // The failures view stands apart from the onboarding states: a failure can
+  // arrive before the first Turn, so it renders whenever a key exists rather
+  // than only once collecting has begun. With no key at all there can be no
+  // failure, so that case falls through to the empty state below.
+  if (view === 'failures' && failures && onboardingState(facts) !== 'no-key') {
+    return <FailuresList failures={failures} timezone={timezone} />
+  }
+
   switch (onboardingState(facts)) {
     case 'collecting':
       // One of the two is always present, decided by the view above: the read
       // the other view would need was never issued.
-      return view === 'time' || ranked === null ? (
+      return view === 'time' || !isDimension(view) || ranked === null ? (
         <OverTime series={spend!} />
       ) : (
         <Ranked cut={ranked} dimension={view} />
       )
 
     case 'waiting':
-      return <Waiting keyUsed={facts.key_used} />
+      return <Waiting keyUsed={facts.key_used} failuresCount={failuresCount} />
 
     // No key and no Turn: the Collector has nothing to report with, so that is
     // the one thing worth saying. The sentence is the product IA's, for the
@@ -323,7 +389,15 @@ function Body({
  * This is the shell's version: say which of the two states it is, and show the
  * install path again.
  */
-function Waiting({ keyUsed }: { keyUsed: boolean }) {
+function Waiting({
+  keyUsed,
+  failuresCount,
+}: {
+  keyUsed: boolean
+  /** Failures in the current period: where a stalled Collector is first
+   * noticed, so the surface links to them when there are any (ticket 78). */
+  failuresCount: number
+}) {
   return (
     <section>
       <div className="border-rule bg-surface max-w-3xl rounded-md border p-6">
@@ -333,6 +407,16 @@ function Waiting({ keyUsed }: { keyUsed: boolean }) {
             ? 'A Collector has reached this deployment with one of your keys, but no Turn has landed yet. The key is not the problem.'
             : 'No Collector has reported with one of your keys yet. The Collector reports when a turn ends, so nothing arrives until one does.'}
         </p>
+        {failuresCount > 0 ? (
+          <p className="mt-3 text-body">
+            <Link href="/costs?view=failures" className="text-accent-text">
+              {failuresCount === 1
+                ? '1 failure was recorded in this period'
+                : `${failuresCount} failures were recorded in this period`}
+            </Link>{' '}
+            — a turn may be ending on an API error before any usage is written.
+          </p>
+        ) : null}
       </div>
 
       <InstallCollector appUrl={appUrl()} />
