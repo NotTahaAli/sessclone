@@ -19,11 +19,28 @@ const configuration = () => ({
   stateDir: mkdtempSync(join(tmpdir(), 'sessclone-sweep-state-')),
 })
 
-/** A `fetch` double: answers from a script and records each request body. */
+/**
+ * A `fetch` double: answers from a script and records each reported body.
+ *
+ * Archival (ticket 59) rides the same sweep, and this file is about Turns, so
+ * the archival requests are answered as a Member who has not opted in — which
+ * is the default state — and are not recorded. `archive.test.mjs` is where
+ * that path is proven.
+ */
 const stubFetch = (answers) => {
   const bodies = []
   const scripted = [...answers]
-  vi.stubGlobal('fetch', async (_url, init) => {
+  vi.stubGlobal('fetch', async (url, init) => {
+    if (String(url).includes('/api/logs/')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          refused: 'archival_off',
+          detail: 'archival is off for this membership',
+        }),
+      }
+    }
     bodies.push(JSON.parse(init.body))
     const answer = scripted.length > 1 ? scripted.shift() : scripted[0]
     if (answer === 'throw') throw new Error('unreachable')

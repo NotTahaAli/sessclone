@@ -19,7 +19,18 @@ import { artifactKey } from './storage'
 // decides which rows this can see.
 
 export type PresignDecision =
-  | { allowed: true; storageKey: string }
+  | {
+      allowed: true
+      storageKey: string
+      /**
+       * The Project the Session resolved to, or null for a Session outside any
+       * repository. Ticket 59's confirm route files the artifact row under it,
+       * which is what ticket 61's retention and ticket 73's per-Project sweep
+       * both find their rows by — so it is returned here rather than resolved
+       * a second time from a second query that could disagree.
+       */
+      projectId: string | null
+    }
   | { allowed: false; refusal: PresignRefusal; detail: string }
   /** No live membership for that key. The route answers 401, as it does for
    * every other way a key fails to identify somebody. */
@@ -167,6 +178,7 @@ export const presignDecision = async (
 
   return {
     allowed: true,
+    projectId: facts.project_id,
     storageKey: artifactKey({
       orgId: request.orgId,
       memberId: request.memberId,

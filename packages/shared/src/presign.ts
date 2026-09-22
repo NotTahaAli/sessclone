@@ -31,6 +31,46 @@ export const PresignRequest = z.object({
 export type PresignRequest = z.infer<typeof PresignRequest>
 
 /**
+ * What the Collector sends once the bytes have landed (ticket 59).
+ *
+ * The presign route authorises an upload; this one records that it happened.
+ * They are two requests because the PUT between them is the part that can
+ * fail: a row written at presign time would claim a transcript is stored
+ * before it is, and the hash guard would then refuse to ever upload it — the
+ * transcript would be permanently missing and the dashboard would say it was
+ * there.
+ *
+ * The object's size is deliberately absent: the deployment reads it from
+ * storage, which is the only account of it that a failed or truncated upload
+ * cannot overstate.
+ */
+export const ConfirmRequest = z.object({
+  sessionId: text,
+  /** Null for a main Session; an Agent Run's transcript is its own object. */
+  agentId: text.nullable().optional(),
+  /** Lowercase hex SHA-256 of the bytes that were uploaded. */
+  sha256: z.string().regex(/^[0-9a-f]{64}$/, 'a lowercase hex sha-256'),
+})
+
+export type ConfirmRequest = z.infer<typeof ConfirmRequest>
+
+/**
+ * A recorded upload, a refusal, or an error.
+ *
+ * `stored` carries the size the deployment read back from storage, so a
+ * Collector can tell a recorded upload from a silently truncated one.
+ *
+ * `not_uploaded` is the refusal particular to this route: the object is not in
+ * the bucket, so there is nothing to record. It is the transient one here —
+ * a provider that is eventually consistent, or an upload that failed after
+ * answering — and the Collector retries it like any other.
+ */
+export type ConfirmResponse =
+  | { stored: true; storageKey: string; sizeBytes: number }
+  | { refused: PresignRefusal | 'not_uploaded'; detail: string }
+  | { error: string; detail?: string }
+
+/**
  * Why a presign was refused, as a code the Collector can branch on.
  *
  * Five of them, distinguishable on purpose (ADR 0003): a Collector that cannot

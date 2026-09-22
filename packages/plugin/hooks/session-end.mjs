@@ -49,6 +49,19 @@ try {
       },
     },
   })
+  // Ticket 59: archival, after the flush and last, because it is the only
+  // part of this hook that can be slow and the only part nothing depends on.
+  // The Session has ended, so its transcripts are final — which is the one
+  // moment an upload is not immediately stale. Every refusal is quiet, and
+  // nothing is uploaded unless this Member has opted in: the deployment
+  // decides, and it is asked before the file is opened.
+  const { archiveSession } = await import('../src/archive.mjs')
+  await archiveSession({
+    configuration,
+    transcriptPath: event.transcript_path,
+    sessionId: event.session_id,
+    environment: process.env,
+  })
 } catch {
   // Deliberately silent: see above.
 }

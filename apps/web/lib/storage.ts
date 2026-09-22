@@ -1,5 +1,6 @@
 import {
   DeleteObjectsCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3'
@@ -137,6 +138,39 @@ export const ttl = () => {
   return Number.isFinite(configured) && configured > 0
     ? Math.min(configured, MAX_TTL_SECONDS)
     : PRESIGN_TTL_SECONDS
+}
+
+/**
+ * The size of a stored object, or null when it is not there.
+ *
+ * Ticket 59's confirm route reads this rather than believing the Collector:
+ * the row it writes is the dashboard's claim that a transcript is downloadable,
+ * and a Collector whose upload failed after answering — or was truncated —
+ * would otherwise make that claim on its behalf. The size is the provider's
+ * own count of the bytes it holds.
+ *
+ * A missing object is null rather than a throw: it is an ordinary answer on
+ * this path, because a provider may be eventually consistent and the Collector
+ * simply confirms again.
+ */
+export const storedObject = async (key: string) => {
+  try {
+    const head = await storage().send(
+      new HeadObjectCommand({ Bucket: required('STORAGE_BUCKET'), Key: key }),
+    )
+    return { sizeBytes: head.ContentLength ?? 0 }
+  } catch (error) {
+    // 404 and 403 both mean "no object to record here" as far as this route is
+    // concerned: some providers answer a HEAD on a missing key with 403 rather
+    // than 404 when the credential cannot list the bucket.
+    const status =
+      typeof error === 'object' && error !== null
+        ? ((error as { $metadata?: { httpStatusCode?: number } }).$metadata
+            ?.httpStatusCode ?? 0)
+        : 0
+    if (status === 404 || status === 403) return null
+    throw error
+  }
 }
 
 /** S3 takes at most a thousand keys in one delete. */

@@ -25,6 +25,7 @@ import { open } from 'node:fs/promises'
 import { hostname } from 'node:os'
 import { promisify } from 'node:util'
 
+import { archiveSession } from './archive.mjs'
 import { readCursor, writeCursor } from './cursors.mjs'
 import { drainQueue, enqueue } from './queue.mjs'
 import { allSessions, sessionTranscripts } from './transcripts.mjs'
@@ -586,6 +587,21 @@ export const sweep = async ({
       // it ran in (`turn.cwd`), so there is no session-wide cwd to pass.
       cwd: undefined,
       environment,
+    })
+
+    // Ticket 59: and archive it, for the Member who has opted in. Turns come
+    // first — they are what the dashboard is for, and they are small — so a
+    // budget spent on one large upload costs at worst a transcript that the
+    // next start picks up, never a Turn. A Member who has not opted in pays
+    // one small refused request per session here and nothing else.
+    if (overBudget()) break
+    // eslint-disable-next-line no-await-in-loop -- as above, and the budget is checked between each
+    await archiveSession({
+      configuration,
+      transcriptPath,
+      sessionId,
+      environment,
+      shouldStop: overBudget,
     })
   }
 }

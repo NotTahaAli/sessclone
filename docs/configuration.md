@@ -285,6 +285,20 @@ fired, against the Session; it reads no transcript and moves no cursor, so the
 Turns before the failure are still the next `Stop`'s to report. A payload
 carrying neither a report nor a failure is a 400.
 
+**Archival is the deployment's decision, not the Collector's (ticket 59).**
+A Member who has opted in has their transcripts uploaded at the end of each
+session and by the `SessionStart` sweep: the Collector hashes the transcript,
+asks `/api/logs/presign`, and opens the file for upload only if that answer is
+a URL. So nothing leaves the machine while the master switch is off, while the
+Project is excluded, while the Tier excludes archival, or when these exact
+bytes are already stored — each of which costs one small request and no
+transfer. The bytes then go straight to storage (ADR 0003), and a second
+request, `/api/logs/confirm`, is what records the upload: the row is written
+only once the deployment has read the object back out of the bucket, so a
+failed or truncated upload leaves no row claiming a transcript is downloadable.
+The Collector needs no configuration for any of this, and holds no copy of the
+switch.
+
 **When the deployment is unreachable, nothing is lost to a blip and little to
 an outage (ticket 39).** A failed report is retried three times over about two
 and a half seconds; a report that still will not go is written to a queue under
