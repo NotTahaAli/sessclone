@@ -32,12 +32,14 @@ variable exported inside a session dies with the container that set it.
 
 ## Results
 
-| Environment                | Device key                                   | Turns before the restart arrived | Notes                                 |
-| -------------------------- | -------------------------------------------- | -------------------------------- | ------------------------------------- |
-| Claude Projects, container | `cloud:6c6ec04b-15a2-4eba-915f-ae53ff0e1e8d` | yes — backfilled by the sweep    | 11 Turns, one Session, 2026-09-22     |
-| A second container         |                                              |                                  | needed for the one-Device claim       |
-| Killed mid-session         |                                              |                                  |                                       |
-| Moved between repositories | same container as above                      | yes                              | two Project keys, one Session (below) |
+| Environment                  | Device key                                   | Turns arrived                 | Notes                                |
+| ---------------------------- | -------------------------------------------- | ----------------------------- | ------------------------------------ |
+| Claude Projects, container 1 | `cloud:6c6ec04b-15a2-4eba-915f-ae53ff0e1e8d` | yes — backfilled by the sweep | 14 Turns, one Session, 2026-09-22    |
+| Claude Projects, container 2 | `cloud:6c6ec04b-15a2-4eba-915f-ae53ff0e1e8d` | yes                           | same key, second Session             |
+| With a subagent              | `cloud:6c6ec04b-15a2-4eba-915f-ae53ff0e1e8d` | yes                           | 21 Turns at `spawn_depth` 1          |
+| Abandoned after a turn       | `cloud:6c6ec04b-15a2-4eba-915f-ae53ff0e1e8d` | yes                           | nothing lost                         |
+| Killed mid-turn              | `cloud:6c6ec04b-15a2-4eba-915f-ae53ff0e1e8d` | baseline only                 | the in-flight turn is lost for good  |
+| Moved between repositories   | every container above                        | yes                           | two Project keys per Session (below) |
 
 ### Paste per environment
 
@@ -157,14 +159,29 @@ a surprise, and it is worth stating plainly because the reverse is easy to
 assume — a flush happens at every turn boundary, not at session end, so
 abandonment costs nothing once a turn has ended.
 
-**What is still unstaged is the mid-turn kill.** Finding 05 predicts `SessionEnd`
-fires about 180 ms after a `SIGTERM` and not at all under a `SIGKILL`, so a
-container killed _during_ a turn loses that turn. Nothing here reproduced that
-deliberately, and the row says so rather than claiming it was tested.
+## Sixth reading: killed mid-turn, and the turn is gone
 
-It is worth recording what that hole costs in cloud specifically, because it is
-larger than on a laptop and nothing in the design says so out loud: a container's
-state directory and its transcripts both die with it. On a Mac an unflushed tail
-is recovered by the next `SessionStart`, which re-reads the transcript from its
-cursor. In a cloud container there is no next start — the cursors are gone, the
-transcript is gone, and an unflushed turn has nothing left to be recovered from.
+Staged deliberately. A container did one short turn, which completed at
+09:55:41Z and delivered 5 Turns. It then began a long turn — cloning and reading
+through the repository — and was killed about half a minute into it, with no
+reply ever sent.
+
+The deployment holds **those 5 baseline Turns and nothing else** for that
+Session. Everything inside the killed turn is gone, which is what finding 05
+predicts: `SessionEnd` fires about 180 ms after a `SIGTERM` and not at all under
+a `SIGKILL`, and the flush that matters happens at a turn boundary that never
+arrived.
+
+**In cloud the loss is permanent, and that is the part worth knowing.** On a Mac
+an unflushed tail is recovered by the next `SessionStart`, which re-reads the
+transcript from its cursor, so the loss is a delay rather than a loss. A cloud
+container has no next start: its state directory and its transcript die with it,
+leaving no cursor to resume from and nothing to re-read. Usage spent inside a
+turn that never ended is billed to nobody.
+
+The hole is bounded at one turn per abnormally-ended container. Every completed
+turn before it is already delivered.
+
+**Killing it took deleting the thread.** Resolving the thread did not stop the
+running container — worth knowing for anyone reproducing this, and worth knowing
+generally: resolved is a display state, not a stop signal.
