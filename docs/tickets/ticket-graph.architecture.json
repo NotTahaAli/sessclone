@@ -3,7 +3,7 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "sessclone v1 — ticket status",
-    "subtitle": "88 tickets · 85 done · 2 ready to start · 1 blocked",
+    "subtitle": "88 tickets · 86 done · 1 ready to start · 1 blocked",
     "output": "docs/tickets/ticket-graph.html",
     "quality_profile": "showcase"
   },
@@ -124,7 +124,7 @@
       "id": "ship",
       "type": "external",
       "label": "Ship + Verify (66-71)",
-      "sublabel": "4 done · 2 ready · 1 blocked",
+      "sublabel": "5 done · 1 ready · 1 blocked",
       "pos": [
         1190,
         122
