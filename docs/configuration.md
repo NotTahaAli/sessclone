@@ -145,6 +145,17 @@ server is reported the same way, because the inviter's remedy is identical.
 first byte. The credentials live in `SMTP_URL` and are read server-side only —
 they carry no `NEXT_PUBLIC_` prefix and reach no page or log line.
 
+### Published pricing
+
+| Variable      | Required | Default | What it is                                                                                |
+| ------------- | -------- | ------- | ----------------------------------------------------------------------------------------- |
+| `PRICING_URL` | no       | —       | Markdown pricing page, e.g. `https://platform.claude.com/docs/en/about-claude/pricing.md` |
+
+Read by "Fetch latest pricing" on `/admin/rates` (ticket 97,
+`apps/web/lib/rate-sync.ts`), server-side only. Unset, the button says so and
+nothing is fetched. Nothing fetched is written until the platform administrator
+approves it.
+
 ### Public base URL
 
 | Variable              | Required | Default | What it is                                                                                 |

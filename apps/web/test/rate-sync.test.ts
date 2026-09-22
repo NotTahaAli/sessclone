@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, test } from 'vitest'
 import { asUser, owner as sql, seedFixture } from './harness'
 import {
   applyProposals,
+  approvedProposals,
+  fingerprint,
   parsePricing,
   pendingProposals,
 } from '../lib/rate-sync'
@@ -25,6 +27,8 @@ const PAGE = `
 
 *<sup>1 Cache hits and refreshes on Claude Fable 5.1 and Claude Mythos 5.1 are priced at 0.025x the base input price.</sup>*
 `
+
+const URL_PAGE = 'https://platform.claude.com/docs/en/about-claude/pricing.md'
 
 const SEED = new URL(
   '../../../supabase/migrations/20260921090000_rate_seed.sql',
@@ -73,6 +77,16 @@ describe('parsing the published page', () => {
     expect(() =>
       parsePricing(PAGE.replace('$4 / MTok', 'Contact sales')),
     ).toThrow()
+  })
+
+  // A junk id would read as a new model and be priced back to the epoch.
+  test('refuses a name that is not a plain model id, and a repeated one', () => {
+    expect(() =>
+      parsePricing(PAGE.replace('Claude Opus 5.5 ', '**Claude Opus 5.5**')),
+    ).toThrow(/unrecognised/)
+    expect(() =>
+      parsePricing(PAGE.replace('Claude Opus 4.5 ', 'Claude Opus 5.5 ')),
+    ).toThrow(/twice/)
   })
 })
 
@@ -143,6 +157,7 @@ describe('proposing and applying against the seeded list', () => {
         tx,
         await pendingProposals(tx, page, '2026-09-22'),
         '2026-09-22',
+        URL_PAGE,
       ),
     )
 
@@ -152,9 +167,60 @@ describe('proposing and applying against the seeded list', () => {
       ) as price
     `
     expect(Number(row!.price)).toBe(20)
+    const [written] = await sql<{ source: string }[]>`
+      select source from rates where model = 'claude-opus-5-5' limit 1
+    `
+    expect(written!.source).toBe(
+      'https://platform.claude.com/docs/en/about-claude/pricing read 2026-09-22',
+    )
     expect(
       await sql.begin((tx) => pendingProposals(tx, page, '2026-09-22')),
     ).toEqual([])
+  })
+
+  test('a class with a change already scheduled is left alone', async () => {
+    await sql`
+      insert into rates (model, class, price_usd, effective_from)
+      values ('claude-opus-4-5', 'input', 7, '2026-12-01')
+    `
+    const page = parsePricing(
+      PAGE.replace(
+        '| $5 / MTok         | $6.25',
+        '| $4.50 / MTok      | $6.25',
+      ),
+    )
+    const proposals = await sql.begin((tx) =>
+      pendingProposals(tx, page, '2026-09-22'),
+    )
+    expect(proposals.map((proposal) => proposal.model)).not.toContain(
+      'claude-opus-4-5',
+    )
+  })
+
+  // What the operator approved is what gets written, or nothing is.
+  test('apply refuses a proposal that changed since it was reviewed', async () => {
+    const seen = await sql.begin((tx) =>
+      pendingProposals(tx, parsePricing(PAGE), '2026-09-22'),
+    )
+    const reviewed = new Map(
+      seen.map((proposal) => [proposal.model, fingerprint(proposal)]),
+    )
+    expect(approvedProposals(seen, reviewed)).toEqual(seen)
+
+    const moved = await sql.begin((tx) =>
+      pendingProposals(
+        tx,
+        parsePricing(
+          PAGE.replace(
+            '$20 / MTok    |\n| Claude Opus 4.5',
+            '$21 / MTok    |\n| Claude Opus 4.5',
+          ),
+        ),
+        '2026-09-22',
+      ),
+    )
+    expect(approvedProposals(moved, reviewed)).toBeNull()
+    expect(approvedProposals([], reviewed)).toBeNull()
   })
 
   test('refused for anyone but the operator', async () => {
@@ -168,6 +234,7 @@ describe('proposing and applying against the seeded list', () => {
           tx,
           await pendingProposals(tx, page, '2026-09-22'),
           '2026-09-22',
+          URL_PAGE,
         ),
       ),
     ).rejects.toThrow(/row-level security/)

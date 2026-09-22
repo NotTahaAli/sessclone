@@ -66,7 +66,21 @@ export function SyncPricing() {
                     <span className="font-mono text-body">
                       {proposal.model}
                     </span>
+                    {/* A model with no price yet is the one worth a second
+                        look: its rows reach back to the epoch. */}
+                    {proposal.changes.every(
+                      (change) => change.from === null,
+                    ) ? (
+                      <span className="text-text-muted text-caption">
+                        new model
+                      </span>
+                    ) : null}
                   </label>
+                  <input
+                    type="hidden"
+                    name={`fingerprint:${proposal.model}`}
+                    value={proposal.fingerprint}
+                  />
                   <ul className="mt-1 flex flex-col gap-0.5 pl-6">
                     {proposal.changes.map((change) => (
                       <li key={change.class} className="text-caption">

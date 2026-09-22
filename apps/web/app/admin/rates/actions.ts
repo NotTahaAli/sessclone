@@ -7,8 +7,11 @@ import { asOperator, currentOperator } from '../../../lib/platform-admin'
 import { addRate, deleteRate, RATE_CLASSES } from '../../../lib/rates'
 import {
   applyProposals,
+  approvedProposals,
+  fingerprint,
   fetchPublished,
   pendingProposals,
+  pricingUrl,
   type Proposal,
 } from '../../../lib/rate-sync'
 
@@ -124,29 +127,44 @@ export const deleteRateAction = async (
 
 // Ticket 97: the published price list, fetched and offered for approval.
 //
-// Two steps behind one Server Action, so the page holds one state: `fetch`
-// reads the page and proposes; `apply` reads it again and publishes only the models the operator ticked. The
-// browser posts model ids, never prices, so a forged request can at most
-// accept a change the page itself published.
+// Two steps behind one Server Action, so the page holds one state. Fetch reads
+// the page and proposes. Apply reads it again, and writes a ticked model only
+// when its fresh changes equal the ones the operator was shown — the browser
+// posts back a fingerprint of each reviewed proposal, which is compared and
+// never written. A page that changed in between is refused, not published
+// unseen.
 
 export type SyncState =
   | { error: string }
-  | { proposals: Proposal[] }
+  | { proposals: (Proposal & { fingerprint: string })[] }
   | { applied: number; models: string[] }
   | null
 
+// ponytail: the server's UTC day, as the Rates page's own default date is.
+// An operator west of UTC applying late in their evening dates the row
+// tomorrow; the add-a-rate form is the way to pick a different day.
 const syncToday = () => new Date().toISOString().slice(0, 10)
 
-const readProposals = async () => {
-  const published = await fetchPublished()
-  return asOperator((tx) => pendingProposals(tx, published, syncToday()))
-}
+const NO_URL = 'Set PRICING_URL on this deployment to fetch published pricing.'
+const UNREADABLE = 'The published pricing page could not be read.'
 
 const fetchPricing = async (): Promise<SyncState> => {
+  const url = pricingUrl()
+  if (!url) return { error: NO_URL }
+  let published
   try {
-    return { proposals: await readProposals() }
+    published = await fetchPublished(url)
   } catch {
-    return { error: 'The published pricing page could not be read.' }
+    return { error: UNREADABLE }
+  }
+  const proposals = await asOperator((tx) =>
+    pendingProposals(tx, published, syncToday()),
+  )
+  return {
+    proposals: proposals.map((proposal) => ({
+      ...proposal,
+      fingerprint: fingerprint(proposal),
+    })),
   }
 }
 
@@ -167,20 +185,41 @@ export const syncPricingAction = async (
 const applyPricing = async (formData: FormData): Promise<SyncState> => {
   const approved = Approved.safeParse(formData.getAll('model'))
   if (!approved.success) return { error: 'Tick at least one model to apply.' }
+  const reviewed = new Map(
+    approved.data.map((model) => {
+      const seen = formData.get(`fingerprint:${model}`)
+      return [model, typeof seen === 'string' ? seen : ''] as const
+    }),
+  )
 
-  const chosen = new Set(approved.data)
+  const url = pricingUrl()
+  if (!url) return { error: NO_URL }
+  let published
   try {
-    const published = await fetchPublished()
-    const today = syncToday()
+    published = await fetchPublished(url)
+  } catch {
+    return { error: UNREADABLE }
+  }
+
+  const today = syncToday()
+  try {
     const applied = await asOperator(async (tx) => {
-      const proposals = (await pendingProposals(tx, published, today)).filter(
-        (proposal) => chosen.has(proposal.model),
+      const chosen = approvedProposals(
+        await pendingProposals(tx, published, today),
+        reviewed,
       )
+      if (!chosen) return null
       return {
-        count: await applyProposals(tx, proposals, today),
-        models: proposals.map((proposal) => proposal.model),
+        count: await applyProposals(tx, chosen, today, url),
+        models: chosen.map((proposal) => proposal.model),
       }
     })
+    if (!applied) {
+      return {
+        error:
+          'The published prices changed since you fetched them. Nothing was applied; fetch again.',
+      }
+    }
     revalidatePath('/', 'layout')
     return { applied: applied.count, models: applied.models }
   } catch (error) {
@@ -192,7 +231,7 @@ const applyPricing = async (formData: FormData): Promise<SyncState> => {
       error:
         code === '23505'
           ? 'A ticked model already has a price from today. Delete that row first; nothing was applied.'
-          : 'Nothing was applied: the pricing page could not be read or a price was refused.',
+          : 'Nothing was applied: a price was refused.',
     }
   }
 }
