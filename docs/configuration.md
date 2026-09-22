@@ -123,8 +123,27 @@ reach, and never used to work around an inconvenient policy. It carries no
 `NEXT_PUBLIC_` prefix precisely so that a mistake is a build-time absence
 rather than a shipped credential.
 
-Invitation and sign-in email is sent by Supabase Auth and configured in the
-Supabase project's own SMTP settings, not here.
+Sign-in email — the magic link — is sent by Supabase Auth and configured in
+the Supabase project's own SMTP settings, not here. The **invitation** email is
+different: an invitation is this app's own `/join/<token>` route, which Supabase
+never sees, so it is sent through the app's own SMTP, below.
+
+### Invitation email (SMTP)
+
+| Variable    | Required | Default | What it is                                                                      |
+| ----------- | -------- | ------- | ------------------------------------------------------------------------------- |
+| `SMTP_URL`  | no       | —       | Connection URL, e.g. `smtp://user:pass@smtp.example.com:587` or `smtps://…:465` |
+| `SMTP_FROM` | no       | —       | From address on the invitation, e.g. `sessclone <no-reply@example.com>`         |
+
+Both or neither. With them set (ticket 82, `apps/web/lib/mailer.ts`), inviting
+someone emails them the join link; with either unset, no mail is attempted and
+the inviter is told to pass the copyable link on themselves — the same link the
+email would carry, never a second token. A send that fails for a configured
+server is reported the same way, because the inviter's remedy is identical.
+
+`smtp://` uses STARTTLS when the server offers it; `smtps://` is TLS from the
+first byte. The credentials live in `SMTP_URL` and are read server-side only —
+they carry no `NEXT_PUBLIC_` prefix and reach no page or log line.
 
 ### Public base URL
 

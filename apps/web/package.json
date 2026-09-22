@@ -16,6 +16,7 @@
     "@supabase/ssr": "catalog:",
     "@supabase/supabase-js": "catalog:",
     "next": "catalog:",
+    "nodemailer": "10.0.10",
     "postgres": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
@@ -25,6 +26,7 @@
     "@tailwindcss/postcss": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "smtp-server": "3.19.13",
     "tailwindcss": "catalog:",
     "typescript": "catalog:"
   }

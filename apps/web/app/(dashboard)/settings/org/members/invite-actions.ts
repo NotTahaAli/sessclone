@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 
+import { appUrl } from '../../../../../lib/auth/app-url'
 import { asViewer } from '../../../../../lib/db'
 import {
   invite,
@@ -10,6 +11,7 @@ import {
   revokeInvitation,
   type InvitedRole,
 } from '../../../../../lib/invitations'
+import { sendInviteEmail, type Delivery } from '../../../../../lib/mailer'
 import { setMemberRemoved, setMemberRole } from '../../../../../lib/members'
 import {
   currentViewer,
@@ -47,8 +49,10 @@ const MemberRole: z.ZodType<Role> = z.enum([
 export type InviteResult =
   | { error: string }
   // The link is shown once, to the person who made it: whoever holds it can
-  // join, and it is never stored in a form anybody can read back.
-  | { link: string; email: string }
+  // join, and it is never stored in a form anybody can read back. `delivery`
+  // says whether the email went, so the page can tell the inviter to pass the
+  // link on when it did not (ticket 82).
+  | { link: string; email: string; delivery: Delivery }
   | null
 
 export const sendInvite = async (
@@ -70,7 +74,19 @@ export const sendInvite = async (
       invite(tx, viewer.orgId, email.data, role.data, viewer.memberId),
     )
     revalidatePath('/settings/org/members')
-    return { link: invitePath(token), email: email.data }
+
+    // Deliver it, and report what delivery did. The email and the copyable
+    // link carry the same token, so a failed or unconfigured send loses
+    // nothing: the inviter passes the link on themselves. Never awaited in a
+    // way that can fail the action — `sendInviteEmail` resolves either way.
+    const link = invitePath(token)
+    const delivery = await sendInviteEmail({
+      to: email.data,
+      link: `${appUrl()}${link}`,
+      orgName: viewer.orgName,
+      invitedByEmail: viewer.email,
+    })
+    return { link, email: email.data, delivery }
   } catch (error) {
     // The one refusal a person can act on is the live-invitation index: they
     // have already invited this address and the first link is still good.

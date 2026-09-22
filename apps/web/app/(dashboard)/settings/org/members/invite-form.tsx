@@ -3,6 +3,23 @@
 import { useActionState } from 'react'
 
 import { sendInvite } from './invite-actions'
+import type { Delivery } from '../../../../../lib/mailer'
+
+// What sits above the copyable link, given what delivery did (ticket 82). The
+// link is shown in every case — it is the same token the email carries — so
+// this only sets expectation: was it emailed, or must the inviter pass it on.
+const deliveryLine = (delivery: Delivery, email: string) => {
+  const suffix =
+    ' The link is shown once, works for seven days, and only works for that address.'
+  if (delivery === 'sent') {
+    return `Invitation emailed to ${email}. You can also send this link yourself.${suffix}`
+  }
+  const why =
+    delivery === 'not-configured'
+      ? 'This deployment does not send email'
+      : 'The email could not be sent'
+  return `${why}, so send ${email} this link yourself.${suffix}`
+}
 
 // Client-side because the link is the result. A Server Action that only
 // revalidated would leave the one thing the inviter needs — the URL to send —
@@ -62,8 +79,7 @@ export function InviteForm({ origin }: { origin: string }) {
         {state && 'link' in state ? (
           <div className="border-rule bg-surface rounded-md border p-3">
             <p className="text-sm">
-              Invitation for {state.email}. Send them this link — it is shown
-              once, it works for seven days, and it only works for that address.
+              {deliveryLine(state.delivery, state.email)}
             </p>
             {/* Readonly rather than text, so it is one tap to copy on a phone
                 and cannot be edited into a link that goes nowhere. */}

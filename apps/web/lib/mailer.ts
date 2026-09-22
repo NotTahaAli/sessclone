@@ -1,0 +1,125 @@
+import { createTransport } from 'nodemailer'
+
+// Ticket 82: the invitation, delivered.
+//
+// Ticket 49 builds the invitation and hands the inviter a link to pass on,
+// because this deployment has no outbound mail of its own — Supabase Auth mails
+// sign-in links, but an invitation is the app's own `/join/<token>` route and
+// Supabase never sees it. This file is the app's own SMTP, used for that one
+// email and reported as absent rather than failing quietly when it is not set.
+//
+// Two variables, both optional. `SMTP_URL` is a connection URL nodemailer
+// parses — `smtp://user:pass@host:587` (STARTTLS when the server offers it) or
+// `smtps://…@host:465` (TLS from the first byte) — so the host, port, auth and
+// transport security are one value a self-hoster copies from their provider
+// rather than five this file would have to define a shape for. `SMTP_FROM` is
+// the From address. Neither has a default: mail that is not configured is a
+// link the inviter copies, which is worse to fake than to admit.
+//
+// The credentials live in `SMTP_URL` and never reach the browser: this module
+// is server-only (no `NEXT_PUBLIC_`), imported by a Server Action, and the URL
+// is passed to nodemailer and put in no log line and no rendered page.
+
+/** Present only when both variables are set: a URL with no From is a mailer
+ * that cannot address a message, so it is treated as unconfigured, not as a
+ * half-configured one that fails at send time. */
+type MailerConfig = { url: string; from: string }
+
+const mailerConfig = (): MailerConfig | null => {
+  const url = process.env.SMTP_URL?.trim()
+  const from = process.env.SMTP_FROM?.trim()
+  return url && from ? { url, from } : null
+}
+
+/** Whether this deployment can send mail at all — read by the invite action so
+ * it can tell the inviter the link is the only route before it even tries. */
+export const mailConfigured = () => mailerConfig() !== null
+
+/**
+ * What one delivery attempt did:
+ * - `sent`: the server accepted the message.
+ * - `not-configured`: no SMTP is set, so nothing was attempted.
+ * - `failed`: SMTP is set but the server refused or was unreachable.
+ *
+ * The link is shown by the caller in every case; delivery only decides what
+ * sentence sits beside it.
+ */
+export type Delivery = 'sent' | 'not-configured' | 'failed'
+
+export type InviteEmail = {
+  to: string
+  /** The absolute join URL — the same link the inviter can copy, not a second
+   * token: one capability, one place it can be spent. */
+  link: string
+  orgName: string
+  /** Who sent it, for the person deciding whether to trust the link. */
+  invitedByEmail: string
+}
+
+/** A subject and body that name the Org and the inviter and carry the link.
+ * Plain text and a minimal HTML part with the link as the only interactive
+ * element — an invitation is a link and a sentence, not a layout. Exported so
+ * the escaping below is testable without parsing MIME back off the wire. */
+export const renderInvite = ({
+  to,
+  link,
+  orgName,
+  invitedByEmail,
+}: InviteEmail) => ({
+  to,
+  subject: `You are invited to ${orgName} on sessclone`,
+  text: [
+    `${invitedByEmail} invited you to join ${orgName} on sessclone.`,
+    '',
+    `Accept the invitation: ${link}`,
+    '',
+    'The link works once and expires. If you did not expect it, ignore this email.',
+  ].join('\n'),
+  html: [
+    `<p>${escapeHtml(invitedByEmail)} invited you to join <strong>${escapeHtml(orgName)}</strong> on sessclone.</p>`,
+    `<p><a href="${escapeHtml(link)}">Accept the invitation</a></p>`,
+    `<p>The link works once and expires. If you did not expect it, ignore this email.</p>`,
+  ].join('\n'),
+})
+
+/** The invitee address, the Org name and the inviter address are all data from
+ * a row, and the body is HTML — so the three interpolated values are escaped
+ * rather than trusted. The link is app-built (`invitePath` + `appUrl`), but
+ * escaped too: it is cheaper than proving it can never contain a quote. */
+const escapeHtml = (value: string) =>
+  value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+
+/**
+ * Sends the invitation email, or reports why it could not.
+ *
+ * Never throws: the invite has already been created and its link returned, so
+ * a mail failure must not undo that or surface as a 500. The transporter is
+ * built per call rather than kept at module scope — an invitation is rare, a
+ * pooled connection to an SMTP server the deployment may have mis-set is a
+ * resource leak this does not need, and `nodemailer`'s default is to open and
+ * close a connection per `sendMail`.
+ */
+export const sendInviteEmail = async (
+  email: InviteEmail,
+): Promise<Delivery> => {
+  const config = mailerConfig()
+  if (!config) return 'not-configured'
+
+  const transporter = createTransport(config.url)
+  try {
+    await transporter.sendMail({ from: config.from, ...renderInvite(email) })
+    return 'sent'
+  } catch {
+    // The reason is not surfaced: an SMTP error can echo the recipient and the
+    // server's banner, and the inviter's remedy is the same whatever it was —
+    // copy the link. The deployment's operator reads the cause in their own
+    // mail server's logs, not in a page a Member sees.
+    return 'failed'
+  } finally {
+    transporter.close()
+  }
+}
