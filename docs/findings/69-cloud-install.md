@@ -32,13 +32,12 @@ variable exported inside a session dies with the container that set it.
 
 ## Results
 
-| Environment                    | Device key | Turns before the restart arrived | Notes |
-| ------------------------------ | ---------- | -------------------------------- | ----- |
-| Claude Code Cloud, container 1 |            |                                  |       |
-| Claude Code Cloud, container 2 |            |                                  |       |
-| Claude Projects                |            |                                  |       |
-| Killed mid-session             |            |                                  |       |
-| Moved between repositories     |            |                                  |       |
+| Environment                | Device key                                   | Turns before the restart arrived | Notes                                 |
+| -------------------------- | -------------------------------------------- | -------------------------------- | ------------------------------------- |
+| Claude Projects, container | `cloud:6c6ec04b-15a2-4eba-915f-ae53ff0e1e8d` | yes — backfilled by the sweep    | 11 Turns, one Session, 2026-09-22     |
+| A second container         |                                              |                                  | needed for the one-Device claim       |
+| Killed mid-session         |                                              |                                  |                                       |
+| Moved between repositories | same container as above                      | yes                              | two Project keys, one Session (below) |
 
 ### Paste per environment
 
@@ -83,3 +82,41 @@ That last point is the finding, not the misconfiguration: a Collector with a
 wrong URL is indistinguishable from a working one until somebody looks. The
 cursors are the tell — 36 of them, none of which could have been written by a
 deployment answering 404, so they predate this environment's current settings.
+
+## Second reading: with the environment fixed
+
+The settings were corrected — `SESSCLONE_URL` to the real deployment and a key
+set — and a fresh container started, since a variable added to an environment
+reaches the next container and not the running one. Its first turn boundary
+delivered.
+
+**Turns arrive, and the backfill is real.** 11 Turns in one Session, under
+`cloud:6c6ec04b-15a2-4eba-915f-ae53ff0e1e8d`. The earliest Turn _occurred_ at
+09:40:11Z and the whole batch was _received_ at 09:41:08Z, when the first `Stop`
+hook ran: work done before the Collector was live arrived anyway, read from the
+transcript by cursor rather than re-run. That is point 2, and it is the property
+that makes an install in a cloud environment forgiving.
+
+**The state directory matches the prediction and the queue stays empty.** One
+cursor file, written at the same 09:41:08Z, and no `queue/` directory at all —
+nothing had to be retried, so nothing was.
+
+**One Session, two Projects.** Those 11 Turns are recorded under two Project
+keys:
+
+| Project key                       | Turns | First Turn   |
+| --------------------------------- | ----- | ------------ |
+| `local:vm:/home/user`             | 3     | 09:40:11.78Z |
+| `github.com/nottahaali/sessclone` | 11    | 09:40:26.04Z |
+
+The container starts outside any repository and the session moves into one, so
+the same `session_id` is written under two project directories. This is the
+collision finding 74 describes and ticket 09 has to close, **observed live**
+rather than reasoned about — and it is ordinary in a cloud container rather than
+the edge case it looks like locally. Note what it costs today: a Session's Turns
+are split across two Projects in every per-Project total, and under ADR 0003's
+naming the same Session would archive under two storage keys.
+
+What is still unproven here is point 3, that every container collapses into one
+Device. One Device row is consistent with the claim but does not demonstrate it;
+two containers reporting the same `cloud:<account uuid>` would.
