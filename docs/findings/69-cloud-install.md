@@ -117,6 +117,28 @@ the edge case it looks like locally. Note what it costs today: a Session's Turns
 are split across two Projects in every per-Project total, and under ADR 0003's
 naming the same Session would archive under two storage keys.
 
-What is still unproven here is point 3, that every container collapses into one
-Device. One Device row is consistent with the claim but does not demonstrate it;
-two containers reporting the same `cloud:<account uuid>` would.
+## Third reading: a second container, same Device
+
+A second, separate container reported the same Device key minutes later, which
+is point 3 demonstrated rather than assumed: two containers, two Sessions, one
+Device row. The deployment holds exactly two Device rows in total — that key and
+the Mac.
+
+| Session      | Project key                       | Turns | First Turn   | First received |
+| ------------ | --------------------------------- | ----- | ------------ | -------------- |
+| `9e561c72-…` | `local:vm:/home/user`             | 3     | 09:40:11.78Z | 09:41:08.57Z   |
+| `9e561c72-…` | `github.com/nottahaali/sessclone` | 11    | 09:40:26.04Z | 09:41:08.57Z   |
+| `00b6f56b-…` | `local:vm:/home/user`             | 4     | 09:43:04.56Z | 09:43:44.78Z   |
+| `00b6f56b-…` | `github.com/nottahaali/sessclone` | 7     | 09:43:12.23Z | 09:43:44.78Z   |
+
+Read the table twice. It settles the Device question, and it shows the split
+Session is **reproducible, not a fluke**: both containers did it, each with the
+same shape — a few Turns outside any repository, then the rest inside one, under
+one `session_id`. In a cloud container that is not an edge case, it is what
+every session does.
+
+Both also show the backfill: roughly a minute separates the first Turn from the
+moment the batch was received, because nothing is sent until a turn ends.
+
+Still unrun: a container killed mid-session (point 4), and any Session whose
+subagent transcripts sit one directory deeper — neither container spawned one.

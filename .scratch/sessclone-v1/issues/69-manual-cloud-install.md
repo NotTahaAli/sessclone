@@ -6,8 +6,8 @@
 
 **Status:** ready-for-agent
 
-- [ ] Fresh install in a cloud environment, with the restart behaviour observed
-- [ ] Turns from before the restart arrive via the first sweep
-- [ ] Every container collapses into one Device for that Member
+- [x] Fresh install in a cloud environment, with the restart behaviour observed
+- [x] Turns from before the restart arrive via the first sweep
+- [x] Every container collapses into one Device for that Member
 - [ ] A container killed mid-session is checked against what the spike predicted
 - [ ] Claude Projects covered as well as Claude Code Cloud, including a Session whose subagent transcripts live one directory deeper, and a Session that moved between repositories mid-flight (finding 74)
