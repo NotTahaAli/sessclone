@@ -34,11 +34,11 @@ the plugin's first release collect nothing at all (PR #12).
 
 ## Results
 
-| Machine | OS            | Claude Code | Node   | Turns arrived | State directory as resolved                        |
-| ------- | ------------- | ----------- | ------ | ------------- | -------------------------------------------------- |
+| Machine | OS            | Claude Code | Node   | Turns arrived | State directory as resolved                         |
+| ------- | ------------- | ----------- | ------ | ------------- | --------------------------------------------------- |
 | macOS   | Darwin 27.0.0 | unrecorded  | 26.8.1 | yes           | `~/Library/Application Support/sessclone`, writable |
-| Linux   |               |             |        |               |                                                    |
-| Windows |               |             |        |               |                                                    |
+| Linux   |               |             |        |               |                                                     |
+| Windows |               |             |        |               |                                                     |
 
 **Windows is the one with no prior evidence.** Finding 06 has the config
 directory and the transcript layout observed on a real Windows box, and the
