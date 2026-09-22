@@ -5,7 +5,12 @@ import { z } from 'zod'
 
 import type { NameState } from '../../inline-name'
 import { asViewer } from '../../../../lib/db'
-import { labelSession, NAME_LIMIT } from '../../../../lib/names'
+import {
+  labelSession,
+  NAME_LIMIT,
+  setSessionState,
+  type SessionState,
+} from '../../../../lib/names'
 import { currentViewer } from '../../../../lib/viewer'
 
 // Ticket 90's second write: a name for a Session.
@@ -64,4 +69,54 @@ export const labelSessionAction = async (
   // here, and that list is another route.
   revalidatePath('/', 'layout')
   return { saved: value }
+}
+
+// Ticket 92's write: which shelf this Session sits on.
+//
+// The same table, the same policy and the same refusal as the label above —
+// `session_labels_write` is the Session's own Member, or an Owner or Admin of
+// its Org — so this action checks nothing about the caller either.
+//
+// Nothing here touches a Turn. An archived Session costs what it cost, and
+// Costs, the breakdowns and the per-model table are the same either side of
+// this write. The state decides what `sessionList` returns and nothing else.
+
+const State = z.enum(['archived', 'hidden', 'listed'])
+
+export type ShelfState = { error?: string; state?: SessionState | null }
+
+export const setSessionStateAction = async (
+  _previous: ShelfState,
+  formData: FormData,
+): Promise<ShelfState> => {
+  const viewer = await currentViewer()
+  if (!viewer) return { error: 'Sign in again to move this Session.' }
+
+  const memberId = MemberId.safeParse(formData.get('memberId'))
+  const sessionId = SessionId.safeParse(formData.get('sessionId'))
+  const state = State.safeParse(formData.get('state'))
+  if (!memberId.success || !sessionId.success) {
+    return { error: 'That is not a Session.' }
+  }
+  if (!state.success) return { error: 'That is not a shelf.' }
+
+  // `listed` is the absence of a state rather than a third value, which is
+  // what the check constraint in the migration says too.
+  const value = state.data === 'listed' ? null : state.data
+
+  // An insert refused by a policy raises where an update merely matches no
+  // row, so this catches as well as checks — the same reason the label above
+  // does, and the catch is outside the transaction so the refusal rolls back.
+  const written = await asViewer(viewer.userId, (tx) =>
+    setSessionState(tx, viewer.orgId, memberId.data, sessionId.data, value),
+  ).catch(() => false)
+
+  if (!written) {
+    return { error: 'That Session is not yours to move.' }
+  }
+
+  // The Sessions list is another route, and this write is mostly about what
+  // that list shows.
+  revalidatePath('/', 'layout')
+  return { state: value }
 }

@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import { labelSessionAction } from './actions'
 import { TurnRows } from '../../turns/turn-row'
 import { InlineName } from '../../inline-name'
+import { Shelf } from './shelf'
 import { PageHeader } from '../../page-header'
 import { asViewer } from '../../../../lib/db'
 import { compact, count, usd } from '../../../../lib/money'
@@ -139,6 +140,15 @@ export default async function Session({
 
       <Summary session={session} when={when} />
 
+      {/* Ticket 92. Under the summary rather than beside the name: it is a
+          thing you do once you have looked, not part of what the Session
+          is. */}
+      <Shelf
+        memberId={member}
+        sessionId={session.sessionId}
+        current={session.state}
+      />
+
       <Models models={models} />
 
       <Transcripts
@@ -193,17 +203,29 @@ const person = (session: SessionRow) =>
     : (session.memberEmail ?? 'Outside your view')
 
 /**
- * Ticket 89: what this Session spent, per model.
+ * Tickets 89 and 94: what this Session spent, per model, and where the tokens
+ * went.
  *
  * Between the four tiles above and the Turn list below there was nothing, so
  * "what did the Opus part cost" meant reading four hundred rows. These rows
  * are the same aggregate as the tiles with one more column in the `group by`,
  * so they sum to the figures above them rather than to something near them.
  *
- * Tokens *and* dollars, which is the half of the ask that a per-Turn
- * breakdown already had and a Session did not. A model with nothing priced
- * shows an em dash and says how many Turns are behind it — never `$0.00`,
- * which is the confident wrong number ADR 0002 is about.
+ * Ticket 94 splits the token total into the four reported classes, because
+ * the total answered "how much" and never "why" — and the why is almost
+ * always the cache. The four are the reported classes and no more: the 5m and
+ * 1h splits are subsets of cache creation, and a column each beside it would
+ * count a token twice on any reader's mental sum.
+ *
+ * A model with nothing priced shows an em dash and says how many Turns are
+ * behind it — never `$0.00`, which is the confident wrong number ADR 0002 is
+ * about.
+ *
+ * A real table, which the rest of this page is not. Six figures per model do
+ * not stack into anything readable at 390px, and a card of six labelled
+ * numbers is what a reader comparing models is trying to get away from. So it
+ * scrolls sideways on a phone instead, with the model column first: what
+ * leaves the viewport is the figures, never the row's identity.
  */
 function Models({ models }: { models: SessionModel[] }) {
   if (models.length === 0) return null
@@ -213,42 +235,78 @@ function Models({ models }: { models: SessionModel[] }) {
       <h2 id="models" className="text-heading-lg">
         Models
       </h2>
-      <ul className="border-rule bg-surface divide-rule divide-y rounded-md border">
-        {models.map((model) => (
-          <li
-            key={model.model ?? 'none'}
-            // Not wrapping, as the Turn rows do not: at 390px a model
-            // identifier is wider than half the row, and a wrapped cost lands
-            // on the left where it reads as part of the model's subtitle
-            // rather than as the figure the row is about.
-            className="flex items-baseline justify-between gap-x-4 p-4"
-          >
-            <span className="flex min-w-0 flex-col gap-0.5">
-              <span className="font-mono text-body break-all">
-                {model.model ?? 'No model reported'}
-              </span>
-              <span className="text-text-muted text-caption">
-                {count.format(model.turns)}{' '}
-                {model.turns === 1 ? 'Turn' : 'Turns'} ·{' '}
-                {compact.format(model.tokens)} tokens
-              </span>
-            </span>
-            <span className="flex shrink-0 flex-col items-end gap-0.5 text-right">
-              <span className="font-mono text-body">{usd(model.costUsd)}</span>
-              <span className="text-text-muted text-caption">
-                {model.unpricedTurns === 0
-                  ? 'every Turn has a Rate'
-                  : model.costUsd === null
-                    ? `${model.unpricedTurns} Turns, no Rate`
-                    : `at least: ${model.unpricedTurns} unpriced`}
-              </span>
-            </span>
-          </li>
-        ))}
-      </ul>
+      <div className="border-rule bg-surface overflow-x-auto rounded-md border">
+        <table className="w-full min-w-[40rem] border-collapse text-caption">
+          <thead>
+            <tr className="border-rule text-text-muted border-b text-left">
+              <th scope="col" className="p-3 font-normal">
+                Model
+              </th>
+              {NUMERIC.map((column) => (
+                <th
+                  key={column}
+                  scope="col"
+                  className="p-3 text-right font-normal"
+                >
+                  {column}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-rule divide-y">
+            {models.map((model) => (
+              <tr key={model.model ?? 'none'}>
+                <th scope="row" className="p-3 text-left font-normal align-top">
+                  <span className="font-mono break-all">
+                    {model.model ?? 'No model reported'}
+                  </span>
+                  <span className="text-text-muted block">
+                    {count.format(model.turns)}{' '}
+                    {model.turns === 1 ? 'Turn' : 'Turns'}
+                  </span>
+                </th>
+                {cell(model.inputTokens)}
+                {cell(model.outputTokens)}
+                {cell(model.cacheReadTokens)}
+                {cell(model.cacheWriteTokens)}
+                <td className="p-3 text-right align-top">
+                  <span className="font-mono">{usd(model.costUsd)}</span>
+                  <span className="text-text-muted block">
+                    {model.unpricedTurns === 0
+                      ? 'every Turn has a Rate'
+                      : model.costUsd === null
+                        ? `${model.unpricedTurns} Turns, no Rate`
+                        : `at least: ${model.unpricedTurns} unpriced`}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   )
 }
+
+/** The columns after the model, in the order ticket 94 asks for them. */
+const NUMERIC = [
+  'Input',
+  'Output',
+  'Cache read',
+  'Cache write',
+  'Cost',
+] as const
+
+/**
+ * One token figure. `compact` for the same reason the tiles use it — these are
+ * millions, and a reader comparing two models is comparing magnitudes rather
+ * than reconciling a ledger.
+ */
+const cell = (tokens: number) => (
+  <td className="p-3 text-right align-top font-mono">
+    {compact.format(tokens)}
+  </td>
+)
 
 /** The figures the ticket asks for, in the order it asks for them. */
 function Summary({

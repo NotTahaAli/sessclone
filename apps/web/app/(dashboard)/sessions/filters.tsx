@@ -1,4 +1,5 @@
-// Ticket 86's two filters, as a `form method="get"`.
+// Ticket 86's two filters, ticket 92's shelf and ticket 93's two, as a
+// `form method="get"`.
 //
 // The same shape as the custom period beside it: a `get` form puts its fields
 // in the query string, which is exactly the URL this page reads — no handler,
@@ -13,17 +14,30 @@
 /** One object, rather than a new one on every render. */
 const NO_PROJECT = { value: 'none', label: 'Outside a repository' }
 
+/** Ticket 92's shelves. Hidden is not among them, on purpose: hidden means no
+ * list, and an option for it would make it a second archive. */
+const SHELVES = [
+  { value: '', label: 'Listed' },
+  { value: 'archived', label: 'Archived' },
+]
+
 export function SessionFilters({
   projects,
   people,
   project,
   member,
+  state,
+  search,
+  failed,
   params,
 }: {
   projects: { id: string; key: string }[]
   people: { id: string; email: string }[]
   project: string | undefined
   member: string | undefined
+  state: string | undefined
+  search: string | undefined
+  failed: boolean
   params: Record<string, string | string[] | undefined>
 }) {
   const carried: [string, string][] = []
@@ -59,6 +73,61 @@ export function SessionFilters({
 
       {choice('project', 'Project', project, projectOptions)}
       {choice('member', 'Person', member, peopleOptions)}
+
+      {/* Ticket 92. A `select` rather than a checkbox, because "listed" and
+          "archived" are two shelves rather than one thing being on or off —
+          and because a third shelf, if there is ever one, is an option
+          rather than a redesign. */}
+      <div className="flex min-w-0 flex-col gap-1">
+        <label htmlFor="filter-state" className="text-text-muted text-micro">
+          Shelf
+        </label>
+        <select
+          id="filter-state"
+          name="state"
+          defaultValue={state ?? ''}
+          className="border-control-border text-text h-8 max-w-[14rem] rounded border px-2 text-caption"
+        >
+          {SHELVES.map((shelf) => (
+            <option key={shelf.value} value={shelf.value}>
+              {shelf.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Ticket 93. `type="search"`, which gets the clear affordance and the
+          right keyboard on a phone for free. */}
+      <div className="flex min-w-0 flex-col gap-1">
+        <label htmlFor="filter-q" className="text-text-muted text-micro">
+          Search
+        </label>
+        <input
+          id="filter-q"
+          name="q"
+          type="search"
+          defaultValue={search ?? ''}
+          placeholder="Name or session id"
+          className="border-control-border text-text h-8 max-w-[14rem] rounded border px-2 text-caption"
+        />
+      </div>
+
+      {/* Ticket 93. The value is the box being ticked: an unchecked box sends
+          nothing, which is how a `get` form says false without a hidden
+          field contradicting it. */}
+      <div className="flex h-8 items-center gap-2">
+        <input
+          id="filter-failed"
+          name="failed"
+          type="checkbox"
+          value="1"
+          defaultChecked={failed}
+          className="border-control-border size-4 rounded border"
+        />
+        <label htmlFor="filter-failed" className="text-text text-caption">
+          Failed only
+        </label>
+      </div>
 
       <button
         type="submit"

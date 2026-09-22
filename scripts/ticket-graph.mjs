@@ -119,9 +119,10 @@ const PHASES = [
     label: 'Sessions + Names',
     type: 'frontend',
     pos: [1190, 800],
-    // 89 to 91 extend the same surfaces: what a Session spent per model, and
-    // the friendly names for a Project, a Session and a person.
-    range: [85, 91],
+    // 89 to 94 extend the same surfaces: what a Session spent per model, the
+    // friendly names for a Project, a Session and a person, and the archiving,
+    // hiding and searching that make a month of Sessions navigable.
+    range: [85, 94],
   },
 ]
 

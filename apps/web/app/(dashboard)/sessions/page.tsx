@@ -49,6 +49,9 @@ const lasted = (session: SessionRow) => {
 type Params = RangeParams & {
   project?: string | string[]
   member?: string | string[]
+  state?: string | string[]
+  q?: string | string[]
+  failed?: string | string[]
   before?: string | string[]
 }
 
@@ -68,12 +71,27 @@ export default async function Sessions({
 
   const project = one(params.project)
   const member = one(params.member)
+
+  // Ticket 92. Anything that is not `archived` is the default shelf, rather
+  // than an error: a hand-edited URL asking for a shelf that does not exist
+  // should show the reader the ordinary list, not an empty one.
+  const state =
+    one(params.state) === 'archived' ? ('archived' as const) : undefined
+
+  // Ticket 93. Trimmed, and an all-spaces box is no filter at all — a `%  %`
+  // pattern would quietly return nothing and read as "no sessions".
+  const search = one(params.q)?.trim() || undefined
+  const failed = one(params.failed) === '1'
+
   const filter = {
     // `none` is the Sessions that ran outside a repository — a group rather
     // than a gap, and the same spelling every other surface uses for it.
     ...(project ? { projectId: project === 'none' ? null : project } : {}),
     ...(member ? { memberId: member } : {}),
-  }
+    ...(state ? { state } : {}),
+    ...(search ? { search } : {}),
+    ...(failed ? { failedOnly: true } : {}),
+  } as const
 
   const [page, options] = await asViewer(viewer.userId, (tx) =>
     Promise.all([
@@ -106,11 +124,20 @@ export default async function Sessions({
         people={options.people}
         project={project}
         member={member}
+        state={state}
+        search={search}
+        failed={failed}
         params={params}
       />
 
       {page.sessions.length === 0 ? (
-        <EmptyState headline="No sessions in this period">
+        <EmptyState
+          headline={
+            state === 'archived'
+              ? 'No archived sessions in this period'
+              : 'No sessions in this period'
+          }
+        >
           Nothing matched these dates and filters. Widen the period above, or
           clear a filter.
         </EmptyState>
@@ -212,7 +239,16 @@ export default async function Sessions({
 /** The same query plus the cursor: the period and the filters must survive. */
 const nextPage = (params: Params, last: SessionRow) => {
   const search = new URLSearchParams()
-  for (const key of ['range', 'from', 'to', 'project', 'member'] as const) {
+  for (const key of [
+    'range',
+    'from',
+    'to',
+    'project',
+    'member',
+    'state',
+    'q',
+    'failed',
+  ] as const) {
     const value = one(params[key])
     if (value) search.set(key, value)
   }
