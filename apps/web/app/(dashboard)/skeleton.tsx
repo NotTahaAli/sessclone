@@ -16,9 +16,19 @@ export function Skeleton({
   label,
 }: {
   className: string
-  label?: string
+  /**
+   * What is loading here. `null` makes the block decorative, for the second
+   * and later blocks of one fallback: a screen reader announcing "Loading"
+   * once per block says nothing the first one did not.
+   */
+  label?: string | null
 }) {
-  return (
+  return label === null ? (
+    <div
+      aria-hidden="true"
+      className={`bg-surface border-rule rounded-md border ${className}`}
+    />
+  ) : (
     <div
       className={`bg-surface border-rule rounded-md border ${className}`}
       role="status"

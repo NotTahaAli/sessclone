@@ -36,7 +36,10 @@ export function ProviderError() {
   const code = reported.get('error_code')
 
   return (
-    <p role="alert">
+    <p
+      role="alert"
+      className="border-bad-border bg-bad-bg text-bad-text mt-4 rounded-md border px-3 py-2 text-caption"
+    >
       The provider refused the sign-in (
       {code && CODE.test(code) ? code : 'unknown'}
       ). Nothing is wrong with your account. Check the provider&apos;s settings

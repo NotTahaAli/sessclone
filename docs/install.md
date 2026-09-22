@@ -128,6 +128,51 @@ with an unknown or revoked key writes nothing and is answered the same way as
 one with no key at all, which is deliberate — ingest is not an oracle for which
 keys exist. If the key is the suspect, issue a new one.
 
+## In the desktop app, where there is no shell to export in
+
+The desktop app runs Claude Code with the environment it was launched with,
+which is the one macOS or Windows gives a GUI application — not the one your
+`~/.zshrc` builds. Exporting the two variables in a terminal therefore changes
+nothing for it, and there is no terminal inside the app to export them in.
+
+Claude Code's own settings file is the way in. An `env` block there is applied
+to every session **and to the subprocesses a session starts**, which is what
+the hooks are:
+
+```json
+{
+  "env": {
+    "SESSCLONE_API_KEY": "sk_your_key_here",
+    "SESSCLONE_URL": "https://sessclone.example.com"
+  }
+}
+```
+
+It goes in `~/.claude/settings.json` (`%USERPROFILE%\.claude\settings.json` on
+Windows), which is the file that applies to you in every project. Create it if
+it is not there; if it is, add the `env` key beside whatever it already holds
+rather than replacing the file. It is strict JSON, so a trailing comma or a
+`//` comment is a syntax error and Claude Code reports the file as a Settings
+Error at the next start.
+
+The plugin itself installs the same way as anywhere else, with `/plugin` inside
+the app.
+
+Then restart the app — as with a shell, the hooks take effect on the next
+start.
+
+Two things worth knowing before choosing this over a shell export:
+
+- **The key is on disk in a plain file.** So is anything else in that settings
+  file; it is a per-user file with your user's permissions. A key in a shell
+  profile is on disk too, and both are readable by anything running as you.
+- **Set it in one place, not both.** Which of a shell export and an `env`
+  block wins is Claude Code's to decide and is not something this plugin can
+  promise; two different keys in the two places is a machine whose Turns land
+  under whichever one won that day. The check below prints the key's first
+  three characters and its length, which is enough to tell which one is in
+  force.
+
 ## In an environment with no shell you can reach
 
 Claude Code Cloud and Claude Projects have no persistent shell for a Member to
