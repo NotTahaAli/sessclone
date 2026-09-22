@@ -5,6 +5,12 @@ import { z } from 'zod'
 
 import { asOperator, currentOperator } from '../../../lib/platform-admin'
 import { addRate, deleteRate, RATE_CLASSES } from '../../../lib/rates'
+import {
+  applyProposals,
+  fetchPublished,
+  pendingProposals,
+  type Proposal,
+} from '../../../lib/rate-sync'
 
 // The one write on this page. A Server Action is a POST endpoint whether or
 // not a form was rendered for the caller, so every field is parsed here and
@@ -114,4 +120,79 @@ export const deleteRateAction = async (
 
   revalidatePath('/', 'layout')
   return { deleted: true }
+}
+
+// Ticket 97: the published price list, fetched and offered for approval.
+//
+// Two steps behind one Server Action, so the page holds one state: `fetch`
+// reads the page and proposes; `apply` reads it again and publishes only the models the operator ticked. The
+// browser posts model ids, never prices, so a forged request can at most
+// accept a change the page itself published.
+
+export type SyncState =
+  | { error: string }
+  | { proposals: Proposal[] }
+  | { applied: number; models: string[] }
+  | null
+
+const syncToday = () => new Date().toISOString().slice(0, 10)
+
+const readProposals = async () => {
+  const published = await fetchPublished()
+  return asOperator((tx) => pendingProposals(tx, published, syncToday()))
+}
+
+const fetchPricing = async (): Promise<SyncState> => {
+  try {
+    return { proposals: await readProposals() }
+  } catch {
+    return { error: 'The published pricing page could not be read.' }
+  }
+}
+
+const Approved = z.array(z.string().trim().min(1).max(200)).min(1).max(200)
+
+export const syncPricingAction = async (
+  _previous: SyncState,
+  formData: FormData,
+): Promise<SyncState> => {
+  if (!(await currentOperator())) {
+    return { error: 'Only a platform administrator may sync pricing.' }
+  }
+  return formData.get('intent') === 'apply'
+    ? applyPricing(formData)
+    : fetchPricing()
+}
+
+const applyPricing = async (formData: FormData): Promise<SyncState> => {
+  const approved = Approved.safeParse(formData.getAll('model'))
+  if (!approved.success) return { error: 'Tick at least one model to apply.' }
+
+  const chosen = new Set(approved.data)
+  try {
+    const published = await fetchPublished()
+    const today = syncToday()
+    const applied = await asOperator(async (tx) => {
+      const proposals = (await pendingProposals(tx, published, today)).filter(
+        (proposal) => chosen.has(proposal.model),
+      )
+      return {
+        count: await applyProposals(tx, proposals, today),
+        models: proposals.map((proposal) => proposal.model),
+      }
+    })
+    revalidatePath('/', 'layout')
+    return { applied: applied.count, models: applied.models }
+  } catch (error) {
+    const code =
+      error && typeof error === 'object' && 'code' in error
+        ? error.code
+        : undefined
+    return {
+      error:
+        code === '23505'
+          ? 'A ticked model already has a price from today. Delete that row first; nothing was applied.'
+          : 'Nothing was applied: the pricing page could not be read or a price was refused.',
+    }
+  }
 }
