@@ -685,3 +685,24 @@ test('a failure with no detail falls back to the type and the rendered line', as
     message: 'API Error: Overloaded',
   })
 })
+
+test('a partial flush writes no session-end marker', async () => {
+  // Finding from review: the completeness marker means "done, need not be
+  // re-read". A well-formed unknown key makes ingest answer 401, so the flush
+  // is refused and its cursor held back — the marker must NOT be sent, or the
+  // deployment would be told the Session is complete while its Turns are
+  // missing. The marker goes only when the whole flush landed.
+  const { path, text } = await transcript('multi-iteration-turn.jsonl')
+  const sessionId = JSON.parse(text.split('\n').find(Boolean)!).sessionId
+
+  await runHook(
+    { session_id: sessionId, transcript_path: path, cwd: '/home/dev/api' },
+    { SESSCLONE_URL: url, SESSCLONE_API_KEY: `sk_${'a'.repeat(43)}` },
+    SESSION_END_HOOK,
+  )
+
+  // No marker row, and no marker request was even attempted: the only request
+  // that went is the refused turn-report, carrying no sessionEnd.
+  expect(await sql`select 1 from session_events`).toEqual([])
+  expect(received.some((r) => r.body.includes('sessionEnd'))).toBe(false)
+})

@@ -442,10 +442,14 @@ export const buildPayloads = async ({
  * mistake here that loses data. Everything is caught by the caller; on an
  * unsupported Node the lazy import that reached this file already threw.
  *
- * `attach` is extra payload fields — a `StopFailure`'s `failures`, a
- * `SessionEnd`'s `sessionEnd` marker — merged onto the first request when there
- * is one, so a marker costs no extra round trip; with nothing to flush it is a
- * request of its own. A lone request advances no cursor.
+ * `attach` is the `SessionEnd` completeness marker (`{ sessionEnd }`), sent in
+ * a request of its own **after** the flush and **only when nothing was
+ * refused**. The marker's meaning is "this Session finished and need not be
+ * re-read", so writing it while any Turn of the session was refused — and its
+ * cursor deliberately held back — would tell the deployment the session is done
+ * when it is not, which a sweep would honour by skipping the un-flushed Turns.
+ * A partial flush therefore writes no marker; the next Stop or `SessionEnd`
+ * flushes the rest and marks it then. Its own send moves no cursor.
  *
  * @param {object} input
  * @param {import('./configuration.mjs').CollectorConfiguration} input.configuration
@@ -471,19 +475,6 @@ export const flush = async ({
     stateDir: configuration.stateDir,
   })
 
-  if (Object.keys(attach).length > 0) {
-    if (plans.length > 0) Object.assign(plans[0].payload, attach)
-    else
-      plans.push({
-        payload: {
-          device: { key: deviceKey({ hostname: hostname(), environment }) },
-          reports: [],
-          ...attach,
-        },
-        advance: [],
-      })
-  }
-
   /** Where each transcript has been read to, and which ones were refused. */
   const acknowledged = new Map()
   const refused = new Set()
@@ -502,6 +493,21 @@ export const flush = async ({
       // eslint-disable-next-line no-await-in-loop -- a handful of files
       await writeCursor(configuration.stateDir, path, cursor)
     }
+  }
+
+  // The completeness marker last, and only when the whole flush landed. With
+  // nothing to flush (the clean case) `refused` is empty and this is the one
+  // request; with several turn-requests it is a rare extra round trip, taken
+  // rather than write a marker that would lie about a partial flush.
+  if (Object.keys(attach).length > 0 && refused.size === 0) {
+    await send({
+      configuration,
+      payload: {
+        device: { key: deviceKey({ hostname: hostname(), environment }) },
+        reports: [],
+        ...attach,
+      },
+    })
   }
 }
 

@@ -67,9 +67,10 @@ try {
           // and, more to the point, a fixed one: it is part of the identity
           // key, so a retry of this exact payload is the same row.
           occurredAt: new Date().toISOString(),
-          // `||` not `??`: an empty-string `error` is not a type, and the
-          // boundary would refuse it (`.min(1)`) into the silent catch.
-          errorType: event.error || 'unknown',
+          // Trimmed `||`, not `??`: an empty or whitespace-only `error` is not
+          // a type, and the boundary would refuse it (`.min(1).refine`) into
+          // the silent catch, losing the failure with no retry queue yet.
+          errorType: event.error?.trim() || 'unknown',
           message:
             typeof message === 'string'
               ? message.slice(0, FAILURE_MESSAGE_LIMIT)
