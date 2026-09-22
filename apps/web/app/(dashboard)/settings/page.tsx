@@ -1,6 +1,5 @@
-import Link from 'next/link'
-
 import { PageHeader } from '../page-header'
+import { PendingLink } from '../pending-link'
 import { settingsFor } from '../navigation'
 import { currentViewer } from '../../../lib/viewer'
 
@@ -26,7 +25,7 @@ export default async function Settings() {
       <ul className="flex flex-col gap-3">
         {settingsFor(viewer.role).map((item) => (
           <li key={item.href}>
-            <Link
+            <PendingLink
               href={item.href}
               className="border-rule bg-surface hover:bg-surface-hover block rounded-md border p-4"
             >
@@ -34,7 +33,7 @@ export default async function Settings() {
               <span className="text-text-secondary mt-1 block text-body">
                 {item.about}
               </span>
-            </Link>
+            </PendingLink>
           </li>
         ))}
       </ul>

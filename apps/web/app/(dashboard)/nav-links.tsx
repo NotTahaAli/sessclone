@@ -1,9 +1,9 @@
 'use client'
 
-import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 import type { NavItem } from './navigation'
+import { PendingLink } from './pending-link'
 
 // The only client module in the shell, and it is one because of a single
 // fact: which destination is current. A layout cannot read the path on the
@@ -27,7 +27,7 @@ export function SidebarLinks({ items }: { items: NavItem[] }) {
         const current = isCurrent(pathname, item.href)
         return (
           <li key={item.href}>
-            <Link
+            <PendingLink
               href={item.href}
               aria-current={current ? 'page' : undefined}
               // An accent edge and accent text, and deliberately no fill: the
@@ -44,7 +44,7 @@ export function SidebarLinks({ items }: { items: NavItem[] }) {
               }`}
             >
               {item.label}
-            </Link>
+            </PendingLink>
           </li>
         )
       })}
@@ -80,7 +80,7 @@ export function BottomBarLinks({ items }: { items: NavItem[] }) {
         const current = isCurrent(pathname, item.href)
         return (
           <li key={item.href}>
-            <Link
+            <PendingLink
               href={item.href}
               aria-current={current ? 'page' : undefined}
               // The 2px rule above the label is the same accent edge the
@@ -93,7 +93,7 @@ export function BottomBarLinks({ items }: { items: NavItem[] }) {
               }`}
             >
               {item.label}
-            </Link>
+            </PendingLink>
           </li>
         )
       })}
