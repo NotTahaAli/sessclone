@@ -588,14 +588,63 @@ test('a batch carrying neither a report nor a failure is refused', async () => {
   expect(await sql`select 1 from session_events`).toEqual([])
 })
 
-test('a failure message past the wire limit is refused, not truncated', async () => {
+// Ticket 38: the session-end completeness marker. A `session_end` row is how a
+// later sweep learns a Session finished and need not be re-read.
+
+test('a session end is recorded, and rides beside the Turns of the same request', async () => {
+  const response = await post(
+    payload({
+      sessionEnd: {
+        sessionId: 'session-1',
+        occurredAt: '2026-09-21T12:00:00.000Z',
+      },
+    }),
+  )
+  expect(response.status).toBe(200)
+
+  expect(await sql`select 1 from turns`).toHaveLength(1)
+  const rows = await sql<
+    { session_id: string; kind: string; occurred_at: Date; detail: unknown }[]
+  >`select session_id, kind, occurred_at, detail from session_events`
+  expect(rows).toEqual([
+    {
+      session_id: 'session-1',
+      kind: 'session_end',
+      occurred_at: new Date('2026-09-21T12:00:00.000Z'),
+      detail: null,
+    },
+  ])
+})
+
+test('a bare session end, with no Turns, is accepted', async () => {
   const response = await post(
     payload({
       reports: [],
-      failures: [failure({ message: 'x'.repeat(2001) })],
+      sessionEnd: {
+        sessionId: 'session-1',
+        occurredAt: '2026-09-21T12:00:00.000Z',
+      },
     }),
   )
+  expect(response.status).toBe(200)
+  expect(await sql`select 1 from turns`).toEqual([])
+  expect(await sql`select kind from session_events`).toEqual([
+    { kind: 'session_end' },
+  ])
+})
 
-  expect(response.status).toBe(400)
-  expect(await sql`select 1 from session_events`).toEqual([])
+test('the same session end reported twice leaves one row', async () => {
+  const body = payload({
+    reports: [],
+    sessionEnd: {
+      sessionId: 'session-1',
+      occurredAt: '2026-09-21T12:00:00.000Z',
+    },
+  })
+  await post(body)
+  await post(body)
+  const [rows] = await sql<
+    { count: string }[]
+  >`select count(*) from session_events`
+  expect(rows!.count).toBe('1')
 })

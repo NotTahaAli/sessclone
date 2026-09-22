@@ -12,6 +12,7 @@ export {
   TURNS_PER_REPORT,
   ReportedCursor,
   ReportedFailure,
+  ReportedSessionEnd,
   ReportedTurn,
   ReportedUsage,
   TranscriptReport,

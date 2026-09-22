@@ -25,7 +25,7 @@ import { open } from 'node:fs/promises'
 import { hostname } from 'node:os'
 import { promisify } from 'node:util'
 
-import { readCursor } from './cursors.mjs'
+import { readCursor, writeCursor } from './cursors.mjs'
 import { sessionTranscripts } from './transcripts.mjs'
 import { parseTranscript } from '../../shared/src/turns.ts'
 import { deviceKey, projectKey } from '../../shared/src/identity.ts'
@@ -421,6 +421,88 @@ export const buildPayloads = async ({
     })
   }
   return payloads
+}
+
+/**
+ * Reads the Session that just finished (and its Agent Runs) from the cursor,
+ * sends each payload, and advances a transcript's cursor only once every
+ * request carrying it was accepted.
+ *
+ * This is the body both `Stop` and `SessionEnd` run: a completed turn fires
+ * `Stop`, and `SessionEnd` is the belt to that suspenders — the last chance to
+ * push whatever the cursor is still behind on when the session ends, whether
+ * because a `Stop` report failed (ticket 39's queue is not built yet) or
+ * because the session ended on something other than a turn (`/clear`, a fork).
+ * It reads from the same cursors `Stop` writes, so running both is not double
+ * counting: the second finds nothing past the first.
+ *
+ * A refusal disqualifies the whole file, not just the request that carried the
+ * refusal: one transcript's reports can span two requests, and advancing on
+ * the first would step the cursor past Turns the second never landed — the one
+ * mistake here that loses data. Everything is caught by the caller; on an
+ * unsupported Node the lazy import that reached this file already threw.
+ *
+ * `attach` is extra payload fields — a `StopFailure`'s `failures`, a
+ * `SessionEnd`'s `sessionEnd` marker — merged onto the first request when there
+ * is one, so a marker costs no extra round trip; with nothing to flush it is a
+ * request of its own. A lone request advances no cursor.
+ *
+ * @param {object} input
+ * @param {import('./configuration.mjs').CollectorConfiguration} input.configuration
+ * @param {string} input.transcriptPath
+ * @param {string} input.sessionId
+ * @param {string | undefined} input.cwd
+ * @param {Record<string, string | undefined>} input.environment
+ * @param {Partial<import('@sessclone/shared').IngestPayload>} [input.attach]
+ */
+export const flush = async ({
+  configuration,
+  transcriptPath,
+  sessionId,
+  cwd,
+  environment,
+  attach = {},
+}) => {
+  const plans = await buildPayloads({
+    transcriptPath,
+    sessionId,
+    cwd,
+    environment,
+    stateDir: configuration.stateDir,
+  })
+
+  if (Object.keys(attach).length > 0) {
+    if (plans.length > 0) Object.assign(plans[0].payload, attach)
+    else
+      plans.push({
+        payload: {
+          device: { key: deviceKey({ hostname: hostname(), environment }) },
+          reports: [],
+          ...attach,
+        },
+        advance: [],
+      })
+  }
+
+  /** Where each transcript has been read to, and which ones were refused. */
+  const acknowledged = new Map()
+  const refused = new Set()
+
+  for (const { payload, advance } of plans) {
+    // eslint-disable-next-line no-await-in-loop -- one request at a time; firing them together is how a Collector takes a deployment down
+    const { ok } = await send({ configuration, payload })
+    for (const { path, cursor } of advance) {
+      if (ok) acknowledged.set(path, cursor)
+      else refused.add(path)
+    }
+  }
+
+  for (const [path, cursor] of acknowledged) {
+    if (cursor && !refused.has(path)) {
+      // eslint-disable-next-line no-await-in-loop -- a handful of files
+      await writeCursor(configuration.stateDir, path, cursor)
+    }
+  }
 }
 
 /**

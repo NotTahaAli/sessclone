@@ -32,17 +32,17 @@ const readStdin = async () => {
   return input
 }
 
-/** Bounded here as well as at the boundary: a message the route would refuse
- * is a report nobody reads, and the interesting part of an API error is its
- * first line. Kept in step with `FAILURE_MESSAGE_LIMIT`. */
-const MESSAGE_LIMIT = 2000
-
 try {
   const event = JSON.parse(await readStdin())
   const configuration = readConfiguration()
 
   const { send } = await import('../src/report.mjs')
   const { deviceKey } = await import('../../shared/src/identity.ts')
+  // Imported, not a second literal: a message between two spellings of the
+  // same limit would be refused at the boundary and, with no retry queue yet,
+  // silently lost. Bounded here as well as there so the route refuses nothing
+  // this hook could have trimmed.
+  const { FAILURE_MESSAGE_LIMIT } = await import('../../shared/src/limits.ts')
 
   // `error_details` before the rendered line: it is the one that says *what*
   // the deployment answered ("429 Too Many Requests"), where the rendered line
@@ -67,10 +67,12 @@ try {
           // and, more to the point, a fixed one: it is part of the identity
           // key, so a retry of this exact payload is the same row.
           occurredAt: new Date().toISOString(),
-          errorType: event.error ?? 'unknown',
+          // `||` not `??`: an empty-string `error` is not a type, and the
+          // boundary would refuse it (`.min(1)`) into the silent catch.
+          errorType: event.error || 'unknown',
           message:
             typeof message === 'string'
-              ? message.slice(0, MESSAGE_LIMIT)
+              ? message.slice(0, FAILURE_MESSAGE_LIMIT)
               : null,
         },
       ],

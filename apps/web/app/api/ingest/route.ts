@@ -137,7 +137,7 @@ export async function POST(request: Request) {
     )
   }
 
-  const { device, reports, failures = [] } = parsed.data
+  const { device, reports, failures = [], sessionEnd } = parsed.data
 
   // One transaction around every write. Without it a batch that passes the
   // schema and fails a database check — a constraint the schema does not
@@ -270,6 +270,22 @@ export async function POST(request: Request) {
               },
             })),
           )}
+          on conflict (member_id, session_id, agent_id, kind, occurred_at)
+            do nothing
+        `
+      }
+
+      // Ticket 38: the completeness marker. A `session_end` row, deduplicated
+      // by the same identity key, is how a later sweep learns this Session
+      // finished cleanly and need not be re-read — a killed container never
+      // fires `SessionEnd` (finding 05), so a missing row is the abnormal end.
+      // No `detail`: the fact that it ended is the whole record.
+      if (sessionEnd) {
+        await tx`
+          insert into session_events
+            (org_id, member_id, device_id, session_id, kind, occurred_at)
+          values (${orgId}, ${memberId}, ${deviceId}, ${sessionEnd.sessionId},
+                  'session_end', ${sessionEnd.occurredAt})
           on conflict (member_id, session_id, agent_id, kind, occurred_at)
             do nothing
         `

@@ -30,6 +30,10 @@ const FAILURE_HOOK = new URL(
   '../../../packages/plugin/hooks/stop-failure.mjs',
   import.meta.url,
 )
+const SESSION_END_HOOK = new URL(
+  '../../../packages/plugin/hooks/session-end.mjs',
+  import.meta.url,
+)
 const CORPUS = new URL(
   '../../../packages/shared/fixtures/transcripts/',
   import.meta.url,
@@ -575,4 +579,109 @@ test('a turn that died on a rate limit is recorded against the Session', async (
 
   // No Turn was invented for a turn that produced none.
   expect(await sql`select 1 from turns`).toEqual([])
+})
+
+test('a session end flushes the final Turns and records completeness', async () => {
+  const key = await issueKey()
+  const { path, text } = await transcript('multi-iteration-turn.jsonl')
+  const sessionId = JSON.parse(text.split('\n').find(Boolean)!).sessionId
+
+  const { stderr } = await runHook(
+    { session_id: sessionId, transcript_path: path, cwd: '/home/dev/api' },
+    {
+      SESSCLONE_URL: url,
+      SESSCLONE_API_KEY: key,
+      SESSCLONE_DEVICE: 'host:tracer-box',
+    },
+    SESSION_END_HOOK,
+  )
+  expect(stderr).toBe('')
+
+  // The transcript's Turns landed (the flush), and the completeness marker was
+  // recorded beside them (the session_end row) — one request, both jobs.
+  expect(await sql`select 1 from turns`).toHaveLength(2)
+  const events = await sql<{ session_id: string; kind: string }[]>`
+    select session_id, kind from session_events
+  `
+  expect(events).toEqual([{ session_id: sessionId, kind: 'session_end' }])
+})
+
+test('a Stop then a SessionEnd does not double-count the Turns', async () => {
+  const key = await issueKey()
+  const { path, text } = await transcript('multi-iteration-turn.jsonl')
+  const sessionId = JSON.parse(text.split('\n').find(Boolean)!).sessionId
+  const environment = { SESSCLONE_URL: url, SESSCLONE_API_KEY: key }
+
+  // The real shape of a finished session: Stop reports the turn and advances
+  // the cursor, then SessionEnd runs and finds nothing past it.
+  await runHook(
+    { session_id: sessionId, transcript_path: path, cwd: '/home/dev/api' },
+    environment,
+  )
+  await runHook(
+    { session_id: sessionId, transcript_path: path, cwd: '/home/dev/api' },
+    environment,
+    SESSION_END_HOOK,
+  )
+
+  // ADR 0006 absorbs a re-report anyway, but the cursor means SessionEnd sent
+  // no Turns at all: the row count is the two the Stop landed, and the marker.
+  expect(await sql`select 1 from turns`).toHaveLength(2)
+  expect(await sql`select kind from session_events`).toEqual([
+    { kind: 'session_end' },
+  ])
+})
+
+test('a session end with nothing to flush still records completeness', async () => {
+  const key = await issueKey()
+  // An empty transcript: the flush finds no Turns, so the marker is a request
+  // of its own rather than a rider on a report.
+  const directory = mkdtempSync(join(tmpdir(), 'sessclone-tracer-'))
+  const path = join(directory, 'empty.jsonl')
+  writeFileSync(path, '')
+
+  const { stderr } = await runHook(
+    {
+      session_id: 'lonely-session',
+      transcript_path: path,
+      cwd: '/home/dev/api',
+    },
+    { SESSCLONE_URL: url, SESSCLONE_API_KEY: key },
+    SESSION_END_HOOK,
+  )
+  expect(stderr).toBe('')
+
+  expect(await sql`select 1 from turns`).toEqual([])
+  expect(await sql`select kind from session_events`).toEqual([
+    { kind: 'session_end' },
+  ])
+})
+
+test('a failure with no detail falls back to the type and the rendered line', async () => {
+  const key = await issueKey()
+
+  await runHook(
+    {
+      session_id: 'session-bare-failure',
+      transcript_path: join(tmpdir(), 'never-read.jsonl'),
+      cwd: '/home/dev/api',
+      hook_event_name: 'StopFailure',
+      // No `error`, no `error_details`: the type falls back to 'unknown' and
+      // the message to the rendered line.
+      last_assistant_message: 'API Error: Overloaded',
+    },
+    { SESSCLONE_URL: url, SESSCLONE_API_KEY: key },
+    FAILURE_HOOK,
+  )
+
+  const rows = await sql<
+    { detail: { error_type: string; message: string | null } }[]
+  >`
+    select detail from session_events where session_id = 'session-bare-failure'
+  `
+  expect(rows).toHaveLength(1)
+  expect(rows[0]!.detail).toEqual({
+    error_type: 'unknown',
+    message: 'API Error: Overloaded',
+  })
 })

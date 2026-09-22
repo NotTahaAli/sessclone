@@ -166,6 +166,28 @@ export const ReportedFailure = z.object({
 })
 
 /**
+ * A session that ended (ticket 38). The completeness record: the `SessionEnd`
+ * hook reports it so a later sweep knows this Session is done and need not be
+ * re-read.
+ *
+ * It is deliberately server-side — a row in `session_events` — rather than a
+ * local marker beside the cursor. A local one would be written on the machine
+ * that ran the session and lost with it, which is exactly the case a sweep
+ * exists for: a container reclaimed by `SIGKILL` fires no `SessionEnd` at all
+ * (finding 05), so the record never being written *is* the signal of an
+ * abnormal end, and that signal has to outlive the container to be read. The
+ * cost is one small row per clean session end; the cost of a killed container
+ * is a Session that is never marked complete and so is re-read until its cursor
+ * goes stale, which is bandwidth, never a lost Turn.
+ */
+export const ReportedSessionEnd = z.object({
+  sessionId: text,
+  /** The Collector's clock: `SessionEnd` carries no time, and a stable value
+   * makes a re-sent marker the same `session_events` row. */
+  occurredAt: z.iso.datetime({ offset: true }),
+})
+
+/**
  * A payload names no Member and no Org.
  *
  * Ticket 34 removed the `memberId` this used to carry: both are resolved from
@@ -192,20 +214,27 @@ export const IngestPayload = z
         `a batch carries at most ${FAILURES_PER_PAYLOAD} failures`,
       )
       .optional(),
+    /** The `SessionEnd` completeness marker, when this request carries one. */
+    sessionEnd: ReportedSessionEnd.optional(),
   })
-  // `reports` lost its `min(1)` to this: a failed turn produces no Turn to
-  // report, so a `StopFailure` sends reports of its own or none at all. What
-  // is still refused is a request carrying neither, which would be a Device
-  // upsert dressed as a report.
+  // `reports` lost its `min(1)` to this: a failed turn and a bare session end
+  // both produce no Turn, so those hooks send reports of their own or none at
+  // all. What is still refused is a request carrying nothing at all, which
+  // would be a Device upsert dressed as a report.
   .refine(
-    (payload) => payload.reports.length + (payload.failures?.length ?? 0) > 0,
-    { error: 'a batch carries at least one report or failure' },
+    (payload) =>
+      payload.reports.length +
+        (payload.failures?.length ?? 0) +
+        (payload.sessionEnd ? 1 : 0) >
+      0,
+    { error: 'a batch carries at least one report, failure or session end' },
   )
 
 export type ReportedUsage = z.infer<typeof ReportedUsage>
 export type ReportedTurn = z.infer<typeof ReportedTurn>
 export type ReportedCursor = z.infer<typeof ReportedCursor>
 export type ReportedFailure = z.infer<typeof ReportedFailure>
+export type ReportedSessionEnd = z.infer<typeof ReportedSessionEnd>
 export type TranscriptReport = z.infer<typeof TranscriptReport>
 export type IngestPayload = z.infer<typeof IngestPayload>
 
