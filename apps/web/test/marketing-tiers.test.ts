@@ -198,7 +198,10 @@ test('the `features` a card renders survive whatever is in the column', async ()
      replaced by the next: run in parallel they would overwrite each other. */
   for (const [features, expected] of shapes) {
     await sql`
-      update tiers set features = ${sql.json(features as never)},
+      update tiers set features = ${sql.json(
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the shapes under test are deliberately not JSONValue
+        features as never,
+      )},
                        description = null
        where key = 'personal'
     `

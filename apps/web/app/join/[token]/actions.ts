@@ -35,6 +35,8 @@ export const acceptAction = async (
   }
 
   // Where a new Member starts. Outside the `try` on purpose — `redirect`
-  // throws by design, and catching it would report a join as a refusal.
+  // throws by design, and catching it would report a join as a refusal. The
+  // `return` is unreachable, and is what says the function always answers.
   redirect('/costs')
+  return null
 }

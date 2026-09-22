@@ -41,7 +41,8 @@ export function AddRateForm({
   // One handler on the list rather than one per chip: the chips are data, and
   // a closure per row is a new prop on every render.
   const fill = useCallback((event: React.MouseEvent<HTMLUListElement>) => {
-    const button = (event.target as HTMLElement).closest('button')
+    const clicked = event.target
+    const button = clicked instanceof Element ? clicked.closest('button') : null
     const field = model.current
     if (!button || !field) return
     field.value = button.dataset.model ?? ''

@@ -52,25 +52,27 @@ const usage = {
   webFetchRequests: 0,
 }
 
-const turn = (over: Partial<ReportedTurn> = {}): ReportedTurn =>
-  ({
-    sessionId: 'session-1',
-    agentId: null,
-    messageId: 'msg_01',
-    model: 'claude-opus-4-6',
-    serviceTier: 'standard',
-    speed: null,
-    inferenceGeo: null,
-    clientVersion: '2.1.0',
-    timestamp: '2026-09-20T08:28:20.655Z',
-    cwd: '/home/dev/api',
-    gitBranch: 'main',
-    requestId: 'req_01',
-    complete: true,
-    usage,
-    entryUuids: ['a1', 'a2'],
-    ...over,
-  }) as ReportedTurn
+const turn = (over: Partial<ReportedTurn> = {}): ReportedTurn => ({
+  sessionId: 'session-1',
+  agentId: null,
+  messageId: 'msg_01',
+  model: 'claude-opus-4-6',
+  serviceTier: 'standard',
+  speed: null,
+  inferenceGeo: null,
+  clientVersion: '2.1.0',
+  timestamp: '2026-09-20T08:28:20.655Z',
+  cwd: '/home/dev/api',
+  gitBranch: 'main',
+  requestId: 'req_01',
+  complete: true,
+  usage,
+  entryUuids: ['a1', 'a2'],
+  ...over,
+  // Defaulted by the schema, so an override that leaves it out still
+  // produces the shape the route receives.
+  spawnDepth: over.spawnDepth ?? null,
+})
 
 const report = (over: Record<string, unknown> = {}) => ({
   sessionId: 'session-1',

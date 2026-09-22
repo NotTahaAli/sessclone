@@ -381,8 +381,8 @@ test('two people accepting at once cannot both take the last Seat', async () => 
   ])
 
   const results = await Promise.all([
-    accept(first!.id, tokens[0]!.token),
-    accept(second!.id, tokens[1]!.token),
+    accept(first!.id, tokens[0].token),
+    accept(second!.id, tokens[1].token),
   ])
 
   expect(results.filter((result) => 'orgId' in result)).toHaveLength(1)

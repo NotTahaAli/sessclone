@@ -77,8 +77,8 @@ export const readMarketingTiers = async (
 /** `features.includes`, when it is a list of lines, and nothing otherwise. */
 const includesOf = (features: unknown) => {
   const value =
-    features && typeof features === 'object'
-      ? (features as Record<string, unknown>).includes
+    features && typeof features === 'object' && 'includes' in features
+      ? features.includes
       : undefined
   return Array.isArray(value)
     ? value.filter((line): line is string => typeof line === 'string')

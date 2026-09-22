@@ -51,7 +51,11 @@ const serve = () =>
         const answer = await ingest(
           new Request(`http://127.0.0.1${request.url}`, {
             method: 'POST',
-            headers: request.headers as Record<string, string>,
+            headers: Object.fromEntries(
+              Object.entries(request.headers).flatMap(([name, value]) =>
+                typeof value === 'string' ? [[name, value]] : [],
+              ),
+            ),
             body: Buffer.concat(chunks).toString('utf8'),
           }),
         )

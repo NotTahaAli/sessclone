@@ -55,11 +55,18 @@ const project = async (key: string) => {
 /** An uploaded transcript, as the presign route's caller would have written. */
 const artifact = async ({
   memberId = '',
-  projectId = null as string | null,
-  projectKey = 'github.com/acme/api' as string | null,
+  projectId = null,
+  projectKey = 'github.com/acme/api',
   sessionId = 'session-1',
-  agentId = null as string | null,
+  agentId = null,
   bytes = 1024,
+}: {
+  memberId?: string
+  projectId?: string | null
+  projectKey?: string | null
+  sessionId?: string
+  agentId?: string | null
+  bytes?: number
 } = {}) => {
   const member = memberId || fixture.acme.members.member
   const key = `orgs/${fixture.acme.id}/members/${member}/projects/${encodeURIComponent(

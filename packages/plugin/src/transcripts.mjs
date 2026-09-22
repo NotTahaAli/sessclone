@@ -85,7 +85,7 @@ const spawnDepthOf = async (transcript) => {
 export const sessionTranscripts = async ({
   transcriptPath,
   sessionId,
-  environment = process.env,
+  environment,
 }) => {
   const projects = join(configDirectory(environment), 'projects')
 

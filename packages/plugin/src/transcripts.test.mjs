@@ -88,7 +88,7 @@ test('a Session’s Agent Runs are found beside it, workflow runs included', asy
     found
       .filter((file) => file.agentRun)
       .map((file) => file.spawnDepth)
-      .toSorted(),
+      .toSorted((a, b) => a - b),
   ).toEqual([1, 2])
 })
 

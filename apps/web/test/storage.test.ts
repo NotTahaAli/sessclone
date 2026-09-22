@@ -68,6 +68,10 @@ test('a delete that S3 refuses per key is a failure, not a success', async () =>
   // let a sweep commit the row deletions while the transcripts — source code,
   // sometimes a credential — stayed in the bucket with nothing pointing at
   // them.
+  // `send` is overloaded, so its mock's parameter resolves to `void` and the
+  // answer has to be asserted in. Test-only, and the assertion is what makes
+  // the S3 answer shape explicit rather than hiding it.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- overloaded signature, see above
   const send = vi.spyOn(S3Client.prototype, 'send').mockResolvedValue({
     Errors: [{ Key: 'orgs/a/one.jsonl', Code: 'AccessDenied' }],
   } as never)
@@ -78,6 +82,7 @@ test('a delete that S3 refuses per key is a failure, not a success', async () =>
 
   // And a clean answer resolves, in one request per thousand keys rather than
   // one per object.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- as above
   send.mockResolvedValue({} as never)
   await deleteObjects(Array.from({ length: 1001 }, (_, n) => `orgs/a/${n}`))
   expect(send).toHaveBeenCalledTimes(3)

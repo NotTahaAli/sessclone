@@ -181,10 +181,9 @@ test('a session that moved between repositories reports each Project’s own tur
       report.turns.map((turn) => turn.messageId),
     ]),
   )
-  expect([...byKey.values()].toSorted()).toEqual([
-    ['msg_api', 'msg_api_2'],
-    ['msg_site'],
-  ])
+  expect(
+    [...byKey.values()].toSorted((a, b) => a[0].localeCompare(b[0])),
+  ).toEqual([['msg_api', 'msg_api_2'], ['msg_site']])
   expect(
     payload.reports.every((report) => report.sessionId === 'session-1'),
   ).toBe(true)

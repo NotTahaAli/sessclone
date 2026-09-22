@@ -163,7 +163,7 @@ const parseFeatures = (raw: string): Record<string, FeatureValue> | null => {
       typeof value === 'string' ||
       (Array.isArray(value) && value.every((line) => typeof line === 'string'))
     if (!ok) return null
-    features[gate] = value as FeatureValue
+    features[gate] = value
   }
   return features
 }

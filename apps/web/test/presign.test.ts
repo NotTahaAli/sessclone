@@ -52,8 +52,13 @@ const withArchival = async (orgId: string, available = true) => {
 const seedSession = async ({
   memberId = '',
   sessionId = 'session-1',
-  agentId = null as string | null,
-  projectKey = 'github.com/acme/api' as string | null,
+  agentId = null,
+  projectKey = 'github.com/acme/api',
+}: {
+  memberId?: string
+  sessionId?: string
+  agentId?: string | null
+  projectKey?: string | null
 } = {}) => {
   const member = memberId || fixture.acme.members.member
   let projectId: string | null = null
