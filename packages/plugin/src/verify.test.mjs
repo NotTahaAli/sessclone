@@ -292,13 +292,15 @@ describe('collect', () => {
   it('names a session written under more than one project directory', async () => {
     // Finding 74's moved-repository case, which ticket 69 asks to see.
     const config = await mkdtemp(join(tmpdir(), 'verify-'))
-    for (const name of ['-home-taha-one', '-home-taha-two']) {
-      await mkdir(join(config, 'projects', name), { recursive: true })
-      await writeFile(
-        join(config, 'projects', name, 'session-1.jsonl'),
-        entry(),
-      )
-    }
+    await Promise.all(
+      ['-home-taha-one', '-home-taha-two'].map(async (name) => {
+        await mkdir(join(config, 'projects', name), { recursive: true })
+        await writeFile(
+          join(config, 'projects', name, 'session-1.jsonl'),
+          entry(),
+        )
+      }),
+    )
 
     const report = await collect({
       environment: { CLAUDE_CONFIG_DIR: config },

@@ -87,15 +87,19 @@ const directoryEvidence = async (directory) => {
     return { path: directory, exists, entries: 0, newest: null }
   }
 
-  let newest = 0
-  for (const entry of entries) {
-    try {
-      const { mtimeMs } = await stat(join(directory, entry.name))
-      if (mtimeMs > newest) newest = mtimeMs
-    } catch {
-      // Swept between the listing and the stat.
-    }
-  }
+  // A cursor directory holds one file per Session and per Agent Run, so the
+  // stats are the many. Zero for an entry swept between the listing and the
+  // stat, which then loses the `Math.max` rather than throwing.
+  const times = await Promise.all(
+    entries.map(async (entry) => {
+      try {
+        return (await stat(join(directory, entry.name))).mtimeMs
+      } catch {
+        return 0
+      }
+    }),
+  )
+  const newest = Math.max(0, ...times)
 
   return {
     path: directory,
@@ -147,22 +151,27 @@ const installEvidence = async (environment) => {
 
   const walk = async (directory, depth) => {
     if (depth > 3) return
-    for (const entry of await listing(directory)) {
-      if (!entry.isDirectory()) continue
-      const path = join(directory, entry.name)
-      if (/sessclone/i.test(entry.name)) {
-        let version = null
-        try {
-          version = JSON.parse(
-            await readFile(join(path, 'package.json'), 'utf8'),
-          ).version
-        } catch {
-          // A marketplace checkout rather than the plugin itself.
+    const entries = (await listing(directory)).filter((entry) =>
+      entry.isDirectory(),
+    )
+
+    await Promise.all(
+      entries.map(async (entry) => {
+        const path = join(directory, entry.name)
+        if (/sessclone/i.test(entry.name)) {
+          let version = null
+          try {
+            version = JSON.parse(
+              await readFile(join(path, 'package.json'), 'utf8'),
+            ).version
+          } catch {
+            // A marketplace checkout rather than the plugin itself.
+          }
+          found.push({ path, version: version ?? null })
         }
-        found.push({ path, version: version ?? null })
-      }
-      await walk(path, depth + 1)
-    }
+        await walk(path, depth + 1)
+      }),
+    )
   }
 
   await walk(root, 0)
@@ -182,26 +191,46 @@ const transcriptEvidence = async (environment) => {
   /** @type {Map<string, { directories: Set<string>, mtimeMs: number }>} */
   const sessions = new Map()
 
-  for (const entry of await listing(projects)) {
-    if (!entry.isDirectory()) continue
-    const directory = join(projects, entry.name)
-    for (const file of await listing(directory)) {
-      if (!file.isFile() || !file.name.endsWith('.jsonl')) continue
-      const sessionId = file.name.replace(/\.jsonl$/, '')
-      let mtimeMs = 0
-      try {
-        mtimeMs = (await stat(join(directory, file.name))).mtimeMs
-      } catch {
-        // Swept between the listing and the stat.
-      }
-      const seen = sessions.get(sessionId) ?? {
-        directories: new Set(),
-        mtimeMs: 0,
-      }
-      seen.directories.add(entry.name)
-      seen.mtimeMs = Math.max(seen.mtimeMs, mtimeMs)
-      sessions.set(sessionId, seen)
+  const directories = (await listing(projects)).filter((entry) =>
+    entry.isDirectory(),
+  )
+
+  const sighted = await Promise.all(
+    directories.map(async (entry) => {
+      const directory = join(projects, entry.name)
+      const files = (await listing(directory)).filter(
+        (file) => file.isFile() && file.name.endsWith('.jsonl'),
+      )
+
+      return Promise.all(
+        files.map(async (file) => {
+          let mtimeMs = 0
+          try {
+            mtimeMs = (await stat(join(directory, file.name))).mtimeMs
+          } catch {
+            // Swept between the listing and the stat.
+          }
+          return {
+            sessionId: file.name.replace(/\.jsonl$/, ''),
+            directory: entry.name,
+            mtimeMs,
+          }
+        }),
+      )
+    }),
+  )
+
+  // Folded after the reads rather than during them: one Session id can be
+  // written under two project directories (finding 74), and that is the thing
+  // this function is looking for.
+  for (const file of sighted.flat()) {
+    const seen = sessions.get(file.sessionId) ?? {
+      directories: new Set(),
+      mtimeMs: 0,
     }
+    seen.directories.add(file.directory)
+    seen.mtimeMs = Math.max(seen.mtimeMs, file.mtimeMs)
+    sessions.set(file.sessionId, seen)
   }
 
   const moved = [...sessions]
@@ -218,20 +247,19 @@ const transcriptEvidence = async (environment) => {
     .toSorted(([, a], [, b]) => b.mtimeMs - a.mtimeMs)
     .slice(0, SESSIONS_INSPECTED)
 
-  let agentRuns = 0
-  let deepestRun = 0
-  for (const [sessionId] of newest) {
-    const files = await sessionTranscripts({
-      transcriptPath: undefined,
-      sessionId,
-      environment,
-    })
-    for (const file of files) {
-      if (!file.agentRun) continue
-      agentRuns += 1
-      if ((file.spawnDepth ?? 0) > deepestRun) deepestRun = file.spawnDepth ?? 0
-    }
-  }
+  const opened = await Promise.all(
+    newest.map(([sessionId]) =>
+      sessionTranscripts({
+        transcriptPath: undefined,
+        sessionId,
+        environment,
+      }),
+    ),
+  )
+
+  const runs = opened.flat().filter((file) => file.agentRun)
+  const agentRuns = runs.length
+  const deepestRun = Math.max(0, ...runs.map((file) => file.spawnDepth ?? 0))
 
   return {
     directory: projects,
@@ -495,8 +523,14 @@ export const handCount = async ({
   const turns = []
   let unreadable = 0
 
+  // One transcript at a time, deliberately. A day of sessions is tens of
+  // megabytes of JSON and this is the one place that holds parsed Turns from
+  // every file at once; reading them all in parallel would hold every file's
+  // text as well, on a laptop, for no gain — the parse, not the read, is the
+  // cost here.
   for (const path of paths) {
     try {
+      // eslint-disable-next-line no-await-in-loop -- sequential on purpose: see above
       turns.push(...parseTranscript(await readFile(path, 'utf8')))
     } catch {
       unreadable += 1
@@ -511,6 +545,20 @@ export const handCount = async ({
 }
 
 const yesNo = (value) => (value ? 'yes' : 'no')
+
+/**
+ * One line for the cursor directory or the queue directory.
+ *
+ * An empty directory and a missing one read differently on purpose: the first
+ * says the Collector has run here, the second that it has not.
+ *
+ * @param {string} name
+ * @param {{ path: string, exists: boolean, entries: number, newest: string | null }} evidence
+ */
+const directoryLine = (name, evidence) =>
+  `- ${name}: \`${evidence.path}\` — ${
+    evidence.exists ? `${evidence.entries} file(s)` : 'does not exist'
+  }${evidence.newest ? `, newest ${evidence.newest}` : ''}`
 
 /**
  * The report as a block a person pastes back, rather than as JSON they have to
@@ -581,14 +629,8 @@ export const format = (report) => {
       }`,
     )
     say()
-    for (const [name, evidence] of [
-      ['Cursors', report.state.cursors],
-      ['Queue', report.state.queue],
-    ]) {
-      say(
-        `- ${name}: \`${evidence.path}\` — ${evidence.exists ? `${evidence.entries} file(s)` : 'does not exist'}${evidence.newest ? `, newest ${evidence.newest}` : ''}`,
-      )
-    }
+    say(directoryLine('Cursors', report.state.cursors))
+    say(directoryLine('Queue', report.state.queue))
   }
 
   say()
