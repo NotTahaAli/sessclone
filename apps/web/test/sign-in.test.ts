@@ -79,6 +79,10 @@ describe('the first time somebody signs in', () => {
       'email',
       'is_platform_admin',
       'created_at',
+      // Ticket 91. A name, which is not a credential: it is written by the
+      // person themselves under `users_write_self` and read by whoever may
+      // already read their address.
+      'display_name',
     ])
   })
 })

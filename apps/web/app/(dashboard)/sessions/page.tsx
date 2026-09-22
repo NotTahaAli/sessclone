@@ -123,14 +123,23 @@ export default async function Sessions({
                 className="border-rule bg-surface hover:bg-surface-hover block rounded-md border p-4"
               >
                 <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                  {/* Ticket 90: the name given to this Session, else the
+                      name given to its Project, else the Project's key. A
+                      name is not monospaced — it is prose, and a key is
+                      not. */}
                   <span
                     className={
-                      session.projectKey
-                        ? 'font-mono text-body break-all'
-                        : 'text-body italic'
+                      (session.label ?? session.projectName)
+                        ? 'text-body break-all'
+                        : session.projectKey
+                          ? 'font-mono text-body break-all'
+                          : 'text-body italic'
                     }
                   >
-                    {session.projectKey ?? 'Outside a repository'}
+                    {session.label ??
+                      session.projectName ??
+                      session.projectKey ??
+                      'Outside a repository'}
                   </span>
                   <span className="font-mono text-body">
                     {usd(session.costUsd)}
@@ -170,8 +179,15 @@ export default async function Sessions({
                 </p>
 
                 <p className="text-text-muted mt-1 text-caption break-all">
-                  {session.memberEmail ?? 'Outside your view'}
+                  {session.memberName ??
+                    session.memberEmail ??
+                    'Outside your view'}
                   {session.deviceLabel ? ` · ${session.deviceLabel}` : ''}
+                  {/* The Project when the row's headline was the Session's
+                      own name, so a named Session still says where it ran. */}
+                  {session.label
+                    ? ` · ${session.projectName ?? session.projectKey ?? 'outside a repository'}`
+                    : ''}
                 </p>
               </Link>
             </li>

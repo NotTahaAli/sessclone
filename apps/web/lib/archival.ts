@@ -86,13 +86,18 @@ export const listArchivalProjects = (tx: postgres.TransactionSql) =>
          and project_id is not null
     )
     select seen.member_id, project.id as project_id,
-           project.key, project.remote, exception.archival_enabled
+           -- Ticket 90: the Org's name for it when it has one. The key stays
+           -- the identity and stays on the row beside it.
+           coalesce(project.nickname, project.key) as key,
+           case when project.nickname is not null then project.key
+                else project.remote end as remote,
+           exception.archival_enabled
       from seen
       join projects project on project.id = seen.project_id
       left join member_project_archival exception
         on exception.member_id = seen.member_id
        and exception.project_id = project.id
-     order by project.key
+     order by coalesce(project.nickname, project.key)
   `
 
 /**

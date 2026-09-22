@@ -116,10 +116,12 @@ const PHASES = [
   },
   {
     id: 'drilldown',
-    label: 'Session Views',
+    label: 'Sessions + Names',
     type: 'frontend',
     pos: [1190, 800],
-    range: [85, 88],
+    // 89 to 91 extend the same surfaces: what a Session spent per model, and
+    // the friendly names for a Project, a Session and a person.
+    range: [85, 91],
   },
 ]
 

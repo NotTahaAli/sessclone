@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 
-import { RenameForm } from './rename-form'
+import { rename } from './actions'
+import { InlineName } from '../inline-name'
 import { EmptyState } from '../empty-state'
 import { PageHeader } from '../page-header'
 import { asViewer } from '../../../lib/db'
@@ -76,8 +77,18 @@ function DeviceCard({
 }) {
   return (
     <li className="border-rule bg-surface rounded-md border p-4">
+      {/* Ticket 90's second look: the pencil sits beside the name rather
+          than a labelled form under every machine on the page. */}
       <h2 className="text-heading break-words">
-        {device.nickname ?? device.key}
+        <InlineName
+          action={rename}
+          hidden={`deviceId=${device.id}`}
+          current={device.nickname}
+          fallback={device.key}
+          label={`Name for ${device.key}`}
+          placeholder="Work laptop"
+          mono
+        />
       </h2>
       {/* Only under a nickname: with none, the heading is already the key, and
           printing it twice reads as two facts about one machine. */}
@@ -91,12 +102,6 @@ function DeviceCard({
         {when.format(device.firstSeenAt)} · {whole.format(device.turns)}{' '}
         {device.turns === 1 ? 'turn' : 'turns'} in the last 30 days
       </p>
-
-      <RenameForm
-        deviceId={device.id}
-        nickname={device.nickname}
-        deviceKey={device.key}
-      />
     </li>
   )
 }

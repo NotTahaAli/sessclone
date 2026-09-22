@@ -180,9 +180,19 @@ export const breakdown = async (
   const rows = await (dimension === 'members'
     ? tx<RawRow[]>`
         select member.id as id,
-               account.email as label,
-               case when member.removed_at is not null then 'removed'
-                    else null end as note,
+               -- Ticket 91: the name when the person has set one, and the
+               -- address when they have not. The address is never dropped —
+               -- it moves to the note, because two people called "Taha" is
+               -- the ordinary case and a list of names alone cannot be acted
+               -- on.
+               coalesce(account.display_name, account.email) as label,
+               nullif(
+                 concat_ws(' · ',
+                   case when account.display_name is not null
+                        then account.email end,
+                   case when member.removed_at is not null
+                        then 'removed' end),
+                 '') as note,
                ${AGGREGATES(tx)}
           ${source}
           left join members member on member.id = turn.member_id
@@ -194,8 +204,17 @@ export const breakdown = async (
     : dimension === 'projects'
       ? tx<RawRow[]>`
           select project.id as id,
-                 project.key as label,
-                 project.remote as note,
+                 -- Ticket 90, and the same rule as the people above: the name
+                 -- leads and the key stays, because the key is what the
+                 -- grouping is on and renaming a Project must not look like
+                 -- moving a dollar.
+                 coalesce(project.nickname, project.key) as label,
+                 -- The key when the Project has been named, because the key
+                 -- is the identity and a reader checking two similar names
+                 -- needs it; the remote otherwise. Not both: at 390px the
+                 -- pair wraps to three lines under a one-line name.
+                 case when project.nickname is not null then project.key
+                      else project.remote end as note,
                  ${AGGREGATES(tx)}
             ${source}
             left join projects project on project.id = turn.project_id

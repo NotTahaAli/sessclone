@@ -88,7 +88,10 @@ const TURN_COLUMNS = (tx: TransactionSql) => tx`
   turn.occurred_at,
   turn.session_id,
   turn.agent_id,
-  project.key as project_key,
+  -- Ticket 90: the Org's name for the Project when it has one, the key when
+  -- it has not. A dense row wants one string, and the page that is *about*
+  -- the Project shows the key beside the name.
+  coalesce(project.nickname, project.key) as project_key,
   turn.model,
   cost.cost_usd,
   cost.unpriced,
@@ -272,6 +275,8 @@ export type TurnDetail = {
     pricedOn: string
     memberId: string
     memberEmail: string | null
+    /** The name that person set for themselves (ticket 91), or null. */
+    memberName: string | null
     deviceLabel: string | null
   }
   quantities: Quantity[]
@@ -296,6 +301,7 @@ type RawDetail = RawTurn & {
   reported_cost_usd: string | null
   member_id: string
   member_email: string | null
+  member_name: string | null
   device_label: string | null
   multiplier: string
   priced_on: string
@@ -348,6 +354,7 @@ export const turnDetail = async (
            turn.reported_cost_usd,
            turn.member_id::text as member_id,
            account.email as member_email,
+           account.display_name as member_name,
            coalesce(device.nickname, device.key) as device_label,
            day.multiplier,
            day.on_date::text as priced_on,
@@ -414,6 +421,7 @@ export const turnDetail = async (
       pricedOn: row.priced_on,
       memberId: row.member_id,
       memberEmail: row.member_email,
+      memberName: row.member_name,
       deviceLabel: row.device_label,
     },
     quantities: [

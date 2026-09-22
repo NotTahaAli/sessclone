@@ -97,7 +97,7 @@ export const sessionFailures = async (
            coalesce(event.detail->>'error_type', 'unknown') as error_type,
            event.detail->>'message' as message,
            coalesce(device.nickname, device.key) as device,
-           account.email as member,
+           coalesce(account.display_name, account.email) as member,
            count(*) over () as total
       from session_events event
       left join devices device on device.id = event.device_id

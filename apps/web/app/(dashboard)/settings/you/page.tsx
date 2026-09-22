@@ -1,6 +1,6 @@
 import Link from 'next/link'
 
-import { setArchival, setProject } from './actions'
+import { setArchival, setName, setProject } from './actions'
 import { setOwnAccent } from './appearance-actions'
 import { ThemeForm } from './theme-form'
 import {
@@ -10,6 +10,8 @@ import {
   type ArchivalProject,
 } from '../../../../lib/archival'
 import { ownScopes, type OwnScope } from '../../../../lib/scopes'
+import { ownDisplayName } from '../../../../lib/names'
+import { InlineName } from '../../inline-name'
 import { PageHeader } from '../../page-header'
 import { AccentPreview } from '../appearance-preview'
 import { SeedPicker } from '../seed-picker'
@@ -40,16 +42,16 @@ export default async function YourSettings() {
 
   // One transaction, which is what `asViewer` opens and what carries the
   // viewer's claim. The two statements are independent, so they go together.
-  const [memberships, projects, scopes, appearance] = await asViewer(
-    user.id,
-    (tx) =>
+  const [memberships, projects, scopes, appearance, displayName] =
+    await asViewer(user.id, (tx) =>
       Promise.all([
         listArchivalMemberships(tx),
         listArchivalProjects(tx),
         ownScopes(tx),
         viewerAppearance(tx),
+        ownDisplayName(tx, user.id),
       ]),
-  )
+    )
 
   // Grouped once here rather than filtered inside the render, which would be
   // a pass over the whole list per membership. One pass, one array each, and
@@ -67,6 +69,29 @@ export default async function YourSettings() {
     // a chart and far past a measure anybody wants to read a paragraph at.
     <div className="flex max-w-3xl flex-col gap-6">
       <PageHeader title="Your settings" />
+
+      {/* Ticket 91, first because it is the one thing on this page other
+          people see. A pencil rather than a form: it is one short string. */}
+      <section aria-labelledby="name">
+        <h2 id="name" className="text-heading-lg">
+          Your name
+        </h2>
+        <p className="text-text-secondary mt-2 mb-3 text-sm">
+          What you are called on every surface that would otherwise print your
+          address. The address stays beside it, because two people with the same
+          first name is ordinary. Save an empty box to go back to the address
+          alone.
+        </p>
+        <p className="text-body">
+          <InlineName
+            action={setName}
+            current={displayName}
+            fallback={user.email ?? 'your address'}
+            label="Your name"
+            placeholder="Taha"
+          />
+        </p>
+      </section>
 
       <YourScopes scopes={scopes} />
 

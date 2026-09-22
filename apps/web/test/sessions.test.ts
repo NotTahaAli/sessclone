@@ -8,6 +8,7 @@ import {
   owner as sql,
   seedFixture,
   type Fixture,
+  type FixtureRole,
 } from './harness'
 import { setArchivalEnabled, setProjectArchival } from '../lib/archival'
 import {
@@ -15,6 +16,7 @@ import {
   sessionDetail,
   sessionFilters,
   sessionList,
+  sessionModels,
   sessionTranscripts,
 } from '../lib/sessions'
 
@@ -496,4 +498,89 @@ test('the end markers for a page are one statement, not one per Session', async 
 
   expect(sessions).toHaveLength(20)
   expect(sessions.every((session) => session.endedAt !== null)).toBe(true)
+})
+
+// --- Per model, in dollars as well as tokens (ticket 89) ---------------
+
+const models = (who: FixtureRole) =>
+  asRole(fixture.acme, who, (tx) =>
+    sessionModels(
+      tx,
+      fixture.acme.id,
+      fixture.acme.members.member,
+      'session-1',
+    ),
+  )
+
+test('the models of a Session rank by cost and sum to its own totals', async () => {
+  await seedTurn({ model: 'claude-opus-4-6', input_tokens: 2_000_000 })
+  await seedTurn({ model: 'claude-opus-4-6', input_tokens: 1_000_000 })
+  await seedTurn({
+    model: 'claude-haiku-4-5-20251001',
+    input_tokens: 1_000_000,
+  })
+
+  const [rows, detail] = await Promise.all([
+    models('owner'),
+    asRole(fixture.acme, 'owner', (tx) =>
+      sessionDetail(
+        tx,
+        fixture.acme.id,
+        fixture.acme.members.member,
+        'session-1',
+      ),
+    ),
+  ])
+
+  expect(rows.map((row) => row.model)).toEqual([
+    'claude-opus-4-6',
+    'claude-haiku-4-5-20251001',
+  ])
+  expect(rows[0]).toMatchObject({ turns: 2, tokens: 3_000_000 })
+
+  // The point of the section: it is the Session's own arithmetic cut one more
+  // way, so a reader adding the rows up gets the tile above them.
+  const cost = rows.reduce((total, row) => total + (row.costUsd ?? 0), 0)
+  const tokens = rows.reduce((total, row) => total + row.tokens, 0)
+  const turns = rows.reduce((total, row) => total + row.turns, 0)
+  expect(cost).toBeCloseTo(detail!.session.costUsd!, 10)
+  expect(tokens).toBe(detail!.session.tokens)
+  expect(turns).toBe(detail!.session.turns)
+})
+
+test('a model with no Rate is unpriced, never zero, and still counted', async () => {
+  await seedTurn({ model: 'claude-opus-4-6', input_tokens: 1_000_000 })
+  await seedTurn({ model: 'a-model-nobody-priced', input_tokens: 5_000_000 })
+
+  const rows = await models('owner')
+  const unpriced = rows.find((row) => row.model === 'a-model-nobody-priced')
+
+  // Null rather than 0: a Turn nobody has a Rate for has a cost nobody knows,
+  // and $0.00 would be a claim (ADR 0002).
+  expect(unpriced).toMatchObject({
+    costUsd: null,
+    turns: 1,
+    unpricedTurns: 1,
+    tokens: 5_000_000,
+  })
+  // And it ranks last rather than first, which is what `nulls last` buys.
+  expect(rows.at(-1)!.model).toBe('a-model-nobody-priced')
+})
+
+test('Turns that reported no model are their own row', async () => {
+  await seedTurn({ model: null, input_tokens: 1_000 })
+
+  const rows = await models('owner')
+
+  expect(rows).toHaveLength(1)
+  expect(rows[0]).toMatchObject({ model: null, turns: 1 })
+})
+
+test('the models are the policies’ to scope, not the query’s', async () => {
+  await seedTurn({ model: 'claude-opus-4-6' })
+
+  // A Manager with no Scope may read no Turns, so there is nothing to group.
+  expect(await models('managerWithoutScope')).toEqual([])
+  // Their own Session, so the Member sees it.
+  expect(await models('member')).toHaveLength(1)
 })

@@ -26,7 +26,9 @@ export const rename = async (
   if (!user) return { error: 'Sign in again to rename this machine.' }
 
   const deviceId = DeviceId.safeParse(formData.get('deviceId'))
-  const nickname = Nickname.safeParse(formData.get('nickname'))
+  // `name`, as every naming control on the dashboard posts since tickets 90
+  // and 91 — one field name, one shared control.
+  const nickname = Nickname.safeParse(formData.get('name'))
   if (!deviceId.success) return { error: 'That machine is not one of yours.' }
   if (!nickname.success) {
     // A name that is too long is the only way a rendered form reaches this;
@@ -34,7 +36,7 @@ export const rename = async (
     // the length of something that was never sent.
     return {
       error:
-        typeof formData.get('nickname') === 'string'
+        typeof formData.get('name') === 'string'
           ? 'A name is 60 characters or fewer.'
           : 'That request was missing the name.',
     }
