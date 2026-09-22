@@ -4,9 +4,22 @@ import { AccountMenu } from './account'
 import { AppearanceSync } from './appearance-sync'
 import { OrgMark } from '../org-mark'
 import { PanelCredit } from './credit'
-import { BottomBarLinks, SidebarLinks } from './nav-links'
-import { DESTINATIONS } from './navigation'
+import {
+  BottomBarLinks,
+  BottomBarLinksPending,
+  SidebarGroups,
+  SidebarGroupsPending,
+  SidebarLinks,
+} from './nav-links'
+import {
+  ADMIN_PANEL,
+  BOTTOM_BAR,
+  MORE,
+  moreItems,
+  navGroups,
+} from './navigation'
 import Loading from './loading'
+import { currentOperator } from '../../lib/platform-admin'
 import { currentViewer } from '../../lib/viewer'
 
 // Ticket 83: this layout prerenders a static shell.
@@ -17,22 +30,29 @@ import { currentViewer } from '../../lib/viewer'
 // a zero-byte shell for every signed-in route — the sidebar, the bottom bar
 // and the frame all waited on a database read that says nothing about them.
 //
-// Now the frame is static and the three things that depend on who is asking
-// stream into it: the Org name, the account menu, and the content column
-// (which carries the subscription notice and the page itself). The bottom bar
-// and the sidebar's destinations are the same four for every Role — the Role
+// Now the frame is static and the things that depend on who is asking stream
+// into it: the Org name, the account menu, the admin entry, and the content
+// column (which carries the subscription notice and the page itself). The
+// bottom bar and the sidebar's groups are the same for every Role — the Role
 // only changes what is inside Settings — so nothing about them needs the
 // viewer, and a reader on a slow connection sees the frame at once.
+//
+// Ticket 85 adds the one exception, and it sits in a boundary of its own for
+// exactly that reason: the Admin panel entry depends on `is_platform_admin`,
+// which is a database read, so it streams in beneath a frame that has already
+// painted rather than holding the frame back for a flag that is false for
+// almost every reader.
 
 // Ticket 45: the signed-in frame every later page hangs from.
 //
 // Three things it establishes, and they are the ticket's criteria:
 //
-//  - **Navigation reflecting what the Role may reach.** Four destinations,
-//    every one of them reachable by all four Roles; the choice a Role does
-//    change is inside Settings, and `/settings` makes it. The list is
-//    filtered on the server, so what a Role may reach never ships to the
-//    browser as data the browser decides on.
+//  - **Navigation reflecting what the Role may reach.** Six destinations in
+//    three groups (ticket 85), every one of them reachable by all four Roles;
+//    the choice a Role does change is inside Settings, and `/settings` makes
+//    it. The one conditional entry is the Admin panel, which is the platform
+//    flag rather than a Role. Both are decided on the server, so what a reader
+//    may reach never ships to the browser as data the browser decides on.
 //  - **Org context, established and visible.** The Org name sits in the
 //    frame at both widths, next to the account control, because every figure
 //    on every page under here is an Org's figure and a reader who cannot see
@@ -54,8 +74,10 @@ import { currentViewer } from '../../lib/viewer'
 // bottom bar are what is built, and the design system still decides every
 // token, every component's parts and the accent rule those parts follow.
 //
-// The two widths show the same four destinations in the same order, which is
-// the wireframes' own requirement: nothing appears on one and not the other.
+// The two widths show the same destinations in the same order, which is the
+// wireframes' own requirement: nothing appears on one and not the other. Six
+// do not fit a bottom bar, so the phone carries the first group and a More
+// entry onto the rest (ticket 85) — one tap further, not absent.
 
 /**
  * What a signed-in person with no Org sees. Not a redirect: a redirect to the
@@ -169,11 +191,46 @@ function Pending({ className }: { className: string }) {
   )
 }
 
+/**
+ * The Admin panel entry, for the operator and for nobody else (ticket 85).
+ *
+ * The flag comes from `currentOperator()`, which asks
+ * `sessclone_is_platform_admin()` — the same function every policy on `rates`,
+ * `tiers` and `subscriptions` asks. So this link and the `/admin` layout's own
+ * gate are one rule read twice, and hiding the link is a convenience rather
+ * than the refusal: a reader who types the path still meets `notFound()`.
+ */
+async function AdminEntry() {
+  const operator = await currentOperator()
+  if (!operator) return null
+  return <SidebarLinks items={ADMIN_ONLY} />
+}
+
+/** Built once at module load rather than per render of the frame. */
+const GROUPS = navGroups()
+const ADMIN_ONLY = [ADMIN_PANEL]
+/**
+ * What More stands in for, so the bar marks it when the reader is on one of
+ * them. The admin entry is in this list unconditionally: the bar is part of
+ * the prerendered shell, so it cannot read the flag — and marking More on
+ * `/admin` is right for the one reader who can reach `/admin` at all.
+ */
+const BEHIND_MORE = { [MORE.href]: moreItems(true) }
+
 // The fallbacks as values rather than as inline elements: one element each,
 // created once, rather than a new one on every render of the frame.
 const PENDING_SIDEBAR = <Pending className="mt-1" />
 const PENDING_HEADER = <Pending className="" />
 const PENDING_CONTENT = <Loading />
+// The navigation reads `usePathname()` to mark the current destination, and on
+// a route with a dynamic segment that value only exists at runtime — so these
+// two boundaries are what let `/sessions/[sessionId]`, `/turns/[id]` and
+// `/costs/[dimension]/[id]` prerender a shell at all. The fallback is the same
+// navigation with nothing marked, which is navigation a reader can already
+// use. On a static route the boundary resolves during the build, so those
+// shells carry the mark exactly as before.
+const PENDING_GROUPS = <SidebarGroupsPending groups={GROUPS} />
+const PENDING_BAR = <BottomBarLinksPending items={BOTTOM_BAR} />
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
@@ -192,7 +249,16 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             </Suspense>
           </p>
           <nav aria-label="Main" className="mt-6">
-            <SidebarLinks items={DESTINATIONS} />
+            <Suspense fallback={PENDING_GROUPS}>
+              <SidebarGroups groups={GROUPS}>
+                {/* The one entry that is a database read. Its fallback is
+                  nothing: an entry that appeared and then vanished would be
+                  worse than one that arrives a moment late. */}
+                <Suspense fallback={null}>
+                  <AdminEntry />
+                </Suspense>
+              </SidebarGroups>
+            </Suspense>
           </nav>
         </div>
         {/* The account block, and the credit under it — which is where the
@@ -249,7 +315,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         aria-label="Main"
         className="border-rule bg-ground fixed inset-x-0 bottom-0 z-10 border-t lg:hidden"
       >
-        <BottomBarLinks items={DESTINATIONS} />
+        <Suspense fallback={PENDING_BAR}>
+          <BottomBarLinks items={BOTTOM_BAR} behind={BEHIND_MORE} />
+        </Suspense>
       </nav>
     </div>
   )

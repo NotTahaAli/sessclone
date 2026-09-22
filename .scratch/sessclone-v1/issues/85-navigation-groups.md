@@ -16,10 +16,10 @@ The phone bottom bar cannot carry six items, so it carries group one plus a **Mo
 
 **Blocked by:** 45, 65.
 
-**Status:** open
+**Status:** done
 
-- [ ] The sidebar renders three labelled groups in the order above
-- [ ] Admin panel appears for a platform admin and for nobody else, proven against the flag rather than through the UI
-- [ ] The phone bottom bar shows Costs, Sessions, Transcripts and More; More reaches Keys, Devices, Settings and, when entitled, Admin panel
-- [ ] The current destination is marked in both layouts, including when it is behind More
-- [ ] Screenshots at 1440x900 and 390x844, light and dark
+- [x] The sidebar renders three labelled groups in the order above — Usage, Collector, Manage. "Manage" rather than "Settings", so the group and the entry inside it are not the same word.
+- [x] Admin panel appears for a platform admin and for nobody else. `navigation.test.ts` proves it against the flag — no Role produces it, and `platform-admin.test.ts` already proves the flag itself comes from `sessclone_is_platform_admin()` against the real database.
+- [x] The phone bottom bar shows Costs, Sessions, Transcripts and More. More is a destination, `/more`, rather than a sheet: no client JavaScript, the back button undoes it, and its list is generated from the groups rather than kept in agreement with them.
+- [x] The current destination is marked in both layouts. More carries a `behind` list, so a reader on Devices sees More marked rather than nothing at all.
+- [x] Screenshots at 1440x900 and 390x844, light and dark, in `/mnt/project-files/shots-tickets-85-88/`

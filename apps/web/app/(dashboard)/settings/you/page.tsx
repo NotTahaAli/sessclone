@@ -1,3 +1,5 @@
+import Link from 'next/link'
+
 import { setArchival, setProject } from './actions'
 import { setOwnAccent } from './appearance-actions'
 import { ThemeForm } from './theme-form'
@@ -7,9 +9,7 @@ import {
   type ArchivalMembership,
   type ArchivalProject,
 } from '../../../../lib/archival'
-import { storedProjects, storedSessions } from '../../../../lib/artifacts'
 import { ownScopes, type OwnScope } from '../../../../lib/scopes'
-import { StoredTranscripts } from './stored-transcripts'
 import { PageHeader } from '../../page-header'
 import { AccentPreview } from '../appearance-preview'
 import { SeedPicker } from '../seed-picker'
@@ -40,17 +40,16 @@ export default async function YourSettings() {
 
   // One transaction, which is what `asViewer` opens and what carries the
   // viewer's claim. The two statements are independent, so they go together.
-  const [memberships, projects, scopes, stored, sessions, appearance] =
-    await asViewer(user.id, (tx) =>
+  const [memberships, projects, scopes, appearance] = await asViewer(
+    user.id,
+    (tx) =>
       Promise.all([
         listArchivalMemberships(tx),
         listArchivalProjects(tx),
         ownScopes(tx),
-        storedProjects(tx),
-        storedSessions(tx),
         viewerAppearance(tx),
       ]),
-    )
+  )
 
   // Grouped once here rather than filtered inside the render, which would be
   // a pass over the whole list per membership. One pass, one array each, and
@@ -149,24 +148,17 @@ export default async function YourSettings() {
         )}
       </section>
 
-      <StoredTranscripts
-        projects={stored.projects}
-        sessions={sessions.sessions}
-        // Either cap being reached means the page is not the whole picture.
-        more={sessions.more || stored.more}
-        // Named only when there is more than one Org to tell apart, as the
-        // archival section above names them only then.
-        orgNames={
-          new Map(
-            memberships.length > 1
-              ? memberships.map((membership) => [
-                  membership.member_id,
-                  membership.org_name,
-                ])
-              : [],
-          )
-        }
-      />
+      {/* Ticket 87: the stored transcripts left this page and became
+          `/transcripts`. What stays here is the switch — a change to make,
+          rather than a thing to find — and a way to the list for somebody who
+          came looking for it. */}
+      <p className="text-text-secondary mt-6 text-sm">
+        What has already been uploaded, and the controls to delete it, are on{' '}
+        <Link href="/transcripts" className="text-accent-text underline">
+          Transcripts
+        </Link>
+        .
+      </p>
     </div>
   )
 }

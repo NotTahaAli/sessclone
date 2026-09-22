@@ -1,3 +1,5 @@
+import Link from 'next/link'
+
 import type { BreakdownRow, Dimension } from '../../../lib/breakdown'
 
 // The ranked list that tickets 54, 55 and 56 each show: horizontal bars,
@@ -46,11 +48,14 @@ export function RankedList({
   rows,
   dimension,
   total,
+  params,
   more = 0,
   moreUnpriced = 0,
 }: {
   rows: BreakdownRow[]
   dimension: Dimension
+  /** The current query, so a row's link keeps the period it was ranked for. */
+  params: Record<string, string | string[] | undefined>
   /**
    * The period's cost across every group, which is the figure in the Cost tile
    * above. The shares are of that rather than of the rows shown, or past the
@@ -77,6 +82,7 @@ export function RankedList({
   // the period. The two answer different questions and only one of them has to
   // agree with the tile above.
   const peak = Math.max(...rows.map((row) => row.costUsd ?? 0))
+  const period = periodOf(params)
 
   return (
     <ol className="flex flex-col">
@@ -86,12 +92,12 @@ export function RankedList({
           className="border-rule flex flex-col gap-1 border-b py-3"
         >
           <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-            <span className="font-mono text-sm break-all" title={row.label}>
+            <Name row={row} dimension={dimension} period={period}>
               {middleTruncate(row.label)}
               {row.note ? (
                 <span className="text-text-muted"> — {row.note}</span>
               ) : null}
-            </span>
+            </Name>
             {/* A row with nothing priced shows a dash, never $0.00: the
                 money is not zero, it is unknown, and the caption below says
                 how many Turns are waiting on a rate. */}
@@ -134,6 +140,58 @@ export function RankedList({
       ) : null}
     </ol>
   )
+}
+
+/**
+ * The row's label, as a link to its Turns when there is a group to ask for.
+ *
+ * The catch-all on People is the one row with no id — its Turns belong to
+ * Members outside the viewer's view, so there is nothing to open — and it
+ * renders as plain text. A link that led to an empty page would be worse than
+ * no link, since the reader would read the emptiness as a bug.
+ */
+function Name({
+  row,
+  dimension,
+  period,
+  children,
+}: {
+  row: BreakdownRow
+  dimension: Dimension
+  period: string
+  children: React.ReactNode
+}) {
+  const openable = row.id !== null || dimension !== 'members'
+
+  if (!openable) {
+    return (
+      <span className="font-mono text-sm break-all" title={row.label}>
+        {children}
+      </span>
+    )
+  }
+
+  return (
+    <Link
+      href={`/costs/${dimension}/${row.id ?? 'none'}${period}`}
+      className="hover:text-accent-text font-mono text-sm break-all underline"
+      title={row.label}
+    >
+      {children}
+    </Link>
+  )
+}
+
+/** The period from the current query, as a search string or an empty one. */
+const periodOf = (params: Record<string, string | string[] | undefined>) => {
+  const search = new URLSearchParams()
+  for (const key of ['range', 'from', 'to'] as const) {
+    const value = params[key]
+    const one = Array.isArray(value) ? value[0] : value
+    if (one) search.set(key, one)
+  }
+  const query = search.toString()
+  return query ? `?${query}` : ''
 }
 
 /**

@@ -101,7 +101,17 @@ function OverTime({ series }: { series: SpendSeries }) {
  * than the ones shown: the list is capped and a total summed from a capped
  * list drops the tail without saying so.
  */
-function Ranked({ cut, dimension }: { cut: Breakdown; dimension: Dimension }) {
+function Ranked({
+  cut,
+  dimension,
+  params,
+}: {
+  cut: Breakdown
+  dimension: Dimension
+  /** The period, so a row's link opens the Turns of the period it was ranked
+   * for (ticket 88). */
+  params: Record<string, string | string[] | undefined>
+}) {
   return (
     <div className="flex flex-col gap-6">
       <Totals {...cut.totals} />
@@ -112,6 +122,7 @@ function Ranked({ cut, dimension }: { cut: Breakdown; dimension: Dimension }) {
           more={cut.more}
           moreUnpriced={cut.moreUnpriced}
           dimension={dimension}
+          params={params}
         />
       </div>
     </div>
@@ -363,7 +374,7 @@ function Body({
       return view === 'time' || !isDimension(view) || ranked === null ? (
         <OverTime series={spend!} />
       ) : (
-        <Ranked cut={ranked} dimension={view} />
+        <Ranked cut={ranked} dimension={view} params={params} />
       )
 
     case 'waiting':

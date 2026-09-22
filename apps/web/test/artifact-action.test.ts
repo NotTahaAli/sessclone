@@ -36,7 +36,7 @@ beforeEach(async () => {
 /** A fresh module per case: the viewer is `cache`d for one request. */
 const actAs = async (userId: string) => {
   signedInUser.mockResolvedValue({ id: userId, email: 'whoever@example.test' })
-  return import('../app/(dashboard)/settings/you/artifact-actions')
+  return import('../app/(dashboard)/transcripts/artifact-actions')
 }
 
 const form = (fields: Record<string, string>) => {
@@ -93,7 +93,7 @@ test('a signed-out caller deletes nothing', async () => {
   await artifact()
   signedInUser.mockResolvedValue(null)
   const actions =
-    await import('../app/(dashboard)/settings/you/artifact-actions')
+    await import('../app/(dashboard)/transcripts/artifact-actions')
 
   await actions.deleteSession(form({ artifactId: crypto.randomUUID() }))
   await actions.deleteProject(
