@@ -530,19 +530,29 @@ describe('the search path every security definer helper runs on', () => {
   })
 })
 
-test('every security definer function pins pg_temp', async () => {
+test('every sessclone function pins pg_temp', async () => {
   // `20260920120600_search_path.sql` exists because ten functions shipped
   // without the pin: Postgres searches `pg_temp` first for a table unless the
   // schema is named, every role has temp rights, and a temp `users` or
   // `members` forged platform-admin or read every Org. Two specific attacks
   // are proven above; this is the class, so the next function cannot
   // reintroduce it.
+  //
+  // Every function, not only the `security definer` ones. Asking only about
+  // those let three through: `create or replace function` replaces the whole
+  // definition and does not keep a function's `SET` clauses, so
+  // `20260921120000_member_and_device_guards.sql` dropped the pin
+  // `20260920120600` had put on `sessclone_guard_device_columns`, and nothing
+  // said so until a database linter on a real deployment did. An invoker
+  // function with a mutable path is a smaller hole than a definer one, but
+  // these run in the ingest path as the role that owns the tables, and
+  // `20260920120600` had already decided they are pinned.
   const unpinned = await sql<{ name: string; config: string[] | null }[]>`
     select routine.proname as name, routine.proconfig as config
       from pg_proc routine
       join pg_namespace space on space.oid = routine.pronamespace
      where space.nspname = 'public'
-       and routine.prosecdef
+       and routine.proname like 'sessclone\_%'
        and not coalesce(
              array_to_string(routine.proconfig, ',') like '%pg_temp%', false)
      order by routine.proname

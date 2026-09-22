@@ -91,7 +91,7 @@ export class ConfigurationError extends Error {
  * @param {NodeJS.Platform} platform
  * @param {Record<string, string | undefined>} env
  */
-const defaultStateDir = (platform, env) => {
+export const defaultStateDir = (platform, env) => {
   if (platform === 'win32') {
     const local =
       env.LOCALAPPDATA ??

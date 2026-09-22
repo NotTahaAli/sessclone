@@ -84,6 +84,21 @@ counted from the Turns themselves.
 
 Start a session, send one turn, and look at **Costs** in the dashboard.
 
+There is also a command that reads this machine and prints what it found —
+the Node version, the resolved state directory, the cursor and queue files as
+they actually landed, the Device key, and the transcripts on disk:
+
+```bash
+node scripts/verify-collector.mjs
+```
+
+Run it from a clone, or from the plugin's own checkout: the plugin installs the
+whole repository, so `<config dir>/plugins/**/sessclone*/scripts` holds a copy
+with the modules it imports beside it. It prints a key's first three characters
+and its length and never more, so the output is safe to paste to whoever is
+helping. `--reconcile --day <date> --tz <zone>` counts a day of Turns off the
+transcripts, for checking a dashboard total by hand.
+
 - **Something arrives.** Done. There is nothing else to install on this
   machine.
 - **The page still says it is waiting, and the key has never been used.** The
