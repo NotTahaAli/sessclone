@@ -50,6 +50,18 @@ export const ConfirmRequest = z.object({
   agentId: text.nullable().optional(),
   /** Lowercase hex SHA-256 of the bytes that were uploaded. */
   sha256: z.string().regex(/^[0-9a-f]{64}$/, 'a lowercase hex sha-256'),
+  /**
+   * The object key the Collector actually PUT to, as the presign route gave
+   * it.
+   *
+   * Echoed, not trusted: the deployment derives the key again and records only
+   * its own. This field exists so the two can be *compared* — a Turn landing
+   * under a different Project between the two requests moves the derived key,
+   * and a row written then would name one object while carrying another's hash
+   * and size, which the unchanged guard would make permanent. When they
+   * differ the answer is `stale_key` and the Collector simply presigns again.
+   */
+  storageKey: z.string().trim().min(1).max(1024),
 })
 
 export type ConfirmRequest = z.infer<typeof ConfirmRequest>
@@ -60,14 +72,16 @@ export type ConfirmRequest = z.infer<typeof ConfirmRequest>
  * `stored` carries the size the deployment read back from storage, so a
  * Collector can tell a recorded upload from a silently truncated one.
  *
- * `not_uploaded` is the refusal particular to this route: the object is not in
- * the bucket, so there is nothing to record. It is the transient one here —
- * a provider that is eventually consistent, or an upload that failed after
- * answering — and the Collector retries it like any other.
+ * Two refusals are particular to this route, and both are transient.
+ * `not_uploaded` is an object that is not in the bucket — an upload that
+ * failed after answering, or a provider that has not made it visible yet.
+ * `stale_key` is the Session having moved Project between the presign and the
+ * confirm, so the key the bytes went to is no longer the key this Session
+ * belongs under. The Collector presigns again in both cases.
  */
 export type ConfirmResponse =
   | { stored: true; storageKey: string; sizeBytes: number }
-  | { refused: PresignRefusal | 'not_uploaded'; detail: string }
+  | { refused: PresignRefusal | 'not_uploaded' | 'stale_key'; detail: string }
   | { error: string; detail?: string }
 
 /**

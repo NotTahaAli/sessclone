@@ -29,9 +29,12 @@ const configuration = () => ({
  */
 const stubFetch = (answers) => {
   const bodies = []
+  /** The archival requests, so their cost per session can be pinned below. */
+  const archival = []
   const scripted = [...answers]
   vi.stubGlobal('fetch', async (url, init) => {
     if (String(url).includes('/api/logs/')) {
+      archival.push(String(url))
       return {
         ok: true,
         status: 200,
@@ -46,6 +49,7 @@ const stubFetch = (answers) => {
     if (answer === 'throw') throw new Error('unreachable')
     return { ok: answer.ok, status: answer.status }
   })
+  bodies.archival = archival
   return bodies
 }
 
@@ -189,6 +193,11 @@ test('a session already flushed to its end is not re-reported by the next sweep'
     environment: { CLAUDE_CONFIG_DIR: dir },
   })
   expect(bodies).toHaveLength(0)
+
+  // And archival costs nothing either: a Member who has not opted in is asked
+  // once per transcript and the answer is remembered while the file is
+  // unchanged, so a sweep over a long history is not a re-read of all of it.
+  expect(bodies.archival).toHaveLength(0)
 })
 
 test('the sweep stops when its time budget is spent', async () => {

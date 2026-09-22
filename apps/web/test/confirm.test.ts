@@ -11,13 +11,25 @@ import { asUser, owner as sql, seedFixture, type Fixture } from './harness'
 // whether it is written at all, what it says, and that it says the size the
 // deployment read back rather than the one a Collector claimed.
 
-const stored = vi.hoisted(() => ({ size: 4096 as number | null }))
+const stored = vi.hoisted(() => ({
+  size: 4096 as number | null,
+  /** Set to throw from `storedObject`, as an unreachable provider does. */
+  unreadable: false,
+  configured: true,
+  /** Keys `deleteObjects` was asked to remove, newest call last. */
+  deleted: [] as string[][],
+}))
 
 vi.mock('../lib/storage', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/storage')>()),
-  storageConfigured: () => true,
-  storedObject: async () =>
-    stored.size === null ? null : { sizeBytes: stored.size },
+  storageConfigured: () => stored.configured,
+  storedObject: async () => {
+    if (stored.unreadable) throw new Error('endpoint refused')
+    return stored.size === null ? null : { sizeBytes: stored.size }
+  },
+  deleteObjects: async (keys: string[]) => {
+    stored.deleted.push(keys)
+  },
 }))
 
 let fixture: Fixture
@@ -80,7 +92,7 @@ const seedSession = async ({
       project_id: projectId,
       session_id: sessionId,
       agent_id: agentId,
-      message_id: `msg_${sessionId}_${agentId ?? 'main'}`,
+      message_id: `msg_${sessionId}_${agentId ?? 'main'}_${projectKey ?? 'none'}`,
       occurred_at: new Date(),
       model: 'claude-opus-4-6',
       input_tokens: 10,
@@ -110,12 +122,28 @@ const ask = async (
             'content-type': 'application/json',
           }
         : { 'content-type': 'application/json' },
-      body: JSON.stringify({ sessionId: 'session-1', sha256: SHA, ...body }),
+      body: JSON.stringify({
+        sessionId: 'session-1',
+        sha256: SHA,
+        // The key the presign issued, which the Collector echoes. Overridden
+        // by the tests that are about it.
+        storageKey: derivedKey(),
+        ...body,
+      }),
     }),
   )
 
 const answer = async (response: Response) =>
   [response.status, await response.json()] as const
+
+/** The object key this Member's `session-1` resolves to for a Project. */
+const derivedKey = (
+  projectKey: string | null = 'github.com/acme/api',
+  agentId: string | null = null,
+) =>
+  `orgs/${fixture.acme.id}/members/${fixture.acme.members.member}/projects/${
+    projectKey === null ? 'none' : encodeURIComponent(projectKey)
+  }/${agentId ? `session-1/agents/${agentId}.jsonl` : 'session-1.jsonl'}`
 
 type ArtifactRow = {
   project_id: string | null
@@ -137,6 +165,9 @@ beforeEach(async () => {
   fixture = await seedFixture()
   key = await issueKey(fixture.acme.members.member)
   stored.size = 4096
+  stored.unreadable = false
+  stored.configured = true
+  stored.deleted = []
   await setArchival(true)
 })
 
@@ -168,14 +199,11 @@ test('the Session’s object key is derived, never taken from the Collector', as
   await seedSession()
 
   const [, body] = await answer(
-    // A Collector cannot file its transcript wherever it likes, nor say how
-    // big it is: neither the key, the Project nor the size is a field of this
-    // request, and a body carrying them is ignored rather than honoured.
-    await ask({
-      storageKey: 'orgs/elsewhere/anything.jsonl',
-      projectKey: 'x',
-      sizeBytes: 999_999,
-    }),
+    // A Collector cannot say where its transcript belongs, nor how big it is.
+    // The key it echoes is compared against the derived one and never used in
+    // its place, and the Project and the size are not fields of this request
+    // at all — a body carrying them is ignored rather than honoured.
+    await ask({ projectKey: 'x', sizeBytes: 999_999 }),
   )
 
   expect(body.storageKey).toBe(
@@ -215,7 +243,10 @@ test('an Agent Run is its own row beside the Session’s', async () => {
   await seedSession({ agentId: 'agent-7' })
 
   await ask()
-  await ask({ agentId: 'agent-7' })
+  await ask({
+    agentId: 'agent-7',
+    storageKey: derivedKey(undefined, 'agent-7'),
+  })
 
   const rows = await artifacts()
   expect(
@@ -324,4 +355,88 @@ test('a malformed body is a 400 naming the field', async () => {
   expect(status).toBe(400)
   expect(body.error).toBe('not a confirm request')
   expect(body.detail).toContain('sha256')
+})
+
+test('a Session that moved Project since the presign is refused, not recorded', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+
+  // The bytes went to the key the presign issued; a Turn under another Project
+  // has landed since, so this Session now belongs under a different key. A row
+  // written here would name one object and carry another's hash and size, and
+  // the unchanged guard would keep it forever.
+  const [status, body] = await answer(
+    await ask({ storageKey: derivedKey('github.com/acme/other') }),
+  )
+
+  expect(status).toBe(200)
+  expect(body).toMatchObject({ refused: 'stale_key' })
+  expect(await artifacts()).toHaveLength(0)
+})
+
+test('a Project change moves the row and destroys the object left behind', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await ask()
+  const [first] = await artifacts()
+
+  // A later Turn puts the Session in another Project (ADR 0003's mid-run
+  // change), so the next upload goes to a new key.
+  await seedSession({ projectKey: 'github.com/acme/other' })
+  const moved = derivedKey('github.com/acme/other')
+  const [, body] = await answer(
+    await ask({ sha256: 'c'.repeat(64), storageKey: moved }),
+  )
+
+  expect(body).toMatchObject({ stored: true, storageKey: moved })
+
+  const rows = await artifacts()
+  expect(rows).toHaveLength(1)
+  expect(rows[0]!.storage_key).toBe(moved)
+  // The old object had no row naming it any more, and bytes no retention
+  // sweep can reach are a transcript kept forever.
+  expect(stored.deleted).toEqual([[first!.storage_key]])
+})
+
+test('an upload to the same key deletes nothing', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+
+  await ask()
+  await ask({ sha256: 'd'.repeat(64) })
+
+  expect(stored.deleted).toEqual([])
+  expect(await artifacts()).toHaveLength(1)
+})
+
+test('a deployment that cannot read the object back records nothing', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  stored.unreadable = true
+
+  const [status, body] = await answer(await ask())
+  expect(status).toBe(503)
+  expect(body.error).toContain('cannot read the uploaded object')
+  expect(await artifacts()).toHaveLength(0)
+})
+
+test('a deployment with no storage says so rather than half-working', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  stored.configured = false
+
+  const [status, body] = await answer(await ask())
+  expect(status).toBe(503)
+  expect(body.error).toContain('no storage configured')
+  expect(await artifacts()).toHaveLength(0)
+})
+
+test('two confirms racing on one Session leave one row', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+
+  const [one, two] = await Promise.all([ask(), ask()])
+
+  expect([one.status, two.status]).toEqual([200, 200])
+  expect(await artifacts()).toHaveLength(1)
 })

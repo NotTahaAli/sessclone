@@ -49,3 +49,41 @@ The SHA-256 stays the Collector's word: computing it server-side would mean
 downloading the transcript through the application, which is the one thing ADR
 0003 exists to prevent. A Member who lies about it can only cause their own
 next upload to be skipped as unchanged.
+
+## Acted on after review
+
+- **The confirm records the key the bytes actually went to.** A Turn under
+  another Project can land between the presign and the confirm (ADR 0003's
+  mid-run Project change), which moves the derived key — and a row written
+  then would name one object while carrying another's hash and size, with the
+  unchanged guard keeping it forever. The request now echoes the key it PUT
+  to, the route compares it against its own derivation and answers
+  `stale_key`, and the Collector presigns again.
+- **A replaced row destroys the object it left behind.** A Session that moved
+  Project used to leave its old transcript in the bucket with no row naming
+  it: bytes no retention sweep can reach, which for a transcript means source
+  code and sometimes credentials kept forever. The upsert returns the previous
+  key and the object is deleted after the row is written.
+- **The upload is bounded to the size that was hashed.** `stat` once, hash
+  that range, upload that range. A transcript being appended to by a live
+  session used to fail its `PUT` after sending the whole file, on every pass
+  forever, because the stream yielded more bytes than `content-length`
+  declared.
+- **An Agent Run keeps its own id.** A file under `subagents/` whose name
+  carries no id was filed under the _Session's_ key and replaced the Session's
+  own transcript; it is skipped now.
+- **`SessionEnd` archives inside a budget** (8s of the hook's 10), so a
+  Session with several Agent Runs is not killed mid-request.
+- **A settled answer is not paid for twice.** The outcome is remembered under
+  `<state dir>/archived/` keyed on the file's size and mtime, so an unchanged
+  transcript costs neither a re-hash nor a request while the answer cannot
+  change. The transient outcomes are deliberately not remembered.
+- **The `unchanged` branch cannot throw.** Its read is inside the route's
+  error handling, and a row the Member destroyed between the two statements is
+  the transient `not_uploaded` rather than an assertion.
+
+Known ceiling, stated rather than fixed: archival shares the sweep's time box
+with the Turns and `allSessions` is newest-first, so on a machine with a long
+history the older sessions are archived over several starts. A session that
+ends cleanly is archived by `SessionEnd` in its own budget, so this only
+affects catching up on history.

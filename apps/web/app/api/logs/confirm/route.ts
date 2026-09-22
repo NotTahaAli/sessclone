@@ -8,7 +8,11 @@ import {
   unauthenticated,
 } from '../../../../lib/collector-auth'
 import { presignDecision } from '../../../../lib/presign'
-import { storageConfigured, storedObject } from '../../../../lib/storage'
+import {
+  deleteObjects,
+  storageConfigured,
+  storedObject,
+} from '../../../../lib/storage'
 
 // Ticket 59: the request that records an upload, after the bytes have landed.
 //
@@ -29,7 +33,11 @@ import { storageConfigured, storedObject } from '../../../../lib/storage'
 // 2. **Where** — the object key and the Project — is re-derived by
 //    `presignDecision` from the Turns already ingested, so a Collector cannot
 //    file one Session's transcript under another Session's key, nor under a
-//    Project it excluded.
+//    Project it excluded. The request echoes the key it uploaded to, and the
+//    two are compared: a Session that moved Project between the presign and
+//    the confirm has a different derived key now, and a row written then
+//    would name one object while carrying another's hash and size — which the
+//    unchanged guard would then make permanent.
 // 3. **How big** is read back from storage. A truncated or failed upload
 //    cannot overstate its own size, and the size is what the retention and
 //    download surfaces show.
@@ -73,7 +81,7 @@ export async function POST(request: Request) {
     )
   }
 
-  const { sessionId, sha256 } = parsed.data
+  const { sessionId, sha256, storageKey } = parsed.data
   const agentId = parsed.data.agentId ?? null
 
   let decision
@@ -105,17 +113,43 @@ export async function POST(request: Request) {
       } satisfies ConfirmResponse)
     }
 
-    const [stored] = await sql<{ storage_key: string; size_bytes: string }[]>`
-      select storage_key, size_bytes from log_artifacts
-       where member_id = ${caller.memberId}
-         and session_id = ${sessionId}
-         and agent_id is not distinct from ${agentId}
-    `
-    // The row is what made the decision `unchanged`, so it is there.
+    let stored
+    try {
+      ;[stored] = await sql<{ storage_key: string; size_bytes: string }[]>`
+        select storage_key, size_bytes from log_artifacts
+         where member_id = ${caller.memberId}
+           and session_id = ${sessionId}
+           and agent_id is not distinct from ${agentId}
+      `
+    } catch (error) {
+      return databaseFailure(error)
+    }
+
+    // The row is what made the decision `unchanged` — but the Member may have
+    // destroyed it between the two statements (ticket 73), and a missing row
+    // is the transient answer rather than a thrown assertion.
+    if (!stored) {
+      return Response.json({
+        refused: 'not_uploaded',
+        detail: 'nothing is stored for this Session any more',
+      } satisfies ConfirmResponse)
+    }
+
     return Response.json({
       stored: true,
-      storageKey: stored!.storage_key,
-      sizeBytes: Number(stored!.size_bytes),
+      storageKey: stored.storage_key,
+      sizeBytes: Number(stored.size_bytes),
+    } satisfies ConfirmResponse)
+  }
+
+  // The bytes went to the key the presign issued; this Session now belongs
+  // under `decision.storageKey`. When those differ the upload is stranded
+  // under the old key and the right answer is to presign again — recording it
+  // would file the wrong object and the hash guard would keep it forever.
+  if (storageKey !== decision.storageKey) {
+    return Response.json({
+      refused: 'stale_key',
+      detail: 'this Session’s Project changed since the upload was authorised',
     } satisfies ConfirmResponse)
   }
 
@@ -148,22 +182,45 @@ export async function POST(request: Request) {
   // target is the Session's identity; `storage_key` is derived from it, so an
   // upload whose Project changed mid-Session (ticket 09) moves the row to the
   // new key rather than writing a second one.
+  let replaced
   try {
-    await sql`
-      insert into log_artifacts (org_id, member_id, project_id, session_id,
-                                 agent_id, storage_key, sha256, size_bytes)
-      values (${caller.orgId}, ${caller.memberId}, ${decision.projectId},
-              ${sessionId}, ${agentId}, ${decision.storageKey}, ${sha256},
-              ${object.sizeBytes})
-      on conflict (member_id, session_id, agent_id) do update
-         set project_id = excluded.project_id,
-             storage_key = excluded.storage_key,
-             sha256 = excluded.sha256,
-             size_bytes = excluded.size_bytes,
-             uploaded_at = now()
+    // `returning` the key the row held before the update: a Session that
+    // moved Project has a new key, and the object at the old one would
+    // otherwise sit in the bucket with no row naming it — bytes no retention
+    // sweep can reach, which for a transcript means source code and sometimes
+    // credentials kept forever.
+    ;[replaced] = await sql<{ previous: string | null }[]>`
+      with previous as (
+        select storage_key from log_artifacts
+         where member_id = ${caller.memberId}
+           and session_id = ${sessionId}
+           and agent_id is not distinct from ${agentId}
+      ), written as (
+        insert into log_artifacts (org_id, member_id, project_id, session_id,
+                                   agent_id, storage_key, sha256, size_bytes)
+        values (${caller.orgId}, ${caller.memberId}, ${decision.projectId},
+                ${sessionId}, ${agentId}, ${decision.storageKey}, ${sha256},
+                ${object.sizeBytes})
+        on conflict (member_id, session_id, agent_id) do update
+           set project_id = excluded.project_id,
+               storage_key = excluded.storage_key,
+               sha256 = excluded.sha256,
+               size_bytes = excluded.size_bytes,
+               uploaded_at = now()
+        returning storage_key
+      )
+      select (select storage_key from previous) as previous from written
     `
   } catch (error) {
     return databaseFailure(error)
+  }
+
+  if (replaced?.previous && replaced.previous !== decision.storageKey) {
+    // After the row, never before: an orphaned object costs storage, and a
+    // deleted object with a row still naming it costs the transcript. A
+    // failure here is left for ticket 61's sweep rather than failing a
+    // recorded upload.
+    await deleteObjects([replaced.previous]).catch(() => {})
   }
 
   return Response.json({

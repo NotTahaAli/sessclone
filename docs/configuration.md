@@ -291,13 +291,23 @@ session and by the `SessionStart` sweep: the Collector hashes the transcript,
 asks `/api/logs/presign`, and opens the file for upload only if that answer is
 a URL. So nothing leaves the machine while the master switch is off, while the
 Project is excluded, while the Tier excludes archival, or when these exact
-bytes are already stored — each of which costs one small request and no
-transfer. The bytes then go straight to storage (ADR 0003), and a second
+bytes are already stored — each of which costs one small request per
+transcript and no transfer, and is then remembered under
+`<state dir>/archived/` so an unchanged transcript is not re-read on the next
+start. The bytes then go straight to storage (ADR 0003), and a second
 request, `/api/logs/confirm`, is what records the upload: the row is written
 only once the deployment has read the object back out of the bucket, so a
 failed or truncated upload leaves no row claiming a transcript is downloadable.
 The Collector needs no configuration for any of this, and holds no copy of the
 switch.
+
+Two limits are worth knowing. The upload is bounded to the transcript's size as
+it stood when the hash was taken, so a session that is still being written is
+archived up to that point and the rest goes on the next pass. And archival
+shares the `SessionStart` sweep's time box with the Turns, which are reported
+first — so on a machine with a long history the newest sessions are archived
+first and the older ones over subsequent starts, while a session that ends
+cleanly is archived by `SessionEnd` in its own eight-second budget.
 
 **When the deployment is unreachable, nothing is lost to a blip and little to
 an outage (ticket 39).** A failed report is retried three times over about two

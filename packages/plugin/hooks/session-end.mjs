@@ -22,6 +22,15 @@
 
 import { readConfiguration } from '../src/configuration.mjs'
 
+/**
+ * How long this hook may spend archiving, in milliseconds.
+ *
+ * The flush above it is small and fast; the uploads are not. Eight of the
+ * hook's ten seconds, so a killed hook is never what stops an upload
+ * mid-request.
+ */
+const ARCHIVE_BUDGET_MS = 8000
+
 const readStdin = async () => {
   let input = ''
   for await (const chunk of process.stdin) input += chunk
@@ -55,12 +64,18 @@ try {
   // moment an upload is not immediately stale. Every refusal is quiet, and
   // nothing is uploaded unless this Member has opted in: the deployment
   // decides, and it is asked before the file is opened.
+  // Time-boxed, because the hook is: `hooks.json` gives it ten seconds and a
+  // Session with several Agent Runs is several uploads. What this budget does
+  // not reach is reached by the next `SessionStart` sweep, which costs nothing
+  // because nothing has been recorded.
   const { archiveSession } = await import('../src/archive.mjs')
+  const deadline = Date.now() + ARCHIVE_BUDGET_MS
   await archiveSession({
     configuration,
     transcriptPath: event.transcript_path,
     sessionId: event.session_id,
     environment: process.env,
+    shouldStop: () => Date.now() >= deadline,
   })
 } catch {
   // Deliberately silent: see above.
