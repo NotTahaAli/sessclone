@@ -372,11 +372,25 @@ stylesheet above, not the inline style, picks between each pair.
 ```
 
 The five painted values are computed once when a seed is saved and stored beside
-it, not recomputed per request and not computed in the browser. `data-theme` is
-written by the server on the `<html>` element for a signed-in Member whose
-stored preference is light or dark; for a signed-out visitor, and for the
-_system_ preference, no attribute is written and the media query decides, so
-nothing has to run before first paint.
+it, not recomputed per request and not computed in the browser. For a signed-out
+visitor, and for the _system_ preference, no attribute is written and the media
+query decides, so nothing has to run before first paint.
+
+**How a signed-in Member's preference actually arrives (ticket 77).** This page
+said the server writes `data-theme` on `<html>`. It does not, and cannot: that
+element lives in the root layout every route shares, so reading the session or a
+cookie there would opt the whole product out of static prerendering and, under
+Cache Components, block every segment beneath it — which is what tickets 80 and
+83 exist to deliver. So the resolved theme and the seven properties travel in a
+cookie the server writes when the setting changes and at sign-in, and an inline
+script in `<head>` applies them while the browser parses the document, before
+the first paint. Next's own guidance reaches the same conclusion, in
+`preventing-flash-before-hydration.md` § "Storing the theme in a cookie". The
+markup above is what the document looks like by the time anything is painted;
+it is written by that script rather than rendered by the server. The cookie is
+presentation and never authority — it carries no id and no claim, every value
+is checked against a shape before it is applied, and the worst a tampered one
+can do is recolour that browser's own pages.
 
 ## Component inventory
 

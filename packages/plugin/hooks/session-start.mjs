@@ -22,15 +22,17 @@
 // that first line. The key itself never appears either way (see
 // `ConfigurationError`).
 //
-// Later tickets grow this hook into the sweep the spec describes (§5.2): drain
-// the retry queue and re-send unfinished sessions. Both need the configuration
-// this reads, which is why the check lands here rather than in a hook of its
-// own.
+// This hook is also the sweep the spec describes (§5.2, ticket 39): once the
+// configuration is known good, drain the retry queue and re-send every session
+// this environment has written that is not known to be complete. Both need the
+// configuration this reads, which is why they land here rather than in a hook
+// of their own.
 
 import { ConfigurationError, readConfiguration } from '../src/configuration.mjs'
 
+let configuration
 try {
-  readConfiguration()
+  configuration = readConfiguration()
 } catch (error) {
   if (!(error instanceof ConfigurationError)) throw error
 
@@ -40,4 +42,16 @@ try {
     )}. See docs/configuration.md.\n`,
   )
   process.exit(2)
+}
+
+// The configuration is good. Recover what an earlier session could not push:
+// the retry queue, then each session from its cursor, time-boxed inside the
+// hook's budget. Silent and exit 0, and the lazy import, for the reasons
+// `stop.mjs` gives — an old Node cannot load `report.mjs`'s TypeScript imports,
+// and a hook's stderr lands in the transcript this product uploads.
+try {
+  const { sweep } = await import('../src/report.mjs')
+  await sweep({ configuration, environment: process.env })
+} catch {
+  // Deliberately silent: see above.
 }

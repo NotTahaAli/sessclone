@@ -1,7 +1,12 @@
 import { IngestPayload, type IngestResponse } from '@sessclone/shared'
 import postgres from 'postgres'
 
-import { hashApiKey } from '../../../lib/api-keys'
+import {
+  ingestDb,
+  presentedKey,
+  resolveCaller,
+  unauthenticated,
+} from '../../../lib/collector-auth'
 
 // Ticket 31: the endpoint the Collector reports to.
 //
@@ -45,82 +50,8 @@ import { hashApiKey } from '../../../lib/api-keys'
 // in as few statements as Postgres's parameter limit allows. A statement per
 // Turn would be a query in a loop (AGENTS.md); a statement per chunk is not.
 
-let client: postgres.Sql | undefined
-
-// Lazily, and once: a connection per request would exhaust the pool under any
-// load, and one opened at module scope would connect during `next build`.
-const db = () => {
-  // Its own variable, and deliberately no fallback to `DATABASE_URL`. That
-  // variable is the dashboard's `sessclone_app`, which owns nothing so that
-  // the policies apply to it — and which has no insert grant on `turns` or
-  // `log_artifacts`. Falling back to it would make a correctly configured
-  // deployment fail on every report, and a *mis*configured one (both pointed
-  // at the owning role) work, which is the mistake the split exists to make
-  // impossible. As in `lib/db.ts`, say what is missing rather than letting
-  // `postgres(undefined)` connect to localhost as the OS user.
-  const url = process.env.INGEST_DATABASE_URL
-  if (!url) throw new Error('INGEST_DATABASE_URL is not set')
-  return (client ??= postgres(url))
-}
-
 const refused = (error: string, detail?: string) =>
   Response.json({ error, detail }, { status: 400 })
-
-// One sentence for every way a key can fail to identify a live Member:
-// absent, malformed, unknown, revoked, or belonging to somebody who has been
-// removed from their Org. They are one answer on purpose. Telling an
-// unauthenticated caller which of those it hit turns this route into an oracle
-// for probing which keys exist, and the Collector's response is the same in
-// every case: stop, and tell the person to check their key.
-//
-// `WWW-Authenticate` because this is what 401 means, and it is what tells a
-// generic HTTP client not to retry the same credential forever.
-const unauthenticated = () =>
-  Response.json(
-    { error: 'no live API key was presented' },
-    { status: 401, headers: { 'www-authenticate': 'Bearer' } },
-  )
-
-/** `Authorization: Bearer sk_…`, or nothing. The scheme is case-insensitive
- * per RFC 9110; the key is not touched beyond having its whitespace trimmed,
- * because a hash of a key with a stray newline is simply a hash that does not
- * match. */
-const presentedKey = (request: Request) => {
-  const header = request.headers.get('authorization')
-  const [scheme, ...rest] = header?.trim().split(/\s+/) ?? []
-  if (scheme?.toLowerCase() !== 'bearer') return undefined
-  return rest.join(' ') || undefined
-}
-
-type Caller = { keyId: string; memberId: string; orgId: string }
-
-/**
- * The Member and Org a presented key resolves to, or `undefined`.
- *
- * One indexed lookup, which is what `hashApiKey`'s choice of a plain SHA-256
- * buys: a salted slow hash could not be looked up at all, and verification
- * would become a scan over every key in the deployment on the hottest path in
- * the product.
- *
- * Three conditions, and all three are the database's rather than this route's.
- * `revoked_at is null` is what makes revocation immediate — ingest reads it on
- * the next request rather than caching a verdict — and `removed_at is null`
- * keeps a removed Member's forgotten key from carrying on reporting spend into
- * an Org they left.
- */
-const resolveCaller = async (sql: postgres.Sql, presented: string) => {
-  const [caller] = await sql<Caller[]>`
-    select api_key.id as "keyId",
-           member.id as "memberId",
-           member.org_id as "orgId"
-      from api_keys api_key
-      join members member on member.id = api_key.member_id
-     where api_key.key_hash = ${hashApiKey(presented)}
-       and api_key.revoked_at is null
-       and member.removed_at is null
-  `
-  return caller
-}
 
 // What the database refused, and what the Collector should do about it. The
 // two cases want opposite behaviour, so they get different statuses:
@@ -162,7 +93,7 @@ export async function POST(request: Request) {
   const presented = presentedKey(request)
   if (!presented) return unauthenticated()
 
-  const sql = db()
+  const sql = ingestDb()
   const caller = await resolveCaller(sql, presented)
   // Nothing about this request reaches a table until it has: the Device and
   // Project upserts are below the verification, not beside it.
@@ -206,7 +137,7 @@ export async function POST(request: Request) {
     )
   }
 
-  const { device, reports } = parsed.data
+  const { device, reports, failures = [], sessionEnd } = parsed.data
 
   // One transaction around every write. Without it a batch that passes the
   // schema and fails a database check — a constraint the schema does not
@@ -246,7 +177,12 @@ export async function POST(request: Request) {
       // the payload — which is what makes filing a Turn across an Org
       // boundary unrepresentable rather than merely checked. Two Orgs cloning
       // one repository get one Project row each.
-      const projects = await tx<{ id: string; key: string }[]>`
+      // A `StopFailure` carries no Turns and so no Project (ticket 40), and
+      // `insert into projects ()` is not a statement.
+      const projects =
+        projectRows.length === 0
+          ? []
+          : await tx<{ id: string; key: string }[]>`
         insert into projects ${tx(projectRows, 'org_id', 'key', 'remote')}
         on conflict (org_id, key) do update
           set last_seen_at = now(),
@@ -263,6 +199,7 @@ export async function POST(request: Request) {
           project_id: projectIds.get(report.project.key)!,
           session_id: turn.sessionId,
           agent_id: turn.agentId,
+          spawn_depth: turn.spawnDepth ?? null,
           message_id: turn.messageId,
           // An entry may carry no timestamp while carrying usage, and the
           // column is not null. Arrival time is the honest fallback: it is
@@ -304,6 +241,53 @@ export async function POST(request: Request) {
         await tx`
           insert into turns ${tx(chunk)}
           on conflict (member_id, session_id, agent_id, message_id) do nothing
+        `
+      }
+
+      // Ticket 40: a turn that died on a rate limit or an overload. One
+      // statement for the batch, filed against the same Member and Org the key
+      // resolved to, and deduplicated by `session_events_identity_key` — the
+      // Collector re-sends a failure it could not deliver, and `SessionStart`
+      // sweeps, so the same event arrives more than once by design.
+      //
+      // The error type and the message are the row's `detail`, because `kind`
+      // is a closed set the table checks and the type is not one: Claude Code
+      // names eleven and may name a twelfth.
+      if (failures.length > 0) {
+        await tx`
+          insert into session_events ${tx(
+            failures.map((failure) => ({
+              org_id: orgId,
+              member_id: memberId,
+              device_id: deviceId,
+              session_id: failure.sessionId,
+              agent_id: failure.agentId ?? null,
+              kind: 'stop_failure',
+              occurred_at: failure.occurredAt,
+              detail: {
+                error_type: failure.errorType,
+                message: failure.message ?? null,
+              },
+            })),
+          )}
+          on conflict (member_id, session_id, agent_id, kind, occurred_at)
+            do nothing
+        `
+      }
+
+      // Ticket 38: the completeness marker. A `session_end` row, deduplicated
+      // by the same identity key, is how a later sweep learns this Session
+      // finished cleanly and need not be re-read — a killed container never
+      // fires `SessionEnd` (finding 05), so a missing row is the abnormal end.
+      // No `detail`: the fact that it ended is the whole record.
+      if (sessionEnd) {
+        await tx`
+          insert into session_events
+            (org_id, member_id, device_id, session_id, kind, occurred_at)
+          values (${orgId}, ${memberId}, ${deviceId}, ${sessionEnd.sessionId},
+                  'session_end', ${sessionEnd.occurredAt})
+          on conflict (member_id, session_id, agent_id, kind, occurred_at)
+            do nothing
         `
       }
     })

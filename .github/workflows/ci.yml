@@ -50,3 +50,20 @@ jobs:
         env:
           DATABASE_URL: postgres://sessclone:sessclone@127.0.0.1:5432/sessclone_test
           APP_DATABASE_URL: postgres://sessclone_app:sessclone_app@127.0.0.1:5432/sessclone_test
+      # With no database reachable at all: the marketing pages are prerendered
+      # at build time (Cache Components, ticket 80), and a build that needs a
+      # live Postgres to compile its own pricing copy would fail a
+      # self-hoster's `docker build` and any release cut while the database
+      # blinked. The pages fall back to an empty list; this is what fails if
+      # that fallback is removed.
+      - run: pnpm --filter web exec next build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: build-only-placeholder
+          NEXT_PUBLIC_APP_URL: http://127.0.0.1:3000
+
+      # Ticket 83: every signed-in route used to prerender an empty shell, so
+      # the first paint waited on the session read. The shells are earned with
+      # Suspense now, and nothing in the build fails if one goes back to zero
+      # bytes — so it is asserted here, against the build above.
+      - run: node scripts/check-shells.mjs

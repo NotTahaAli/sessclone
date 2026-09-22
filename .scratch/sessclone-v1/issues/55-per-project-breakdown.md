@@ -4,9 +4,9 @@
 
 **Blocked by:** 52, 53.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Cost and tokens per Project over the selected range
-- [ ] One repository reported from several machines appears once
-- [ ] Non-repository work attributed without being silently dropped
-- [ ] Scoped by Role in the same way as every other view
+- [x] Cost and tokens per Project over the selected range
+- [x] One repository reported from several machines appears once
+- [x] Non-repository work attributed without being silently dropped
+- [x] Scoped by Role in the same way as every other view

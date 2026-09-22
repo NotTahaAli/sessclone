@@ -1,10 +1,28 @@
-import type { ReactNode } from 'react'
+import { Suspense, type ReactNode } from 'react'
 
 import { AccountMenu } from './account'
+import { AppearanceSync } from './appearance-sync'
+import { OrgMark } from '../org-mark'
 import { PanelCredit } from './credit'
 import { BottomBarLinks, SidebarLinks } from './nav-links'
 import { DESTINATIONS } from './navigation'
+import Loading from './loading'
 import { currentViewer } from '../../lib/viewer'
+
+// Ticket 83: this layout prerenders a static shell.
+//
+// Cache Components (ticket 80) prerenders a shell for every route and refuses
+// one that reads request data outside a Suspense boundary. This layout used
+// to read the session before rendering anything and opted out, which shipped
+// a zero-byte shell for every signed-in route — the sidebar, the bottom bar
+// and the frame all waited on a database read that says nothing about them.
+//
+// Now the frame is static and the three things that depend on who is asking
+// stream into it: the Org name, the account menu, and the content column
+// (which carries the subscription notice and the page itself). The bottom bar
+// and the sidebar's destinations are the same four for every Role — the Role
+// only changes what is inside Settings — so nothing about them needs the
+// viewer, and a reader on a slow connection sees the frame at once.
 
 // Ticket 45: the signed-in frame every later page hangs from.
 //
@@ -57,14 +75,107 @@ function WithoutOrg() {
   )
 }
 
-export default async function DashboardLayout({
-  children,
+/**
+ * What a non-active subscription says, in the reader's terms.
+ *
+ * Neutral tokens and not an alarm: nothing is broken and nothing has been
+ * lost. The three states differ in why, so each says its own why rather than
+ * one sentence covering all of them badly.
+ */
+function Inactive({
+  status,
 }: {
-  children: ReactNode
+  status: 'inactive' | 'past_due' | 'cancelled'
 }) {
+  const said = {
+    inactive:
+      'This Org is not activated yet. Collection works and nothing is lost; whoever operates this deployment turns it on.',
+    past_due:
+      'This Org’s subscription is past due. Collection works and nothing is lost; whoever operates this deployment can sort it out.',
+    cancelled:
+      'This Org’s subscription has been cancelled. Collection works and nothing is lost, and whoever operates this deployment can turn it back on.',
+  }[status]
+
+  return (
+    <p
+      role="status"
+      className="border-rule bg-surface text-text-secondary mb-6 rounded-md border p-3 text-caption"
+    >
+      {said}
+    </p>
+  )
+}
+
+/** The Org name, which every figure under here belongs to. */
+async function OrgName({ className }: { className: string }) {
+  const viewer = await currentViewer()
+  if (!viewer) return <span className={className}>No Org</span>
+
+  // Ticket 77: the mark sits beside the name wherever the name is, which is
+  // the design system's rule for OrgMark — never instead of it, since a logo
+  // is not a label. It rides on the viewer's own row rather than being read
+  // here, so the shell still costs one transaction.
+  return (
+    <span className="flex items-center gap-2">
+      <OrgMark name={viewer.orgName} src={viewer.orgLogo} size={20} />
+      <span className={className} title={viewer.orgName}>
+        {viewer.orgName}
+      </span>
+    </span>
+  )
+}
+
+/** The account control, which knows the Role and the address it signs out. */
+async function Account() {
+  const viewer = await currentViewer()
+  return viewer ? <AccountMenu viewer={viewer} /> : null
+}
+
+/**
+ * The content column: the subscription notice, then the page.
+ *
+ * The page is inside this boundary rather than beside it because every page
+ * under here reads the session too — one boundary covers all of them, and the
+ * frame around it is what prerenders.
+ */
+async function Content({ children }: { children: ReactNode }) {
   const viewer = await currentViewer()
   if (!viewer) return <WithoutOrg />
 
+  return (
+    <>
+      {/* Ticket 48: an Org whose subscription is not active is told so, on
+          every page, rather than shown a dashboard that quietly means less
+          than it looks like it does. No subscription row is the same answer
+          as an inactive one — it is the state every Org starts in, and the
+          commonest reason a person is reading this notice. Collection keeps
+          working either way: refusing the Org's own history would be a worse
+          answer than saying what is true. */}
+      {viewer.subscriptionStatus === 'active' ? null : (
+        <Inactive status={viewer.subscriptionStatus ?? 'inactive'} />
+      )}
+      {children}
+    </>
+  )
+}
+
+/** A line of the frame's own colour, where a name has not arrived yet. */
+function Pending({ className }: { className: string }) {
+  return (
+    <span
+      className={`bg-surface inline-block h-4 w-32 animate-none rounded ${className}`}
+      aria-hidden="true"
+    />
+  )
+}
+
+// The fallbacks as values rather than as inline elements: one element each,
+// created once, rather than a new one on every render of the frame.
+const PENDING_SIDEBAR = <Pending className="mt-1" />
+const PENDING_HEADER = <Pending className="" />
+const PENDING_CONTENT = <Loading />
+
+export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <div className="bg-ground text-text min-h-dvh lg:flex">
       {/* Desktop: the 232px sidebar, holding the same four destinations and
@@ -75,8 +186,10 @@ export default async function DashboardLayout({
       >
         <div>
           <p className="text-label text-text-muted uppercase">sessclone</p>
-          <p className="text-heading mt-1 truncate" title={viewer.orgName}>
-            {viewer.orgName}
+          <p className="text-heading mt-1 truncate">
+            <Suspense fallback={PENDING_SIDEBAR}>
+              <OrgName className="block truncate" />
+            </Suspense>
           </p>
           <nav aria-label="Main" className="mt-6">
             <SidebarLinks items={DESTINATIONS} />
@@ -87,7 +200,9 @@ export default async function DashboardLayout({
             every deployment rather than only a self-hosted one, because the
             additional term in `NOTICE.md` makes no such distinction. */}
         <div className="flex flex-col gap-4">
-          <AccountMenu viewer={viewer} />
+          <Suspense fallback={null}>
+            <Account />
+          </Suspense>
           <PanelCredit />
         </div>
       </aside>
@@ -99,15 +214,29 @@ export default async function DashboardLayout({
           <span className="text-label text-text-muted block uppercase">
             sessclone
           </span>
-          <span className="text-heading block truncate">{viewer.orgName}</span>
+          <Suspense fallback={PENDING_HEADER}>
+            <OrgName className="text-heading block truncate" />
+          </Suspense>
         </p>
-        <AccountMenu viewer={viewer} />
+        <Suspense fallback={null}>
+          <Account />
+        </Suspense>
       </header>
+
+      {/* Renders nothing unless the cookie carrying the theme has fallen
+          behind the database — which happens when somebody else changed the
+          Org's colour. Inside a boundary of its own so it never delays the
+          frame or the page. */}
+      <Suspense fallback={null}>
+        <AppearanceSync />
+      </Suspense>
 
       {/* The bottom bar is fixed, so the content column reserves room for it
           rather than ending underneath it. */}
       <main className="grow px-4 py-6 pb-28 lg:px-8 lg:pb-8">
-        {children}
+        <Suspense fallback={PENDING_CONTENT}>
+          <Content>{children}</Content>
+        </Suspense>
         {/* At phone width the sidebar is not rendered at all, so the notices
             go under the content instead. One of the two is visible at a
             time. */}

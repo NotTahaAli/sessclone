@@ -80,15 +80,11 @@ make a correct deployment fail on every report and a misconfigured one — both
 pointed at the owning role, row-level security off — appear to work, which is
 the whole failure this split exists to prevent.
 
-(`apps/web/app/api/probe/route.ts` writes `probe_rows`, which `sessclone_app`
-is granted nothing on either, so it answers `permission denied for table
-probe_rows` on a correct deployment. That route is ticket 02's tracer bullet
-and is expected to be deleted.)
-
 **What one report may carry.** The ingest route bounds the batch at the
 boundary, so an absurd payload is a 400 naming the limit rather than a request
-that times out: at most **100 reports** in a payload and **5000 turns** in a
-report (`packages/shared/src/ingest.ts`). A Collector draining a queue larger
+that times out: at most **100 reports** in a payload, **5000 turns** in a
+report, and **100 stop failures** in a payload, each with a message of at most
+2000 characters (`packages/shared/src/ingest.ts`). A Collector draining a queue larger
 than that splits it across requests, which it can do safely because the cursor
 travels per report and re-reporting is absorbed by the identity index (ADR
 0006). A batch the database itself refuses is a 400 with the reason — retrying
@@ -127,8 +123,27 @@ reach, and never used to work around an inconvenient policy. It carries no
 `NEXT_PUBLIC_` prefix precisely so that a mistake is a build-time absence
 rather than a shipped credential.
 
-Invitation and sign-in email is sent by Supabase Auth and configured in the
-Supabase project's own SMTP settings, not here.
+Sign-in email — the magic link — is sent by Supabase Auth and configured in
+the Supabase project's own SMTP settings, not here. The **invitation** email is
+different: an invitation is this app's own `/join/<token>` route, which Supabase
+never sees, so it is sent through the app's own SMTP, below.
+
+### Invitation email (SMTP)
+
+| Variable    | Required | Default | What it is                                                                      |
+| ----------- | -------- | ------- | ------------------------------------------------------------------------------- |
+| `SMTP_URL`  | no       | —       | Connection URL, e.g. `smtp://user:pass@smtp.example.com:587` or `smtps://…:465` |
+| `SMTP_FROM` | no       | —       | From address on the invitation, e.g. `sessclone <no-reply@example.com>`         |
+
+Both or neither. With them set (ticket 82, `apps/web/lib/mailer.ts`), inviting
+someone emails them the join link; with either unset, no mail is attempted and
+the inviter is told to pass the copyable link on themselves — the same link the
+email would carry, never a second token. A send that fails for a configured
+server is reported the same way, because the inviter's remedy is identical.
+
+`smtp://` uses STARTTLS when the server offers it; `smtps://` is TLS from the
+first byte. The credentials live in `SMTP_URL` and are read server-side only —
+they carry no `NEXT_PUBLIC_` prefix and reach no page or log line.
 
 ### Public base URL
 
@@ -143,6 +158,67 @@ Member is shown, so a
 self-hoster's team is told to report to the self-hoster's deployment. It is not
 derived from request headers: a forwarded `Host` is attacker-controllable, and
 an invite link is a credential.
+
+An invite link is a credential that travels in a URL, which is worth knowing
+when you decide how invitations are delivered. Somebody who opens one while
+signed out is sent to sign in and back, so the token passes through the auth
+provider's `redirect_to` — and, for GitHub sign-in, through GitHub — and it
+lands in whatever request logs sit in front of the deployment. It is still only
+usable by the address it names, which the database checks against the account's
+own verified address, and accepting it takes a deliberate press rather than a
+page load. Treat a link in a chat message the way you would treat a password
+reset link, and revoke one you think has been seen.
+
+### Retention sweep
+
+Retention is a window per Org, in days, set by an Owner or an Admin under Org
+settings and capped by the Tier's ceiling. Nothing enforces it on a schedule,
+because this deployment has no scheduler and a self-hoster's is their own:
+`POST /api/retention/sweep` is the call that removes what is past the window —
+the `log_artifacts` rows and the stored objects together, oldest first, at most
+500 per call, and it answers how many remain so a backlog can be drained by
+calling again. It is idempotent: nothing is past its window twice, and deleting
+an object that is already gone succeeds.
+
+**Turns are never touched by it.** The spend history is append-only and
+survives every transcript it describes.
+
+| Variable                 | Required | Default | What it is                                                                              |
+| ------------------------ | -------- | ------- | --------------------------------------------------------------------------------------- |
+| `RETENTION_SWEEP_SECRET` | no       | —       | Shared secret for `POST /api/retention/sweep`. Unset means the route refuses every call |
+
+The window is measured from when a transcript was first stored, not from its
+last upload: a growing Session replaces its object and moves `uploaded_at`, so
+a window measured from that would be days since the last write and a busy
+Session would never age out.
+
+The route answers `200` with `{removed, remaining}`, `401` for a wrong secret,
+`503` when the secret is unset, `503` when storage is not configured — nothing
+is removed in that case, because the rows and the objects go together — and
+`503` when the sweep itself failed, which rolls the rows back. Two sweeps at
+once are safe: the second is told there is more to do and removes nothing,
+rather than reading a half-finished picture as an empty backlog.
+
+**Upgrading an existing deployment sets every Org to 90 days.** The column
+arrived with that default, and no Org chose it, so the _first_ sweep on a
+deployment that has been collecting for longer destroys every transcript older
+than 90 days. Nothing happens until the route is called and the route needs
+this secret, so the order is: set the windows, then configure the sweep.
+
+```sql
+update orgs set retention_days = 365;   -- or per Org, before sweeping
+```
+
+Org settings says when retention last ran on the deployment, or that it never
+has, so an Owner reading a window can tell whether anything enforces it.
+
+Unset is the safe default on purpose: this endpoint destroys transcripts, so a
+deployment that has not configured a sweep keeps everything rather than leaving
+a destructive route open. The secret travels as `Authorization: Bearer <secret>`
+and is compared in constant time, as the pricing route's is. The sweep runs as
+the owning role — it crosses every Org, while a Member's own delete is all the
+policies allow (ADR 0005) — which is why it is a secret-gated route and not
+anything a browser can reach.
 
 ### Storage
 
@@ -162,11 +238,98 @@ of these today, and ticket 67 is where two providers get proven.
 | `STORAGE_FORCE_PATH_STYLE`    | no       | `true`  | Path-style addressing. Required by MinIO and Supabase; AWS accepts it             |
 | `STORAGE_PRESIGN_TTL_SECONDS` | no       | `300`   | Life of an issued URL. A presigned URL is a bearer credential — keep it short     |
 
+### Pricing cache
+
+The public pricing pages read the `tiers` table and cache the read under the
+tag `tiers`. Saving a Tier on `/admin/tiers` clears that cache itself, so an
+operator who works in the panel needs nothing here.
+
+`POST /api/pricing/revalidate` is the other way in, for a Tier changed outside
+the panel — by hand in `psql`, by a billing webhook, or by whatever a
+self-hoster runs against their own database. It takes
+`Authorization: Bearer <secret>` and answers 503 while no secret is set, so a
+deployment that never configures one has no open cache-clearing endpoint.
+
+| Variable                    | Required | Default | What it is                                                                                 |
+| --------------------------- | -------- | ------- | ------------------------------------------------------------------------------------------ |
+| `PRICING_REVALIDATE_SECRET` | no       | —       | Shared secret for `POST /api/pricing/revalidate`. Unset means the route refuses every call |
+
+The secret is a bearer token: it is replayable, and the route is not rate
+limited. That is deliberate — the only thing it does is clear a cache, which
+is cheap to ask for repeatedly — but it is a reason to rotate it like any
+other credential rather than to publish it.
+
+Two things about this cache are worth knowing before a deployment grows:
+
+**It is per instance.** `updateTag` and `revalidateTag` clear the cache of the
+process that runs them. One server behind one process sees a saved price
+immediately. Several instances, or a serverless deployment, do not: the
+instance that handled the save is fresh and the others carry their old copy
+until their own revalidation window passes. Nothing here is wrong on any of
+them — the price is simply older — but a deployment that wants them to agree
+at once needs a shared cache handler (`cacheHandlers` in `next.config.ts`),
+or must call the route through something that reaches every instance.
+
+**The build does not need the database.** The pricing pages are prerendered,
+so `next build` reads the Tiers if it can. If it cannot — no `DATABASE_URL`,
+or no Postgres to reach, as in a container build — the build still succeeds
+and those pages ship with the cards replaced by a short "not loading right
+now" notice, which the first successful read after start-up replaces. A price
+is never written into the build, which is the whole point of reading it from
+the table.
+
+## Docker Compose — `compose.yaml`
+
+Three variables read by compose itself rather than by any process it starts.
+They live in the `.env` at the repository root, which is the file compose
+reads; the application's own variables are read from that same file and handed
+to the container. A deployment that runs the app directly rather than in a
+container needs none of them.
+
+| Variable            | Required       | Default | What it is                                                                   |
+| ------------------- | -------------- | ------- | ---------------------------------------------------------------------------- |
+| `WEB_PORT`          | no             | `3000`  | Host port the dashboard is published on. Deliberately not `PORT` — see below |
+| `POSTGRES_PASSWORD` | with `db` only | —       | Password for the `sessclone` role in the bundled Postgres (`--profile db`)   |
+| `POSTGRES_PORT`     | no             | `5432`  | Host port the bundled Postgres is published on, bound to loopback            |
+
+`WEB_PORT` is not named `PORT` because `next start` reads `PORT` as the port it
+listens on _inside_ the container, and the same file is handed to both. One
+variable for both would publish `8080:3000` while the server moved to 8080, and
+nothing would answer.
+
+`POSTGRES_PASSWORD` carries no compose-level requirement even though the `db`
+service cannot start without it: compose interpolates every service's variables
+whether or not that service's profile is active, so a required value here would
+refuse `docker compose up` on a deployment that brings its own database. Left
+unset with the profile in use, the Postgres image refuses to initialise and
+says why.
+
 ## Collector — `packages/plugin`
 
 The Collector runs on a Member's own machine, one install per machine. Its
 configuration is read from the environment so that a self-hoster's team can
 point at their own deployment without editing a vendored plugin.
+
+**It needs Node 22.18 or newer** (or 23.6, or any 24). The hooks are run as
+`node <file>` with no build step, and the parser and identity rules they
+import from `packages/shared` are TypeScript that Node executes by stripping
+the types — which is on by default from those versions and not before. On an
+older Node that import throws, and `stop.mjs` performs it inside its own
+`try` for that reason: the plugin installs, starts cleanly, reports nothing
+and says nothing, rather than printing a stack trace on every turn into the
+transcript this product then uploads. The session-start check names the
+problem instead, beside the variables below.
+
+`docs/install.md` is the install path itself — the two commands, the restart,
+the backfill, and the environments with no shell to export a variable in. This
+section is the variables it sets.
+
+The hooks import those modules by relative path, which reaches outside the
+plugin directory into the same clone. That is how the marketplace entry
+installs it (`.claude-plugin/marketplace.json` points at `./packages/plugin`
+inside this repository), but an install that copies only the plugin directory
+has no `packages/shared` to reach and reports nothing — silently, for the same
+reason as above.
 
 | Variable              | Required       | Default                 | What it is                                                                          |
 | --------------------- | -------------- | ----------------------- | ----------------------------------------------------------------------------------- |
@@ -174,6 +337,77 @@ point at their own deployment without editing a vendored plugin.
 | `SESSCLONE_API_KEY`   | yes            | —                       | The Member's API key, issued in the dashboard. Identifies the Member and the Org    |
 | `SESSCLONE_STATE_DIR` | no             | platform-dependent \*\* | Where the cursor and the retry queue are kept                                       |
 | `SESSCLONE_DEVICE`    | no             | derived \*\*\*          | Pins this environment's Device key instead of deriving one                          |
+
+The Collector keeps one cursor per transcript under
+`<state dir>/cursors/<hash>.json`: per file rather than per Session, because a
+subagent's transcript and its parent's are appended to independently (finding
+74), and named by a hash because a transcript path carries the Member's own
+directory names. A cursor is a cache and never a record — missing, unreadable
+or past the end of a replaced file all mean "read from the top", which costs
+bandwidth and never a Turn. It is stored only after the deployment accepted
+the report carrying it.
+
+One request carries at most 100 reports of at most 5,000 Turns each, and at
+most 100 stop failures (`packages/shared/src/limits.ts`, which both ends
+import). The Collector
+splits a long transcript across requests itself rather than sending one the
+route refuses: a session past the limit would otherwise be refused on every
+Stop for the rest of its life, and nothing reads the answer.
+
+A request may also carry **stop failures** and no Turns at all. `StopFailure`
+fires on a turn that ended on an API error — a rate limit, an overload, a
+billing problem — which writes no usage and so appears in no Turn. The hook
+sends the error type, the error detail Claude Code reported, and the time it
+fired, against the Session; it reads no transcript and moves no cursor, so the
+Turns before the failure are still the next `Stop`'s to report. A payload
+carrying neither a report nor a failure is a 400.
+
+**Archival is the deployment's decision, not the Collector's (ticket 59).**
+A Member who has opted in has their transcripts uploaded at the end of each
+session and by the `SessionStart` sweep: the Collector hashes the transcript,
+asks `/api/logs/presign`, and opens the file for upload only if that answer is
+a URL. So nothing leaves the machine while the master switch is off, while the
+Project is excluded, while the Tier excludes archival, or when these exact
+bytes are already stored — each of which costs one small request per
+transcript and no transfer, and is then remembered under
+`<state dir>/archived/` so an unchanged transcript is not re-read on the next
+start. The bytes then go straight to storage (ADR 0003), and a second
+request, `/api/logs/confirm`, is what records the upload: the row is written
+only once the deployment has read the object back out of the bucket, so a
+failed or truncated upload leaves no row claiming a transcript is downloadable.
+The Collector needs no configuration for any of this, and holds no copy of the
+switch.
+
+Two limits are worth knowing. The upload is bounded to the transcript's size as
+it stood when the hash was taken, so a session that is still being written is
+archived up to that point and the rest goes on the next pass. And archival
+shares the `SessionStart` sweep's time box with the Turns, which are reported
+first — so on a machine with a long history the newest sessions are archived
+first and the older ones over subsequent starts, while a session that ends
+cleanly is archived by `SessionEnd` in its own eight-second budget.
+
+**When the deployment is unreachable, nothing is lost to a blip and little to
+an outage (ticket 39).** A failed report is retried three times over about two
+and a half seconds; a report that still will not go is written to a queue under
+`<state dir>/queue/`, and the next session started in this environment drains
+that queue and then re-reads every recent transcript from its cursor. So a
+laptop that closed on a train, or a deployment down for an hour, catches up on
+its own at the next session with no Turn lost. The sweep is time-boxed to fit
+inside the session-start hook, working newest-first, so a very large backlog —
+a fresh install over a year of existing history, say — is caught up oldest-ward
+across several sessions rather than all in one; each recovered session is
+reported in full, and the ones not yet reached carry over to the next start.
+
+The residual gap — the one thing this does not guarantee — is a **stop failure
+or a session-end marker** that is queued and then never drained, because the
+state directory is read-only, the queue's 14-day age limit or 500-entry cap is
+reached first, or no further session is ever started in this environment. A
+dropped _Turn_ is always recovered, because the cursor did not advance and the
+next session re-reads it; a dropped session **event** reads no transcript and
+so has only the queue behind it. In practice this shows up as a session that
+ran but whose failure or clean-end is missing from the dashboard — usage is
+still counted from the Turns themselves. Keep the state directory writable (see
+the default-path note below) and this gap stays closed.
 
 \* Not required by the code — `readConfiguration` falls back to
 `http://127.0.0.1:3000` — but required by anyone whose deployment is not on

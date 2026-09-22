@@ -4,9 +4,9 @@
 
 **Blocked by:** 13, 24, 44, 45.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Tier, seat allowance, and price shown to the Owner
-- [ ] Page states plainly whether transcript archival is available on this Tier
-- [ ] Retention ceiling shown, since it bounds a setting the Owner controls
-- [ ] Capabilities read from tier data, so a change needs no deployment
+- [x] Tier, seat allowance, and price shown to the Owner
+- [x] Page states plainly whether transcript archival is available on this Tier
+- [x] Retention ceiling shown, since it bounds a setting the Owner controls
+- [x] Capabilities read from tier data, so a change needs no deployment

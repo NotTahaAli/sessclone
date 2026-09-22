@@ -1,10 +1,19 @@
 import { NextResponse, type NextRequest } from 'next/server'
+
+import { safeNext } from '../../../lib/auth/next-path'
 import { z } from 'zod'
 
 import {
   EmailBelongsToAnotherAccount,
   ensureOrgForSigner,
 } from '../../../lib/auth/bootstrap'
+import {
+  APPEARANCE_COOKIE,
+  APPEARANCE_COOKIE_OPTIONS,
+  encodeAppearance,
+  viewerAppearance,
+} from '../../../lib/appearance'
+import { asViewer } from '../../../lib/db'
 import { supabaseServer } from '../../../lib/supabase/server'
 
 // Where both ways in come back to.
@@ -60,7 +69,7 @@ export async function GET(request: NextRequest) {
   // `/costs` and not `/`: `/` is the marketing page (ticket 26), and landing
   // somebody there the moment they sign in is landing them where they already
   // decided to leave. The dashboard's home is Costs (ticket 45).
-  const next = requested?.startsWith('/') ? requested : '/costs'
+  const next = safeNext(requested) ?? '/costs'
 
   // The provider refused before we ever got a code. Distinguished from a link
   // that arrived with nothing, which is what this route used to call it: the
@@ -124,5 +133,26 @@ export async function GET(request: NextRequest) {
   const destination = request.nextUrl.clone()
   destination.pathname = next
   destination.search = ''
-  return NextResponse.redirect(destination)
+  const answer = NextResponse.redirect(destination)
+
+  // Ticket 77: the theme and the accent, onto this browser, before the first
+  // page is asked for. A route handler is one of the two places a cookie can
+  // be written, and this is the one that runs on a browser that has never
+  // been here — so a Member who signed in on their phone gets their own theme
+  // on the very first paint rather than after a correction.
+  //
+  // Failure here is not a failed sign-in. The cookie is presentation: without
+  // it the shell notices on the next load and applies it then.
+  try {
+    const appearance = await asViewer(claims.sub, viewerAppearance)
+    answer.cookies.set(
+      APPEARANCE_COOKIE,
+      encodeAppearance(appearance),
+      APPEARANCE_COOKIE_OPTIONS,
+    )
+  } catch (cause) {
+    console.error('sign-in: could not read the signer’s appearance', cause)
+  }
+
+  return answer
 }

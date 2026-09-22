@@ -1,4 +1,8 @@
-import { reachesOrgSettings, type Role } from '../../lib/viewer'
+import {
+  reachesOrgSettings,
+  reachesTeamTranscripts,
+  type Role,
+} from '../../lib/viewer'
 
 // Ticket 45: the four destinations, and which of them a Role reaches.
 //
@@ -37,6 +41,16 @@ export const settingsFor = (role: Role): (NavItem & { about: string })[] => [
     label: 'Your settings',
     about: 'Your appearance, your archival, your Devices and your Scope.',
   },
+  ...(reachesTeamTranscripts(role)
+    ? [
+        {
+          href: '/settings/transcripts',
+          label: 'Team transcripts',
+          about:
+            'The transcripts stored by the people you can see, and their downloads.',
+        },
+      ]
+    : []),
   ...(reachesOrgSettings(role)
     ? [
         {

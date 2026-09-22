@@ -1,0 +1,94 @@
+# Ticket 67: the whole thing, against your own database and your own bucket.
+#
+#   cp .env.example .env    # at the repo ROOT, for compose — see below
+#   docker compose up --build
+#
+# The environment file compose reads is the one beside this file, and it is not
+# the same file the no-Docker path uses: `next dev` reads `apps/web/.env`,
+# because Next reads from its own project root. Running both ways means the
+# same values in both files. `docs/self-hosting.md` § 1 says which is which.
+#
+# What this file deliberately does not run: storage and authentication. Both
+# are the deployment's own (an S3-compatible bucket, and a Supabase project —
+# hosted or self-hosted) because both hold data that must outlive a container,
+# and a compose file that quietly stood up a bucket would be a compose file
+# that quietly lost the transcripts in it.
+#
+# Postgres is here under a profile, for a deployment that has no cluster yet:
+#
+#   docker compose --profile db up --build
+#
+# Without that profile nothing is started but the application, and
+# DATABASE_URL points wherever you already keep your data.
+
+services:
+  web:
+    build:
+      context: .
+      args:
+        # Read by the browser bundle, so they are build arguments as well as
+        # environment: changing them means rebuilding the image.
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+    # Every value comes from the environment file rather than from this file:
+    # a compose file in a repository is a compose file in a pull request.
+    env_file: .env
+    # WEB_PORT is the host's port, and deliberately not PORT: the same file is
+    # handed to the container, where `next start` reads PORT as the port it
+    # listens on — so one variable for both would publish 8080:3000 while the
+    # server moved to 8080 and nothing answered.
+    ports:
+      - '${WEB_PORT:-3000}:3000'
+    # Optional, so `docker compose up` without the profile does not wait for a
+    # service that was never started.
+    depends_on:
+      db:
+        condition: service_healthy
+        required: false
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          'fetch("http://127.0.0.1:3000/").then(r=>process.exit(r.ok?0:1),()=>process.exit(1))',
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  # A cluster for a deployment that has none. Two roles, because they are
+  # deliberately two: the migrating owner, and the unprivileged role the
+  # dashboard reads as. `supabase/README.md` explains why, and why pointing
+  # DATABASE_URL at the owner switches row-level security off silently.
+  db:
+    profiles: ['db']
+    image: postgres:16.15-alpine3.24
+    environment:
+      POSTGRES_USER: sessclone
+      # No `:?` requirement: compose interpolates every service's variables
+      # whether or not its profile is active, so a required value here refuses
+      # `docker compose up` for a deployment that brings its own database and
+      # never starts this service. Left unset, the Postgres image itself
+      # refuses to initialise and says so.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+      POSTGRES_DB: sessclone
+    # Named, so `docker compose down` does not take the database with it.
+    volumes:
+      - sessclone-db:/var/lib/postgresql/data
+    # Bound to loopback. Published on every interface, this is a transcript
+    # database on the public internet behind one password.
+    ports:
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U sessclone -d sessclone']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  sessclone-db:

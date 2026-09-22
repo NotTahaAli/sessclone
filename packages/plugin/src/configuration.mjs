@@ -33,6 +33,37 @@ const KEY_PATTERN = /^sk_[\w-]{43}$/
 export const DEFAULT_URL = 'http://127.0.0.1:3000'
 
 /**
+ * The oldest Node that can run the Collector.
+ *
+ * The hooks import two modules from `packages/shared` as TypeScript and rely
+ * on Node executing them by stripping the types, which is on by default from
+ * 22.18 (and in 23.6 on the other line). Older Node throws
+ * `Unknown file extension ".ts"` from inside a hook, where every failure is
+ * swallowed — so a Member on Node 20 would see a plugin that installs, starts
+ * cleanly and silently reports nothing. Checked once, at session start, where
+ * it can be said out loud.
+ */
+export const MINIMUM_NODE = [22, 18]
+
+/**
+ * A sentence naming the Node problem, or null.
+ *
+ * @param {string} version `process.versions.node`.
+ */
+export const nodeProblem = (version) => {
+  const [major = 0, minor = 0] = version.split('.').map(Number)
+  const [wantMajor, wantMinor] = MINIMUM_NODE
+  const old =
+    major < wantMajor ||
+    (major === wantMajor && minor < wantMinor) ||
+    // The 23 line never received type stripping by default before 23.6.
+    (major === 23 && minor < 6)
+  return old
+    ? `Node ${version} is too old for the Collector, which needs ${wantMajor}.${wantMinor} or newer (or 24). Nothing will be collected from this machine until Claude Code runs on a newer Node.`
+    : null
+}
+
+/**
  * Raised when the environment cannot produce a usable configuration.
  *
  * `problems` is a sentence per variable, and **none of them ever carries a
@@ -161,6 +192,9 @@ export const readConfiguration = (
 
   const url = readUrl(env.SESSCLONE_URL)
   if ('problem' in url) problems.push(url.problem)
+
+  const node = nodeProblem(process.versions.node)
+  if (node) problems.push(node)
 
   const stateDir =
     env.SESSCLONE_STATE_DIR?.trim() || defaultStateDir(platform, env)

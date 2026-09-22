@@ -1,0 +1,173 @@
+import type postgres from 'postgres'
+
+import { deleteObjects } from './storage'
+
+// Ticket 61: transcripts stop accumulating forever.
+//
+// One window per Org, in days, capped by the Tier's ceiling — the cap is the
+// trigger's in `20260922100000_org_retention.sql`, and it is read again here
+// because a Tier can shrink after an Org set its window and the sweep must
+// not keep a transcript the Tier no longer allows.
+//
+// **Turns are never touched.** They are the spend history, they are
+// append-only (ADR 0006), and a team that lost its cost record because a
+// transcript aged out would have lost what the product is for. What ages out
+// is `log_artifacts` and the objects those rows name.
+//
+// The sweep runs as the owning role, not as a viewer: it crosses every Org on
+// the deployment, and `log_artifacts_delete` is deliberately the Member's own
+// rows alone (ADR 0005 — an Admin may download a transcript and may not
+// destroy it). So it is a deployment job rather than anything a browser can
+// reach, and `app/api/retention/sweep/route.ts` is the only caller.
+
+/**
+ * How many artifacts one call may remove.
+ *
+ * A deployment that has never swept has every transcript it ever stored past
+ * the window, and one statement deleting all of them is one transaction
+ * holding every row it touched while the objects go in batches of a thousand.
+ * Bounded instead, and the route says how many are left — a sweep is
+ * idempotent, so the answer to a backlog is to call it again.
+ */
+export const SWEEP_LIMIT = 500
+
+export type Swept = {
+  /** Rows removed, which equals objects deleted. */
+  removed: number
+  /** Whether more remain past the window: call again. */
+  more: boolean
+}
+
+/**
+ * The effective window for each Org: its own setting, or the Tier's ceiling
+ * when that is lower.
+ *
+ * `left join`, so an Org with no subscription keeps its own window rather than
+ * dropping out of the sweep — no Tier is no ceiling here, not a ceiling of
+ * zero, because the alternative is a deployment quietly deleting the
+ * transcripts of every Org an operator has not activated yet.
+ */
+const CUTOFFS = (tx: postgres.Sql | postgres.TransactionSql) => tx`
+  select org.id as org_id,
+         -- least() ignores nulls, so a Tier with no ceiling needs no coalesce.
+         least(org.retention_days, tier.retention_max_days) as days
+    from orgs org
+    left join subscriptions subscription
+           on subscription.org_id = org.id
+          and subscription.status = 'active'
+    left join tiers tier on tier.id = subscription.tier_id
+`
+
+/**
+ * Removes the artifacts past their Org's window, rows and objects together.
+ *
+ * The order is what makes the pair atomic under failure, exactly as
+ * `deleteStoredSession` has it: the rows go inside the transaction, the
+ * objects go next, and the transaction commits only if that succeeded. A
+ * storage failure rolls the rows back, so the deployment is left with rows
+ * that can still find their bytes rather than rows pointing at nothing.
+ *
+ * Idempotent and safe to re-run: a second sweep finds no rows, and deleting
+ * an object that is already gone succeeds — which is what makes a retried
+ * call after a partial failure correct rather than dangerous.
+ */
+export const sweepRetention = async (
+  sql: postgres.Sql,
+  limit = SWEEP_LIMIT,
+): Promise<Swept> =>
+  sql.begin(async (tx) => {
+    // One sweep at a time on the deployment. Two overlapping sweeps cannot
+    // delete one object twice — `delete` re-checks each row — but the second
+    // one's `doomed` is chosen from a snapshot that still shows the first
+    // one's rows, so it deletes fewer than it selected, reads that as "no
+    // more" and stops a drain with a backlog left. The lock is held for the
+    // transaction, so a second caller is told to come back rather than
+    // queueing behind a bucket round trip.
+    const [held] = await tx<{ granted: boolean }[]>`
+      select pg_try_advisory_xact_lock(hashtext('sessclone_retention_sweep'))
+             as granted
+    `
+    if (!held?.granted) return { removed: 0, more: true }
+
+    // One statement across the deployment, oldest first. The filter compares
+    // each artifact against its own Org's cutoff, which is a joined value —
+    // and with `log_artifacts_org_created_at_idx` in place and the table
+    // analysed, the planner drives it as a nested loop from `orgs` and turns
+    // that comparison into the index condition. Measured on one box at 200k
+    // artifacts across 50 Orgs: 0.5ms with nothing expired, 65ms with 120k
+    // expired (a parallel scan, once the backlog is large enough to be worth
+    // one). A per-Org `cross join lateral` was tried and is worse — 220ms on
+    // the same backlog, because it fetches `limit` rows per Org and sorts the
+    // union of them single-threaded.
+    const rows = await tx<{ storage_key: string }[]>`
+      with cutoffs as (${CUTOFFS(tx)}), doomed as (
+        select artifact.id
+          from log_artifacts artifact
+          join cutoffs on cutoffs.org_id = artifact.org_id
+         where artifact.created_at
+               < now() - (cutoffs.days || ' days')::interval
+         -- Oldest first, so a backlog drains in the order things expired.
+         order by artifact.created_at
+         limit ${limit}
+      )
+      delete from log_artifacts
+       where id in (select id from doomed)
+      returning storage_key
+    `
+
+    // The objects nothing names any more (`storage_orphans`), taken in the
+    // same batch: they are already paid for in one round trip, and they are
+    // the one class of stored transcript no row can lead anybody to.
+    const orphans = await tx<{ storage_key: string }[]>`
+      delete from storage_orphans
+       where storage_key in (
+         select storage_key from storage_orphans
+          order by noticed_at limit ${limit}
+       )
+      returning storage_key
+    `
+
+    const keys = [...rows, ...orphans].map((row) => row.storage_key)
+    if (keys.length > 0) await deleteObjects(keys)
+
+    // Recorded even when it removed nothing, because "has a sweep ever run
+    // here" is the question the settings page needs answered — a deployment
+    // with no scheduler promises a window it never enforces.
+    await tx`
+      insert into retention_sweeps (swept_at, removed)
+      values (now(), ${rows.length})
+      on conflict (id) do update
+         set swept_at = excluded.swept_at, removed = excluded.removed
+    `
+
+    // At the limit means there may be more; the caller calls again. Saying
+    // "more" when the backlog happened to end exactly on the limit costs one
+    // extra call that removes nothing, which is the cheap way to be wrong.
+    return {
+      removed: rows.length,
+      more: rows.length === limit || orphans.length === limit,
+    }
+  })
+
+/**
+ * How many artifacts are past their window right now.
+ *
+ * Measured from `created_at`, which is written once: `uploaded_at` moves every
+ * time a growing Session replaces its object, so a window measured from it
+ * would be days since the last upload rather than days since the transcript
+ * was stored.
+ *
+ * For the route's answer and for a test: a sweep that reports what it removed
+ * says nothing about whether it kept up, and "is there a backlog" is the
+ * question an operator actually has.
+ */
+export const expiredCount = async (sql: postgres.Sql): Promise<number> => {
+  const [row] = await sql<{ count: string }[]>`
+    with cutoffs as (${CUTOFFS(sql)})
+    select count(*) as count
+      from log_artifacts artifact
+      join cutoffs on cutoffs.org_id = artifact.org_id
+     where artifact.created_at < now() - (cutoffs.days || ' days')::interval
+  `
+  return Number(row?.count ?? 0)
+}

@@ -3,7 +3,7 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "sessclone v1 — ticket status",
-    "subtitle": "81 tickets · 42 done · 8 ready to start · 31 blocked",
+    "subtitle": "84 tickets · 81 done · 2 ready to start · 1 blocked",
     "output": "docs/tickets/ticket-graph.html",
     "quality_profile": "showcase"
   },
@@ -96,7 +96,7 @@
       "id": "collection",
       "type": "backend",
       "label": "Collection + Cost (29-43)",
-      "sublabel": "7 done · 3 ready · 6 blocked",
+      "sublabel": "16 done",
       "pos": [
         960,
         122
@@ -110,7 +110,7 @@
       "id": "product",
       "type": "security",
       "label": "Access + Dashboard (44-57)",
-      "sublabel": "2 done · 3 ready · 11 blocked",
+      "sublabel": "17 done",
       "pos": [
         960,
         560
@@ -124,7 +124,7 @@
       "id": "ship",
       "type": "external",
       "label": "Ship + Verify (66-71)",
-      "sublabel": "1 done · 1 ready · 5 blocked",
+      "sublabel": "4 done · 2 ready · 1 blocked",
       "pos": [
         1190,
         122
@@ -138,7 +138,7 @@
       "id": "archival",
       "type": "cloud",
       "label": "Archival + Admin (58-65)",
-      "sublabel": "1 done · 1 ready · 9 blocked",
+      "sublabel": "13 done",
       "pos": [
         1190,
         560
@@ -204,13 +204,13 @@
       "id": "accounts_collection",
       "from": "accounts",
       "to": "collection",
-      "variant": "emphasis"
+      "variant": "default"
     },
     {
       "id": "product_archival",
       "from": "product",
       "to": "archival",
-      "variant": "emphasis"
+      "variant": "default"
     },
     {
       "id": "collection_ship",
@@ -228,7 +228,7 @@
       "id": "archival_product",
       "from": "archival",
       "to": "product",
-      "variant": "emphasis"
+      "variant": "default"
     }
   ]
 }

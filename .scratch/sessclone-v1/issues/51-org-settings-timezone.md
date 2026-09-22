@@ -4,8 +4,8 @@
 
 **Blocked by:** 44, 45.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Timezone set by an Owner or Admin, defaulted sensibly on Org creation
-- [ ] Stored on the Org, available to every query that buckets by day
-- [ ] Changing it re-buckets existing charts rather than rewriting stored data
+- [x] Timezone set by an Owner or Admin, defaulted sensibly on Org creation
+- [x] Stored on the Org, available to every query that buckets by day
+- [x] Changing it re-buckets existing charts rather than rewriting stored data

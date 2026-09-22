@@ -138,3 +138,78 @@ test('a batch past the documented limits is refused, and says which', () => {
   expect(tooManyReports.success).toBe(false)
   expect(tooManyReports.error?.issues[0]?.message).toMatch(/100/)
 })
+
+// Tickets 40 and 38: the session-event side of the wire, tested where the
+// bounds live rather than only through a Postgres route.
+
+const failure = (over: Record<string, unknown> = {}) => ({
+  sessionId: 'session-1',
+  occurredAt: '2026-09-21T11:00:00.000Z',
+  errorType: 'rate_limit',
+  message: 'x',
+  ...over,
+})
+
+const failurePayload = (over: Record<string, unknown> = {}) => ({
+  device: { key: 'host:build-box' },
+  reports: [],
+  failures: [failure()],
+  ...over,
+})
+
+test('a stop failure with a type and a session id parses', () => {
+  expect(IngestPayload.safeParse(failurePayload()).success).toBe(true)
+})
+
+test('a blank error type is refused', () => {
+  expect(
+    IngestPayload.safeParse(
+      failurePayload({ failures: [failure({ errorType: '   ' })] }),
+    ).success,
+  ).toBe(false)
+  expect(
+    IngestPayload.safeParse(
+      failurePayload({ failures: [failure({ errorType: '' })] }),
+    ).success,
+  ).toBe(false)
+})
+
+test('an error type or message past its bound is refused', () => {
+  expect(
+    IngestPayload.safeParse(
+      failurePayload({ failures: [failure({ errorType: 'x'.repeat(65) })] }),
+    ).success,
+  ).toBe(false)
+  expect(
+    IngestPayload.safeParse(
+      failurePayload({ failures: [failure({ message: 'x'.repeat(2001) })] }),
+    ).success,
+  ).toBe(false)
+})
+
+test('more than 100 failures in one batch is refused', () => {
+  const many = failurePayload({
+    failures: Array.from({ length: 101 }, () => failure()),
+  })
+  expect(IngestPayload.safeParse(many).success).toBe(false)
+})
+
+test('a batch carrying neither a report, a failure nor a session end is refused', () => {
+  const empty = IngestPayload.safeParse({
+    device: { key: 'host:build-box' },
+    reports: [],
+  })
+  expect(empty.success).toBe(false)
+})
+
+test('a bare session-end marker is a valid batch', () => {
+  const parsed = IngestPayload.safeParse({
+    device: { key: 'host:build-box' },
+    reports: [],
+    sessionEnd: {
+      sessionId: 'session-1',
+      occurredAt: '2026-09-21T12:00:00.000Z',
+    },
+  })
+  expect(parsed.success).toBe(true)
+})

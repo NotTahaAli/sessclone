@@ -4,9 +4,9 @@
 
 **Blocked by:** 52.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Range selection with sensible presets and a custom range
-- [ ] Range reflected in the URL, so a view can be shared or reloaded
-- [ ] Ranges interpreted in the Org's timezone
-- [ ] Later breakdowns inherit the control rather than reimplementing it
+- [x] Range selection with sensible presets and a custom range
+- [x] Range reflected in the URL, so a view can be shared or reloaded
+- [x] Ranges interpreted in the Org's timezone
+- [x] Later breakdowns inherit the control rather than reimplementing it

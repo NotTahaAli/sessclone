@@ -1,18 +1,27 @@
 import { setArchival, setProject } from './actions'
+import { setOwnAccent } from './appearance-actions'
+import { ThemeForm } from './theme-form'
 import {
   listArchivalMemberships,
   listArchivalProjects,
   type ArchivalMembership,
   type ArchivalProject,
 } from '../../../../lib/archival'
+import { storedProjects, storedSessions } from '../../../../lib/artifacts'
+import { ownScopes, type OwnScope } from '../../../../lib/scopes'
+import { StoredTranscripts } from './stored-transcripts'
 import { PageHeader } from '../../page-header'
+import { AccentPreview } from '../appearance-preview'
+import { SeedPicker } from '../seed-picker'
+import { viewerAppearance } from '../../../../lib/appearance'
 import { asViewer } from '../../../../lib/db'
 import { signedInUser } from '../../../../lib/supabase/server'
 
 // Ticket 72: `/settings/you`, the destination `docs/design/product-ia.md`
 // gives every Role, carrying the settings that are the Member's own. Archival
-// is the first of them; appearance (77), the Member's Log Artifacts (60, 73)
-// and a Manager's own Scope (46) land beside it later.
+// is the first of them, and a Manager's own Scope (ticket 46) is the second;
+// appearance (77) and the Member's Log Artifacts (60, 73) land beside them
+// later.
 //
 // ADR 0005 is what this page is the surface of, and its two rules shape every
 // control here: the master switch is the Member's own and starts off, and the
@@ -31,9 +40,17 @@ export default async function YourSettings() {
 
   // One transaction, which is what `asViewer` opens and what carries the
   // viewer's claim. The two statements are independent, so they go together.
-  const [memberships, projects] = await asViewer(user.id, (tx) =>
-    Promise.all([listArchivalMemberships(tx), listArchivalProjects(tx)]),
-  )
+  const [memberships, projects, scopes, stored, sessions, appearance] =
+    await asViewer(user.id, (tx) =>
+      Promise.all([
+        listArchivalMemberships(tx),
+        listArchivalProjects(tx),
+        ownScopes(tx),
+        storedProjects(tx),
+        storedSessions(tx),
+        viewerAppearance(tx),
+      ]),
+    )
 
   // Grouped once here rather than filtered inside the render, which would be
   // a pass over the whole list per membership. One pass, one array each, and
@@ -51,6 +68,56 @@ export default async function YourSettings() {
     // a chart and far past a measure anybody wants to read a paragraph at.
     <div className="flex max-w-3xl flex-col gap-6">
       <PageHeader title="Your settings" />
+
+      <YourScopes scopes={scopes} />
+
+      {/* Ticket 77. First of the personal settings because it is the one that
+          changes what the rest of them look like, and the only one somebody
+          might come here for on their first visit. */}
+      {memberships[0] ? (
+        <section aria-labelledby="appearance" className="mt-8">
+          <h2 id="appearance" className="text-heading-lg">
+            Appearance
+          </h2>
+          <p className="text-text-secondary mt-2 text-sm">
+            Light or dark is always yours. The accent colour is yours unless
+            your Org has locked it, and either way it only paints buttons, links
+            and the active navigation underline — never the status colours or a
+            breakdown&apos;s chart series, which have to mean the same thing
+            across a desk.
+          </p>
+
+          <ThemeForm
+            memberId={memberships[0].member_id}
+            current={appearance.theme}
+          />
+
+          {appearance.locked ? (
+            <p className="border-rule text-text-secondary mt-6 rounded border border-dashed p-4 text-sm">
+              Your Org has locked its accent colour, so everybody sees{' '}
+              <span className="font-mono">{appearance.orgSeed}</span>. If you
+              had chosen one it is still stored, and it applies again if the
+              lock is lifted.
+            </p>
+          ) : (
+            <SeedPicker
+              action={setOwnAccent}
+              field="memberId"
+              rowId={memberships[0].member_id}
+              current={appearance.ownSeed}
+              orgSeed={appearance.orgSeed}
+              inheritable
+              label={
+                appearance.ownSeed
+                  ? 'Your accent colour'
+                  : 'Your accent colour, currently your Org’s'
+              }
+            />
+          )}
+
+          <AccentPreview seed={appearance.seed} tones={appearance.tones} />
+        </section>
+      ) : null}
 
       <section aria-labelledby="archival" className="mt-8">
         <h2 id="archival" className="text-heading-lg">
@@ -81,6 +148,25 @@ export default async function YourSettings() {
           ))
         )}
       </section>
+
+      <StoredTranscripts
+        projects={stored.projects}
+        sessions={sessions.sessions}
+        // Either cap being reached means the page is not the whole picture.
+        more={sessions.more || stored.more}
+        // Named only when there is more than one Org to tell apart, as the
+        // archival section above names them only then.
+        orgNames={
+          new Map(
+            memberships.length > 1
+              ? memberships.map((membership) => [
+                  membership.member_id,
+                  membership.org_name,
+                ])
+              : [],
+          )
+        }
+      />
     </div>
   )
 }
@@ -284,5 +370,62 @@ function Toggle({
         )}
       </button>
     </form>
+  )
+}
+
+/**
+ * A Manager's own Scope, which is ticket 46's second criterion.
+ *
+ * It is about trust rather than convenience. A Manager who cannot see their
+ * Scope cannot tell a Member they were never given from a Member who has
+ * reported nothing, and will read the first as a bug in the product. So the
+ * empty case says out loud that it is empty and who changes it, rather than
+ * rendering nothing and leaving them to guess.
+ *
+ * Absent entirely for anybody who is not a Manager: the section would be a
+ * paragraph about a Role they do not hold.
+ */
+function YourScopes({ scopes }: { scopes: OwnScope[] }) {
+  if (scopes.length === 0) return null
+
+  return (
+    <section aria-labelledby="scope">
+      <h2 id="scope" className="text-heading-lg">
+        Your Scope
+      </h2>
+      <p className="text-text-secondary mt-2 text-sm">
+        As a Manager you see these Members and nobody else. An Owner or an Admin
+        decides who is on the list.
+      </p>
+
+      {scopes.map((scope) => (
+        <div
+          key={scope.managerMemberId}
+          className="border-rule mt-4 rounded border p-4"
+        >
+          {scopes.length > 1 ? (
+            <h3 className="text-heading">{scope.orgName}</h3>
+          ) : (
+            <h3 className="sr-only">{scope.orgName}</h3>
+          )}
+
+          {scope.members.length === 0 ? (
+            <p className="text-text-muted text-sm">
+              Nobody yet, so Costs shows you your own Turns and no one
+              else&apos;s. An Owner or an Admin of {scope.orgName} can add
+              people.
+            </p>
+          ) : (
+            <ul className="mt-2 flex flex-col gap-1">
+              {scope.members.map((member) => (
+                <li key={member.memberId} className="text-sm break-all">
+                  {member.email}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ))}
+    </section>
   )
 }

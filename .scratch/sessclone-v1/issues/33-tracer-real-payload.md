@@ -4,9 +4,9 @@
 
 **Blocked by:** 02, 29, 31, 32.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Turn reported from a real session with real Usage
-- [ ] Counters in the database match the transcript, checked by hand once
-- [ ] Device and Project resolved correctly from the reporting machine
-- [ ] The throwaway pieces from ticket 02 are gone
+- [x] Turn reported from a real session with real Usage
+- [x] Counters in the database match the transcript, checked by hand once
+- [x] Device and Project resolved correctly from the reporting machine
+- [x] The throwaway pieces from ticket 02 are gone

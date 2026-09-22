@@ -2,7 +2,7 @@ import Link from 'next/link'
 
 import { InstallCommand } from './install-command'
 import { CONTACT_EMAIL, REPOSITORY } from './constants'
-import { TierCard } from './tier-card'
+import { TierCard, TiersUnavailable } from './tier-card'
 import { marketingTiers } from '../../lib/tiers'
 
 // The landing page. `docs/design/marketing-site.md` fixes the order of the
@@ -104,8 +104,8 @@ const FAQ = [
   },
 ]
 
-export default function Landing() {
-  const tiers = marketingTiers()
+export default async function Landing() {
+  const tiers = await marketingTiers()
 
   return (
     <>
@@ -248,15 +248,21 @@ export default function Landing() {
           <p className="text-body text-text-secondary mt-3">
             A seat is a person, not a machine.
           </p>
-          <div className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-            {tiers.map((tier) => (
-              <TierCard
-                key={tier.key}
-                tier={tier}
-                highlighted={tier.key === 'team'}
-              />
-            ))}
-          </div>
+          {tiers.length === 0 ? (
+            <div className="mt-8">
+              <TiersUnavailable />
+            </div>
+          ) : (
+            <div className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+              {tiers.map((tier) => (
+                <TierCard
+                  key={tier.key}
+                  tier={tier}
+                  highlighted={tier.key === 'team'}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { readdirSync, readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
 import { expect, test } from 'vitest'
 
@@ -76,4 +78,95 @@ test('the tables are found at all, so nothing above passes vacuously', () => {
   expect(documented.size).toBeGreaterThan(10)
   expect(assignments.size).toBe(documented.size)
   expect(documentedDefaults.size).toBeGreaterThan(3)
+})
+
+// Ticket 67's first criterion: "every external dependency configured by
+// environment variable, nothing hard-coded". A hostname compiled into the
+// application is a deployment that silently talks to somebody else's
+// infrastructure, and the failure is invisible until it is expensive.
+
+/**
+ * Every tracked source file, asked of git so that a generated or ignored file
+ * is never scanned — and read from the filesystem when there is no git to ask.
+ *
+ * The fallback is not decoration: a release tarball has no `.git`, and neither
+ * does the Docker build context (`.dockerignore` excludes it), so a top-level
+ * `execFileSync` that throws would take every other test in this file down
+ * with it rather than failing this one.
+ */
+const listed = (): string[] => {
+  const directories = [
+    'apps/web/app',
+    'apps/web/lib',
+    'apps/web/scripts',
+    'packages/shared/src',
+    'packages/shared/hooks',
+    'packages/plugin/src',
+    'packages/plugin/hooks',
+  ]
+
+  try {
+    return execFileSync('git', ['ls-files', ...directories, 'apps/web/*.ts'], {
+      cwd: fileURLToPath(root),
+      encoding: 'utf8',
+    }).split('\n')
+  } catch {
+    const walk = (directory: string): string[] => {
+      let entries
+      try {
+        entries = readdirSync(new URL(`${directory}/`, root), {
+          withFileTypes: true,
+        })
+      } catch {
+        return []
+      }
+      return entries.flatMap((entry) =>
+        entry.isDirectory()
+          ? walk(`${directory}/${entry.name}`)
+          : [`${directory}/${entry.name}`],
+      )
+    }
+    return [
+      ...directories.flatMap(walk),
+      ...walk('apps/web').filter((path) => path.split('/').length === 3),
+    ]
+  }
+}
+
+const sources = listed()
+  .filter((path) => /\.(ts|tsx|mjs)$/.test(path))
+  .filter((path) => !path.includes('.test.'))
+
+/**
+ * Hosts that would mean a dependency was chosen at build time rather than by
+ * the deployment. `127.0.0.1:3000` is deliberately not here: it is the
+ * Collector's documented default for `SESSCLONE_URL`, which is the opposite
+ * of hard-coded — it is what the variable falls back to when nobody set it,
+ * on the one machine where that guess is right.
+ *
+ * The list is every provider the storage and auth documentation names, plus
+ * the object stores a self-hoster is most likely to be on, plus this project's
+ * own vendors: a hostname pointing at us is the same broken promise as one
+ * pointing at Amazon.
+ */
+const HARD_CODED =
+  /\b(?:[\w-]+\.)?(?:supabase\.co|supabase\.in|supabase\.com|cloudflarestorage\.com|amazonaws\.com|storage\.googleapis\.com|digitaloceanspaces\.com|wasabisys\.com|backblazeb2\.com|r2\.dev|anthropic\.com|claude\.ai|claude\.com)\b/
+
+test('no external host is compiled into the application', () => {
+  const offenders = sources.flatMap((path) => {
+    const found = readFileSync(new URL(path, root), 'utf8')
+      .split('\n')
+      .map((line, index) => [index + 1, line] as const)
+      // A comment naming a provider is documentation, not a dependency.
+      .filter(([, line]) => !/^\s*(?:\/\/|\*|#)/.test(line))
+      .filter(([, line]) => HARD_CODED.test(line))
+    return found.map(([line]) => `${path}:${line}`)
+  })
+
+  expect(offenders).toEqual([])
+})
+
+test('the file list is found at all, so the check is not vacuous', () => {
+  expect(sources.length).toBeGreaterThan(40)
+  expect(sources.some((path) => path.includes('lib/storage.ts'))).toBe(true)
 })

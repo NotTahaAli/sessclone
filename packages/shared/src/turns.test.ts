@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 
 import { describe, expect, test } from 'vitest'
 
@@ -38,6 +38,39 @@ const EXPECTED = [
   { file: 'slash-model-is-not-a-switch.jsonl', usageEntries: 4, turns: 2 },
   { file: 'workflow-agent-run.jsonl', usageEntries: 1, turns: 1 },
 ]
+
+// The raw entries behind a fixture. The assertions that need these are the
+// ones about what the parser did *not* make a Turn from, which nothing in a
+// list of Turns can show. Only the fields they reach for: the redactor decides
+// what a fixture carries, not this shape.
+type Entry = {
+  type?: string
+  uuid?: string
+  sessionId?: string
+  message?: { usage?: unknown }
+}
+
+// JSON.parse returns any, so naming the return type here is the one place the
+// untyped boundary is crossed — and it is a declaration, not an assertion.
+const parseEntry = (line: string): Entry => JSON.parse(line)
+
+/** Sorting strings needs a comparator: the default one sorts by UTF-16 code
+ * unit, which is not what a reader of a failure message expects. */
+const byText = (left: string | undefined, right: string | undefined) =>
+  (left ?? '').localeCompare(right ?? '')
+
+const entriesIn = (file: string): Entry[] =>
+  fixture(file)
+    .split('\n')
+    .filter((line) => line !== '')
+    .map(parseEntry)
+
+// Every entry type in the corpus that carries no usage block at all.
+const withoutUsage = new Set(
+  EXPECTED.flatMap(({ file }) => entriesIn(file))
+    .filter((entry) => entry.message?.usage === undefined)
+    .map((entry) => entry.type),
+)
 
 // A transcript built from objects, for the cases the corpus cannot show:
 // blocks of one group that disagree, and values no captured session produced.
@@ -517,5 +550,144 @@ describe('input a transcript should not contain', () => {
     )
 
     expect(turns[0]?.agentId).toBeNull()
+  })
+})
+
+// Ticket 71: the assertions that only hold when they are made over the whole
+// corpus at once. Each case below is one the per-fixture tests above cannot
+// state, because the failure it catches is a file the table never names, an
+// entry type nobody thought to skip, or a counter that survives a length
+// check unchanged.
+describe('the corpus as a whole', () => {
+  test('the table above names every fixture that is committed', () => {
+    // Every count assertion in this file iterates EXPECTED rather than the
+    // directory. A fixture added for a new case — or one re-captured under a
+    // new name — would sit in the corpus proving nothing, and every test here
+    // would go on passing without ever having parsed it.
+    expect(EXPECTED.map(({ file }) => file).toSorted()).toEqual(
+      readdirSync(DIRECTORY)
+        .filter((file) => file.endsWith('.jsonl'))
+        .toSorted(),
+    )
+  })
+
+  test('the bookkeeping entry types are all still in the corpus', () => {
+    // The list the assertion below is meaningful against. Claude Code writes
+    // these beside the responses and none of them carries usage; if a
+    // re-capture quietly stopped writing one, the guard underneath would pass
+    // on a corpus that no longer contains the case it guards.
+    expect([...withoutUsage].toSorted(byText)).toEqual(
+      expect.arrayContaining([
+        'ai-title',
+        'atis-latch',
+        'attachment',
+        'last-prompt',
+        'mode',
+        'queue-operation',
+        'system',
+        'user',
+      ]),
+    )
+  })
+
+  test('no entry without usage contributes to a Turn, in any fixture', () => {
+    // Stronger than counting Turns: a parser that swept a usage-less entry
+    // into an existing group would bill the same number of Turns and quietly
+    // attach the wrong uuids to one. The compact summary is the entry that
+    // makes this worth asserting — it is a `user` entry carrying 2,559
+    // characters of the conversation it replaced, and it reads like a
+    // response to anything matching on size rather than on usage.
+    for (const { file } of EXPECTED) {
+      const billed = turnsIn(file).flatMap((parsed) => parsed.entryUuids)
+
+      expect(billed.toSorted(byText)).toEqual(
+        entriesIn(file)
+          .filter((entry) => entry.message?.usage !== undefined)
+          .map((entry) => entry.uuid)
+          .toSorted(byText),
+      )
+    }
+  })
+
+  test('every Agent Run Turn lands on the Session that spawned it', () => {
+    // The corpus's three Agent Runs were captured from one parent Session, so
+    // the id is asserted against that Session's own transcript rather than
+    // written out again here — a run attributed to its own `agentId`, or to
+    // nothing, is a Session's spend split across rows no dashboard joins back
+    // together. `agent-run-ends-mid-turn.jsonl` is the file this covers that
+    // the literal assertions above do not: all four of its Turns, including
+    // the two that died mid-stream, belong to the parent.
+    const parent = entriesIn('nested-run-inherits-parent-session-id.jsonl')[0]
+      ?.sessionId
+
+    expect(parent).toBe('456e47f6-e387-59c4-b84c-21c031bb3504')
+
+    for (const file of [
+      'agent-run.jsonl',
+      'agent-run-ends-mid-turn.jsonl',
+      'workflow-agent-run.jsonl',
+    ]) {
+      const turns = turnsIn(file)
+
+      expect(turns.length).toBeGreaterThan(0)
+      for (const parsed of turns) {
+        expect(parsed.sessionId).toBe(parent)
+        // Attributed to the parent and still distinguishable inside it: an
+        // Agent Run's Turns are not the parent's own.
+        expect(parsed.agentId).not.toBeNull()
+      }
+      expect(new Set(turns.map((parsed) => parsed.agentId)).size).toBe(1)
+    }
+  })
+})
+
+describe('compaction and a model switch cost what they cost', () => {
+  // Both fixtures are asserted above by Turn count and by model alone, which a
+  // parser can satisfy while getting every counter wrong. The numbers here are
+  // read off the fixtures by hand: doubling one is the block double-count and
+  // dropping one is the loss, and neither changes a length.
+  test('a compaction leaves one Turn billed once, not twice', () => {
+    // Two entries, byte-identical usage, one response. Summing them bills 246
+    // output tokens and 49,952 one-hour cache-creation tokens against a turn
+    // that used half of each.
+    expect(turnsIn('compaction.jsonl')).toMatchObject([
+      {
+        model: 'claude-haiku-4-5-20251001',
+        complete: true,
+        usage: {
+          inputTokens: 10,
+          outputTokens: 123,
+          thinkingTokens: 116,
+          cacheReadInputTokens: 28_880,
+          cacheCreationInputTokens: 24_976,
+          cacheCreation1hInputTokens: 24_976,
+        },
+      },
+    ])
+  })
+
+  test('a model switch bills each model for its own response, and only it', () => {
+    // Three usage entries: two blocks of the haiku response and one of the
+    // sonnet response that followed the switch. The two failures this catches
+    // are opposite — collapsing on `sessionId` alone loses the second Turn
+    // entirely, and grouping on the entry bills haiku twice.
+    expect(turnsIn('model-switch.jsonl')).toMatchObject([
+      {
+        model: 'claude-haiku-4-5-20251001',
+        usage: {
+          outputTokens: 79,
+          cacheReadInputTokens: 28_880,
+          cacheCreationInputTokens: 24_969,
+        },
+      },
+      {
+        model: 'claude-sonnet-5',
+        usage: {
+          outputTokens: 3,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 76_795,
+        },
+      },
+    ])
   })
 })

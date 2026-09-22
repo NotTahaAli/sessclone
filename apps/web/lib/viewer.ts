@@ -1,5 +1,7 @@
 import { cache } from 'react'
 import { asViewer } from './db'
+import { logoPath } from './org-logo'
+import type { SubscriptionStatus } from './tier'
 import { signedInUser } from './supabase/server'
 
 // Ticket 45: the Org context the shell establishes, read once per request.
@@ -25,14 +27,40 @@ export type Viewer = {
   memberId: string
   orgId: string
   orgName: string
+  /**
+   * The Org's timezone (ticket 51). Carried here because every surface that
+   * cuts Turns into days needs it and this row is already being read once per
+   * request — the alternative is each chart asking again for a fact that
+   * cannot change mid-render.
+   */
+  orgTimezone: string
+  /**
+   * The Org's subscription status, or `null` when it has no subscription row
+   * at all — which is every Org until an operator activates it (ticket 48).
+   * Carried here for the same reason as the timezone: the shell shows the
+   * inactive notice on every page, and reading one enum in a second
+   * `asViewer` transaction is a second connection checkout per navigation.
+   */
+  subscriptionStatus: SubscriptionStatus | null
   role: Role
+  /**
+   * The Org's logo (ticket 77), already versioned, or null. Read here rather
+   * than by the component that draws it: the mark sits beside the Org's name
+   * in the shell, so a separate read would be a third `asViewer` transaction
+   * on every dashboard load to answer a question this row was already open
+   * for.
+   */
+  orgLogo: string | null
 }
 
 type MembershipRow = {
   member_id: string
   org_id: string
   org_name: string
+  org_timezone: string
+  subscription_status: SubscriptionStatus | null
   role: Role
+  logo_updated_at: Date | null
 }
 
 /**
@@ -60,9 +88,15 @@ export const currentViewer = cache(async (): Promise<Viewer | null> => {
       select member.id as member_id,
              member.org_id,
              org.name as org_name,
-             member.role
+             org.timezone as org_timezone,
+             subscription.status as subscription_status,
+             member.role,
+             logo.updated_at as logo_updated_at
         from members member
         join orgs org on org.id = member.org_id
+        left join subscriptions subscription
+               on subscription.org_id = member.org_id
+        left join org_logos logo on logo.org_id = member.org_id
        where member.id in (select sessclone_own_member_ids())
        order by member.created_at
        limit 1
@@ -77,7 +111,12 @@ export const currentViewer = cache(async (): Promise<Viewer | null> => {
     memberId: membership.member_id,
     orgId: membership.org_id,
     orgName: membership.org_name,
+    orgTimezone: membership.org_timezone,
+    subscriptionStatus: membership.subscription_status,
     role: membership.role,
+    orgLogo: membership.logo_updated_at
+      ? logoPath(membership.org_id, membership.logo_updated_at)
+      : null,
   }
 })
 
@@ -92,6 +131,23 @@ export const currentViewer = cache(async (): Promise<Viewer | null> => {
  */
 export const reachesOrgSettings = (role: Role) =>
   role === 'owner' || role === 'admin'
+
+/**
+ * Whether this Role reaches the Org-wide transcript listing (ticket 84).
+ *
+ * Owner, Admin and Manager: a Manager is in because their Scope is exactly
+ * what the listing is for. Absent for a Member rather than present and empty,
+ * since their own transcripts are on Your settings and a second page showing
+ * the same rows under a different name only invites the question of which one
+ * is the real list.
+ *
+ * Named Roles rather than `!== 'member'`: this is the gate on the one surface
+ * that lists other people's transcripts, which are source code and sometimes
+ * a credential, and a Role added later should have to be let in rather than
+ * arrive already holding the key.
+ */
+export const reachesTeamTranscripts = (role: Role) =>
+  role === 'owner' || role === 'admin' || role === 'manager'
 
 /**
  * Whether this Role reaches the Tier page.

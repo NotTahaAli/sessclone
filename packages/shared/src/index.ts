@@ -5,12 +5,22 @@ export type { Turn, TurnUsage } from './turns.ts'
 export { deviceKey, normaliseRemote, projectKey } from './identity.ts'
 export type { ProjectIdentity } from './identity.ts'
 export {
+  FAILURE_MESSAGE_LIMIT,
+  FAILURES_PER_PAYLOAD,
   IngestPayload,
   REPORTS_PER_PAYLOAD,
   TURNS_PER_REPORT,
   ReportedCursor,
+  ReportedFailure,
+  ReportedSessionEnd,
   ReportedTurn,
   ReportedUsage,
   TranscriptReport,
 } from './ingest.ts'
 export type { IngestResponse } from './ingest.ts'
+export { ConfirmRequest, PresignRequest } from './presign.ts'
+export type {
+  ConfirmResponse,
+  PresignRefusal,
+  PresignResponse,
+} from './presign.ts'

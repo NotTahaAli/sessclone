@@ -3,6 +3,7 @@ import { expect, test } from 'vitest'
 import {
   ConfigurationError,
   DEFAULT_URL,
+  nodeProblem,
   readConfiguration,
 } from './configuration.mjs'
 
@@ -137,4 +138,21 @@ test('a pinned device key is used verbatim', () => {
     readConfiguration({ ...valid, SESSCLONE_DEVICE: 'ci:fleet-3' }, 'linux')
       .device,
   ).toBe('ci:fleet-3')
+})
+
+test('a Node too old to run the Collector is a problem named at session start', () => {
+  // The hooks import `packages/shared` as TypeScript and rely on Node
+  // stripping the types. On Node 20 that throws `Unknown file extension
+  // ".ts"` inside a hook, where every failure is swallowed — so without this
+  // check the plugin installs, starts cleanly and silently reports nothing.
+  expect(nodeProblem('20.11.0')).toMatch(/too old/)
+  expect(nodeProblem('22.17.9')).toMatch(/22\.18 or newer/)
+  expect(nodeProblem('23.5.0')).toMatch(/too old/)
+
+  expect(nodeProblem('22.18.0')).toBeNull()
+  expect(nodeProblem('23.6.0')).toBeNull()
+  expect(nodeProblem('24.2.1')).toBeNull()
+
+  // And it never names the key, as no problem here ever does.
+  expect(nodeProblem('20.11.0')).not.toMatch(/sk_/)
 })

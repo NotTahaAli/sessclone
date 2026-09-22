@@ -1,5 +1,5 @@
 import { CONTACT_EMAIL, REPOSITORY } from '../constants'
-import { TierCard } from '../tier-card'
+import { TierCard, TiersUnavailable } from '../tier-card'
 import { marketingTiers } from '../../../lib/tiers'
 
 // The pricing page. Four tiers in one row on desktop, stacked on a phone,
@@ -13,8 +13,8 @@ export const metadata = {
     'Self-hosted free at any size, $5 a month for one person, $10 per seat for a team. A seat is a person, not a machine.',
 }
 
-export default function Pricing() {
-  const tiers = marketingTiers()
+export default async function Pricing() {
+  const tiers = await marketingTiers()
 
   return (
     <>
@@ -34,15 +34,21 @@ export default function Pricing() {
       <section className="border-rule border-b">
         <div className="mx-auto w-full max-w-[1120px] px-5 py-14">
           <h2 className="text-display font-serif">Four tiers</h2>
-          <div className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-            {tiers.map((tier) => (
-              <TierCard
-                key={tier.key}
-                tier={tier}
-                highlighted={tier.key === 'team'}
-              />
-            ))}
-          </div>
+          {tiers.length === 0 ? (
+            <div className="mt-8">
+              <TiersUnavailable />
+            </div>
+          ) : (
+            <div className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+              {tiers.map((tier) => (
+                <TierCard
+                  key={tier.key}
+                  tier={tier}
+                  highlighted={tier.key === 'team'}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

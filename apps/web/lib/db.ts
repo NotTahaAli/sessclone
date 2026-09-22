@@ -28,6 +28,33 @@ const pool = () => {
 }
 
 /**
+ * The two public tables, read with no viewer at all: the published Tiers, and
+ * an Org's logo.
+ *
+ * The one exception to the rule above, and deliberately not a general one.
+ * It is safe because of what it can reach, not because of where it is called
+ * from: `tiers_read` and `org_logos_read` are the only `using (true)` read
+ * policies in the schema, every other read policy tests
+ * `sessclone_user_id()`, which is null here, and so does every write policy on
+ * a table this role may write to. So a caller who passed a query for anything
+ * else would read nothing — which is why this stayed one function when ticket
+ * 77 added the second table rather than becoming a pair that differ only in
+ * their name.
+ *
+ * Why a logo is public at all is argued in `20260922130000_org_logo.sql`: it
+ * is fetched by mail clients and by visitors who have not signed in, and it
+ * carries nothing but the picture.
+ *
+ * The same file's `sessclone_invitation_org` is reached this way too, and is
+ * the reason the sentence above says "what it can reach" rather than "which
+ * tables": a `security definer` function is authorised by what it is given,
+ * and that one is given a token's hash.
+ */
+export const readAnonymously = <T>(
+  query: (tx: postgres.TransactionSql) => Promise<T>,
+) => pool().begin((tx) => query(tx))
+
+/**
  * Runs `query` in a transaction with `userId` as the viewer.
  *
  * The id comes from the verified Supabase session and never from a request

@@ -288,3 +288,30 @@ describe('excluding a Project', () => {
     expect(rows).toHaveLength(0)
   })
 })
+
+describe('a Project known only from a stored transcript', () => {
+  test('is listed, so it can be excluded (ticket 73)', async () => {
+    // No Turn on it: the first Session on a new repository reports its
+    // transcript before its Turns land, and Retention ages Turns out from
+    // under a Project whose transcripts are still stored.
+    const [project] = await sql<{ id: string }[]>`
+      insert into projects (org_id, key)
+      values (${fixture.acme.id}, 'github.com/acme/fresh')
+      returning id
+    `
+    await sql`
+      insert into log_artifacts (org_id, member_id, project_id, session_id,
+                                 storage_key, sha256, size_bytes)
+      values (${fixture.acme.id}, ${fixture.acme.members.member},
+              ${project!.id}, 'session-fresh', 'orgs/x/fresh.jsonl',
+              ${'c'.repeat(64)}, 2048)
+    `
+
+    const projects = await asUser(
+      fixture.acme.users.member,
+      listArchivalProjects,
+    )
+
+    expect(projects.map((row) => row.key)).toEqual(['github.com/acme/fresh'])
+  })
+})

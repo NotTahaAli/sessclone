@@ -4,9 +4,9 @@
 
 **Blocked by:** 41, 42, 44, 63.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Overrides set per Org, effective-dated like platform rates
-- [ ] Resolution prefers an Org override and falls back to the platform table
-- [ ] An Org's overrides are invisible to every other Org
-- [ ] Covered by cost tests and by the policy suite
+- [x] Overrides set per Org, effective-dated like platform rates
+- [x] Resolution prefers an Org override and falls back to the platform table
+- [x] An Org's overrides are invisible to every other Org
+- [x] Covered by cost tests and by the policy suite

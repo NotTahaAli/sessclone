@@ -10,10 +10,14 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "catalog:",
+    "@aws-sdk/s3-request-presigner": "catalog:",
+    "@material/material-color-utilities": "0.4.0",
     "@sessclone/shared": "workspace:*",
     "@supabase/ssr": "catalog:",
     "@supabase/supabase-js": "catalog:",
     "next": "catalog:",
+    "nodemailer": "10.0.10",
     "postgres": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
@@ -23,6 +27,8 @@
     "@tailwindcss/postcss": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "@types/smtp-server": "3.5.13",
+    "smtp-server": "3.19.13",
     "tailwindcss": "catalog:",
     "typescript": "catalog:"
   }

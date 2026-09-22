@@ -4,9 +4,9 @@
 
 **Blocked by:** 47.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Activation and deactivation both possible, with a note recorded
-- [ ] Each writes a subscription event carrying who did it and when
-- [ ] Entitlement checks read subscription status and Tier, nothing provider-specific
-- [ ] An inactive Org is told it is inactive rather than shown a broken dashboard
+- [x] Activation and deactivation both possible, with a note recorded
+- [x] Each writes a subscription event carrying who did it and when
+- [x] Entitlement checks read subscription status and Tier, nothing provider-specific
+- [x] An inactive Org is told it is inactive rather than shown a broken dashboard

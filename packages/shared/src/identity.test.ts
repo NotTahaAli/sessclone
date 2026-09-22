@@ -26,6 +26,26 @@ describe('a git remote names one Project however it was cloned', () => {
     expect(normaliseRemote(remote)).toBe('github.com/nottahaali/sessclone')
   })
 
+  test.each(SPELLINGS)(
+    '%s is one Project, wherever it was cloned to',
+    (remote) => {
+      // The checkbox is about the Project, not about the normalised string:
+      // `projectKey` falls back to a per-machine local key whenever
+      // `normaliseRemote` returns null, so a spelling it stopped reading would
+      // split this repository into one Project per machine — with no failure
+      // anywhere, because every key it produced would still be a valid key.
+      expect(
+        projectKey({ remote, cwd: '/wherever', hostname: 'a-machine' }).key,
+      ).toBe(
+        projectKey({
+          remote: 'git@github.com:NotTahaAli/sessclone.git',
+          cwd: '/somewhere/else',
+          hostname: 'another-machine',
+        }).key,
+      )
+    },
+  )
+
   test('strips credentials a remote should never have carried', () => {
     expect(
       normaliseRemote('https://someone:ghp_asecret@github.com/Org/repo.git'),
