@@ -83,6 +83,24 @@ Then point `DATABASE_URL` at `sessclone_app` and `INGEST_DATABASE_URL` at
 `sessclone`. `apps/web/app-role.test.ts` fails if the dashboard is ever
 pointed at a privileged role.
 
+**An upgrade is two steps, and the order matters.** Nothing in the deploy
+applies a migration, so a release whose code reads a new column against a
+database that has not got it yet serves a broken page for every surface that
+reads it — and leaves the rest working, which is what makes it read as
+several unrelated bugs. Apply the new migrations first, deploy second, and
+check the two agree:
+
+```bash
+DATABASE_URL="$OWNER_URL" node apps/web/scripts/schema-drift.mjs
+```
+
+It names every migration the checkout has and the database does not, and
+exits non-zero when there are any. It reads
+`supabase_migrations.schema_migrations`, which only the Supabase CLI and the
+Management API write: applying the files with the `psql` loop above leaves no
+ledger, and the script says so and stops rather than calling every migration
+missing.
+
 ## 3. Check your bucket actually works
 
 "S3-compatible" covers a wide range, and this product uses a narrow and
