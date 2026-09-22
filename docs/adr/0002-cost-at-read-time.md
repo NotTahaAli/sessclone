@@ -59,7 +59,10 @@ backfill. The same mechanism fixes a wrong price: correct the row, and every
 past estimate is correct from the next read.
 
 Rates are platform-maintained, effective-dated, and updated by reviewed
-migration — never scraped from a pricing page. An Org may override them where
+migration or by the platform administrator — never scraped from a pricing page
+into the table unreviewed. Ticket 97 reads the published page, but only to
+propose: each model's change is shown to the operator and written only once
+they approve it. An Org may override them where
 it has negotiated pricing. Silent breakage producing wrong money is worse than
 stale money.
 
