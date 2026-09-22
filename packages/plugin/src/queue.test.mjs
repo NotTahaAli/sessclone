@@ -3,7 +3,7 @@ import { readdir, utimes } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { expect, test } from 'vitest'
+import { expect, test, vi } from 'vitest'
 
 import { drainQueue, enqueue } from './queue.mjs'
 
@@ -164,4 +164,32 @@ test('entries past the TTL are dropped when the next enqueue enforces the cap', 
   const names = queueFiles(dir)
   expect(names).toHaveLength(1)
   expect(names).not.toContain(old)
+})
+
+test('two payloads queued in the same millisecond drain in the order written', async () => {
+  // The flake behind `expected [ 's-2', 's-1' ] to deeply equal [ 's-1', 's-2' ]`
+  // on CI, made deterministic: freeze the clock so both entries share a
+  // millisecond, and hand the first name the larger random suffix. Before the
+  // sequence in `entryName` the lexical sort then put the second entry first,
+  // and the drain's oldest-first guarantee — which also decides which entries
+  // the 500 cap drops — was decided by `Math.random`.
+  const dir = stateDir()
+  const now = vi.spyOn(Date, 'now').mockReturnValue(1_790_000_000_000)
+  const random = vi
+    .spyOn(Math, 'random')
+    .mockReturnValueOnce(0.99)
+    .mockReturnValueOnce(0.11)
+
+  try {
+    await enqueue(dir, payload(1))
+    await enqueue(dir, payload(2))
+  } finally {
+    now.mockRestore()
+    random.mockRestore()
+  }
+
+  const { send, seen } = transport([ok])
+  await drainQueue(dir, send)
+
+  expect(seen.map((body) => body.sessionEnd.sessionId)).toEqual(['s-1', 's-2'])
 })

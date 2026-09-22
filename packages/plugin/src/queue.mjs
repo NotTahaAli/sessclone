@@ -53,12 +53,33 @@ const MAX_QUEUED = 500
 const QUEUE_TTL_MS = 14 * 24 * 60 * 60 * 1000
 
 /**
+ * Counts the entries this process has written, so two queued in the same
+ * millisecond still sort in the order they were written.
+ *
+ * The millisecond alone is not enough: `Date.now()` has millisecond
+ * resolution and two `enqueue` calls in one turn routinely land inside one,
+ * at which point the name's random suffix decided the order — which made the
+ * drain's oldest-first guarantee a coin toss, and with it which entries the
+ * 500 cap drops. That is what CI caught, intermittently, as
+ * `expected [ 's-2', 's-1' ] to deeply equal [ 's-1', 's-2' ]`.
+ *
+ * Within a process this is exact. Two processes writing in the same
+ * millisecond are still ordered arbitrarily between themselves, which is what
+ * the random suffix was already doing and is as much as a filename can
+ * promise.
+ */
+let written = 0
+
+/**
  * A sortable, unique file name. The millisecond prefix makes a lexical sort a
  * chronological one, so the drain is oldest-first without reading any file;
- * the random suffix keeps two payloads queued in the same millisecond apart.
+ * the sequence orders entries inside one millisecond; the random suffix keeps
+ * two processes' entries apart.
  */
 const entryName = () =>
-  `${Date.now().toString().padStart(15, '0')}-${Math.random().toString(36).slice(2, 10)}.json`
+  `${Date.now().toString().padStart(15, '0')}-${(written++)
+    .toString()
+    .padStart(6, '0')}-${Math.random().toString(36).slice(2, 10)}.json`
 
 /**
  * Writes one payload to the queue. Resolves either way.
