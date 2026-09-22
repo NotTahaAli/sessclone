@@ -152,6 +152,26 @@ describe('reconcile', () => {
     expect(counted.unique).toBe(2)
   })
 
+  it('counts each Session separately, because a Device spans containers', () => {
+    // Finding 69: in the cloud every container reports under one `cloud:` key,
+    // so a Device total covers containers whose transcripts died with them and
+    // can never match a hand count run on one machine. The Session is the only
+    // unit both sides can name.
+    const counted = reconcile(
+      [
+        turn(),
+        turn({ messageId: 'msg_2' }),
+        turn({ sessionId: 'session-2', messageId: 'msg_3' }),
+      ],
+      { day: null, timeZone: 'UTC' },
+    )
+
+    expect(counted.bySession).toEqual([
+      ['session-1', 2],
+      ['session-2', 1],
+    ])
+  })
+
   it('marks Turns cut off mid-stream, whose counters are a floor', () => {
     const counted = reconcile([turn({ complete: false })], {
       day: null,

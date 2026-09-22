@@ -13,9 +13,9 @@
 // `--no-probe` skips the one network call, which is a plain GET of
 // `SESSCLONE_URL` carrying no key.
 //
-// Run it from a clone, or from the plugin's own checkout — the plugin installs
-// the whole repository, so `<config>/plugins/**/sessclone*/scripts` is a copy
-// of this file with the modules it imports beside it.
+// Run it from a clone. An install carries `packages/plugin` alone, with no
+// `scripts/` directory and no `node_modules` beside it (PR #12), so there is no
+// copy of this file on an installed machine to run instead.
 
 import {
   format,
