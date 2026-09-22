@@ -137,7 +137,7 @@ export async function POST(request: Request) {
     )
   }
 
-  const { device, reports } = parsed.data
+  const { device, reports, failures = [] } = parsed.data
 
   // One transaction around every write. Without it a batch that passes the
   // schema and fails a database check — a constraint the schema does not
@@ -177,7 +177,12 @@ export async function POST(request: Request) {
       // the payload — which is what makes filing a Turn across an Org
       // boundary unrepresentable rather than merely checked. Two Orgs cloning
       // one repository get one Project row each.
-      const projects = await tx<{ id: string; key: string }[]>`
+      // A `StopFailure` carries no Turns and so no Project (ticket 40), and
+      // `insert into projects ()` is not a statement.
+      const projects =
+        projectRows.length === 0
+          ? []
+          : await tx<{ id: string; key: string }[]>`
         insert into projects ${tx(projectRows, 'org_id', 'key', 'remote')}
         on conflict (org_id, key) do update
           set last_seen_at = now(),
@@ -236,6 +241,37 @@ export async function POST(request: Request) {
         await tx`
           insert into turns ${tx(chunk)}
           on conflict (member_id, session_id, agent_id, message_id) do nothing
+        `
+      }
+
+      // Ticket 40: a turn that died on a rate limit or an overload. One
+      // statement for the batch, filed against the same Member and Org the key
+      // resolved to, and deduplicated by `session_events_identity_key` — the
+      // Collector re-sends a failure it could not deliver, and `SessionStart`
+      // sweeps, so the same event arrives more than once by design.
+      //
+      // The error type and the message are the row's `detail`, because `kind`
+      // is a closed set the table checks and the type is not one: Claude Code
+      // names eleven and may name a twelfth.
+      if (failures.length > 0) {
+        await tx`
+          insert into session_events ${tx(
+            failures.map((failure) => ({
+              org_id: orgId,
+              member_id: memberId,
+              device_id: deviceId,
+              session_id: failure.sessionId,
+              agent_id: failure.agentId ?? null,
+              kind: 'stop_failure',
+              occurred_at: failure.occurredAt,
+              detail: {
+                error_type: failure.errorType,
+                message: failure.message ?? null,
+              },
+            })),
+          )}
+          on conflict (member_id, session_id, agent_id, kind, occurred_at)
+            do nothing
         `
       }
     })

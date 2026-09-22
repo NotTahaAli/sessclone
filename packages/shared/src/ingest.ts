@@ -1,6 +1,11 @@
 import { z } from 'zod'
 
-import { REPORTS_PER_PAYLOAD, TURNS_PER_REPORT } from './limits.ts'
+import {
+  FAILURE_MESSAGE_LIMIT,
+  FAILURES_PER_PAYLOAD,
+  REPORTS_PER_PAYLOAD,
+  TURNS_PER_REPORT,
+} from './limits.ts'
 
 // Ticket 31. The ingest wire contract, in the one place both ends import it
 // from: the Collector builds a payload against this schema and the route
@@ -29,7 +34,12 @@ import { REPORTS_PER_PAYLOAD, TURNS_PER_REPORT } from './limits.ts'
 
 // The limits live in `limits.ts`, which imports nothing: the Collector chunks
 // to them and cannot import this file, because its hooks run without zod.
-export { REPORTS_PER_PAYLOAD, TURNS_PER_REPORT }
+export {
+  FAILURE_MESSAGE_LIMIT,
+  FAILURES_PER_PAYLOAD,
+  REPORTS_PER_PAYLOAD,
+  TURNS_PER_REPORT,
+}
 
 /** A token count: a non-negative safe integer, or the payload is not one. */
 const counter = z.int().min(0)
@@ -126,6 +136,36 @@ export const TranscriptReport = z.object({
 })
 
 /**
+ * A turn that ended on an API error rather than on an answer (ticket 40).
+ *
+ * The `StopFailure` hook carries the error type, optional details and the
+ * rendered error line — and nothing else about the conversation. None of the
+ * prompt travels here: `last_assistant_message` on this event is the API error
+ * string, not Claude's output (Claude Code hooks reference, `StopFailure`),
+ * which is what makes this collectable without the transcript's consent gate.
+ *
+ * `errorType` is free text rather than an enum of the eleven types the
+ * reference lists. A type this version has never heard of is exactly the case
+ * worth recording, and refusing the payload for it would also throw away the
+ * Turns riding in the same request. Bounded instead, and stored as it came.
+ */
+export const ReportedFailure = z.object({
+  sessionId: text,
+  /** The Agent Run that failed, when it was one. */
+  agentId: text.nullable().optional(),
+  /** When the hook fired. The Collector's clock, because the event states no
+   * time — and a stable one, so a re-sent failure is the same row: it is part
+   * of `session_events_identity_key`. */
+  occurredAt: z.iso.datetime({ offset: true }),
+  errorType: z
+    .string()
+    .min(1)
+    .max(64)
+    .refine((value) => value.trim() !== '', { error: 'must not be blank' }),
+  message: z.string().max(FAILURE_MESSAGE_LIMIT).nullable().optional(),
+})
+
+/**
  * A payload names no Member and no Org.
  *
  * Ticket 34 removed the `memberId` this used to carry: both are resolved from
@@ -134,21 +174,38 @@ export const TranscriptReport = z.object({
  * field the caller fills in cannot be that, however carefully it is
  * validated — somebody else's id is a valid id.
  */
-export const IngestPayload = z.object({
-  /** `deviceKey` from this package; the nickname is the Member's to change. */
-  device: z.object({ key: text, nickname: text.nullable().optional() }),
-  reports: z
-    .array(TranscriptReport)
-    .min(1)
-    .max(
-      REPORTS_PER_PAYLOAD,
-      `a batch carries at most ${REPORTS_PER_PAYLOAD} reports`,
-    ),
-})
+export const IngestPayload = z
+  .object({
+    /** `deviceKey` from this package; the nickname is the Member's to change. */
+    device: z.object({ key: text, nickname: text.nullable().optional() }),
+    reports: z
+      .array(TranscriptReport)
+      .max(
+        REPORTS_PER_PAYLOAD,
+        `a batch carries at most ${REPORTS_PER_PAYLOAD} reports`,
+      ),
+    /** Empty for every ordinary report: only the `StopFailure` hook fills it. */
+    failures: z
+      .array(ReportedFailure)
+      .max(
+        FAILURES_PER_PAYLOAD,
+        `a batch carries at most ${FAILURES_PER_PAYLOAD} failures`,
+      )
+      .optional(),
+  })
+  // `reports` lost its `min(1)` to this: a failed turn produces no Turn to
+  // report, so a `StopFailure` sends reports of its own or none at all. What
+  // is still refused is a request carrying neither, which would be a Device
+  // upsert dressed as a report.
+  .refine(
+    (payload) => payload.reports.length + (payload.failures?.length ?? 0) > 0,
+    { error: 'a batch carries at least one report or failure' },
+  )
 
 export type ReportedUsage = z.infer<typeof ReportedUsage>
 export type ReportedTurn = z.infer<typeof ReportedTurn>
 export type ReportedCursor = z.infer<typeof ReportedCursor>
+export type ReportedFailure = z.infer<typeof ReportedFailure>
 export type TranscriptReport = z.infer<typeof TranscriptReport>
 export type IngestPayload = z.infer<typeof IngestPayload>
 

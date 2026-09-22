@@ -82,8 +82,9 @@ the whole failure this split exists to prevent.
 
 **What one report may carry.** The ingest route bounds the batch at the
 boundary, so an absurd payload is a 400 naming the limit rather than a request
-that times out: at most **100 reports** in a payload and **5000 turns** in a
-report (`packages/shared/src/ingest.ts`). A Collector draining a queue larger
+that times out: at most **100 reports** in a payload, **5000 turns** in a
+report, and **100 stop failures** in a payload, each with a message of at most
+2000 characters (`packages/shared/src/ingest.ts`). A Collector draining a queue larger
 than that splits it across requests, which it can do safely because the cursor
 travels per report and re-reporting is absorbed by the identity index (ADR
 0006). A batch the database itself refuses is a 400 with the reason — retrying
@@ -246,11 +247,20 @@ or past the end of a replaced file all mean "read from the top", which costs
 bandwidth and never a Turn. It is stored only after the deployment accepted
 the report carrying it.
 
-One request carries at most 100 reports of at most 5,000 Turns each
-(`packages/shared/src/limits.ts`, which both ends import). The Collector
+One request carries at most 100 reports of at most 5,000 Turns each, and at
+most 100 stop failures (`packages/shared/src/limits.ts`, which both ends
+import). The Collector
 splits a long transcript across requests itself rather than sending one the
 route refuses: a session past the limit would otherwise be refused on every
 Stop for the rest of its life, and nothing reads the answer.
+
+A request may also carry **stop failures** and no Turns at all. `StopFailure`
+fires on a turn that ended on an API error — a rate limit, an overload, a
+billing problem — which writes no usage and so appears in no Turn. The hook
+sends the error type, the error detail Claude Code reported, and the time it
+fired, against the Session; it reads no transcript and moves no cursor, so the
+Turns before the failure are still the next `Stop`'s to report. A payload
+carrying neither a report nor a failure is a 400.
 
 \* Not required by the code — `readConfiguration` falls back to
 `http://127.0.0.1:3000` — but required by anyone whose deployment is not on

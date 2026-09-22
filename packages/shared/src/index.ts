@@ -5,10 +5,13 @@ export type { Turn, TurnUsage } from './turns.ts'
 export { deviceKey, normaliseRemote, projectKey } from './identity.ts'
 export type { ProjectIdentity } from './identity.ts'
 export {
+  FAILURE_MESSAGE_LIMIT,
+  FAILURES_PER_PAYLOAD,
   IngestPayload,
   REPORTS_PER_PAYLOAD,
   TURNS_PER_REPORT,
   ReportedCursor,
+  ReportedFailure,
   ReportedTurn,
   ReportedUsage,
   TranscriptReport,

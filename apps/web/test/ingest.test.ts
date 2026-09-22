@@ -495,3 +495,107 @@ test('an unauthenticated report writes nothing at all', async () => {
   `
   expect(keys!.used).toBe('0')
 })
+
+// Ticket 40: the turn that ended on an API error. A subscription Member is not
+// billed per token, so "did I hit the limit" is the question they have, and a
+// failed turn writes no usage — it is invisible to every Turn above.
+
+const failure = (over: Record<string, unknown> = {}) => ({
+  sessionId: 'session-1',
+  agentId: null,
+  occurredAt: '2026-09-21T11:00:00.000Z',
+  errorType: 'rate_limit',
+  message: '429 Too Many Requests',
+  ...over,
+})
+
+test('a stop failure is recorded against the Session, with its type and message', async () => {
+  const response = await post(payload({ reports: [], failures: [failure()] }))
+  expect(response.status).toBe(200)
+
+  const rows = await sql<
+    {
+      org_id: string
+      member_id: string
+      session_id: string
+      agent_id: string | null
+      kind: string
+      occurred_at: Date
+      detail: { error_type: string; message: string | null }
+    }[]
+  >`
+    select org_id, member_id, session_id, agent_id, kind, occurred_at, detail
+      from session_events
+  `
+
+  expect(rows).toHaveLength(1)
+  expect(rows[0]).toMatchObject({
+    org_id: fixture.acme.id,
+    member_id: fixture.acme.members.member,
+    session_id: 'session-1',
+    agent_id: null,
+    kind: 'stop_failure',
+    detail: { error_type: 'rate_limit', message: '429 Too Many Requests' },
+  })
+  expect(rows[0]!.occurred_at).toEqual(new Date('2026-09-21T11:00:00.000Z'))
+
+  // A failure carries no Turns and so no Project: neither table gained a row,
+  // and the Device it was reported from did.
+  expect(await sql`select 1 from turns`).toEqual([])
+  expect(await sql`select 1 from projects`).toEqual([])
+  expect(await sql`select 1 from devices`).toHaveLength(1)
+})
+
+test('the same failure reported twice leaves one row', async () => {
+  // A `SessionStart` sweep and ticket 39's queue both re-send, so the same
+  // event arriving twice is the designed case, not the exceptional one.
+  const body = payload({ reports: [], failures: [failure()] })
+  await post(body)
+  await post(body)
+
+  const [rows] = await sql<{ count: string }[]>`
+    select count(*) from session_events
+  `
+  expect(rows!.count).toBe('1')
+})
+
+test('a failure rides beside the Turns of the same request', async () => {
+  await post(payload({ failures: [failure()] }))
+
+  expect(await sql`select 1 from turns`).toHaveLength(1)
+  expect(await sql`select 1 from session_events`).toHaveLength(1)
+})
+
+test('a failure is filed under the key that reported it, never a named Org', async () => {
+  // The same rule the Turns follow: nothing in the body decides where a row
+  // lands. Globex's key reports a Session named in Acme's fixture, and it is
+  // Globex's Member who gets the row.
+  await post(payload({ reports: [], failures: [failure()] }), globexKey)
+
+  const rows = await sql<{ org_id: string; member_id: string }[]>`
+    select org_id, member_id from session_events
+  `
+  expect(rows).toEqual([
+    { org_id: fixture.globex.id, member_id: fixture.globex.members.member },
+  ])
+})
+
+test('a batch carrying neither a report nor a failure is refused', async () => {
+  const response = await post(payload({ reports: [] }))
+
+  expect(response.status).toBe(400)
+  await nothingWasWritten()
+  expect(await sql`select 1 from session_events`).toEqual([])
+})
+
+test('a failure message past the wire limit is refused, not truncated', async () => {
+  const response = await post(
+    payload({
+      reports: [],
+      failures: [failure({ message: 'x'.repeat(2001) })],
+    }),
+  )
+
+  expect(response.status).toBe(400)
+  expect(await sql`select 1 from session_events`).toEqual([])
+})

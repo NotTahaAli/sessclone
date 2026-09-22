@@ -26,6 +26,10 @@ const run = promisify(execFile)
 // the database with a session id; this proves a hook reaches it with a Turn.
 
 const HOOK = new URL('../../../packages/plugin/hooks/stop.mjs', import.meta.url)
+const FAILURE_HOOK = new URL(
+  '../../../packages/plugin/hooks/stop-failure.mjs',
+  import.meta.url,
+)
 const CORPUS = new URL(
   '../../../packages/shared/fixtures/transcripts/',
   import.meta.url,
@@ -98,8 +102,9 @@ const issueKey = async () => {
 const runHook = async (
   event: Record<string, unknown>,
   environment: Record<string, string>,
+  hook: URL = HOOK,
 ) => {
-  const child = run('node', [HOOK.pathname], {
+  const child = run('node', [hook.pathname], {
     env: { ...process.env, ...environment },
     cwd: tmpdir(),
   })
@@ -511,4 +516,63 @@ test('a key that is not live stores nothing, and says nothing', async () => {
     select count(*)::int as count from turns
   `
   expect(stored!.count).toBe(0)
+})
+
+test('a turn that died on a rate limit is recorded against the Session', async () => {
+  const key = await issueKey()
+
+  const { stderr } = await runHook(
+    {
+      session_id: 'session-rate-limited',
+      // The failing turn's transcript, which this hook deliberately does not
+      // read: the Turns before the failure are the next Stop's to report.
+      transcript_path: join(tmpdir(), 'never-read.jsonl'),
+      cwd: '/home/dev/api',
+      hook_event_name: 'StopFailure',
+      error: 'rate_limit',
+      error_details: '429 Too Many Requests',
+      last_assistant_message: 'API Error: Rate limit reached',
+    },
+    {
+      SESSCLONE_URL: url,
+      SESSCLONE_API_KEY: key,
+      SESSCLONE_DEVICE: 'host:tracer-box',
+    },
+    FAILURE_HOOK,
+  )
+
+  expect(stderr).toBe('')
+
+  const events = await sql<
+    {
+      session_id: string
+      kind: string
+      member_id: string
+      device_key: string
+      detail: { error_type: string; message: string | null }
+    }[]
+  >`
+    select event.session_id, event.kind, event.member_id, event.detail,
+           device.key as device_key
+      from session_events event
+      join devices device on device.id = event.device_id
+  `
+
+  expect(events).toHaveLength(1)
+  expect(events[0]).toMatchObject({
+    session_id: 'session-rate-limited',
+    kind: 'stop_failure',
+    member_id: fixture.acme.members.member,
+    device_key: 'host:tracer-box',
+    detail: { error_type: 'rate_limit', message: '429 Too Many Requests' },
+  })
+
+  // The credential is in the header and nowhere else: a body is the thing
+  // something downstream logs.
+  expect(received).toHaveLength(1)
+  expect(received[0]!.authorization).toBe(`Bearer ${key}`)
+  expect(received[0]!.body).not.toContain(key)
+
+  // No Turn was invented for a turn that produced none.
+  expect(await sql`select 1 from turns`).toEqual([])
 })

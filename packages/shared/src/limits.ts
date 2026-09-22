@@ -13,3 +13,17 @@
 
 export const REPORTS_PER_PAYLOAD = 100
 export const TURNS_PER_REPORT = 5000
+
+/**
+ * Stop failures in one request (ticket 40). One hook fires one failure, so
+ * this bounds a drain rather than an ordinary report — and it is separate from
+ * `REPORTS_PER_PAYLOAD` because a failure carries no Turns and costs one row.
+ */
+export const FAILURES_PER_PAYLOAD = 100
+
+/**
+ * How much of an API error message is stored. Long enough for the rendered
+ * error and a retry-after line, short enough that a pathological body cannot
+ * be pushed into the table through it.
+ */
+export const FAILURE_MESSAGE_LIMIT = 2000
