@@ -28,9 +28,17 @@
 // keeps a sweep over a year of history from re-uploading all of it.
 
 import { createReadStream } from 'node:fs'
-import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
+import {
+  mkdir,
+  open,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises'
 import { createHash } from 'node:crypto'
-import { basename, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 
@@ -46,6 +54,17 @@ import { sessionTranscripts } from './transcripts.mjs'
  * opportunity, which costs nothing because nothing has been recorded.
  */
 export const UPLOAD_TIMEOUT_MS = 8000
+
+/**
+ * Whether this machine archives after every turn rather than at the end
+ * (ticket 99): a Claude Code cloud container, which never runs `SessionEnd`
+ * and takes its files with it. The same test `deviceKey` makes for a cloud
+ * Device, minus the account, which the upload does not need.
+ *
+ * @param {Record<string, string | undefined>} environment
+ */
+export const archivesEveryTurn = (environment) =>
+  environment.CLAUDE_CODE_REMOTE?.trim() === 'true'
 
 /** The small requests either side of the upload. */
 const REQUEST_TIMEOUT_MS = 4000
@@ -214,6 +233,7 @@ const ask = async ({ configuration, path, body, deadline = NO_DEADLINE }) => {
  * @param {string} input.sessionId
  * @param {string | null} [input.agentId]
  * @param {number} [input.deadline]
+ * @param {number} [input.uploadTimeoutMs] The PUT's own limit.
  * @returns {Promise<{ archived: boolean, refused?: string, sizeBytes?: number }>}
  */
 export const archiveTranscript = async ({
@@ -222,6 +242,7 @@ export const archiveTranscript = async ({
   sessionId,
   agentId = agentIdOf(transcriptPath),
   deadline = NO_DEADLINE,
+  uploadTimeoutMs = UPLOAD_TIMEOUT_MS,
 }) => {
   // The size first, and once: everything below reads exactly this range, so a
   // transcript that grows underneath is archived as it stood here and the next
@@ -295,7 +316,7 @@ export const archiveTranscript = async ({
       ),
       // Node requires this for a streamed request body.
       duplex: 'half',
-      signal: requestSignal(UPLOAD_TIMEOUT_MS, deadline),
+      signal: requestSignal(uploadTimeoutMs, deadline),
     })
     if (!answer.ok) return { archived: false, refused: 'upload_failed' }
   } catch {
@@ -344,6 +365,7 @@ export const archiveTranscript = async ({
  * @param {string} input.sessionId
  * @param {Record<string, string | undefined>} input.environment
  * @param {number} [input.deadline]
+ * @param {number} [input.uploadTimeoutMs]
  */
 export const archiveSession = async ({
   configuration,
@@ -351,6 +373,7 @@ export const archiveSession = async ({
   sessionId,
   environment,
   deadline = NO_DEADLINE,
+  uploadTimeoutMs,
 }) => {
   const transcripts = await sessionTranscripts({
     transcriptPath,
@@ -379,9 +402,109 @@ export const archiveSession = async ({
       sessionId,
       agentId,
       deadline,
+      uploadTimeoutMs,
     })
     if (result.archived) archived += 1
     else if (result.refused) refusals.push(result.refused)
   }
   return { archived, refusals }
+}
+
+/** How long a per-turn lock is trusted before it is taken as a dead run's. */
+const TURN_LOCK_STALE_MS = 120_000
+
+/** How often a waiting run looks at the lock again. */
+const TURN_LOCK_POLL_MS = 500
+
+/** How long to give the `Stop` flush before asking again after `no_turns`. */
+export const NO_TURNS_RETRY_MS = 3000
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/**
+ * Takes the per-Session lock, waiting for a run still holding it. True when
+ * this run may go ahead — including when the state directory cannot hold a
+ * lock at all, which costs an overlap and never a transcript.
+ *
+ * @param {string} path
+ * @param {number} deadline
+ */
+const takeLock = async (path, deadline) => {
+  try {
+    await mkdir(dirname(path), { recursive: true })
+  } catch {
+    return true
+  }
+  for (;;) {
+    try {
+      // eslint-disable-next-line no-await-in-loop -- one attempt at a time is the lock
+      await (await open(path, 'wx')).close()
+      return true
+    } catch (error) {
+      if (error?.code !== 'EEXIST') return true
+    }
+    // eslint-disable-next-line no-await-in-loop -- as above
+    const age = await stat(path).then(
+      (stats) => Date.now() - stats.mtimeMs,
+      () => 0,
+    )
+    // A run that died holding it: take it over.
+    // eslint-disable-next-line no-await-in-loop -- as above
+    if (age >= TURN_LOCK_STALE_MS) await rm(path, { force: true })
+    else if (expired(deadline - TURN_LOCK_POLL_MS)) return false
+    // eslint-disable-next-line no-await-in-loop -- as above
+    else await sleep(TURN_LOCK_POLL_MS)
+  }
+}
+
+/**
+ * Ticket 99: archives a cloud Session after one of its turns.
+ *
+ * Two things `archiveSession` alone gets wrong when it runs after every turn,
+ * in the background, beside the `Stop` flush:
+ *
+ * - **Runs overlap.** A quick next turn starts a second run while the first is
+ *   still uploading, and two runs can confirm in the opposite order to their
+ *   PUTs, leaving the row naming bytes the object no longer holds. So runs for
+ *   one Session take a lock, and a later run waits for the earlier one rather
+ *   than skipping — the later run is the one holding the newest bytes.
+ * - **The flush may not have landed.** The presign refuses a Session with no
+ *   Turns yet (`no_turns`), which on a first turn is a race with the flush
+ *   started at the same moment. One retry after a short wait covers it; a
+ *   single-turn Session would otherwise never be archived.
+ *
+ * @param {object} input
+ * @param {import('./configuration.mjs').CollectorConfiguration} input.configuration
+ * @param {string | undefined} input.transcriptPath
+ * @param {string} input.sessionId
+ * @param {Record<string, string | undefined>} input.environment
+ * @param {number} input.deadline
+ * @param {number} [input.uploadTimeoutMs]
+ * @param {number} [input.retryAfterMs]
+ */
+export const archiveAfterTurn = async ({
+  retryAfterMs = NO_TURNS_RETRY_MS,
+  ...input
+}) => {
+  const lock = join(
+    input.configuration.stateDir,
+    'archived',
+    `${createHash('sha256').update(input.sessionId).digest('hex').slice(0, 32)}.lock`,
+  )
+  if (!(await takeLock(lock, input.deadline))) {
+    return { archived: 0, refusals: ['busy'] }
+  }
+  try {
+    let result = await archiveSession(input)
+    if (
+      result.refusals.includes('no_turns') &&
+      !expired(input.deadline - retryAfterMs)
+    ) {
+      await sleep(retryAfterMs)
+      result = await archiveSession(input)
+    }
+    return result
+  } finally {
+    await rm(lock, { force: true })
+  }
 }

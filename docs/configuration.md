@@ -398,6 +398,20 @@ first — so on a machine with a long history the newest sessions are archived
 first and the older ones over subsequent starts, while a session that ends
 cleanly is archived by `SessionEnd` in its own eight-second budget.
 
+A Claude Code cloud container (`CLAUDE_CODE_REMOTE=true`) gets neither of those
+moments: it never runs `SessionEnd`, and the next session starts in a fresh
+container without this one's files. So there a second `Stop` hook,
+`hooks/stop-archive.mjs`, archives the Session's transcripts after every turn
+(ticket 99). It is registered `async: true`, so the turn never waits on it and
+Claude Code enforces no timeout; its own budget is sixty seconds, and one
+upload may take fifty of them rather than the eight a synchronous hook allows.
+Each pass uploads the whole file and replaces the one stored object, so a
+container reclaimed between turns loses nothing stored. Runs for one Session
+take a lock under `<state dir>/archived/`, so a quick next turn waits for the
+previous upload instead of racing it, and a presign refused `no_turns` (the
+first turn beating its own flush) is asked once more after three seconds. On
+any other machine the hook exits at once.
+
 **When the deployment is unreachable, nothing is lost to a blip and little to
 an outage (ticket 39).** A failed report is retried three times over about two
 and a half seconds; a report that still will not go is written to a queue under

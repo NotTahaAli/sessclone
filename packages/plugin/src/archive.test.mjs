@@ -6,6 +6,8 @@ import { join } from 'node:path'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import {
+  archiveAfterTurn,
+  archivesEveryTurn,
   agentIdOf,
   archiveSession,
   archiveTranscript,
@@ -369,4 +371,92 @@ test('the session archive sends nothing once its deadline has passed', async () 
   })
 
   expect(calls).toHaveLength(0)
+})
+
+test('only a cloud container archives after every turn', () => {
+  // Ticket 99: a cloud container never runs SessionEnd and takes its files
+  // with it, so its transcript goes up per turn; a laptop keeps the end-of-
+  // session upload and the sweep, and spends no bytes per turn.
+  expect(archivesEveryTurn({ CLAUDE_CODE_REMOTE: 'true' })).toBe(true)
+  expect(archivesEveryTurn({ CLAUDE_CODE_REMOTE: ' true\n' })).toBe(true)
+  expect(archivesEveryTurn({})).toBe(false)
+  expect(archivesEveryTurn({ CLAUDE_CODE_REMOTE: 'false' })).toBe(false)
+})
+
+/**
+ * A Session with one transcript and no Agent Runs, and a `fetch` whose
+ * presign answers come from a list in order, the last repeating. Each request
+ * is recorded by its step, in the order the requests were made.
+ */
+const turnFixture = async (presigns, { putDelayMs = 0 } = {}) => {
+  const dir = mkdtempSync(join(tmpdir(), 'sessclone-archive-turn-'))
+  const project = join(dir, 'projects', 'home-dev-api')
+  await mkdir(project, { recursive: true })
+  const transcriptPath = join(project, 'session-a.jsonl')
+  await writeFile(transcriptPath, '{"main":1}\n')
+  const steps = []
+  let asked = 0
+  vi.stubGlobal('fetch', async (url) => {
+    const target = String(url)
+    if (target.includes('/api/logs/presign')) {
+      const body = presigns[Math.min(asked, presigns.length - 1)]
+      asked += 1
+      steps.push('presign')
+      return { ok: true, status: 200, json: async () => body }
+    }
+    if (target.includes('/api/logs/confirm')) {
+      steps.push('confirm')
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ stored: true, sizeBytes: 11 }),
+      }
+    }
+    steps.push('put')
+    await new Promise((resolve) => setTimeout(resolve, putDelayMs))
+    return { ok: true, status: 200, json: async () => null }
+  })
+  return {
+    steps,
+    input: {
+      configuration: configuration(),
+      transcriptPath,
+      sessionId: 'session-a',
+      environment: { CLAUDE_CONFIG_DIR: dir },
+      deadline: Date.now() + 10_000,
+      retryAfterMs: 10,
+    },
+  }
+}
+
+const ISSUED = {
+  url: 'https://storage.test/object?signed',
+  storageKey: 'orgs/o/members/m/projects/p/session-a.jsonl',
+}
+
+test('a first turn that beats its own flush is asked again', async () => {
+  // Ticket 99: the per-turn archive starts beside the Stop flush, so on a
+  // Session's first turn the presign can arrive before any Turn has, and is
+  // refused `no_turns`. Without a second ask a single-turn cloud Session is
+  // never archived.
+  const { steps, input } = await turnFixture([{ refused: 'no_turns' }, ISSUED])
+  const result = await archiveAfterTurn(input)
+  expect(result.archived).toBe(1)
+  expect(steps).toEqual(['presign', 'presign', 'put', 'confirm'])
+})
+
+test('a turn’s archive waits for the previous turn’s to finish', async () => {
+  // Two overlapping runs can confirm in the opposite order to their PUTs,
+  // leaving the row naming bytes the object no longer holds. So the second
+  // waits, and goes after — it holds the newer bytes.
+  const { steps, input } = await turnFixture([ISSUED], { putDelayMs: 50 })
+  const [first, second] = await Promise.all([
+    archiveAfterTurn(input),
+    archiveAfterTurn(input),
+  ])
+  expect(first.archived + second.archived).toBeGreaterThanOrEqual(1)
+  // Never interleaved: each presign is followed by its own put and confirm.
+  expect(steps.join(' ')).toMatch(
+    /^presign put confirm( presign( put confirm)?)?$/,
+  )
 })

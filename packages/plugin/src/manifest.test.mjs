@@ -33,6 +33,10 @@ const exists = async (path) =>
 /** Where Claude Code looks for a plugin's hooks, with no manifest entry. */
 const HOOKS_FILE = 'hooks/hooks.json'
 
+/** The per-turn cloud archive, the one async `Stop` entry (ticket 99). */
+const isArchive = (entry) =>
+  entry.args?.some((part) => part.endsWith('/hooks/stop-archive.mjs'))
+
 /** The events the Collector registers. */
 const EVENTS = ['SessionStart', 'Stop', 'StopFailure', 'SessionEnd']
 
@@ -83,25 +87,30 @@ test('every hook the plugin registers runs a script that is there', async () => 
 
   for (const event of EVENTS) {
     const entries = hooks[event].flatMap((group) => group.hooks)
-    expect(entries).toHaveLength(1)
+    // Stop carries the per-turn cloud archive beside the flush (ticket 99).
+    expect(entries).toHaveLength(event === 'Stop' ? 2 : 1)
 
-    const [entry] = entries
-    expect(entry.type).toBe('command')
+    for (const entry of entries) {
+      expect(entry.type).toBe('command')
 
-    // `${CLAUDE_PLUGIN_ROOT}` is the plugin's installed directory, which is
-    // the only path form that survives the copy an install makes.
-    const referenced = [entry.command, ...(entry.args ?? [])].filter((part) =>
-      part.includes('${CLAUDE_PLUGIN_ROOT}'),
-    )
-    expect(referenced).toHaveLength(1)
+      // `${CLAUDE_PLUGIN_ROOT}` is the plugin's installed directory, which is
+      // the only path form that survives the copy an install makes.
+      const referenced = [entry.command, ...(entry.args ?? [])].filter((part) =>
+        part.includes('${CLAUDE_PLUGIN_ROOT}'),
+      )
+      expect(referenced).toHaveLength(1)
 
-    const script = referenced[0].replaceAll('${CLAUDE_PLUGIN_ROOT}', root)
-    // eslint-disable-next-line no-await-in-loop -- four files, in order, for a readable failure
-    expect(await exists(script)).toBe(true)
+      const script = referenced[0].replaceAll('${CLAUDE_PLUGIN_ROOT}', root)
+      // eslint-disable-next-line no-await-in-loop -- five files, in order, for a readable failure
+      expect(await exists(script)).toBe(true)
 
-    // The hook's own deadline has to leave room for the sweep it starts,
-    // which is the invariant rather than any particular number of seconds.
-    expect(entry.timeout * 1000).toBeGreaterThan(SWEEP_BUDGET_MS)
+      // The hook's own deadline has to leave room for the sweep it starts,
+      // which is the invariant rather than any particular number of seconds.
+      // The async archive starts no sweep, and nothing enforces its timeout.
+      if (!isArchive(entry)) {
+        expect(entry.timeout * 1000).toBeGreaterThan(SWEEP_BUDGET_MS)
+      }
+    }
   }
 })
 
@@ -122,13 +131,17 @@ test('the SessionEnd hook runs asynchronously, so the exit cannot cancel it', as
   const [sessionEnd] = hooks.SessionEnd.flatMap((group) => group.hooks)
   expect(sessionEnd.async).toBe(true)
 
-  // And only SessionEnd: a Stop hook that returned no decision would let the
+  // And only SessionEnd and the per-turn cloud archive (ticket 99), which
+  // nothing waits on: a Stop flush that returned no decision would let the
   // turn end before its Turns were read, and the sweep's one-line notice on
   // SessionStart is stderr Claude Code would stop reading.
   for (const event of EVENTS.filter((name) => name !== 'SessionEnd')) {
     const entries = hooks[event].flatMap((group) => group.hooks)
-    expect(entries.every((entry) => entry.async === undefined)).toBe(true)
+    for (const entry of entries) {
+      expect(entry.async).toBe(isArchive(entry) ? true : undefined)
+    }
   }
+  expect(hooks.Stop.flatMap((group) => group.hooks).some(isArchive)).toBe(true)
 })
 
 test('what the hooks import is still there', async () => {
@@ -140,6 +153,7 @@ test('what the hooks import is still there', async () => {
     'hooks/session-start.mjs',
     'hooks/session-end.mjs',
     'hooks/stop.mjs',
+    'hooks/stop-archive.mjs',
     'hooks/stop-failure.mjs',
     'src/report.mjs',
     'src/configuration.mjs',
