@@ -4,13 +4,21 @@ import { useActionState, useCallback, useState } from 'react'
 
 import { createKey } from './actions'
 import type { Membership } from '../../../lib/api-keys'
+import { installCommand } from '../../../lib/install-command'
 
 // The one client component on this page, and it is client-side for exactly one
 // reason: the new key lives in `useActionState`'s return value and nowhere
 // else. A Server Component cannot hold it — there is nothing to re-read it
 // from on the next render, which is the point.
 
-export function NewKeyForm({ memberships }: { memberships: Membership[] }) {
+export function NewKeyForm({
+  memberships,
+  appUrl,
+}: {
+  memberships: Membership[]
+  /** This deployment's own URL, so the command below is ready to run. */
+  appUrl: string
+}) {
   const [state, formAction, pending] = useActionState(createKey, null)
 
   // Only when there is a choice. One membership is the common case and a
@@ -73,7 +81,9 @@ export function NewKeyForm({ memberships }: { memberships: Membership[] }) {
         </p>
       ) : null}
 
-      {state && 'key' in state ? <Revealed apiKey={state.key} /> : null}
+      {state && 'key' in state ? (
+        <Revealed apiKey={state.key} appUrl={appUrl} />
+      ) : null}
     </section>
   )
 }
@@ -82,8 +92,10 @@ export function NewKeyForm({ memberships }: { memberships: Membership[] }) {
  * Shown once, on the render that created it. Navigating away or reloading
  * loses it, and that is not a bug to fix later — nothing stored it.
  */
-function Revealed({ apiKey }: { apiKey: string }) {
+function Revealed({ apiKey, appUrl }: { apiKey: string; appUrl: string }) {
   const [copied, setCopied] = useState(false)
+  const [copiedCommand, setCopiedCommand] = useState(false)
+  const command = installCommand(appUrl, apiKey)
 
   const copy = useCallback(() => {
     // Unavailable over plain HTTP and refusable by the browser, so the key
@@ -93,6 +105,13 @@ function Revealed({ apiKey }: { apiKey: string }) {
       () => setCopied(false),
     )
   }, [apiKey])
+
+  const copyCommand = useCallback(() => {
+    navigator.clipboard?.writeText(command).then(
+      () => setCopiedCommand(true),
+      () => setCopiedCommand(false),
+    )
+  }, [command])
 
   return (
     <div
@@ -113,6 +132,42 @@ function Revealed({ apiKey }: { apiKey: string }) {
         >
           {copied ? 'Copied' : 'Copy'}
         </button>
+      </div>
+
+      {/* The install command with the key already in it, on the one render
+          that has the key (Taha, 2026-09-22). Everywhere else the same
+          command carries a placeholder, because nothing stores a key to put
+          here — and a machine set up by one paste is the whole point of the
+          `--config` flags. The marketplace command runs first, which the
+          panel below this form spells out.
+
+          The caveat is not hidden: a command carries its argument into shell
+          history, so the prompt route is named right beside it for anybody
+          who would rather it did not. */}
+      <div className="mt-4">
+        <p className="text-text text-sm font-medium">
+          Or install the Collector in one command
+        </p>
+        <p className="text-text-secondary mt-1 text-sm">
+          After <code className="font-mono">claude plugin marketplace add</code>
+          , which is step 1 below. This has your key in it, so it will be kept
+          in your shell&apos;s history; running{' '}
+          <code className="font-mono">/plugin install sessclone</code> inside
+          Claude Code asks for the key at a prompt instead.
+        </p>
+        <div className="border-rule bg-surface mt-2 flex items-center gap-2 rounded-md border p-2">
+          <code className="text-text grow overflow-x-auto px-1 font-mono text-sm whitespace-pre">
+            {command}
+          </code>
+          <button
+            type="button"
+            onClick={copyCommand}
+            className="border-control-border text-text shrink-0 rounded border px-3 py-1 text-sm"
+          >
+            {copiedCommand ? 'Copied' : 'Copy'}
+            <span className="sr-only"> the install command</span>
+          </button>
+        </div>
       </div>
     </div>
   )

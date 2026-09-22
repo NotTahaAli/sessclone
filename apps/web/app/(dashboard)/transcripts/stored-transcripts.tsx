@@ -26,7 +26,7 @@ const size = (bytes: number) => {
 }
 
 /**
- * When a transcript was uploaded, to the minute and in the Org's timezone.
+ * A time on this page, to the minute and in the Org's timezone.
  *
  * The date alone was not enough (Taha, 2026-09-22): several sessions on one
  * repository land on the same day, and a column of identical dates cannot say
@@ -187,7 +187,8 @@ function Group({
           <p className="text-text-muted mt-1 text-sm">
             {own ? '' : `${project.memberEmail ?? 'A Member'} · `}
             {project.sessions} session{project.sessions === 1 ? '' : 's'} ·{' '}
-            {size(project.bytes)} · newest {stamp.format(project.newest)}
+            {size(project.bytes)} · last upload{' '}
+            {stamp.format(project.newest)}
             {orgName ? ` · ${orgName}` : ''}
           </p>
         </div>
@@ -221,8 +222,18 @@ function Group({
                   {session.sessionId}
                   {session.agentId ? ` · subagent ${session.agentId}` : ''}
                 </p>
+                {/* The last message rather than the upload (Taha,
+                    2026-09-22). A transcript is uploaded when the session
+                    ends, which is a fact about the Collector: a laptop that
+                    was closed uploads hours after the work everybody
+                    remembers. Where no Turn of the session is readable there
+                    is nothing to say but when it arrived, so it says that
+                    instead of dressing one time up as the other. */}
                 <p className="text-text-muted text-sm">
-                  {size(session.bytes)} · {stamp.format(session.uploadedAt)}
+                  {size(session.bytes)} ·{' '}
+                  {session.lastTurnAt
+                    ? `last message ${stamp.format(session.lastTurnAt)}`
+                    : `uploaded ${stamp.format(session.uploadedAt)}`}
                 </p>
               </div>
               <div className="flex items-center gap-3">

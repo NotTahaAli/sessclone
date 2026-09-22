@@ -92,6 +92,22 @@ export type StoredSession = {
   agentId: string | null
   bytes: number
   uploadedAt: Date
+  /**
+   * When the last message of this Session was reported, or null when no Turn
+   * of it is readable.
+   *
+   * Taha asked for the last message rather than the upload (2026-09-22): a
+   * transcript is uploaded when the Session ends, which is a fact about the
+   * Collector and not about the work — and a machine that was asleep uploads
+   * hours after the session everybody remembers. The upload time is still
+   * what the list is ordered and paged by, because that is the column the
+   * index covers; only what is shown changes.
+   *
+   * Null rather than a fallback, so a caller decides what to say. A Turn is
+   * readable under the same visible-member set as the artifact, so null here
+   * means a transcript whose Turns never arrived, not a permission edge.
+   */
+  lastTurnAt: Date | null
 }
 
 /** Bounded: a Member with a year of archived work has thousands of rows. */
@@ -227,18 +243,80 @@ export const storedSessions = async (
      limit ${limit + 1}
   `
 
+  const page = rows.slice(0, limit).map((row) => ({
+    id: row.id,
+    memberId: row.member_id,
+    projectId: row.project_id,
+    sessionId: row.session_id,
+    agentId: row.agent_id,
+    bytes: Number(row.size_bytes),
+    uploadedAt: row.uploaded_at,
+  }))
+
+  const last = await lastTurns(tx, page)
+
   return {
-    sessions: rows.slice(0, limit).map((row) => ({
-      id: row.id,
-      memberId: row.member_id,
-      projectId: row.project_id,
-      sessionId: row.session_id,
-      agentId: row.agent_id,
-      bytes: Number(row.size_bytes),
-      uploadedAt: row.uploaded_at,
+    sessions: page.map((session) => ({
+      ...session,
+      lastTurnAt:
+        last.get(turnKey(session.memberId, session.sessionId, session.agentId)) ??
+        null,
     })),
     more: rows.length > limit,
   }
+}
+
+const turnKey = (
+  memberId: string,
+  sessionId: string,
+  agentId: string | null,
+) => `${memberId}:${sessionId}:${agentId ?? ''}`
+
+/**
+ * The last Turn of each of these transcripts, in one statement.
+ *
+ * One statement for the whole page rather than one per row: a query in a loop
+ * is a query in a loop (AGENTS.md), and this page lists up to a hundred.
+ *
+ * The two `any` quals are a superset of the pairs the page holds — Postgres
+ * has no tuple-array qual that stays index-backed — so a Session id belonging
+ * to another Member of the page can be read as well. That costs a few rows and
+ * changes no answer: the grouping carries the Member, so a lookup never
+ * crosses one. `turns_identity_key` leads on `(member_id, session_id)`, which
+ * is exactly what both quals name.
+ *
+ * `agent_id` is grouped and matched too, because an Agent Run has its own
+ * transcript under its parent's Session id — its row's last message is the
+ * subagent's, not the parent's.
+ */
+const lastTurns = async (
+  tx: TransactionSql,
+  sessions: { memberId: string; sessionId: string; agentId: string | null }[],
+): Promise<Map<string, Date>> => {
+  if (sessions.length === 0) return new Map()
+
+  const rows = await tx<
+    {
+      member_id: string
+      session_id: string
+      agent_id: string | null
+      last_at: Date
+    }[]
+  >`
+    select member_id::text as member_id, session_id, agent_id,
+           max(occurred_at) as last_at
+      from turns
+     where member_id = any(${sessions.map((s) => s.memberId)}::uuid[])
+       and session_id = any(${sessions.map((s) => s.sessionId)}::text[])
+     group by member_id, session_id, agent_id
+  `
+
+  return new Map(
+    rows.map((row) => [
+      turnKey(row.member_id, row.session_id, row.agent_id),
+      row.last_at,
+    ]),
+  )
 }
 
 /**

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { SignedInLink } from './signed-in-link'
 
 import { InstallCommand } from './install-command'
 import { CONTACT_EMAIL, REPOSITORY } from './constants'
@@ -125,12 +126,7 @@ export default async function Landing() {
               per Member, Project and Device.
             </p>
             <div className="flex flex-wrap gap-3">
-              <Link
-                href="/sign-in"
-                className="bg-accent-fill text-accent-on-fill border-accent-border text-body flex h-[var(--control-h)] items-center border px-5"
-              >
-                Start counting
-              </Link>
+              <SignedInLink variant="hero" />
               <a
                 href={REPOSITORY}
                 className="border-control-border text-body hover:bg-surface-hover flex h-[var(--control-h)] items-center border px-5"
@@ -152,16 +148,6 @@ export default async function Landing() {
               Product shot — the Costs view, once ticket 45 lands
             </p>
           </div>
-        </div>
-      </section>
-
-      <section
-        className="border-rule border-b"
-        aria-label="Teams using sessclone"
-      >
-        <div className="text-label text-text-muted mx-auto flex w-full max-w-[1120px] flex-wrap items-center gap-x-8 gap-y-3 px-5 py-6 font-mono uppercase">
-          <span>Logo placeholders until real ones exist</span>
-          <span aria-hidden="true">— · — · — · — · —</span>
         </div>
       </section>
 

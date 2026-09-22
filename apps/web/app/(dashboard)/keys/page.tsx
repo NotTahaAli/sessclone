@@ -57,14 +57,15 @@ export default async function Keys() {
         <KeyList keys={keys} />
       )}
 
-      <NewKeyForm memberships={memberships} />
+      <NewKeyForm memberships={memberships} appUrl={appUrl()} />
 
       <section className="border-rule border-t pt-6">
         <h2 className="text-heading">Installing the Collector</h2>
         <p className="text-text-secondary mt-1 text-body">
-          The same two commands, whether this is your first machine or your
-          fourth. A key is shown once at creation and never again, so the step
-          below has a placeholder where yours goes.
+          The same commands, whether this is your first machine or your fourth.
+          A key is shown once at creation and never again, so the step below has
+          a placeholder where yours goes — a key you have just created comes
+          with the command already filled in.
         </p>
         <InstallCollector appUrl={appUrl()} />
       </section>
