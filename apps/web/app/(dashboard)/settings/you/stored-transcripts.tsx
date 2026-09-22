@@ -168,13 +168,26 @@ function Group({
                   {size(session.bytes)} · {DAY.format(session.uploadedAt)}
                 </p>
               </div>
-              <Confirm
-                summary="Delete"
-                question={`Delete the transcript of session ${session.sessionId}? This cannot be undone.`}
-                action={deleteSession}
-                label={`Delete the transcript of session ${session.sessionId}`}
-                artifactId={session.id}
-              />
+              <div className="flex items-center gap-3">
+                {/* Ticket 60. A plain link, because a download is a GET: it
+                    can be bookmarked, retried and handed to `curl`, and the
+                    route redirects to storage so the bytes never come through
+                    the application. */}
+                <a
+                  href={`/api/logs/download/${session.id}`}
+                  className="hover:text-accent-text text-sm underline"
+                  aria-label={`Download the transcript of session ${session.sessionId}`}
+                >
+                  Download
+                </a>
+                <Confirm
+                  summary="Delete"
+                  question={`Delete the transcript of session ${session.sessionId}? This cannot be undone.`}
+                  action={deleteSession}
+                  label={`Delete the transcript of session ${session.sessionId}`}
+                  artifactId={session.id}
+                />
+              </div>
             </li>
           ))}
         </ul>

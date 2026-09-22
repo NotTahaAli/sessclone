@@ -1,5 +1,6 @@
 import {
   DeleteObjectsCommand,
+  GetObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
   S3Client,
@@ -139,6 +140,33 @@ export const ttl = () => {
     ? Math.min(configured, MAX_TTL_SECONDS)
     : PRESIGN_TTL_SECONDS
 }
+
+/**
+ * A short-lived GET URL for one object (ticket 60).
+ *
+ * The bytes never come through the application on the way out either (ADR
+ * 0003): the browser is redirected to storage, which is what keeps a
+ * gigabyte of transcripts off the server's memory and out of its request
+ * timeout. The URL is a bearer credential with the same short life as the
+ * upload's, and the download's authorisation happened before it was signed.
+ *
+ * `ResponseContentDisposition` is what makes a browser save the file under a
+ * readable name rather than render the object key: the object is `.jsonl`,
+ * and the key is a path with a percent-encoded Project in it. The filename is
+ * quoted and stripped of quotes and control characters, because it is built
+ * from a Session id a Collector sent.
+ */
+export const presignDownload = async (key: string, filename: string) =>
+  getSignedUrl(
+    storage(),
+    new GetObjectCommand({
+      Bucket: required('STORAGE_BUCKET'),
+      Key: key,
+      ResponseContentType: 'application/x-ndjson',
+      ResponseContentDisposition: `attachment; filename="${filename.replaceAll(/["\\\p{C}]/gu, '')}"`,
+    }),
+    { expiresIn: ttl() },
+  )
 
 /**
  * The size of a stored object, or null when it is not there.

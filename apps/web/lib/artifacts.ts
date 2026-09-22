@@ -137,6 +137,37 @@ export const storedSessions = async (
 }
 
 /**
+ * One artifact the viewer may download, or null (ticket 60).
+ *
+ * The policy is the whole authorisation: `log_artifacts_read` is
+ * `sessclone_visible_member_ids()`, so this statement names no Member and
+ * filters on nothing but the id — a Member gets their own, an Owner and an
+ * Admin any Member's, and a Manager only their Scope. An artifact outside that
+ * set is no row, which the route answers as a 404 rather than a 403: a
+ * distinguishable refusal would confirm that a transcript somebody cannot see
+ * exists.
+ *
+ * The filename is built here rather than in the route because it is built from
+ * the same row: `<session>.jsonl`, or `<session>-agent-<id>.jsonl` for an
+ * Agent Run, which is what a person wants when four of them land in one
+ * downloads folder.
+ */
+export const downloadableArtifact = async (
+  tx: TransactionSql,
+  id: string,
+): Promise<{ storageKey: string; filename: string } | null> => {
+  const [row] = await tx<{ storage_key: string; name: string }[]>`
+    select storage_key,
+           case when agent_id is null then session_id
+                else session_id || '-agent-' || agent_id
+           end as name
+      from log_artifacts where id = ${id}
+  `
+  if (!row) return null
+  return { storageKey: row.storage_key, filename: `${row.name}.jsonl` }
+}
+
+/**
  * Destroys one Session's stored transcript.
  *
  * The row and the object go together, and the order is what makes that true
