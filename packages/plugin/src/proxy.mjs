@@ -1,4 +1,4 @@
-// Ticket 97: the Collector goes through `HTTPS_PROXY` when one is set.
+// Ticket 98: the Collector goes through `HTTPS_PROXY` when one is set.
 //
 // Node's `fetch` ignores the proxy variables unless it was started with
 // `NODE_USE_ENV_PROXY=1` (or `--use-env-proxy`). A Claude Code cloud

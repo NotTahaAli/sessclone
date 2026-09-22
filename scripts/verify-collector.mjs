@@ -25,7 +25,7 @@ import {
   handCount,
 } from '../packages/plugin/src/verify.mjs'
 
-// Ticket 97: the probe takes the route the hooks take, proxy included.
+// Ticket 98: the probe takes the route the hooks take, proxy included.
 throughProxy()
 
 const argv = process.argv.slice(2)

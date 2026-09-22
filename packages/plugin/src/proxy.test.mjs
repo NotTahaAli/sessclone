@@ -8,7 +8,7 @@ import { expect, test } from 'vitest'
 
 import { needsProxyRestart } from './proxy.mjs'
 
-// Ticket 97: Node's `fetch` connects directly unless `NODE_USE_ENV_PROXY` is
+// Ticket 98: Node's `fetch` connects directly unless `NODE_USE_ENV_PROXY` is
 // set at startup, so a cloud environment's credential never reached ingest.
 
 const FLAGS = new Set(['--use-env-proxy'])

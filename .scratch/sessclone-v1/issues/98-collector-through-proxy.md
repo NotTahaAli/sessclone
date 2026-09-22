@@ -1,4 +1,4 @@
-# 97: The Collector goes through the proxy, and a refused key says so
+# 98: The Collector goes through the proxy, and a refused key says so
 
 **What to build:** Found on 2026-09-22 in a Claude Projects container ("Is the collector running here" thread), handed to this ticket by Taha. A cloud environment set up per ticket 96 collected nothing: Node's `fetch` ignores `HTTPS_PROXY`, so the Collector connected directly, the agent proxy never added the SessClone API credential, and ingest answered `401` to the placeholder key. `curl` in the same container went through the proxy and authenticated. With `NODE_USE_ENV_PROXY=1` the same report was answered 200.
 

@@ -471,6 +471,7 @@ Tiers, and every Org on it, rather than one Org's spend.
 | Admin shell and navigation     | `/admin`                  | Platform flag only | 62     | An Org Owner is refused; gate is in policy and in routing                                                       |
 | Rates                          | `/admin/rates`            | Platform flag only | 41, 63 | Effective-dated; a price change is a new row, never an overwrite                                                |
 | Unknown models                 | `/admin/rates`            | Platform flag only | 43, 63 | Distinct unknown model identifiers, with how many Turns each affects                                            |
+| Fetch latest pricing           | `/admin/rates`            | Platform flag only | 97     | Proposes changes from the published page; nothing is written until the operator approves a model                |
 | Org rate overrides             | `/admin/orgs/<org>/rates` | Platform flag only | 64     | Invisible to every other Org; resolution prefers the override                                                   |
 | Tiers                          | `/admin/tiers`            | Platform flag only | 65     | Seats, price and capabilities; changes take effect without a deployment                                         |
 | An Org's Tier and subscription | `/admin/orgs/<org>`       | Platform flag only | 48, 65 | Activation and deactivation with a recorded note, writing an event each time; subscription history in one place |

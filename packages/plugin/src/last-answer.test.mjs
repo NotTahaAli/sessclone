@@ -7,7 +7,7 @@ import { afterEach, expect, test, vi } from 'vitest'
 import { readAnswer, refusalNotice } from './last-answer.mjs'
 import { send } from './report.mjs'
 
-// Ticket 97: a refused report used to leave no trace at all — no cursor, no
+// Ticket 98: a refused report used to leave no trace at all — no cursor, no
 // queue, not even the state directory — so it looked like no install.
 
 afterEach(() => vi.unstubAllGlobals())

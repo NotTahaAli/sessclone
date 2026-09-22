@@ -279,7 +279,7 @@ const transcriptEvidence = async (environment) => {
  *
  * An empty body to `/api/ingest`: the route checks the key before the payload,
  * so 401 is a refused key and 400 is an accepted key with nothing to report.
- * Ticket 97 replaced a plain GET of the base URL here, which answered 200 in a
+ * Ticket 98 replaced a plain GET of the base URL here, which answered 200 in a
  * cloud container while ingest refused every report — the key was never on
  * the probe, and the probe never went through the proxy that adds it.
  *
@@ -378,7 +378,7 @@ export const collect = async ({
         }))),
         cursors: await directoryEvidence(join(stateDir, 'cursors')),
         queue: await directoryEvidence(join(stateDir, 'queue')),
-        // Ticket 97: the one trace a refused report leaves.
+        // Ticket 98: the one trace a refused report leaves.
         lastAnswer: await readAnswer(stateDir),
       }
     : null
@@ -414,7 +414,7 @@ export const collect = async ({
             configuration?.apiKey ?? environment.SESSCLONE_API_KEY,
           )
         : null,
-    // Ticket 97: whether a proxy is set, and whether this process's `fetch`
+    // Ticket 98: whether a proxy is set, and whether this process's `fetch`
     // goes through it. The hooks restart themselves to make that yes.
     proxy: {
       set: Boolean(environment.HTTPS_PROXY || environment.https_proxy),

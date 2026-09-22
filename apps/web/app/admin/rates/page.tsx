@@ -1,5 +1,6 @@
 import { AddRateForm } from './add-rate-form'
 import { DeleteRate } from './delete-rate'
+import { SyncPricing } from './sync-pricing'
 import { TextFilter } from '../text-filter'
 import { PageHeader } from '../../(dashboard)/page-header'
 import { asOperator } from '../../../lib/platform-admin'
@@ -62,6 +63,13 @@ export default async function Page({
             unknown={unknown.models}
             moreUnknown={unknown.more}
           />
+        </div>
+      </section>
+
+      <section>
+        <h2 className="text-heading">Published pricing</h2>
+        <div className="mt-3">
+          <SyncPricing />
         </div>
       </section>
 

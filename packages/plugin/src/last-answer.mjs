@@ -1,4 +1,4 @@
-// Ticket 97: what the deployment last said, kept where a person can find it.
+// Ticket 98: what the deployment last said, kept where a person can find it.
 //
 // A refused report writes no cursor and queues nothing (a 4xx is final), so
 // before this a Collector whose every report was answered 401 left no trace

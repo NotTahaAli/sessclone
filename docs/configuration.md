@@ -145,6 +145,17 @@ server is reported the same way, because the inviter's remedy is identical.
 first byte. The credentials live in `SMTP_URL` and are read server-side only —
 they carry no `NEXT_PUBLIC_` prefix and reach no page or log line.
 
+### Published pricing
+
+| Variable      | Required | Default | What it is                                                                                |
+| ------------- | -------- | ------- | ----------------------------------------------------------------------------------------- |
+| `PRICING_URL` | no       | —       | Markdown pricing page, e.g. `https://platform.claude.com/docs/en/about-claude/pricing.md` |
+
+Read by "Fetch latest pricing" on `/admin/rates` (ticket 97,
+`apps/web/lib/rate-sync.ts`), server-side only. Unset, the button says so and
+nothing is fetched. Nothing fetched is written until the platform administrator
+approves it.
+
 ### Public base URL
 
 | Variable              | Required | Default | What it is                                                                                 |
@@ -399,14 +410,14 @@ a fresh install over a year of existing history, say — is caught up oldest-war
 across several sessions rather than all in one; each recovered session is
 reported in full, and the ones not yet reached carry over to the next start.
 
-**When the deployment refuses the key, it says so (ticket 97).** A refusal is
-final, so it writes no cursor and queues nothing, and before ticket 97 a
+**When the deployment refuses the key, it says so (ticket 98).** A refusal is
+final, so it writes no cursor and queues nothing, and before ticket 98 a
 Collector refused on every report left no trace at all: not even the state
 directory. Now every report overwrites `<state dir>/last-answer.json` with the
 status and the time, `node scripts/verify-collector.mjs` prints it, and a
 session that starts after a `401` prints one line saying the key was refused.
 
-**Behind a proxy, the Collector goes through it (ticket 97).** Node's `fetch`
+**Behind a proxy, the Collector goes through it (ticket 98).** Node's `fetch`
 ignores `HTTPS_PROXY` unless Node was started with `NODE_USE_ENV_PROXY=1`, and
 the variable is read only at startup. So a hook that finds `HTTPS_PROXY` set
 starts itself again with `NODE_USE_ENV_PROXY=1`, which also honours
