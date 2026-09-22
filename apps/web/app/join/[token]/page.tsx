@@ -4,12 +4,17 @@ import { AcceptForm } from './accept-form'
 import { PanelCredit } from '../../(dashboard)/credit'
 import { signedInUser } from '../../../lib/supabase/server'
 
-// Cache Components (ticket 80) prerenders a static shell for every route and
-// refuses one that reads request data outside a Suspense boundary. This page
-// is reached signed out and still reads request data before rendering — the
-// `next` parameter here, the token and any session there — so `false` turns
-// the validation off rather than satisfying it, and the route renders at
-// request time as it always has. Deferred with the rest: ticket 83.
+// Cache Components (ticket 80) prerenders a static shell for every route. The
+// dashboard earns a real one by streaming the viewer into a static frame
+// (ticket 83); this page does not, and that is the answer rather than a
+// deferral: which of the two pages below a visitor gets *is* the session
+// read, and the token is in the path, so the only thing a shell could
+// prerender is a frame that says nothing. There is no chrome here on purpose
+// — whoever opens this may not be in any Org yet.
+//
+// The empty shell comes from that session read sitting outside any Suspense
+// boundary. `instant = false` only stops instant-navigation validation from
+// listing the route as work still to do.
 export const instant = false
 
 // Ticket 49: where an invitation is accepted.

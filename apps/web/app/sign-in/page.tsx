@@ -1,14 +1,17 @@
+import { Suspense } from 'react'
+
 import { sendMagicLink, signInWithGitHub } from './actions'
 import { safeNext } from '../../lib/auth/next-path'
 import { ProviderError } from './provider-error'
 
-// Cache Components (ticket 80) prerenders a static shell for every route and
-// refuses one that reads request data outside a Suspense boundary. This page
-// is reached signed out and still reads request data before rendering — the
-// `next` parameter here, the token and any session there — so `false` turns
-// the validation off rather than satisfying it, and the route renders at
-// request time as it always has. Deferred with the rest: ticket 83.
-export const instant = false
+// Ticket 83: the page prerenders, and the query string streams into it.
+//
+// This is the page a signed-out visitor waits on, so it is the one where a
+// static shell is worth the most: the heading and both forms are the same for
+// everybody, and only two things are not — the error a failed round trip
+// reports, and the `next` path an invitation link carries. Those two read
+// `searchParams`, so they sit behind a Suspense boundary and the rest of the
+// page is prerendered.
 
 // Deliberately unstyled. The design system (ticket 16) is documented and not
 // yet built — there is no Tailwind, no `globals.css` and no shell in this app
@@ -31,26 +34,31 @@ const MESSAGES: Record<string, string> = {
 // Matched, never rendered as it arrives — see `app/auth/callback/route.ts`.
 const PROVIDER_CODE = /^[a-z_]{1,64}$/
 
-export default async function SignIn({
-  searchParams,
-}: {
-  searchParams: Promise<{
-    error?: string
-    sent?: string
-    code?: string
-    next?: string
-  }>
-}) {
-  const { error, sent, code, next } = await searchParams
+type Query = Promise<{
+  error?: string
+  sent?: string
+  code?: string
+  next?: string
+}>
 
-  // Carried through both forms so an invitation link survives the round trip
-  // to GitHub or to an inbox.
-  const returnTo = safeNext(next)
+/**
+ * Where to come back to, carried through both forms so an invitation link
+ * survives the round trip to GitHub or to an inbox.
+ *
+ * A hidden input rather than a value the page bakes in: it reads the query
+ * string, which is what keeps the rest of the page prerenderable.
+ */
+async function ReturnTo({ searchParams }: { searchParams: Query }) {
+  const returnTo = safeNext((await searchParams).next)
+  return returnTo ? <input type="hidden" name="next" value={returnTo} /> : null
+}
+
+/** What a failed round trip left in the query string, if anything. */
+async function Notices({ searchParams }: { searchParams: Query }) {
+  const { error, sent, code } = await searchParams
 
   return (
-    <main>
-      <h1>Sign in to sessclone</h1>
-
+    <>
       {error === 'provider' ? (
         <p role="alert">
           The provider refused the sign-in (
@@ -62,23 +70,39 @@ export default async function SignIn({
         <p role="alert">{MESSAGES[error] ?? 'Something went wrong.'}</p>
       ) : null}
 
-      {/* The same failure, when Supabase reported it in the fragment. */}
-      <ProviderError />
-
       {sent ? (
         <p role="status">
           If that address has an account, a sign-in link is on its way. The link
           works once and expires.
         </p>
       ) : null}
+    </>
+  )
+}
+
+export default function SignIn({ searchParams }: { searchParams: Query }) {
+  return (
+    <main>
+      <h1>Sign in to sessclone</h1>
+
+      <Suspense fallback={null}>
+        <Notices searchParams={searchParams} />
+      </Suspense>
+
+      {/* The same failure, when Supabase reported it in the fragment. */}
+      <ProviderError />
 
       <form action={signInWithGitHub}>
-        {returnTo ? <input type="hidden" name="next" value={returnTo} /> : null}
+        <Suspense fallback={null}>
+          <ReturnTo searchParams={searchParams} />
+        </Suspense>
         <button type="submit">Continue with GitHub</button>
       </form>
 
       <form action={sendMagicLink}>
-        {returnTo ? <input type="hidden" name="next" value={returnTo} /> : null}
+        <Suspense fallback={null}>
+          <ReturnTo searchParams={searchParams} />
+        </Suspense>
         <label htmlFor="email">Or get a sign-in link by email</label>
         <input
           id="email"

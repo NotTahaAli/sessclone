@@ -1,22 +1,26 @@
-import type { ReactNode } from 'react'
+import { Suspense, type ReactNode } from 'react'
 
 import { AccountMenu } from './account'
 import { PanelCredit } from './credit'
 import { BottomBarLinks, SidebarLinks } from './nav-links'
 import { DESTINATIONS } from './navigation'
+import Loading from './loading'
 import { currentViewer } from '../../lib/viewer'
 
-// Cache Components (ticket 80) prerenders a static shell for every route and
-// refuses one that reads request data outside a Suspense boundary. This route
-// reads the session before it renders anything, so today it has no shell at
-// all: `false` turns the validation off rather than satisfying it, and the
-// route renders at request time as it always has.
+// Ticket 83: this layout prerenders a static shell.
 //
-// That is a deferral, not a design. The chrome here — the sidebar, the bottom
-// bar, the Org name's frame — is exactly what a shell is for, and reaching it
-// means wrapping the session read in a Suspense boundary so the frame
-// prerenders around it. Ticket 83.
-export const instant = false
+// Cache Components (ticket 80) prerenders a shell for every route and refuses
+// one that reads request data outside a Suspense boundary. This layout used
+// to read the session before rendering anything and opted out, which shipped
+// a zero-byte shell for every signed-in route — the sidebar, the bottom bar
+// and the frame all waited on a database read that says nothing about them.
+//
+// Now the frame is static and the three things that depend on who is asking
+// stream into it: the Org name, the account menu, and the content column
+// (which carries the subscription notice and the page itself). The bottom bar
+// and the sidebar's destinations are the same four for every Role — the Role
+// only changes what is inside Settings — so nothing about them needs the
+// viewer, and a reader on a slow connection sees the frame at once.
 
 // Ticket 45: the signed-in frame every later page hangs from.
 //
@@ -100,14 +104,71 @@ function Inactive({
   )
 }
 
-export default async function DashboardLayout({
+/** The Org name, which every figure under here belongs to. */
+async function OrgName({ className }: { className: string }) {
+  const viewer = await currentViewer()
+  return (
+    <span className={className} title={viewer?.orgName}>
+      {viewer?.orgName ?? 'No Org'}
+    </span>
+  )
+}
+
+/** The account control, which knows the Role and the address it signs out. */
+async function Account() {
+  const viewer = await currentViewer()
+  return viewer ? <AccountMenu viewer={viewer} /> : null
+}
+
+/**
+ * The content column: the subscription notice, then the page.
+ *
+ * The page is inside this boundary rather than beside it because every page
+ * under here reads the session too — one boundary covers all of them, and the
+ * frame around it is what prerenders.
+ */
+async function Content({ children }: { children: ReactNode }) {
+  const viewer = await currentViewer()
+  if (!viewer) return <WithoutOrg />
+
+  return (
+    <>
+      {/* Ticket 48: an Org whose subscription is not active is told so, on
+          every page, rather than shown a dashboard that quietly means less
+          than it looks like it does. No subscription row is the same answer
+          as an inactive one — it is the state every Org starts in, and the
+          commonest reason a person is reading this notice. Collection keeps
+          working either way: refusing the Org's own history would be a worse
+          answer than saying what is true. */}
+      {viewer.subscriptionStatus === 'active' ? null : (
+        <Inactive status={viewer.subscriptionStatus ?? 'inactive'} />
+      )}
+      {children}
+    </>
+  )
+}
+
+/** A line of the frame's own colour, where a name has not arrived yet. */
+function Pending({ className }: { className: string }) {
+  return (
+    <span
+      className={`bg-surface inline-block h-4 w-32 animate-none rounded ${className}`}
+      aria-hidden="true"
+    />
+  )
+}
+
+// The fallbacks as values rather than as inline elements: one element each,
+// created once, rather than a new one on every render of the frame.
+const PENDING_SIDEBAR = <Pending className="mt-1" />
+const PENDING_HEADER = <Pending className="" />
+const PENDING_CONTENT = <Loading />
+
+export default function DashboardLayout({
   children,
 }: {
   children: ReactNode
 }) {
-  const viewer = await currentViewer()
-  if (!viewer) return <WithoutOrg />
-
   return (
     <div className="bg-ground text-text min-h-dvh lg:flex">
       {/* Desktop: the 232px sidebar, holding the same four destinations and
@@ -118,8 +179,10 @@ export default async function DashboardLayout({
       >
         <div>
           <p className="text-label text-text-muted uppercase">sessclone</p>
-          <p className="text-heading mt-1 truncate" title={viewer.orgName}>
-            {viewer.orgName}
+          <p className="text-heading mt-1 truncate">
+            <Suspense fallback={PENDING_SIDEBAR}>
+              <OrgName className="block truncate" />
+            </Suspense>
           </p>
           <nav aria-label="Main" className="mt-6">
             <SidebarLinks items={DESTINATIONS} />
@@ -130,7 +193,9 @@ export default async function DashboardLayout({
             every deployment rather than only a self-hosted one, because the
             additional term in `NOTICE.md` makes no such distinction. */}
         <div className="flex flex-col gap-4">
-          <AccountMenu viewer={viewer} />
+          <Suspense fallback={null}>
+            <Account />
+          </Suspense>
           <PanelCredit />
         </div>
       </aside>
@@ -142,25 +207,21 @@ export default async function DashboardLayout({
           <span className="text-label text-text-muted block uppercase">
             sessclone
           </span>
-          <span className="text-heading block truncate">{viewer.orgName}</span>
+          <Suspense fallback={PENDING_HEADER}>
+            <OrgName className="text-heading block truncate" />
+          </Suspense>
         </p>
-        <AccountMenu viewer={viewer} />
+        <Suspense fallback={null}>
+          <Account />
+        </Suspense>
       </header>
 
       {/* The bottom bar is fixed, so the content column reserves room for it
           rather than ending underneath it. */}
       <main className="grow px-4 py-6 pb-28 lg:px-8 lg:pb-8">
-        {/* Ticket 48: an Org whose subscription is not active is told so, on
-            every page, rather than shown a dashboard that quietly means less
-            than it looks like it does. No subscription row is the same answer
-            as an inactive one — it is the state every Org starts in, and the
-            commonest reason a person is reading this notice. Collection keeps
-            working either way: refusing the Org's own history would be a
-            worse answer than saying what is true. */}
-        {viewer.subscriptionStatus === 'active' ? null : (
-          <Inactive status={viewer.subscriptionStatus ?? 'inactive'} />
-        )}
-        {children}
+        <Suspense fallback={PENDING_CONTENT}>
+          <Content>{children}</Content>
+        </Suspense>
         {/* At phone width the sidebar is not rendered at all, so the notices
             go under the content instead. One of the two is visible at a
             time. */}

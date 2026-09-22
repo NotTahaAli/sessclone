@@ -61,3 +61,9 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: build-only-placeholder
           NEXT_PUBLIC_APP_URL: http://127.0.0.1:3000
+
+      # Ticket 83: every signed-in route used to prerender an empty shell, so
+      # the first paint waited on the session read. The shells are earned with
+      # Suspense now, and nothing in the build fails if one goes back to zero
+      # bytes — so it is asserted here, against the build above.
+      - run: node scripts/check-shells.mjs

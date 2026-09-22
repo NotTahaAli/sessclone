@@ -6,16 +6,20 @@ import { PanelCredit } from '../(dashboard)/credit'
 import { BottomBarLinks, SidebarLinks } from '../(dashboard)/nav-links'
 import { currentOperator } from '../../lib/platform-admin'
 
-// Cache Components (ticket 80) prerenders a static shell for every route and
-// refuses one that reads request data outside a Suspense boundary. This route
-// reads the session before it renders anything, so today it has no shell at
-// all: `false` turns the validation off rather than satisfying it, and the
-// route renders at request time as it always has.
+// Cache Components (ticket 80) prerenders a static shell for every route. The
+// dashboard earns a real one by streaming the viewer into a static frame
+// (ticket 83); this area deliberately does not, and its shell stays empty.
 //
-// That is a deferral, not a design. The chrome here — the sidebar, the bottom
-// bar, the Org name's frame — is exactly what a shell is for, and reaching it
-// means wrapping the session read in a Suspense boundary so the frame
-// prerenders around it. Ticket 83.
+// The reason is the gate below, which reads the session outside any Suspense
+// boundary and so makes the whole route render on demand. A prerendered shell
+// is served before anybody is identified, so an Org Owner probing `/admin`
+// would be sent a frame reading "sessclone · Platform" and only then a 404 —
+// which is the confirmation `notFound` exists to withhold. No shell is the
+// correct answer for a route whose existence is the secret.
+//
+// `instant = false` does not cause that; the structure above does. It only
+// stops instant-navigation validation from reporting the route as one left to
+// fix, which is exactly what it is not.
 export const instant = false
 
 // Ticket 62: the operator's frame, built once so the admin pages that follow
