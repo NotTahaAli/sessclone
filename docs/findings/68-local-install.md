@@ -36,7 +36,7 @@ the plugin's first release collect nothing at all (PR #12).
 
 | Machine | OS            | Claude Code | Node   | Turns arrived | State directory as resolved                         |
 | ------- | ------------- | ----------- | ------ | ------------- | --------------------------------------------------- |
-| macOS   | Darwin 27.0.0 | unrecorded  | 26.8.1 | yes           | `~/Library/Application Support/sessclone`, writable |
+| macOS   | Darwin 27.0.0 | 2.1.267     | 26.8.1 | yes           | `~/Library/Application Support/sessclone`, writable |
 | Linux   |               |             |        |               |                                                     |
 | Windows |               |             |        |               |                                                     |
 
