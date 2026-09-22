@@ -451,6 +451,14 @@ export const reconcile = (turns, { day, timeZone }) => {
   }
   /** @type {Map<string, number>} */
   const byModel = new Map()
+  // Ticket 70 compares this count against a dashboard, and the Device is the
+  // wrong unit to compare on: finding 69 shows every cloud container reporting
+  // under one `cloud:` key, so a Device total includes containers whose
+  // transcripts are gone and could never be counted here. The Session is named
+  // identically on both sides, so it is the unit a discrepancy can be traced
+  // in.
+  /** @type {Map<string, number>} */
+  const bySession = new Map()
   let incomplete = 0
 
   for (const turn of unique.values()) {
@@ -461,6 +469,7 @@ export const reconcile = (turns, { day, timeZone }) => {
     if (!turn.complete) incomplete += 1
     const model = turn.model ?? '(none)'
     byModel.set(model, (byModel.get(model) ?? 0) + 1)
+    bySession.set(turn.sessionId, (bySession.get(turn.sessionId) ?? 0) + 1)
   }
 
   return {
@@ -473,6 +482,7 @@ export const reconcile = (turns, { day, timeZone }) => {
     incomplete,
     totals,
     byModel: [...byModel].toSorted((a, b) => b[1] - a[1]),
+    bySession: [...bySession].toSorted((a, b) => b[1] - a[1]),
   }
 }
 
@@ -699,6 +709,11 @@ export const formatCount = (count) => {
   say('### By model')
   say()
   for (const [model, turns] of count.byModel) say(`- ${model}: ${turns}`)
+
+  say()
+  say('### By Session — the unit to compare, one row per Session')
+  say()
+  for (const [session, turns] of count.bySession) say(`- ${session}: ${turns}`)
 
   return lines.join('\n')
 }

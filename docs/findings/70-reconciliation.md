@@ -32,17 +32,100 @@ Turns with no timestamp cannot be placed in a day and are counted separately
 rather than folded in. Turns cut off mid-stream are counted, and their token
 figures are a floor.
 
+## Count the Session, not the Device
+
+Finding 69 changes what this reconciliation can compare. In the cloud every
+container reports under one `cloud:<account uuid>` Device key, and a container's
+transcripts die with it — so a Device total covers machines whose transcripts
+can never be counted by hand, and will always read higher than any single hand
+count. The Session is named identically on both sides and is the only unit a
+difference can be traced in, so the hand count now prints one row per Session
+(`### By Session`) as well as the total.
+
 ## Results
 
-| Environment   | Unique Turns counted by hand |
-| ------------- | ---------------------------- |
-|               |                              |
-|               |                              |
-|               |                              |
-| **Total**     |                              |
-| **Dashboard** |                              |
+Counted on 2026-09-22, Org timezone `UTC` (read from `orgs.timezone`, which is
+what ticket 51's day boundary uses).
 
-## Discrepancies
+| Environment                                | Unique Turns counted by hand | Dashboard |
+| ------------------------------------------ | ---------------------------- | --------- |
+| Claude Projects container, Session `fd21…` | 977                          | 950       |
+| macOS, `host:muhammads-macbook-pro.local`  | not counted                  | 14        |
+| Other containers, same Device key          | not countable (see below)    | 561       |
+| **Deployment, all time**                   | —                            | **6,833** |
 
-<!-- Each difference and the cause it was traced to. "Rounding" is not a cause:
-     Turns are counted, not rounded. -->
+Every figure above is a reading at an instant, because the session doing the
+counting is itself producing Turns: the container's Session stood at 950 on the
+dashboard at 10:16:32Z and 983 at 10:20:58Z. The Device's own total for the day
+is the sum of the two container rows — 983 + 561 = 1,544 — and the hand count
+below is paired with the dashboard reading taken at the same moment.
+
+### The one difference, and its cause
+
+The container's own Session read 977 Turns by hand against 950 on the
+dashboard. The 27 are not missing: **every one of them was written after the
+last Turn the deployment had received**, which is what a Collector that flushes
+at a turn boundary is supposed to look like while a session is still running.
+
+Traced rather than assumed. The deployment's newest Turn for that Session had
+`occurred_at` 10:16:27.989Z; splitting the hand count on that exact instant
+gives 950 at or before it and 27 after, with the earliest of the 27 at
+10:16:41.867Z:
+
+```
+{ "total": 977, "atOrBefore": 950, "after": 27,
+  "earliestAfter": "2026-09-22T10:16:41.867Z" }
+```
+
+950 and 950. The difference is a moving window, not a loss — a reconciliation
+run against a live session counts Turns the deployment has not been offered
+yet. Count a finished session, or subtract what falls after the newest
+`received_at`.
+
+The other containers' 561 Turns cannot be hand-counted at all: those containers
+are gone and took their transcripts with them. That is finding 69's sixth
+reading stated as an accounting fact rather than a loss scenario, and it is the
+reason the Device is the wrong row to reconcile on.
+
+## Repeated sweeps produce no duplicates
+
+Forced rather than waited for. Every cursor in this container's state directory
+was moved aside — 42 of them — and `hooks/session-start.mjs` run, which is the
+sweep: with no cursor to resume from it re-read each transcript from byte zero
+and re-sent every Turn it found, including ones the deployment had already
+stored.
+
+|                                     | Before the re-sweep | After |
+| ----------------------------------- | ------------------- | ----- |
+| Turns in the deployment             | 6,800               | 6,833 |
+| Identities appearing more than once | 0                   | 0     |
+
+The 33 new rows are the Turns this session wrote in between; not one re-sent
+Turn became a second row. `turns_identity_key` is
+`(member_id, session_id, agent_id, message_id)` with `nulls not distinct`, and
+the ingest path upserts on it, so a resend is absorbed rather than counted —
+checkbox two, demonstrated on a live deployment rather than argued from the
+schema.
+
+Also checked across all 6,833 Turns: **no Turn is stored under two Projects.**
+A cloud Session spans two Project keys (finding 69) — `local:vm:/home/user`
+then the repository — but each individual Turn lands under exactly one of them.
+The split divides a Session's Turns; it does not duplicate any.
+
+## Three environments at once
+
+Open. Two environments reported within the same minute on 2026-09-22 —
+Sessions `fd21…` and `e61f75…`, two separate containers, last received
+10:16:32Z and 10:16:28Z — and the Mac reported the same day, last at 09:30Z.
+The checkbox asks for three **at once**, and the Mac was not live in that
+window.
+
+What closes it: one ordinary session on the Mac while two containers are
+running, then
+
+```
+node scripts/verify-collector.mjs --reconcile --day <date> --tz UTC
+```
+
+on the Mac, so its Sessions can be reconciled row by row the way the
+container's were. Nothing else is outstanding.

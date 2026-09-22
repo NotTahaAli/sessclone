@@ -4,9 +4,9 @@
 
 **Blocked by:** 42, 68, 69.
 
-**Status:** ready-for-agent
+**Status:** in-progress
 
-- [ ] Same Member reporting from at least three environments at once
-- [ ] Repeated sweeps and restarts produce no duplicate Turns
-- [ ] Dashboard total reconciled by hand against the transcripts for one day
-- [ ] Any discrepancy traced to its cause rather than written off as rounding
+- [ ] Same Member reporting from at least three environments at once — two cloud containers overlap, the Mac has not been live in the same window yet
+- [x] Repeated sweeps and restarts produce no duplicate Turns
+- [x] Dashboard total reconciled by hand against the transcripts for one day
+- [x] Any discrepancy traced to its cause rather than written off as rounding
