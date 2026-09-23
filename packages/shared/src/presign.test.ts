@@ -2,7 +2,7 @@ import { expect, test } from 'vitest'
 
 import { ConfirmRequest, PresignRequest } from './presign.ts'
 
-// Ticket 101. `kind` is new, so a Collector that predates it sends none — and
+// Ticket 104. `kind` is new, so a Collector that predates it sends none — and
 // must still be read as archiving a transcript, which is all it knows how to.
 
 const sha256 = 'a'.repeat(64)

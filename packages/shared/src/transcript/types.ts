@@ -1,4 +1,4 @@
-// Tickets 100-105: the transcript viewer's data model.
+// Tickets 103-108: the transcript viewer's data model.
 //
 // A Claude Code transcript is JSONL whose format Claude Code documents as
 // internal and liable to change (code.claude.com/docs/en/sessions). So the

@@ -4,7 +4,7 @@ import { asViewer } from '../../../../../lib/db'
 import { signedInUser } from '../../../../../lib/supabase/server'
 import { sessionTurnCosts } from '../../../../../lib/transcript-files'
 
-// Tickets 102-104: the priced Turns of one Session, keyed
+// Tickets 105-107: the priced Turns of one Session, keyed
 // `<agentId or ''>:<messageId>` (see `costKey`), for the viewer to annotate
 // assistant messages. `turns_read` decides which Turns come back; a Session
 // the viewer cannot see is an empty object, which says no more than a 404.

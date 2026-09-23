@@ -1,4 +1,4 @@
-// Tickets 102 and 105: the pure half of the column view — which columns are
+// Tickets 105 and 108: the pure half of the column view — which columns are
 // open, how wide each is, and which bytes of the main transcript to fetch
 // next. The component only renders what these decide.
 

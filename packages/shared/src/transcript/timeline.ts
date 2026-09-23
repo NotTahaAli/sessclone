@@ -1,4 +1,4 @@
-// Ticket 100: loaded Items -> Rows for one column, an agent run's summary,
+// Ticket 103: loaded Items -> Rows for one column, an agent run's summary,
 // and which Rows a filter preset shows. Pure; re-run over everything loaded
 // whenever another chunk arrives (see types.ts).
 

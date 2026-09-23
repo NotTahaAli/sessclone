@@ -21,7 +21,7 @@ import { z } from 'zod'
 const text = z.string().trim().min(1).max(200)
 
 /**
- * What the object is (ticket 101). A Session's transcripts are not its only
+ * What the object is (ticket 104). A Session's transcripts are not its only
  * files: each Agent Run has an `agent-<id>.meta.json` sidecar, and each
  * workflow run a `journal.jsonl`. They ride the same presign and confirm, the
  * same gates and the same hash guard, told apart by this.

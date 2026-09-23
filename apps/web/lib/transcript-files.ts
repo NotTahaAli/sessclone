@@ -1,6 +1,6 @@
 import type { TransactionSql } from 'postgres'
 
-// Tickets 102-104: what the transcript viewer reads from the database.
+// Tickets 105-107: what the transcript viewer reads from the database.
 //
 // Nothing here names a Role. `log_artifacts_read` and `turns_read` are both
 // `sessclone_visible_member_ids()`, and the explicit `member_id in (...)` below

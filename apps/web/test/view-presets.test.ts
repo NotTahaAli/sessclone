@@ -2,7 +2,7 @@ import { beforeEach, expect, test, vi } from 'vitest'
 
 import { asUser, seedFixture, type Fixture } from './harness'
 
-// Tickets 102-104: saved presets are one person's own, proven through the
+// Tickets 105-107: saved presets are one person's own, proven through the
 // Server Actions on the unprivileged role.
 
 const session = vi.hoisted(() => ({ userId: null as string | null }))

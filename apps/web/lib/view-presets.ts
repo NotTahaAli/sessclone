@@ -2,7 +2,7 @@ import type { TransactionSql } from 'postgres'
 
 import type { Category, ThinkingMode } from '@sessclone/shared'
 
-// Tickets 102-104: a person's saved transcript-viewer presets. Every statement
+// Tickets 105-107: a person's saved transcript-viewer presets. Every statement
 // names the viewer through `sessclone_user_id()` rather than a parameter, and
 // `transcript_view_presets_own` refuses anybody else's row besides.
 

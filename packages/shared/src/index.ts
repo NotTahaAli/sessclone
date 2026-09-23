@@ -24,7 +24,7 @@ export type {
   PresignRefusal,
   PresignResponse,
 } from './presign.ts'
-// Tickets 100-105: the transcript viewer's parser and data model.
+// Tickets 103-108: the transcript viewer's parser and data model.
 export { splitChunk } from './transcript/chunk.ts'
 export type { Line } from './transcript/chunk.ts'
 export { parseJournal, parseLines, parseMeta } from './transcript/parse.ts'

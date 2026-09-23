@@ -165,7 +165,7 @@ test('an Agent Run is a file under its Session, and still a valid key', async ()
 })
 
 test('a run’s sidecar and a workflow’s journal each have a key of their own', async () => {
-  // Ticket 101: beside the transcript they describe, never on top of it.
+  // Ticket 104: beside the transcript they describe, never on top of it.
   const { artifactKey } = await import('../lib/storage')
   const at = {
     orgId: 'org',

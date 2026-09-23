@@ -7,7 +7,7 @@ import { asViewer } from '../../../../../lib/db'
 import { signedInUser } from '../../../../../lib/supabase/server'
 import * as presets from '../../../../../lib/view-presets'
 
-// Tickets 102-104: the transcript viewer's saved presets. Anybody can POST to
+// Tickets 105-107: the transcript viewer's saved presets. Anybody can POST to
 // a Server Action, so every input is parsed here, and whose row it is comes
 // from the verified session, never from the arguments.
 

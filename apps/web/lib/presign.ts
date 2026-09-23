@@ -65,7 +65,7 @@ export const presignDecision = async (
     memberId: string
     sessionId: string
     agentId: string | null
-    /** Ticket 101: a sidecar passes the same gates as its transcript. */
+    /** Ticket 104: a sidecar passes the same gates as its transcript. */
     kind: ArtifactKind
     sha256: string
   },

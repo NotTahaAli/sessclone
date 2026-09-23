@@ -73,7 +73,7 @@ presign answered 200 (observed 2026-09-22). Flattening is not reversible and
 does not need to be — `log_artifacts` records the key an object was stored
 under, and nothing reads an id back out of a path.
 
-A Session's other files sit under its id (ticket 101): an Agent Run at
+A Session's other files sit under its id (ticket 104): an Agent Run at
 `<session_id>/agents/<agent_id>.jsonl`, the run's `agent-<id>.meta.json`
 sidecar at `<session_id>/agents/<agent_id>.meta.json`, and a workflow's
 `journal.jsonl` at `<session_id>/workflows/<run_id>.journal.jsonl`. The

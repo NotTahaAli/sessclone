@@ -105,7 +105,7 @@ const segment = (raw: string) => {
  * ```
  * orgs/<org>/members/<member>/projects/<project key>/<session>.jsonl
  *   …/<session>/agents/<agent>.jsonl             an Agent Run
- *   …/<session>/agents/<agent>.meta.json         its sidecar (ticket 101)
+ *   …/<session>/agents/<agent>.meta.json         its sidecar (ticket 104)
  *   …/<session>/workflows/<run>.journal.jsonl    a workflow's journal
  * ```
  *
@@ -121,7 +121,7 @@ export const artifactKey = (artifact: {
   projectKey: string | null
   sessionId: string
   agentId: string | null
-  /** Ticket 101: a sidecar sits beside the transcript it describes. */
+  /** Ticket 104: a sidecar sits beside the transcript it describes. */
   kind?: ArtifactKind
 }) => {
   const session = segment(artifact.sessionId)

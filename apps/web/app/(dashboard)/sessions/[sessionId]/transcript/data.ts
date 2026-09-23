@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { splitChunk, parseLines, type Item } from '@sessclone/shared'
 
-// Tickets 102-104: how the viewer's browser reaches the bytes. The file list
+// Tickets 105-107: how the viewer's browser reaches the bytes. The file list
 // comes from our route; the bytes come straight from storage through the
 // presigned links it hands out (ADR 0003), never through the application.
 

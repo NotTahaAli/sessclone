@@ -390,7 +390,7 @@ describe('a Log Artifact', () => {
   })
 
   test('keeps a sidecar beside its transcript, and knows only three kinds', async () => {
-    // Ticket 101: one row per (Session, Agent Run, kind), so a run's
+    // Ticket 104: one row per (Session, Agent Run, kind), so a run's
     // `.meta.json` is not refused as a second copy of its transcript.
     await artifact(fixture.acme, 'member', 'session-1')
     await sql`

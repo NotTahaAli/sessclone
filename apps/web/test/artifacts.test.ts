@@ -635,7 +635,7 @@ test('a transcript whose Turns never arrived reports null, not the upload', asyn
 })
 
 test('sidecars are not listed as transcripts, and go with the transcript they belong to', async () => {
-  // Ticket 101. The main transcript takes its workflows' journals with it; an
+  // Ticket 104. The main transcript takes its workflows' journals with it; an
   // Agent Run's takes its own `.meta.json` and nobody else's.
   const projectId = await project('github.com/acme/api')
   const main = await artifact({ projectId })

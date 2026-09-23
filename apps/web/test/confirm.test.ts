@@ -449,7 +449,7 @@ test('two confirms racing on one Session leave one row', async () => {
 })
 
 test('a run’s sidecar and a workflow’s journal are rows of their own kind beside the transcripts', async () => {
-  // Ticket 101. Same member, Session and id as the Agent Run's transcript, so
+  // Ticket 104. Same member, Session and id as the Agent Run's transcript, so
   // only `kind` keeps the three from being one row; and the journal's id is a
   // workflow run id no Turn carries, so it is filed under the Session's
   // Project rather than refused as never ingested.

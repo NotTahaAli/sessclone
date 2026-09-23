@@ -27,7 +27,7 @@ import { concat, readBytes, type StoredFile } from './data'
 import { Badge, RowView, rowKey } from './rows'
 import { taskStatuses } from './tasks'
 
-// Tickets 102 and 105: what goes inside one column. The Session's own column
+// Tickets 105 and 108: what goes inside one column. The Session's own column
 // opens at the end and reads backwards a megabyte at a time as the reader
 // scrolls up; a subagent's column is small enough to read whole and opens at
 // its start.
@@ -279,7 +279,7 @@ export function AgentColumn({
   )
 }
 
-/** Ticket 105: a workflow's agents, grouped by phase, from its journal. */
+/** Ticket 108: a workflow's agents, grouped by phase, from its journal. */
 export function WorkflowColumn({ runId }: { runId: string }) {
   const viewer = useViewer()
   const result = usePromise(

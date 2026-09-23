@@ -19,7 +19,7 @@ import {
 
 import type { SavedPreset } from '../../../../../lib/view-presets'
 
-// Ticket 103: which rows a column shows. A preset is a set of chips plus a
+// Ticket 106: which rows a column shows. A preset is a set of chips plus a
 // thinking mode. Normal and All are built in and cannot be changed; anything
 // else is the reader's own, saved to their account so it follows them.
 

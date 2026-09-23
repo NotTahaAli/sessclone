@@ -233,7 +233,7 @@ const ask = async ({ configuration, path, body, deadline = NO_DEADLINE }) => {
  * @param {string} input.sessionId
  * @param {string | null} [input.agentId]
  * @param {'transcript' | 'agent_meta' | 'workflow_journal'} [input.kind]
- *   What the file is (ticket 101); a sidecar rides exactly this path.
+ *   What the file is (ticket 104); a sidecar rides exactly this path.
  * @param {number} [input.deadline]
  * @param {number} [input.uploadTimeoutMs] The PUT's own limit.
  * @returns {Promise<{ archived: boolean, refused?: string, sizeBytes?: number }>}
@@ -391,7 +391,7 @@ export const archiveSession = async ({
     environment,
   })
 
-  // The transcripts first, then their sidecars (ticket 101): a deadline that
+  // The transcripts first, then their sidecars (ticket 104): a deadline that
   // runs out part-way should cost a run's metadata before a transcript.
   const work = [
     ...transcripts.map(({ path, agentRun }) => ({

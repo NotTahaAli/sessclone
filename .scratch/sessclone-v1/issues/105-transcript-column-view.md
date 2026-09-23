@@ -1,4 +1,4 @@
-# 102: Transcript page with Finder-style columns
+# 105: Transcript page with Finder-style columns
 
 **What to build:** Taha, 2026-09-23: "I want a session transcript viewer, which shows when a subagent started, and a side pane for the subagent transcript in it, if there are multiple depths, keep increasing subpanes. Just like the MacOS finder Columns view, Horizontally Scrollable."
 
@@ -13,7 +13,7 @@
 - Subagent block: type, description, model, status, duration, tool count, and the prompt the parent sent.
 - Out of scope: search, links to one message, auto-refresh.
 
-**Blocked by:** 100, 101
+**Blocked by:** 103, 104
 
 **Status:** todo
 

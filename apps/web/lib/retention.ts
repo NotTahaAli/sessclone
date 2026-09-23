@@ -100,7 +100,7 @@ export const sweepRetention = async (
     // the same backlog, because it fetches `limit` rows per Org and sorts the
     // union of them single-threaded.
     //
-    // An expired transcript takes its sidecars with it (ticket 101) whatever
+    // An expired transcript takes its sidecars with it (ticket 104) whatever
     // their own age — a run's `.meta.json` and a workflow's journal are
     // written after the transcript they describe and must not outlive it.
     // Found by the identity key's leading `(member_id, session_id)`, in the

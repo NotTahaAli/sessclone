@@ -10,7 +10,7 @@ import {
 } from './preset-actions'
 import { TranscriptViewer } from './viewer'
 
-// Tickets 102-105: one Session's transcript, read in the browser.
+// Tickets 105-108: one Session's transcript, read in the browser.
 //
 // This page carries no transcript bytes and asks the database for nothing
 // about the Session: the viewer fetches the file list from

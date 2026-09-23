@@ -151,7 +151,7 @@ export const storedProjects = async (
            artifact.project_id,
            -- Ticket 90: the Org's name for the Project, or its key.
            coalesce(project.nickname, project.key) as project_key,
-           -- Transcripts, not the sidecars beside them (ticket 101) — which
+           -- Transcripts, not the sidecars beside them (ticket 104) — which
            -- do count towards the bytes stored.
            count(*) filter (where artifact.kind = 'transcript') as sessions,
            coalesce(sum(artifact.size_bytes), 0) as bytes,
@@ -240,7 +240,7 @@ export const storedSessions = async (
            and project_id is not distinct from ${group.projectId}`
          : tx`member_id in (${memberIds(tx, audience)})`
      }
-       -- A sidecar is not a transcript to list (ticket 101).
+       -- A sidecar is not a transcript to list (ticket 104).
        and kind = 'transcript'
        ${
          before
@@ -359,7 +359,7 @@ export const downloadableArtifact = async (
       from log_artifacts where id = ${id}
   `
   if (!row) return null
-  // A sidecar (ticket 101) downloads as what it is.
+  // A sidecar (ticket 104) downloads as what it is.
   const [extension, contentType] =
     row.kind === 'agent_meta'
       ? ['.meta.json', 'application/json']
@@ -392,7 +392,7 @@ export const deleteStoredSession = async (
   tx: TransactionSql,
   artifactId: string,
 ): Promise<boolean> => {
-  // The transcript and its sidecars in one statement (ticket 101): an Agent
+  // The transcript and its sidecars in one statement (ticket 104): an Agent
   // Run's `.meta.json`, and for the Session's own transcript its workflows'
   // journals. A sidecar's id names no transcript and deletes nothing.
   const rows = await tx<{ storage_key: string }[]>`

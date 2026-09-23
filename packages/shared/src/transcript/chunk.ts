@@ -1,4 +1,4 @@
-// Ticket 100: cut an HTTP Range chunk of a JSONL file into whole lines.
+// Ticket 103: cut an HTTP Range chunk of a JSONL file into whole lines.
 //
 // Works on bytes, not decoded text: a Range boundary can fall inside a
 // multibyte UTF-8 character, and decoding first would turn both halves into

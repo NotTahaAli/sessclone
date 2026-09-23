@@ -32,7 +32,7 @@ import {
   toolSummary,
 } from './format'
 
-// Tickets 102-105: one row of a column. Every row starts with its clock time;
+// Tickets 105-108: one row of a column. Every row starts with its clock time;
 // its details say how far into the Session it ran and, where there is one,
 // how long it took. Anything the viewer does not recognise is a row of raw
 // JSON rather than a broken page — the format is Claude Code's internal one.
@@ -231,7 +231,7 @@ function AssistantRow({ item }: { item: Of<'assistant'> }) {
   )
 }
 
-/** Ticket 104: what one model response was, and what it cost. */
+/** Ticket 107: what one model response was, and what it cost. */
 function Breakdown({ item }: { item: Of<'assistant'> }) {
   const { costs, sessionStart, clock } = useViewer()
   const { agentId } = useContext(ColumnContext)

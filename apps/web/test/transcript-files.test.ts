@@ -4,7 +4,7 @@ import { GET as files } from '../app/api/transcripts/[sessionId]/route'
 import { GET as costs } from '../app/api/transcripts/[sessionId]/costs/route'
 import { owner as sql, seedFixture, type Fixture } from './harness'
 
-// Tickets 102-104: the viewer's two reads, against the real policies on the
+// Tickets 105-107: the viewer's two reads, against the real policies on the
 // unprivileged role. Only the session and the signer are faked.
 
 const session = vi.hoisted(() => ({ userId: null as string | null }))

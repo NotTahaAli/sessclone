@@ -1,4 +1,4 @@
-# 101: Archive agent sidecars and workflow journals
+# 104: Archive agent sidecars and workflow journals
 
 **What to build:** Taha, 2026-09-23: "I want a session transcript viewer, which shows when a subagent started, and a side pane for the subagent transcript in it, if there are multiple depths, keep increasing subpanes. Just like the MacOS finder Columns view, Horizontally Scrollable." A subagent's type, description and the tool call that spawned it live in `agent-<id>.meta.json` beside its transcript, and which agents belong to a workflow run lives only in `subagents/workflows/<runId>/journal.jsonl`. The Collector archived neither, so the viewer could not group a workflow's agents. Found 2026-09-23 by running a two-agent workflow and reading what Claude Code wrote.
 

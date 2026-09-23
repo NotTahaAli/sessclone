@@ -83,7 +83,7 @@ const walk = async (directory, depth) => {
 }
 
 /**
- * Ticket 101: what a file under `subagents/` is when it is not a transcript,
+ * Ticket 104: what a file under `subagents/` is when it is not a transcript,
  * read from its name alone — or null for a transcript.
  *
  * `agent-<id>.meta.json` is an Agent Run's sidecar, keyed by the run's id.

@@ -306,7 +306,7 @@ test('a workflow’s runs are found a level deeper, under their run id', async (
 })
 
 test('each run’s sidecar and each workflow’s journal are found as sidecars, not transcripts', async () => {
-  // Ticket 101: the sidecars are archived too, under their own kind — and a
+  // Ticket 104: the sidecars are archived too, under their own kind — and a
   // workflow's `journal.jsonl` is not an Agent Run's transcript, whatever its
   // extension says.
   const { config, main, project } = await layout({

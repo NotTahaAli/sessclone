@@ -1,4 +1,4 @@
-// Ticket 100: one JSONL line -> zero or more Items, plus the two sidecars a
+// Ticket 103: one JSONL line -> zero or more Items, plus the two sidecars a
 // workflow or agent run leaves beside its transcript.
 //
 // Tolerant by contract (see types.ts): nothing here throws. A line that does

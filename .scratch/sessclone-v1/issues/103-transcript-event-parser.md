@@ -1,4 +1,4 @@
-# 100: Transcript event parser
+# 103: Transcript event parser
 
 **What to build:** Taha, 2026-09-23: "I want a session transcript viewer, which shows when a subagent started, and a side pane for the subagent transcript in it, if there are multiple depths, keep increasing subpanes. Just like the MacOS finder Columns view, Horizontally Scrollable." The dashboard has never read a transcript's content — `parseTranscript` only reads usage. The viewer needs every line as something it can draw: messages, thinking, tool calls paired with their results, skills, hooks, subagent and workflow spawns, compactions, interrupts, API errors, slash commands. Claude Code calls the format internal, so a line the parser does not know becomes an `unknown` item carrying the raw JSON, never an error.
 

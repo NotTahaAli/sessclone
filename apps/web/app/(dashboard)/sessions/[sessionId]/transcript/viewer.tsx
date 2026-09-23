@@ -46,7 +46,7 @@ import {
 import { FilterBar, type PresetActions } from './filter-bar'
 import { clockFormat } from './format'
 
-// Tickets 102-105: the transcript viewer. Finder-style columns: the Session on
+// Tickets 105-108: the transcript viewer. Finder-style columns: the Session on
 // the left, and each subagent or workflow opened from a block to the right of
 // the column the block sits in. At phone width the columns are 84% wide and
 // snap, so the next one peeks in from the right, with a breadcrumb above them.

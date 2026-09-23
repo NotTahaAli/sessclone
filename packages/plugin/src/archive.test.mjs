@@ -462,7 +462,7 @@ test('a turn’s archive waits for the previous turn’s to finish', async () =>
 })
 
 test('a Session’s sidecars are asked about under their own kind, with the right content type', async () => {
-  // Ticket 101: the run's `.meta.json` and the workflow's `journal.jsonl` are
+  // Ticket 104: the run's `.meta.json` and the workflow's `journal.jsonl` are
   // archived beside the transcripts, each presigned with the kind the
   // deployment files it under.
   const config = configuration()

@@ -1,4 +1,4 @@
--- Ticket 101: a Session's sidecars are archived beside its transcripts.
+-- Ticket 104: a Session's sidecars are archived beside its transcripts.
 --
 -- Each Agent Run writes an `agent-<id>.meta.json` next to its transcript, and
 -- each workflow run a `journal.jsonl` under its run id. They ride the same

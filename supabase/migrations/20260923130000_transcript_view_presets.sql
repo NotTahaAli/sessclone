@@ -1,4 +1,4 @@
--- Tickets 102-104: a person's saved transcript-viewer presets.
+-- Tickets 105-107: a person's saved transcript-viewer presets.
 --
 -- A preset is which entry categories the viewer shows plus how thinking is
 -- drawn. It belongs to the person rather than to a membership: the same eyes

@@ -454,7 +454,7 @@ function Transcripts({
   transcripts: StoredTranscript[]
   archival: 'off' | 'excluded' | 'on' | null
   agentRuns: number
-  /** Tickets 102-105: the transcript viewer, for the Session's own file. */
+  /** Tickets 105-108: the transcript viewer, for the Session's own file. */
   view: string
 }) {
   return (

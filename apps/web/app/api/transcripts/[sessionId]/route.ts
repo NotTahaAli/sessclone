@@ -9,7 +9,7 @@ import {
 import { signedInUser } from '../../../../lib/supabase/server'
 import { transcriptFiles } from '../../../../lib/transcript-files'
 
-// Tickets 102-104: every stored file of one Session, each with a presigned GET
+// Tickets 105-107: every stored file of one Session, each with a presigned GET
 // the viewer's browser reads byte ranges from directly (ADR 0003 — the bytes
 // never pass through here).
 //

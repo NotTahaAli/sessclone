@@ -1,6 +1,6 @@
 import type { RunStatus } from '@sessclone/shared'
 
-// Tickets 102-105: how the viewer says a time, a duration and a tool call in a
+// Tickets 105-108: how the viewer says a time, a duration and a tool call in a
 // few characters. Pure, so the phrasing is tested once here rather than
 // eyeballed in a browser.
 

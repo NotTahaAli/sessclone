@@ -94,7 +94,7 @@ beforeEach(async () => {
 })
 
 test('an expired transcript takes its sidecars with it, however new they are', async () => {
-  // Ticket 101: a run's `.meta.json` and a workflow's journal are written
+  // Ticket 104: a run's `.meta.json` and a workflow's journal are written
   // later than the transcript they describe, and must not outlive it.
   await sql`update orgs set retention_days = 30 where id = ${fixture.acme.id}`
   const main = await seedArtifact({ age: 31 })
