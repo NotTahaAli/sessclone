@@ -7,9 +7,15 @@
    to the dashboard keeps it loaded. Everything below is written to be inert
    there:
 
-   - `@reference` takes the app's theme and variants without re-emitting them,
-     and utilities are generated for the docs' own files only (`source(none)`
-     plus the `@source` lines), so nothing here redefines an app class.
+   - `@reference` takes the app's theme and variants without re-emitting them.
+   - Utilities are generated from the whole app, the same automatic detection
+     `globals.css` uses, plus the docs' own `@source` lines: this sheet is a
+     superset of the app's utilities, in Tailwind's order. It used to be the
+     docs' files only (`source(none)`), and then it re-emitted a base utility
+     the app also uses (`.hidden`) without the app's responsive one after it
+     (`lg:flex`); loaded later in the same `utilities` layer, it won, and the
+     dashboard's sidebar vanished after a visit to the docs. A copy of the
+     app's utilities costs the docs page some bytes and nothing else.
    - Every `--color-fd-*` value is declared under `:root:has(#nd-docs-layout)`,
      which is true only while the docs layout is mounted. Fumadocs' base rules
      read those variables with a fallback (`border-color`) or are re-pointed
@@ -22,7 +28,7 @@
    docs need no `.dark` class and no second theme switch. */
 
 @reference '../globals.css';
-@import 'tailwindcss/utilities.css' layer(utilities) source(none);
+@import 'tailwindcss/utilities.css' layer(utilities);
 @import 'fumadocs-ui/css/preset.css';
 @import 'fumadocs-openapi/css/preset.css';
 
