@@ -209,7 +209,12 @@ export default function PlaygroundClient({
             : init;
           return {
             ...next,
-            signal: next.signal ? AbortSignal.any([next.signal, signal]) : signal,
+            // `AbortSignal.any` is missing before Safari 17.4; there the
+            // unmount signal alone still stops a request we no longer want.
+            signal:
+              next.signal && 'any' in AbortSignal
+                ? AbortSignal.any([next.signal, signal])
+                : signal,
           };
         },
       }),
