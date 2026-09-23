@@ -22,7 +22,7 @@ import { hrefWith, one, type Query } from '../query'
 import { MenuItem, PillMenu } from '../../_ui/pill-menu'
 import { Row, SectionBreak } from '../../_ui/primitives'
 import { appUrl } from '../../../lib/auth/app-url'
-import { asViewer } from '../../../lib/db'
+import { asViewer, pageSeenAt } from '../../../lib/db'
 import {
   onboardingFacts,
   onboardingState,
@@ -92,13 +92,15 @@ export default async function Costs({
   // the failures view too, since the list's own total counts every failure,
   // viewed or not, and is a different number.
   //
-  // `seenAt` is taken before the reads, so a "Mark viewed" posted from this
-  // page never covers a failure received after what it showed.
-  const seenAt = new Date().toISOString()
-  const [facts, days, ranked, counted, failures] = await asViewer(
+  // `seenAt` is taken before the reads, from the database's own clock rather
+  // than the app server's, so a "Mark viewed" posted from this page never
+  // covers a failure received after what it showed — and never covers one
+  // that only looks later because the two clocks disagree.
+  const [dbSeenAt, [facts, days, ranked, counted, failures]] = await asViewer(
     viewer.userId,
-    (tx) =>
-      Promise.all([
+    async (tx) => {
+      const seenAt = await pageSeenAt(tx)
+      const reads = await Promise.all([
         onboardingFacts(tx, viewer.orgId),
         view === 'time'
           ? dailySpend(tx, viewer.orgId, viewer.orgTimezone, range)
@@ -122,8 +124,11 @@ export default async function Costs({
               range,
             )
           : null,
-      ]),
+      ])
+      return [seenAt, reads] as const
+    },
   )
+  const seenAt = dbSeenAt.toISOString()
   const spend = days === null ? null : spendSeries(days.rows, range, days)
   const failuresCount = counted
 
