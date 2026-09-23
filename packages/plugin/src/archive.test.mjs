@@ -460,3 +460,69 @@ test('a turn’s archive waits for the previous turn’s to finish', async () =>
     /^presign put confirm( presign( put confirm)?)?$/,
   )
 })
+
+test('a Session’s sidecars are asked about under their own kind, with the right content type', async () => {
+  // Ticket 101: the run's `.meta.json` and the workflow's `journal.jsonl` are
+  // archived beside the transcripts, each presigned with the kind the
+  // deployment files it under.
+  const config = configuration()
+  const dir = mkdtempSync(join(tmpdir(), 'sessclone-archive-config-'))
+  const project = join(dir, 'projects', 'home-dev-api')
+  const runs = join(project, 'session-a', 'subagents')
+  const workflow = join(runs, 'workflows', 'wf_9')
+  await mkdir(workflow, { recursive: true })
+  await writeFile(join(project, 'session-a.jsonl'), '{"main":1}\n')
+  await writeFile(join(runs, 'agent-7.jsonl'), '{"run":1}\n')
+  await writeFile(join(runs, 'agent-7.meta.json'), '{"spawnDepth":1}')
+  await writeFile(join(workflow, 'journal.jsonl'), '{"type":"started"}\n')
+
+  const calls = stubFetch({
+    presign: {
+      body: { url: 'https://storage.test/o?signed', storageKey: 'k' },
+    },
+    put: { ok: true },
+    confirm: { body: { stored: true, sizeBytes: 1 } },
+  })
+
+  const { archived } = await archiveSession({
+    configuration: config,
+    transcriptPath: join(project, 'session-a.jsonl'),
+    sessionId: 'session-a',
+    environment: { CLAUDE_CONFIG_DIR: dir },
+  })
+
+  expect(archived).toBe(4)
+  const presigned = calls
+    .filter((call) => path(call) === '/api/logs/presign')
+    .map((call) => JSON.parse(call.init.body))
+    .map(({ kind, agentId }) => `${kind}:${agentId}`)
+  expect(presigned.toSorted()).toEqual([
+    'agent_meta:7',
+    'transcript:7',
+    'transcript:null',
+    'workflow_journal:wf_9',
+  ])
+  const confirmed = calls
+    .filter((call) => path(call) === '/api/logs/confirm')
+    .map((call) => JSON.parse(call.init.body).kind)
+  expect(confirmed.toSorted(byText)).toEqual([
+    'agent_meta',
+    'transcript',
+    'transcript',
+    'workflow_journal',
+  ])
+  const types = calls
+    .filter((call) => call.method === 'PUT')
+    .map((call) => call.init.headers['content-type'])
+  expect(types.toSorted(byText)).toEqual([
+    'application/json',
+    'application/x-ndjson',
+    'application/x-ndjson',
+    'application/x-ndjson',
+  ])
+})
+
+/** @param {string} a @param {string} b */
+function byText(a, b) {
+  return a.localeCompare(b)
+}

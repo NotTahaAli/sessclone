@@ -73,6 +73,14 @@ presign answered 200 (observed 2026-09-22). Flattening is not reversible and
 does not need to be — `log_artifacts` records the key an object was stored
 under, and nothing reads an id back out of a path.
 
+A Session's other files sit under its id (ticket 101): an Agent Run at
+`<session_id>/agents/<agent_id>.jsonl`, the run's `agent-<id>.meta.json`
+sidecar at `<session_id>/agents/<agent_id>.meta.json`, and a workflow's
+`journal.jsonl` at `<session_id>/workflows/<run_id>.journal.jsonl`. The
+sidecars take the same presign, confirm and hash guard as transcripts, told
+apart by `log_artifacts.kind`; they are never listed as transcripts, and
+deleting or expiring a transcript takes its sidecars with it.
+
 The latest upload replaces the prior one at the same key. One object per
 Session, not forty partial versions: the use case is feeding a whole session to
 an analysis agent, which partial copies only obstruct.

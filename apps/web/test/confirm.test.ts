@@ -447,3 +447,60 @@ test('two confirms racing on one Session leave one row', async () => {
   expect([one.status, two.status]).toEqual([200, 200])
   expect(await artifacts()).toHaveLength(1)
 })
+
+test('a run’s sidecar and a workflow’s journal are rows of their own kind beside the transcripts', async () => {
+  // Ticket 101. Same member, Session and id as the Agent Run's transcript, so
+  // only `kind` keeps the three from being one row; and the journal's id is a
+  // workflow run id no Turn carries, so it is filed under the Session's
+  // Project rather than refused as never ingested.
+  await withArchival(fixture.acme.id)
+  const projectId = await seedSession()
+  await seedSession({ agentId: 'agent-7' })
+
+  const base = `orgs/${fixture.acme.id}/members/${fixture.acme.members.member}/projects/github.com-acme-api/session-1`
+  await ask({ agentId: 'agent-7', storageKey: `${base}/agents/agent-7.jsonl` })
+  const [metaStatus, meta] = await answer(
+    await ask({
+      agentId: 'agent-7',
+      kind: 'agent_meta',
+      storageKey: `${base}/agents/agent-7.meta.json`,
+    }),
+  )
+  const [journalStatus, journal] = await answer(
+    await ask({
+      agentId: 'wf_01',
+      kind: 'workflow_journal',
+      storageKey: `${base}/workflows/wf_01.journal.jsonl`,
+    }),
+  )
+
+  expect([metaStatus, journalStatus]).toEqual([200, 200])
+  expect(meta).toMatchObject({ stored: true })
+  expect(journal).toMatchObject({ stored: true })
+
+  const rows = await sql<
+    { kind: string; agent_id: string; project_id: string }[]
+  >`
+    select kind, agent_id, project_id from log_artifacts order by kind
+  `
+  expect(rows).toEqual([
+    { kind: 'agent_meta', agent_id: 'agent-7', project_id: projectId },
+    { kind: 'transcript', agent_id: 'agent-7', project_id: projectId },
+    { kind: 'workflow_journal', agent_id: 'wf_01', project_id: projectId },
+  ])
+
+  // The hash guard is per kind: the transcript's stored hash does not make
+  // its sidecar `unchanged`, and the sidecar's own does.
+  const [, again] = await answer(
+    await ask({
+      agentId: 'agent-7',
+      kind: 'agent_meta',
+      storageKey: `${base}/agents/agent-7.meta.json`,
+    }),
+  )
+  expect(again).toMatchObject({
+    stored: true,
+    storageKey: `${base}/agents/agent-7.meta.json`,
+  })
+  expect(await artifacts()).toHaveLength(3)
+})

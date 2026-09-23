@@ -20,10 +20,28 @@ import { z } from 'zod'
 // has been streamed — the cost ADR 0003's presign-side guard exists to avoid.
 const text = z.string().trim().min(1).max(200)
 
+/**
+ * What the object is (ticket 101). A Session's transcripts are not its only
+ * files: each Agent Run has an `agent-<id>.meta.json` sidecar, and each
+ * workflow run a `journal.jsonl`. They ride the same presign and confirm, the
+ * same gates and the same hash guard, told apart by this.
+ *
+ * For `agent_meta` the `agentId` is the Agent Run's id; for
+ * `workflow_journal` it is the workflow's run id (`wf_…`).
+ *
+ * Defaulted, so a Collector that predates it keeps archiving transcripts.
+ */
+export const ArtifactKind = z
+  .enum(['transcript', 'agent_meta', 'workflow_journal'])
+  .default('transcript')
+
+export type ArtifactKind = z.output<typeof ArtifactKind>
+
 export const PresignRequest = z.object({
   sessionId: text,
   /** Null for a main Session; an Agent Run's transcript is its own object. */
   agentId: text.nullable().optional(),
+  kind: ArtifactKind,
   /** Lowercase hex SHA-256 of the transcript as it stands on disk. */
   sha256: z.string().regex(/^[0-9a-f]{64}$/, 'a lowercase hex sha-256'),
 })
@@ -48,6 +66,7 @@ export const ConfirmRequest = z.object({
   sessionId: text,
   /** Null for a main Session; an Agent Run's transcript is its own object. */
   agentId: text.nullable().optional(),
+  kind: ArtifactKind,
   /** Lowercase hex SHA-256 of the bytes that were uploaded. */
   sha256: z.string().regex(/^[0-9a-f]{64}$/, 'a lowercase hex sha-256'),
   /**

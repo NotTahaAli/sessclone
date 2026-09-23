@@ -1,4 +1,4 @@
-import type { PresignRefusal } from '@sessclone/shared'
+import type { ArtifactKind, PresignRefusal } from '@sessclone/shared'
 import type postgres from 'postgres'
 
 import { artifactKey } from './storage'
@@ -65,9 +65,21 @@ export const presignDecision = async (
     memberId: string
     sessionId: string
     agentId: string | null
+    /** Ticket 101: a sidecar passes the same gates as its transcript. */
+    kind: ArtifactKind
     sha256: string
   },
 ): Promise<PresignDecision> => {
+  // Which Turns place this object in a Project. A transcript and an Agent
+  // Run's `.meta.json` are placed by that run's own Turns; a workflow's
+  // journal is keyed by a run id no Turn carries, so it is placed by the
+  // Session's — any of them, which `turns_identity_key`'s leading
+  // `(member_id, session_id)` still answers from the index.
+  const sameRun =
+    request.kind === 'workflow_journal'
+      ? tx``
+      : tx`and turn.agent_id is not distinct from ${request.agentId}`
+
   const [facts] = await tx<Facts[]>`
     select member.archival_enabled,
            tier.archival_available as tier_archival,
@@ -92,7 +104,7 @@ export const presignDecision = async (
           from turns turn
          where turn.member_id = member.id
            and turn.session_id = ${request.sessionId}
-           and turn.agent_id is not distinct from ${request.agentId}
+           ${sameRun}
          -- Turns of one Session often share a timestamp, and on a tie the
          -- Project decides both the exclusion check and the storage key, so
          -- the order cannot be the planner's to choose.
@@ -107,6 +119,7 @@ export const presignDecision = async (
              on artifact.member_id = member.id
             and artifact.session_id = ${request.sessionId}
             and artifact.agent_id is not distinct from ${request.agentId}
+            and artifact.kind = ${request.kind}
      where member.id = ${request.memberId}
        and member.org_id = ${request.orgId}
        and member.removed_at is null
@@ -142,10 +155,10 @@ export const presignDecision = async (
   // Session is simply not ingested yet.
   if (!facts.project_id) {
     const [seen] = await tx<{ any: boolean }[]>`
-      select true as any from turns
-       where member_id = ${request.memberId}
-         and session_id = ${request.sessionId}
-         and agent_id is not distinct from ${request.agentId}
+      select true as any from turns turn
+       where turn.member_id = ${request.memberId}
+         and turn.session_id = ${request.sessionId}
+         ${sameRun}
        limit 1
     `
     if (!seen) {
@@ -185,6 +198,7 @@ export const presignDecision = async (
       projectKey: facts.project_key,
       sessionId: request.sessionId,
       agentId: request.agentId,
+      kind: request.kind,
     }),
   }
 }

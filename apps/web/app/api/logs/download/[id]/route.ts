@@ -57,7 +57,11 @@ export async function GET(
 
   let url
   try {
-    url = await presignDownload(artifact.storageKey, artifact.filename)
+    url = await presignDownload(
+      artifact.storageKey,
+      artifact.filename,
+      artifact.contentType,
+    )
   } catch {
     return new Response('this deployment cannot sign a download right now', {
       status: 503,

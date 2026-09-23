@@ -367,6 +367,15 @@ test('a stored transcript is listed, the session’s and each subagent’s', asy
       (${fixture.acme.id}, ${fixture.acme.members.member}, 'session-1',
        'agent-1', 'k/agent', repeat('b', 64), 50)
   `
+  // Its sidecar (ticket 101), which is not a transcript to list.
+  await sql`
+    insert into log_artifacts
+      (org_id, member_id, session_id, agent_id, kind, storage_key, sha256,
+       size_bytes)
+    values
+      (${fixture.acme.id}, ${fixture.acme.members.member}, 'session-1',
+       'agent-1', 'agent_meta', 'k/agent.meta', repeat('c', 64), 5)
+  `
 
   const stored = await asRole(fixture.acme, 'owner', (tx) =>
     sessionTranscripts(tx, fixture.acme.members.member, 'session-1'),

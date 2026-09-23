@@ -596,6 +596,8 @@ export const sessionTranscripts = async (
       from log_artifacts
      where member_id = ${memberId}
        and session_id = ${sessionId}
+       -- Not the sidecars beside them (ticket 101).
+       and kind = 'transcript'
      order by agent_id nulls first
   `
 

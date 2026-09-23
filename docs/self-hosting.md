@@ -120,6 +120,12 @@ check and stops at the first failure with a non-zero exit, so the line above
 the exit is the thing to fix. Run it before you tell anybody
 archival is on.
 
+The bucket must also answer CORS for the dashboard: the transcript viewer
+reads byte ranges straight from storage in the browser, through presigned GET
+URLs, so allow `GET` with the `Range` request header from your dashboard's
+origin. Supabase Storage allows this by default (`access-control-allow-origin:
+*`, `range` among the allowed headers); on R2, AWS or MinIO add a CORS rule.
+
 ## 4. Run it
 
 ```bash

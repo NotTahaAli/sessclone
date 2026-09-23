@@ -81,7 +81,7 @@ export async function POST(request: Request) {
     )
   }
 
-  const { sessionId, sha256, storageKey } = parsed.data
+  const { sessionId, sha256, storageKey, kind } = parsed.data
   const agentId = parsed.data.agentId ?? null
 
   let decision
@@ -91,6 +91,7 @@ export async function POST(request: Request) {
       memberId: caller.memberId,
       sessionId,
       agentId,
+      kind,
       sha256,
     })
   } catch (error) {
@@ -120,6 +121,7 @@ export async function POST(request: Request) {
          where member_id = ${caller.memberId}
            and session_id = ${sessionId}
            and agent_id is not distinct from ${agentId}
+           and kind = ${kind}
       `
     } catch (error) {
       return databaseFailure(error)
@@ -195,13 +197,15 @@ export async function POST(request: Request) {
          where member_id = ${caller.memberId}
            and session_id = ${sessionId}
            and agent_id is not distinct from ${agentId}
+           and kind = ${kind}
       ), written as (
         insert into log_artifacts (org_id, member_id, project_id, session_id,
-                                   agent_id, storage_key, sha256, size_bytes)
+                                   agent_id, kind, storage_key, sha256,
+                                   size_bytes)
         values (${caller.orgId}, ${caller.memberId}, ${decision.projectId},
-                ${sessionId}, ${agentId}, ${decision.storageKey}, ${sha256},
-                ${object.sizeBytes})
-        on conflict (member_id, session_id, agent_id) do update
+                ${sessionId}, ${agentId}, ${kind}, ${decision.storageKey},
+                ${sha256}, ${object.sizeBytes})
+        on conflict (member_id, session_id, agent_id, kind) do update
            set project_id = excluded.project_id,
                storage_key = excluded.storage_key,
                sha256 = excluded.sha256,
