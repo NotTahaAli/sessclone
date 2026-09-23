@@ -9,8 +9,10 @@
 
 **Blocked by:** 116.
 
-**Status:** todo
+**Status:** done
 
-- [ ] Spec generated from zod, with a test that fails on drift
-- [ ] API pages and playground themed
-- [ ] Screenshots
+- [x] Spec generated from zod, with a test that fails on drift
+- [x] API pages and playground themed
+- [x] Screenshots
+
+Screenshots (1440x900 and 390x844, light and dark): scratchpad `shots-116/api-*, tryit-*`.

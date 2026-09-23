@@ -1,0 +1,215 @@
+---
+title: Configuration
+description: Every variable the deployment and the Collector read, and what each one is for.
+---
+
+The three things a self-hoster supplies are reached by plain configuration,
+with no provider in the code path: the database is a Postgres URL, storage is
+any S3-compatible endpoint, and the public base URL is whatever the deployment
+answers on. Auth is the exception, and is named as one — it is Supabase Auth.
+
+`.env.example` in the repository is the same list in copyable form. Real
+values live in `.env`, which is gitignored, or in your deployment's own secret
+store.
+
+<Callout type="warn" title="The server's .env belongs in apps/web">
+  Next.js reads environment files from its own project root, so a `.env` at the
+  repository root is read by nothing when you run the app directly, and the
+  first page that needs one fails with `NEXT_PUBLIC_SUPABASE_URL is not set`.
+  Docker Compose is the exception: it reads the root `.env`.
+</Callout>
+
+## Server
+
+### Database
+
+| Variable              | Required | What it is                                                                  |
+| --------------------- | -------- | --------------------------------------------------------------------------- |
+| `DATABASE_URL`        | yes      | Everything the dashboard reads. Any Postgres; Supabase is not a requirement |
+| `INGEST_DATABASE_URL` | yes      | What the ingest route writes as. The owning role, **not** `sessclone_app`   |
+
+**Two variables, because they are two roles.** Point `DATABASE_URL` at
+`sessclone_app`, a role that owns nothing. Postgres applies no row-level
+security to a superuser or to the role that owns the tables, so a dashboard
+connected as the role that applied the migrations has every policy switched off
+and no error to say so. Ingest writes tables `sessclone_app` has no insert
+grant on, so it gets the owning role through its own variable, and the ingest
+route is the only code that reads it.
+
+**Neither has a default, and neither falls back to the other.** A missing one
+throws `DATABASE_URL is not set` (or `INGEST_DATABASE_URL is not set`) on the
+first request that needs it. A silent fallback would make a misconfigured
+deployment — both pointed at the owning role, row-level security off — appear to
+work.
+
+### Supabase (sign-in)
+
+| Variable                        | Required | What it is                                                                     |
+| ------------------------------- | -------- | ------------------------------------------------------------------------------ |
+| `NEXT_PUBLIC_SUPABASE_URL`      | yes      | Project URL. `NEXT_PUBLIC_` because the browser needs it                       |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes      | Anon key. Public by design; row-level security protects the rows, not this key |
+| `SUPABASE_SERVICE_ROLE_KEY`     | yes      | **Bypasses every policy.** Server-only, and only on ingest paths               |
+
+Sign-in is GitHub OAuth and a magic link; no password is created or stored.
+Both are configured in the Supabase project: GitHub needs a client id and
+secret under Authentication, and both need `<NEXT_PUBLIC_APP_URL>/auth/callback`
+in the project's allowed redirect URLs.
+
+`SUPABASE_SERVICE_ROLE_KEY` is the most dangerous value here. It is never read
+by a page, a client component or anything else the browser can reach, and it
+carries no `NEXT_PUBLIC_` prefix so that a mistake is a build-time absence
+rather than a shipped credential.
+
+The magic-link email is sent by Supabase and configured in the Supabase
+project's own SMTP settings. The invitation email is the app's own, below.
+
+### Invitation email
+
+| Variable    | Required | What it is                                                                      |
+| ----------- | -------- | ------------------------------------------------------------------------------- |
+| `SMTP_URL`  | no       | Connection URL, e.g. `smtp://user:pass@smtp.example.com:587` or `smtps://…:465` |
+| `SMTP_FROM` | no       | From address on the invitation, e.g. `sessclone <no-reply@example.com>`         |
+
+Both or neither. With them set, inviting someone emails them the join link;
+without, the inviter is given the link to pass on themselves — the same link
+the email would carry. `smtp://` uses STARTTLS when the server offers it;
+`smtps://` is TLS from the first byte.
+
+### Public base URL
+
+| Variable              | Required | What it is                                                                                 |
+| --------------------- | -------- | ------------------------------------------------------------------------------------------ |
+| `NEXT_PUBLIC_APP_URL` | yes      | Origin this deployment answers on, e.g. `https://sessclone.example.com`. No trailing slash |
+
+Used to build the sign-in redirect, invite links and the install instructions a
+Member is shown, so your team is told to report to your deployment. It is not
+derived from request headers: a forwarded `Host` is attacker-controllable, and
+an invite link is a credential.
+
+### Storage
+
+Transcripts go straight to storage through a presigned PUT; the application
+never carries the bytes. Only the S3 API is used, so Supabase Storage,
+Cloudflare R2, AWS S3, Oracle Cloud Object Storage and MinIO are the same code
+path. With these unset, archival is off and everything else works.
+
+| Variable                      | Required | Default | What it is                                                                     |
+| ----------------------------- | -------- | ------- | ------------------------------------------------------------------------------ |
+| `STORAGE_ENDPOINT`            | yes      | —       | S3 API endpoint URL. The provider's S3 endpoint, not its dashboard             |
+| `STORAGE_REGION`              | no       | `auto`  | Region. `auto` suits R2 and Supabase; AWS needs the real one, e.g. `eu-west-2` |
+| `STORAGE_BUCKET`              | yes      | —       | Bucket holding transcripts. Must **not** be public: reads are presigned        |
+| `STORAGE_ACCESS_KEY_ID`       | yes      | —       | Access key id                                                                  |
+| `STORAGE_SECRET_ACCESS_KEY`   | yes      | —       | Secret access key                                                              |
+| `STORAGE_FORCE_PATH_STYLE`    | no       | `true`  | Path-style addressing. Required by MinIO and Supabase; AWS accepts it          |
+| `STORAGE_PRESIGN_TTL_SECONDS` | no       | `300`   | Life of an issued URL. A presigned URL is a bearer credential — keep it short  |
+
+[Self-hosting](/docs/self-hosting#3-check-your-bucket-actually-works) has the
+script that checks a bucket speaks every part of the S3 API this uses, and the
+CORS rule the transcript viewer needs.
+
+### Retention sweep
+
+| Variable                 | Required | What it is                                                                              |
+| ------------------------ | -------- | --------------------------------------------------------------------------------------- |
+| `RETENTION_SWEEP_SECRET` | no       | Shared secret for `POST /api/retention/sweep`. Unset means the route refuses every call |
+
+Retention is a window per Org, in days, set by an Owner or an Admin under Org
+settings and capped by the Org's Tier. Nothing enforces it on a schedule,
+because your scheduler is yours: `POST /api/retention/sweep` with
+`Authorization: Bearer <secret>` removes transcripts past their window — the
+rows and the stored objects together, oldest first, at most 500 per call — and
+answers `{ removed, remaining }` so a backlog can be drained by calling again.
+**Turns are never touched**: the spend history survives every transcript it
+describes.
+
+<Callout type="error" title="Set the windows before the first sweep">
+  Upgrading an existing deployment sets every Org to 90 days, which no Org
+  chose. The first sweep on a deployment that has been collecting for longer
+  destroys every transcript older than that. Set the windows first — `update
+  orgs set retention_days = 365;` or per Org — then configure the secret.
+</Callout>
+
+The route answers `401` for a wrong secret and `503` when the secret is unset,
+when storage is not configured, or when the sweep failed (which rolls the rows
+back).
+
+### Published pricing
+
+| Variable                    | Required | What it is                                                                                 |
+| --------------------------- | -------- | ------------------------------------------------------------------------------------------ |
+| `PRICING_URL`               | no       | Markdown pricing page, e.g. `https://platform.claude.com/docs/en/about-claude/pricing.md`  |
+| `PRICING_REVALIDATE_SECRET` | no       | Shared secret for `POST /api/pricing/revalidate`. Unset means the route refuses every call |
+
+`PRICING_URL` is read by **Fetch latest pricing** on `/admin/rates`. Nothing
+fetched is written until a platform admin approves it.
+
+The public pricing pages cache the Tier table. Saving a Tier in the admin
+panel clears that cache itself; `POST /api/pricing/revalidate` with
+`Authorization: Bearer <secret>` is for a Tier changed outside the panel. The
+cache is per instance, so several instances or a serverless deployment each
+refresh on their own schedule unless you add a shared cache handler.
+
+## Docker Compose
+
+Read by compose itself, from the `.env` at the repository root.
+
+| Variable            | Required       | Default | What it is                                                                 |
+| ------------------- | -------------- | ------- | -------------------------------------------------------------------------- |
+| `WEB_PORT`          | no             | `3000`  | Host port the dashboard is published on. Deliberately not `PORT`           |
+| `POSTGRES_PASSWORD` | with `db` only | —       | Password for the `sessclone` role in the bundled Postgres (`--profile db`) |
+| `POSTGRES_PORT`     | no             | `5432`  | Host port the bundled Postgres is published on, bound to loopback          |
+
+`WEB_PORT` is not `PORT` because `next start` reads `PORT` as the port it
+listens on inside the container, and the same file is handed to both.
+
+## Collector
+
+The Collector reads its configuration from the environment, or from the
+answers given when the plugin was enabled, so your team can point at your
+deployment without editing the plugin. An exported variable wins over the
+answer.
+
+| Variable              | Required    | Default                 | What it is                                                                           |
+| --------------------- | ----------- | ----------------------- | ------------------------------------------------------------------------------------ |
+| `SESSCLONE_URL`       | in practice | `http://127.0.0.1:3000` | Base URL of the deployment. Matches the server's `NEXT_PUBLIC_APP_URL`               |
+| `SESSCLONE_API_KEY`   | yes         | —                       | The Member's [API key](/docs/api-keys). Identifies the Member and the Org            |
+| `SESSCLONE_STATE_DIR` | no          | per platform, below     | Where the cursors and the retry queue are kept                                       |
+| `SESSCLONE_DEVICE`    | no          | derived                 | Pins this environment's Device key instead of deriving one                           |
+| `SESSCLONE_DEBUG`     | no          | —                       | Set to anything to print a hook's swallowed failure to stderr. Off, a hook is silent |
+
+`SESSCLONE_URL` is required by anyone whose deployment is not on their own
+laptop — which is everyone — but the code falls back rather than refusing, and
+says nothing about it. A value that is not an `http` or `https` URL is refused
+at session start.
+
+The **Device key** is normally `host:<hostname>` on a machine and
+`cloud:<account uuid>` in Claude Code on the web. Set `SESSCLONE_DEVICE` only
+when one account runs several environments that should be counted separately —
+a CI fleet beside a laptop, say. The value is used verbatim, so it also pins an
+identity across a rename.
+
+The **state directory** deliberately never lands under `~/.claude`, because
+Claude Code's own `cleanupPeriodDays` sweep deletes under `~/.claude/projects/`
+after 30 days by default and would take the cursors and the queue with it:
+
+| Platform | Default state directory                                                  |
+| -------- | ------------------------------------------------------------------------ |
+| Linux    | `$XDG_STATE_HOME/sessclone`, else `~/.local/state/sessclone`             |
+| macOS    | `~/Library/Application Support/sessclone`                                |
+| Windows  | `%LOCALAPPDATA%\sessclone`, else `%USERPROFILE%\AppData\Local\sessclone` |
+
+Only the Linux row has been observed on a real machine so far; treat the other
+two as the intended behaviour.
+
+`CLAUDE_CONFIG_DIR` is Claude Code's variable. The Collector reads it —
+`CLAUDE_CONFIG_DIR`, else `~/.claude`, exactly as Claude Code does — to find
+transcripts, and never writes inside it.
+
+## Not configured here
+
+- **Rates.** Prices ship as reviewed migrations and are edited in the platform
+  admin area, never read from the environment. A price in an env var is a
+  price nobody reviewed.
+- **Tiers and retention windows.** Rows in the database, set per Org.
+- **The Org timezone.** An Org setting, because two Orgs on one deployment
+  bucket their days differently.

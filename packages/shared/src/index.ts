@@ -8,6 +8,7 @@ export {
   FAILURE_MESSAGE_LIMIT,
   FAILURES_PER_PAYLOAD,
   IngestPayload,
+  IngestResponse,
   REPORTS_PER_PAYLOAD,
   TURNS_PER_REPORT,
   ReportedCursor,
@@ -17,7 +18,7 @@ export {
   ReportedUsage,
   TranscriptReport,
 } from './ingest.ts'
-export type { IngestResponse } from './ingest.ts'
+export { ingestOpenAPI } from './openapi.ts'
 export { ArtifactKind, ConfirmRequest, PresignRequest } from './presign.ts'
 export type {
   ConfirmResponse,

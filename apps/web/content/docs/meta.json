@@ -1,0 +1,13 @@
+{
+  "pages": [
+    "---Guides---",
+    "index",
+    "install",
+    "how-collection-works",
+    "api-keys",
+    "configuration",
+    "self-hosting",
+    "---Reference---",
+    "...api"
+  ]
+}

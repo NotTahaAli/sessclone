@@ -10,8 +10,10 @@
 
 **Blocked by:** 111.
 
-**Status:** todo
+**Status:** done
 
-- [ ] `/docs` with sidebar, search, MDX guides
-- [ ] Theme matches, light and dark
-- [ ] Screenshots
+- [x] `/docs` with sidebar, search, MDX guides
+- [x] Theme matches, light and dark
+- [x] Screenshots
+
+Screenshots (1440x900 and 390x844, light and dark): scratchpad `shots-116/guide-*, home-*, search-*, menu-*`.

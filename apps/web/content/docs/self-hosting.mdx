@@ -1,0 +1,214 @@
+---
+title: Self-hosting
+description: From a clone to the first collected Turn, on your own Postgres, bucket and Supabase project.
+---
+
+Everything sessclone needs is yours to supply: a Postgres cluster, an
+S3-compatible bucket, and a Supabase project for sign-in. Nothing is hard-coded
+and nothing phones home. Self-hosting is free at any size.
+
+This page is the order to do things in; [Configuration](/docs/configuration)
+is the reference for every variable.
+
+## What you need first
+
+| Thing                   | Why                                                                         |
+| ----------------------- | --------------------------------------------------------------------------- |
+| Postgres 16 or newer    | Every table, and the row-level security policies that are the authorisation |
+| An S3-compatible bucket | Transcripts, which never pass through the application                       |
+| A Supabase project      | Sign-in only. Hosted or self-hosted; the migrations touch no `auth` schema  |
+| Node 22.18+ and pnpm    | To build, and on each Member's machine for the Collector                    |
+
+Storage is optional to start with: with `STORAGE_*` unset, archival is off and
+everything else works. A deployment with no bucket collects Turns, prices them
+and shows them, and stores no transcripts at all.
+
+## 1. Clone, and write the environment
+
+```bash
+git clone https://github.com/NotTahaAli/sessclone
+cd sessclone
+pnpm install
+cp .env.example apps/web/.env     # running it directly
+cp .env.example .env              # running it with Docker Compose
+```
+
+The two destinations are not interchangeable: `next dev` and `next start` read
+`apps/web/.env`, and `compose.yaml` reads the `.env` beside it.
+
+Fill it in. The two database URLs are deliberately two roles, and pointing both
+at the same one switches row-level security off for the whole application with
+no error anywhere to say so.
+
+## 2. Create the roles and apply the migrations
+
+`$ADMIN_URL` below is a connection as a role that may create roles and
+databases — `postgres` on a fresh cluster, or whatever superuser-equivalent a
+managed provider gave you.
+
+**Create both roles before the migrations run.** The migration that sets up
+`sessclone_app` skips it when it already exists, which is the path to take:
+`sessclone` deliberately cannot create roles, so creating one from inside the
+migrations fails part way through.
+
+```bash
+ADMIN_URL="postgres://postgres:…@your-host:5432/postgres"
+
+psql "$ADMIN_URL" -c "create role sessclone login password 'choose-one'"
+psql "$ADMIN_URL" -c "create database sessclone owner sessclone"
+# nologin is wrong here: this is the role the dashboard connects as.
+psql "$ADMIN_URL" -c "create role sessclone_app login password 'choose-another'"
+
+OWNER_URL="postgres://sessclone:choose-one@your-host:5432/sessclone"
+for file in supabase/migrations/*.sql; do
+  echo "$file"
+  psql -v ON_ERROR_STOP=1 --single-transaction "$OWNER_URL" -f "$file" || exit 1
+done
+```
+
+`ON_ERROR_STOP=1` is not optional. Without it `psql` exits 0 after a failed
+statement, and the loop leaves a half-migrated database that reports success.
+`--single-transaction` means a file that fails leaves nothing of itself behind.
+
+Then point `DATABASE_URL` at `sessclone_app` and `INGEST_DATABASE_URL` at
+`sessclone`.
+
+### Upgrading
+
+Do not re-run the loop on an existing deployment: the migrations use bare
+`create table`, so a second run errors on the first file. Apply only the files
+added since your last upgrade, in filename order, and read the header of each
+first.
+
+**Migrations first, deploy second.** Nothing in the deploy applies a migration,
+so code that reads a new column against a database without it serves a broken
+page wherever that column is read. Check the two agree:
+
+```bash
+DATABASE_URL="$OWNER_URL" node apps/web/scripts/schema-drift.mjs
+```
+
+A few migrations must run **after** the deploy instead, because the code still
+live beforehand depends on what they remove. Their header says so: hold them
+back, deploy, then apply them.
+
+## 3. Check your bucket actually works
+
+"S3-compatible" covers a wide range, and sessclone uses a narrow part of the
+API: a presigned PUT with no checksum in the signature, `HeadObject`, a
+presigned GET carrying `response-content-disposition`, and `DeleteObjects`. One
+script answers whether yours does all of it:
+
+```bash
+STORAGE_ENDPOINT=… STORAGE_BUCKET=… \
+STORAGE_ACCESS_KEY_ID=… STORAGE_SECRET_ACCESS_KEY=… \
+node apps/web/scripts/storage-compat.mjs
+```
+
+It writes and deletes one object under `storage-compat/`, prints a line per
+check, and stops at the first failure with a non-zero exit. Run it before you
+tell anybody archival is on.
+
+The bucket must also answer CORS for the dashboard: the transcript viewer reads
+byte ranges straight from storage in the browser, so allow `GET` with the
+`Range` request header from your dashboard's origin. Supabase Storage allows
+this by default; on R2, AWS or MinIO add a CORS rule.
+
+## 4. Run it
+
+```bash
+docker compose up --build                # your database
+docker compose --profile db up --build   # or bring one up alongside
+```
+
+With the `db` profile, three things differ. Both database URLs in the root
+`.env` name `db:5432` rather than `127.0.0.1`. The database already exists and
+is owned by `sessclone`, so skip the `create database` line in step 2, and set
+`POSTGRES_PASSWORD` to the password you gave `sessclone`. And the migrations
+run inside the cluster:
+
+```bash
+for file in supabase/migrations/*.sql; do
+  echo "$file"
+  docker compose exec -T db psql -v ON_ERROR_STOP=1 --single-transaction \
+    -U sessclone -d sessclone < "$file" || exit 1
+done
+```
+
+The Postgres port is published on loopback only. `compose.yaml` deliberately
+does **not** stand up storage or authentication: both hold data that must
+outlive a container.
+
+Without Docker:
+
+```bash
+pnpm --filter web build
+pnpm --filter web start
+```
+
+The `NEXT_PUBLIC_*` variables are read into the browser bundle at build time,
+so changing one means rebuilding rather than restarting.
+
+## 5. Sign in, and collect the first Turn
+
+1. Open the deployment and sign in. GitHub sign-in through Supabase needs a
+   GitHub **OAuth App**, not a GitHub App — a GitHub App fails with `Error
+getting user profile from external provider`.
+2. Signing in with no membership creates an Org and makes you its Owner —
+   which is true of _everyone_ who signs in. If your Supabase project accepts
+   open sign-ups, every stranger who signs in gets their own Org on your
+   deployment; restrict sign-ups in the Supabase project if that is not what
+   you want.
+3. Issue a key under **Keys**.
+4. [Install the Collector](/docs/install) on a machine: two commands, the key,
+   and a restart of Claude Code.
+5. Run a Claude Code session. The Turn appears under **Costs** as soon as the
+   session's first response finishes.
+
+If nothing arrives, [Check it worked](/docs/install#check-it-worked) has the
+list in the order worth checking.
+
+## Rates, so costs are not zero
+
+Published prices arrive seeded by a migration, so a fresh deployment prices
+Turns without anybody visiting the admin panel. A model published after that
+has no Rate, and a Turn with no matching Rate is _unpriced_, never zero —
+every total carries the count of unpriced Turns beside it.
+
+Adding one is the admin panel's job, under **/admin → Rates**, which needs the
+platform admin flag on your user. That flag is guarded so only a platform admin
+may grant it, so the first one on a deployment steps around the guard once, as
+the owning role in `psql`:
+
+```sql
+alter table users disable trigger users_guard_platform_admin;
+update users set is_platform_admin = true
+ where lower(email) = lower('you@example.com');
+alter table users enable trigger users_guard_platform_admin;
+```
+
+Every later platform admin is granted from inside the panel. To catch up with a
+later price list, set `PRICING_URL` and press **Fetch latest pricing** on the
+same page; nothing is written until you tick a model and apply it.
+
+## Retention
+
+Retention is a window per Org, and nothing enforces it on a schedule because
+your scheduler is yours. [Retention sweep](/docs/configuration#retention-sweep)
+has the call — and the warning that matters: set the windows **before** the
+first sweep.
+
+## What the licence asks of you
+
+sessclone is AGPL-3.0-only with one additional term, and `NOTICE.md` in the
+repository states both. For a deployment:
+
+- **Offering source to your users.** AGPL section 13 applies when you modify
+  the software and let others use it over a network. Unmodified, it does not
+  arise; modified, your users may ask you for the source of your version.
+- **The panel notice stays.** The additional term preserves the notice at the
+  bottom of the dashboard. Restyle it; do not remove it.
+- **Self-hosting is free at any size, and a private fork is permitted
+  indefinitely.**
+
+`NOTICE.md` also says plainly that no lawyer has reviewed any of this.

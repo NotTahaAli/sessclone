@@ -1,0 +1,37 @@
+---
+title: Introduction
+description: Claude Code usage and cost, for a whole team.
+---
+
+sessclone collects Claude Code usage from every machine your team works on and
+puts it in one place, so an Org can see what it is spending — per Member, per
+Project, per Device — and, when a Member opts in, download the raw session
+logs to learn from them.
+
+## What is collected
+
+A Claude Code plugin, the **Collector**, runs on each machine and reports
+**usage only**: token counts, models, timings, and the Session, Project and
+Device they belong to — plus, per Turn, the working directory it ran in, the
+git branch, and the git remote normalised into a Project key. Never a prompt,
+never a file's contents.
+
+Transcripts — the raw session logs, which do contain both — are a separate
+upload that stays off until a Member turns it on.
+
+## Where to start
+
+<Cards>
+  <Card title="Install the Collector" href="/docs/install">
+    Two commands, two answers and a restart, on each machine.
+  </Card>
+  <Card title="How collection works" href="/docs/how-collection-works">
+    Cursors, the retry queue, the backfill, and what is uploaded when.
+  </Card>
+  <Card title="Self-host sessclone" href="/docs/self-hosting">
+    From a clone to the first collected Turn on your own infrastructure.
+  </Card>
+  <Card title="Ingest API" href="/docs/api/ingest">
+    The endpoint the Collector reports to, with a playground.
+  </Card>
+</Cards>
