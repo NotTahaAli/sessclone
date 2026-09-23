@@ -1,0 +1,4 @@
+{"type":"launched"}
+{"type":"started","key":"v2:k1","agentId":"a1","label":"probe-a","phase":"Probe"}
+{"type":"started","key":"v2:k2","agentId":"a2","label":"probe-b","phase":"Probe"}
+{"type":"result","key":"v2:k1","agentId":"a1","result":"alpha"}
