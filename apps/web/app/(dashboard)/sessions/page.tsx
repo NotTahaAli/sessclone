@@ -259,8 +259,6 @@ function SessionLine({
           {session.label
             ? ` · ${session.projectName ?? session.projectKey ?? 'outside a repository'}`
             : ''}
-          {' · '}
-          {session.turns} {session.turns === 1 ? 'Turn' : 'Turns'}
           {session.agentRuns > 0
             ? ` · ${session.agentRuns} ${
                 session.agentRuns === 1 ? 'subagent' : 'subagents'

@@ -20,8 +20,9 @@ export type Device = {
   nickname: string | null
   firstSeenAt: Date
   lastSeenAt: Date
-  /** Turns reported in the last 30 days: the window the page asks about. */
-  turns: number
+  /** Sessions with a Turn in the last 30 days: the window the page asks
+   * about. */
+  sessions: number
 }
 
 type DeviceRow = {
@@ -30,7 +31,7 @@ type DeviceRow = {
   nickname: string | null
   first_seen_at: Date
   last_seen_at: Date
-  turns: string
+  sessions: string
 }
 
 /**
@@ -43,7 +44,7 @@ export const DEVICE_LIMIT = 50
 /**
  * The signed-in Member's own Devices, most recently seen first.
  *
- * The Turn count is a correlated aggregate rather than a join and a group by,
+ * The Session count is a correlated aggregate rather than a join and a group by,
  * and it is bounded to the last 30 days on both counts: bounded, it reaches
  * `turns_device_occurred_at_idx` by its leading columns instead of counting a
  * machine's whole history, and thirty days is the question the page asks —
@@ -60,9 +61,10 @@ export const listOwnDevices = async (
            device.nickname,
            device.first_seen_at,
            device.last_seen_at,
-           (select count(*) from turns turn
+           (select count(distinct (turn.member_id, turn.session_id))
+              from turns turn
              where turn.device_id = device.id
-               and turn.occurred_at >= now() - interval '30 days') as turns
+               and turn.occurred_at >= now() - interval '30 days') as sessions
       from devices device
      where device.member_id in (select sessclone_own_member_ids())
      order by device.last_seen_at desc
@@ -76,7 +78,7 @@ export const listOwnDevices = async (
       nickname: row.nickname,
       firstSeenAt: row.first_seen_at,
       lastSeenAt: row.last_seen_at,
-      turns: Number(row.turns),
+      sessions: Number(row.sessions),
     })),
     more: rows.length > limit,
   }

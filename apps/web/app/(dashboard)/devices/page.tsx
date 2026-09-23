@@ -95,8 +95,8 @@ function DeviceRow({
               <span className="font-mono">{device.key} · </span>
             )}
             first seen {when.format(device.firstSeenAt)} ·{' '}
-            {whole.format(device.turns)} {device.turns === 1 ? 'turn' : 'turns'}{' '}
-            in the last 30 days
+            {whole.format(device.sessions)}{' '}
+            {device.sessions === 1 ? 'session' : 'sessions'} in the last 30 days
           </>
         }
       >
