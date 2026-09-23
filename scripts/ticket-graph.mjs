@@ -132,6 +132,20 @@ const PHASES = [
     pos: [960, 800],
     range: [103, 110],
   },
+  {
+    id: 'overhaul',
+    label: 'Redesign + Docs',
+    type: 'frontend',
+    pos: [730, 800],
+    range: [111, 117],
+  },
+  {
+    id: 'approval',
+    label: 'Signup Approval',
+    type: 'backend',
+    pos: [500, 800],
+    range: [118, 121],
+  },
 ]
 
 const phaseOf = (n) =>
