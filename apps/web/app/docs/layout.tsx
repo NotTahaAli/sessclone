@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 
 import { source } from '../../lib/docs'
 import { Lockup } from '../_ui/logo'
+import { CloudflareAnalytics } from '../cloudflare-analytics'
 
 // Scoped to `/docs`: the stylesheet is imported here and nowhere else, and
 // its tokens only apply while this layout is on the page (`docs.css`).
@@ -27,6 +28,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       <DocsLayout tree={source.getPageTree()} nav={NAV} themeSwitch={THEME}>
         {children}
       </DocsLayout>
+      <CloudflareAnalytics />
     </RootProvider>
   )
 }

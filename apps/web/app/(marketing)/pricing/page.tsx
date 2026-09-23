@@ -1,4 +1,5 @@
 import { FRAME } from '../constants'
+import { canonical } from '../../../lib/site'
 import { TiersUnavailable } from '../tiers-unavailable'
 import { PlanPicker, type Plan } from './plan-picker'
 import { comparison, isFree, planLines } from '../../../lib/plans'
@@ -13,7 +14,8 @@ import {
 // Every price, seat range and line is read from the `tiers` table on this
 // render; nothing here restates one.
 export const metadata = {
-  title: 'Pricing — SessClone',
+  title: 'Pricing',
+  alternates: { canonical: canonical('/pricing') },
   description:
     'Pay per person, not per machine. Self-hosting is free at any size.',
 }

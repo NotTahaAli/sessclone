@@ -7,6 +7,7 @@ import {
 import { notFound } from 'next/navigation'
 
 import { source } from '../../../lib/docs'
+import { canonical } from '../../../lib/site'
 import { mdxComponents } from '../mdx-components'
 
 type Props = { params: Promise<{ slug?: string[] }> }
@@ -34,7 +35,8 @@ export async function generateMetadata({ params }: Props) {
   const page = source.getPage((await params).slug)
   if (!page) notFound()
   return {
-    title: `${page.data.title} · SessClone docs`,
+    title: `${page.data.title} · Docs`,
+    alternates: { canonical: canonical(page.url) },
     description: page.data.description,
   }
 }

@@ -1,7 +1,9 @@
 import { Geist, Geist_Mono } from 'next/font/google'
+import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 
 import { AppearanceScript } from './appearance-script'
+import { SITE_DESCRIPTION, siteUrl } from '../lib/site'
 
 // A stylesheet has nothing to assign, and this import is how Next finds it.
 // oxlint-disable-next-line no-unassigned-import
@@ -30,9 +32,23 @@ const mono = Geist_Mono({
   display: 'swap',
 })
 
-export const metadata = {
-  title: 'SessClone',
-  description: 'Claude Code usage and cost, for a whole team.',
+// Every page inherits these. A page sets its own `title` (the template adds
+// the name) and, when it is public, its own canonical link; the share image is
+// `opengraph-image.tsx` beside this file.
+export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl()),
+  title: {
+    default: 'SessClone: Claude Code usage and cost for your whole team',
+    template: '%s · SessClone',
+  },
+  description: SITE_DESCRIPTION,
+  applicationName: 'SessClone',
+  openGraph: {
+    type: 'website',
+    siteName: 'SessClone',
+    locale: 'en_US',
+  },
+  twitter: { card: 'summary_large_image' },
 }
 
 // No `data-theme` attribute rendered here, in either direction. A signed-out
