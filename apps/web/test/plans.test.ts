@@ -20,6 +20,7 @@ const tier = (key: string, over: Partial<MarketingTier>): MarketingTier => ({
   description: '',
   basePriceUsd: null,
   seatPriceUsd: null,
+  includedSeats: 0,
   minSeats: null,
   maxSeats: null,
   retentionMaxDays: null,
@@ -68,6 +69,20 @@ test('a price for the size, and Contact never reads as free', () => {
   expect(priceFor(personal, 1)).toEqual({ amount: '$5', per: '/month flat' })
   expect(priceFor(enterprise, 12).amount).toBe('Talk to us')
   expect(priceFor(selfHosted, 40).amount).toBe('Free')
+})
+
+test('a base price with included seats charges only the seats past them', () => {
+  const bundle = tier('bundle', {
+    basePriceUsd: 50,
+    seatPriceUsd: 10,
+    includedSeats: 5,
+  })
+  expect(priceFor(bundle, 8)).toEqual({
+    amount: '$80',
+    per: '$50/month + 3 × $10/seat/month',
+  })
+  // Inside the bundle, the base is the whole price.
+  expect(priceFor(bundle, 3)).toEqual({ amount: '$50', per: '/month flat' })
 })
 
 test('a plan that does not fit says why', () => {

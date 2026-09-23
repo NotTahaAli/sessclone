@@ -23,6 +23,7 @@ import { buttonClass, SectionBreak } from '../../_ui/primitives'
 /** One plan as the page hands it over: the Tier's pricing columns and the
  * lines it lists, already read from the row. */
 export type Plan = TierPricing & {
+  includedSeats: number
   key: string
   name: string
   description: string

@@ -28,6 +28,8 @@ export type MarketingTier = {
   basePriceUsd: number | null
   /** Per seat per month. A seat is a person, not a machine. */
   seatPriceUsd: number | null
+  /** Seats the base price already covers; only the rest are charged. */
+  includedSeats: number
   minSeats: number | null
   maxSeats: number | null
   retentionMaxDays: number | null
@@ -55,7 +57,7 @@ export const readMarketingTiers = async (
 ): Promise<MarketingTier[]> => {
   const rows = await tx<TierRow[]>`
     select key, name, description, base_price_usd, seat_price_usd,
-           min_seats, max_seats, retention_max_days, archival_available,
+           included_seats, min_seats, max_seats, retention_max_days, archival_available,
            features, sort_order
       from tiers
      where available
@@ -72,6 +74,7 @@ export const readMarketingTiers = async (
       row.base_price_usd === null ? null : Number(row.base_price_usd),
     seatPriceUsd:
       row.seat_price_usd === null ? null : Number(row.seat_price_usd),
+    includedSeats: row.included_seats,
     minSeats: row.min_seats,
     maxSeats: row.max_seats,
     retentionMaxDays: row.retention_max_days,
@@ -111,6 +114,7 @@ type TierRow = {
   description: string | null
   base_price_usd: string | null
   seat_price_usd: string | null
+  included_seats: number
   min_seats: number | null
   max_seats: number | null
   retention_max_days: number | null

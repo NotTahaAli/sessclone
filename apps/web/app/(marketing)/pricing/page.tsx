@@ -54,6 +54,7 @@ const toPlan = (tier: MarketingTier): Plan => ({
   description: tier.description,
   basePriceUsd: tier.basePriceUsd,
   seatPriceUsd: tier.seatPriceUsd,
+  includedSeats: tier.includedSeats,
   minSeats: tier.minSeats,
   maxSeats: tier.maxSeats,
   lines: planLines(tier, tierRetention(tier)),

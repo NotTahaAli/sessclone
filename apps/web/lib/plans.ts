@@ -38,23 +38,25 @@ export const unfitReason = (tier: TierPricing, n: number) => {
   return tier.maxSeats === 1 ? '1 person only' : `up to ${tier.maxSeats} seats`
 }
 
-/** What a team of `n` pays a month on this Tier, and how it adds up. */
+/** What a team of `n` pays a month on this Tier, and how it adds up: the
+ * base price, plus each seat past the ones it includes. */
 export const priceFor = (
-  tier: TierPricing,
+  tier: TierPricing & { includedSeats: number },
   n: number,
 ): { amount: string; per: string } => {
   const { basePriceUsd: base, seatPriceUsd: seat } = tier
   if (base === null && seat === null) return { amount: 'Talk to us', per: '' }
   if (isFree(tier)) return { amount: 'Free', per: 'your servers' }
   const seats = Math.max(n, tier.minSeats ?? 1)
-  const total = (base ?? 0) + (seat ?? 0) * seats
+  const charged = Math.max(0, seats - tier.includedSeats)
+  const total = (base ?? 0) + (seat ?? 0) * charged
   const parts = [
     base ? `$${base}/month` : null,
-    seat ? `${seats} × $${seat}/seat/month` : null,
+    seat && charged ? `${charged} × $${seat}/seat/month` : null,
   ].filter(Boolean)
   return {
     amount: `$${total}`,
-    per: seat ? parts.join(' + ') : '/month flat',
+    per: seat && charged ? parts.join(' + ') : '/month flat',
   }
 }
 
