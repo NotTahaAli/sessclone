@@ -6,6 +6,7 @@ import {
   DeleteOrgRate,
 } from '../../../../admin/orgs/[orgId]/org-rate-form'
 import { PageHeader } from '../../../page-header'
+import { Row, SectionBreak } from '../../../../_ui/primitives'
 import { asViewer } from '../../../../../lib/db'
 import {
   listOrgRates,
@@ -18,8 +19,8 @@ import { currentViewer, reachesOrgSettings } from '../../../../../lib/viewer'
 
 // Ticket 121: an Enterprise Org's own per-model rates, in rows.
 //
-// Plain on purpose: the visual layer is ticket 111's, and this reuses the
-// admin page's form and row markup rather than inventing a third. Owner or
+// Direction A rows (ticket 111), and the admin page's form rather than a
+// second one. Owner or
 // Admin, as the rest of Org settings; the form appears only when the Org's
 // Tier has `features.own_rates`, and `org_rate_overrides_own` refuses the
 // write otherwise whatever this page renders.
@@ -47,12 +48,15 @@ export default async function Page() {
   const writable = tier?.features.own_rates === true
 
   return (
-    <div className="flex max-w-3xl flex-col gap-6">
-      <PageHeader
-        title="Rates"
-        description="What this Org's costs are estimated at, per model, instead of the published price. sessclone bills per seat, so a rate changes the estimates your Members read and never the invoice."
-      />
+    <div className="flex max-w-3xl flex-col">
+      <PageHeader title="Rates" back="/settings" />
+      <p className="text-text-muted mt-3 text-caption">
+        What this Org&apos;s costs are estimated at, per model, instead of the
+        published price. SessClone bills per seat, so a rate changes the
+        estimates your Members read and never the invoice.
+      </p>
 
+      <SectionBreak>Set a rate</SectionBreak>
       {writable ? (
         <AddOrgRateForm
           orgId={viewer.orgId}
@@ -61,55 +65,65 @@ export default async function Page() {
           action={addOwnRateAction}
         />
       ) : (
-        <p className="text-text-secondary text-body">
+        <p className="text-text-muted py-1 text-body">
           Setting your own per-model rates comes with the Enterprise plan.
         </p>
       )}
 
+      <SectionBreak>
+        {overrides.rates.length === 0
+          ? 'Published prices'
+          : `Your rates · ${overrides.rates.length}`}
+      </SectionBreak>
       {overrides.rates.length === 0 ? (
-        <p className="text-text-secondary text-body">
+        <p className="text-text-muted py-1 text-body">
           This Org is on the published prices.
         </p>
       ) : (
-        <ul className="flex flex-col gap-2">
+        <ol className="mt-1">
           {overrides.rates.map((rate) => (
-            <li
-              key={rate.id}
-              className="border-rule bg-surface rounded-md border p-3"
-            >
-              <p className="text-body">
-                <span className="font-mono">{rate.model ?? 'any model'}</span> ·{' '}
-                {rate.class.replaceAll('_', ' ')}
-              </p>
-              <p className="text-text-secondary text-caption">
-                {MONEY.format(rate.priceUsd)} {rateUnit(rate.class)} from{' '}
-                {rate.effectiveFrom}
-                {rate.platformUsd === null
-                  ? ' · nothing published to compare'
-                  : ` · published ${MONEY.format(rate.platformUsd)}`}
-                {rate.current
-                  ? ''
-                  : rate.effectiveFrom > now
-                    ? ' · scheduled'
-                    : ' · superseded'}
-              </p>
-              {rate.note ? (
-                <p className="text-text-muted text-caption">{rate.note}</p>
-              ) : null}
+            <li key={rate.id} className="flex items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <Row
+                  lead={rate.current ? 'ok' : 'idle'}
+                  value={`${MONEY.format(rate.priceUsd)} ${rateUnit(rate.class)}`}
+                  sub={[
+                    `from ${rate.effectiveFrom}`,
+                    rate.platformUsd === null
+                      ? 'nothing published to compare'
+                      : `published ${MONEY.format(rate.platformUsd)}`,
+                    rate.current
+                      ? null
+                      : rate.effectiveFrom > now
+                        ? 'scheduled'
+                        : 'superseded',
+                    rate.note,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                >
+                  <span className="font-mono">{rate.model ?? 'any model'}</span>{' '}
+                  <span className="text-text-muted">
+                    {rate.class.replaceAll('_', ' ')}
+                  </span>
+                </Row>
+              </div>
               {writable ? (
-                <DeleteOrgRate
-                  orgId={viewer.orgId}
-                  rateId={rate.id}
-                  said={`${rate.model ?? 'any model'} ${rate.class} rate from ${rate.effectiveFrom}`}
-                  action={deleteOwnRateAction}
-                />
+                <div className="pt-1.5">
+                  <DeleteOrgRate
+                    orgId={viewer.orgId}
+                    rateId={rate.id}
+                    said={`${rate.model ?? 'any model'} ${rate.class} rate from ${rate.effectiveFrom}`}
+                    action={deleteOwnRateAction}
+                  />
+                </div>
               ) : null}
             </li>
           ))}
-        </ul>
+        </ol>
       )}
       {overrides.more ? (
-        <p className="text-text-muted text-caption">
+        <p className="text-text-muted mt-1 text-caption">
           Only the first {OVERRIDE_PAGE} rates are shown.
         </p>
       ) : null}

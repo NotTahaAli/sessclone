@@ -1,6 +1,8 @@
 import Link from 'next/link'
 
 import { signOut } from '../sign-in/actions'
+import { LogoMark } from '../_ui/logo'
+import { Button, buttonClass } from '../_ui/primitives'
 
 /**
  * What a locked Org sees instead of the dashboard (ticket 119): one sentence
@@ -25,30 +27,25 @@ export function Waiting({
   return (
     <div className="bg-ground text-text fixed inset-0 z-50 overflow-y-auto">
       <main className="mx-auto flex max-w-md flex-col gap-4 px-4 py-16">
+        <LogoMark size={28} className="text-text" />
         <h1 className="text-heading-lg">
           {cancelled ? 'Cancelled' : 'Waiting for approval'}
         </h1>
-        <p className="text-text-secondary text-body">
+        <p className="text-text-muted text-body">
           {cancelled
             ? `${orgName}'s subscription has been cancelled. Nothing is collected while it is. Whoever operates this deployment can turn it back on.`
             : `${orgName} is waiting for whoever operates this deployment to approve it. Until then there is nothing to set up and nothing is collected. Reload this page once you hear it is approved.`}
         </p>
-        {operator ? (
-          <Link
-            href="/admin/orgs"
-            className="text-accent-text text-body underline"
-          >
-            Open the Admin panel to approve it
-          </Link>
-        ) : null}
-        <form action={signOut}>
-          <button
-            type="submit"
-            className="border-control-border text-text hover:bg-surface-hover h-[var(--control-h)] w-full rounded-md border px-3 text-body"
-          >
-            Sign out
-          </button>
-        </form>
+        <div className="flex flex-wrap gap-2">
+          {operator ? (
+            <Link href="/admin/orgs" className={buttonClass('primary')}>
+              Open the Admin panel to approve it
+            </Link>
+          ) : null}
+          <form action={signOut}>
+            <Button type="submit">Sign out</Button>
+          </form>
+        </div>
       </main>
     </div>
   )

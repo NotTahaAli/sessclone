@@ -8,6 +8,7 @@ import { SIGNUP_PLANS } from '../../lib/subscriptions'
 import { marketingTiers, tierPrice } from '../../lib/tiers'
 import { OrgMark } from '../org-mark'
 import { LogoMark } from '../_ui/logo'
+import { buttonClass, inputClass } from '../_ui/primitives'
 import { invitationToken, safeNext } from '../../lib/auth/next-path'
 import { ProviderError } from './provider-error'
 import { PanelCredit } from '../(dashboard)/credit'
@@ -41,9 +42,9 @@ const MESSAGES: Record<string, string> = {
 // Matched, never rendered as it arrives — see `app/auth/callback/route.ts`.
 const PROVIDER_CODE = /^[a-z_]{1,64}$/
 
-/** The one control both forms submit through, so they read as one choice. */
-const BUTTON =
-  'inline-flex h-[var(--control-h)] w-full items-center justify-center rounded-md px-4 text-body'
+/** Direction A's round button at full width (ticket 111): one primary. */
+const PRIMARY = `${buttonClass('primary')} w-full`
+const SECONDARY = `${buttonClass()} w-full`
 
 type Query = Promise<{
   error?: string
@@ -113,8 +114,8 @@ async function PlanChoice({ searchParams }: { searchParams: Query }) {
   const team = tiers.find((tier) => tier.key === 'team')
 
   return (
-    <fieldset className="border-rule bg-surface mt-6 flex flex-col gap-2 rounded-md border p-4">
-      <legend className="text-text-secondary px-1 text-caption">
+    <fieldset className="mt-6 flex flex-col gap-2">
+      <legend className="text-text-muted mb-2 text-caption">
         New here? Choose a plan
       </legend>
       {tiers.map((tier, index) => (
@@ -142,7 +143,7 @@ async function PlanChoice({ searchParams }: { searchParams: Query }) {
             min={team.minSeats ?? 1}
             max={team.maxSeats ?? undefined}
             defaultValue={team.minSeats ?? 2}
-            className="border-control-border text-text h-[var(--control-h)] w-20 rounded border px-2 text-body"
+            className={`${inputClass} w-20`}
           />
         </label>
       ) : null}
@@ -224,13 +225,13 @@ export default function SignIn({ searchParams }: { searchParams: Query }) {
           type="submit"
           formAction={signInWithGitHub}
           formNoValidate
-          className={`${BUTTON} bg-accent-fill text-accent-on-fill mt-6`}
+          className={`${PRIMARY} mt-6`}
         >
           Continue with GitHub
         </button>
 
-        <div className="border-rule bg-surface mt-6 flex flex-col gap-2 rounded-md border p-4">
-          <label htmlFor="email" className="text-text-secondary text-caption">
+        <div className="border-rule mt-6 flex flex-col gap-2 border-t pt-4">
+          <label htmlFor="email" className="text-text-muted text-caption">
             Or get a sign-in link by email
           </label>
           <input
@@ -240,12 +241,9 @@ export default function SignIn({ searchParams }: { searchParams: Query }) {
             autoComplete="email"
             required
             placeholder="you@example.com"
-            className="border-control-border text-text h-[var(--control-h)] w-full rounded border px-3 text-body"
+            className={`${inputClass} w-full`}
           />
-          <button
-            type="submit"
-            className={`${BUTTON} border-control-border text-text border`}
-          >
+          <button type="submit" className={SECONDARY}>
             Email me a link
           </button>
         </div>

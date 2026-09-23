@@ -10,9 +10,12 @@
 - Logo R1: the prompt chevron closed into a sum sign, bottom stroke in the accent. SVG mark, lockup, favicon and app icon.
 - Shell: 232px sidebar with the Usage / Collector / Manage groups; phone bottom bar unchanged in content.
 
-**Status:** todo
+**Status:** done
 
 - [x] Tokens and fonts in `globals.css`, light and dark, `data-theme` and system
 - [ ] Primitives built and used by the transcript page too — built in `apps/web/app/_ui/` and used by the shell; the transcript page already reads the shared tokens, and switching its markup to the primitives is left to the thread that owns that page
+
+The one unticked box is the transcript page's markup, which another thread owns; everything this ticket owns is done.
+
 - [x] Logo, favicon, app icon
 - [x] Screenshots 1440x900 + 390x844, light and dark

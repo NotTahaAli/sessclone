@@ -4,6 +4,7 @@ import { useActionState, useCallback } from 'react'
 
 import { addOrgRateAction, deleteOrgRateAction } from './rate-actions'
 import { RATE_CLASSES, rateUnit, type RateClass } from '../../../../lib/rates'
+import { buttonClass, inputClass } from '../../../_ui/primitives'
 
 // Client-side for the refusal and the confirmation, as everywhere else in the
 // admin area: a write the policy refuses touches nothing and raises nothing,
@@ -20,7 +21,7 @@ const LABELS: Record<RateClass, string> = {
   web_fetch_request: 'Web fetch',
 }
 
-const FIELD = 'border-control-border text-text rounded border px-3 py-1 text-sm'
+const FIELD = inputClass
 
 export function AddOrgRateForm({
   orgId,
@@ -101,7 +102,11 @@ export function AddOrgRateForm({
             className={FIELD}
           />
         </label>
-        <button type="submit" disabled={pending} className={FIELD}>
+        <button
+          type="submit"
+          disabled={pending}
+          className={buttonClass('primary')}
+        >
           {pending ? 'Saving…' : 'Set price'}
         </button>
       </form>
