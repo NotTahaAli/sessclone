@@ -67,3 +67,9 @@ export async function POST(request: Request) {
     )
   }
 }
+
+// Vercel Cron calls the production URL with GET and `Authorization: Bearer
+// $CRON_SECRET`, so on Vercel set `CRON_SECRET` to the same value as
+// `RETENTION_SWEEP_SECRET`; `apps/web/vercel.json` holds the schedule. The same
+// secret gates both methods, so GET opens nothing POST did not.
+export const GET = POST

@@ -31,7 +31,7 @@ The failures surface is drawn in `docs/design/dashboard-wireframes.md`, under "T
   Phone-first single column.
 - The onboarding waiting surface links to the failures view when the period
   holds any — where a stalled Collector is first noticed.
-- `supabase/migrations/20260922090000_session_failure_index.sql` — partial
+- `supabase/migrations/20260922090001_session_failure_index.sql` — partial
   index `(org_id, occurred_at desc, id desc) where kind = 'stop_failure'`, so
   the read is index-backed.
 - Screenshots (1440x900 and 390x844, light and dark) in project files

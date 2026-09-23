@@ -380,6 +380,30 @@ test('the endpoint answers the backlog, and removes nothing it cannot delete', a
   delete process.env.RETENTION_SWEEP_SECRET
 })
 
+/** A Vercel Cron call: GET, with the secret as a bearer or no header at all. */
+const cronRequest = (secret?: string) =>
+  new Request('https://sessclone.test/api/retention/sweep', {
+    headers: secret ? { authorization: `Bearer ${secret}` } : {},
+  })
+
+test('a scheduled GET sweeps like a POST', async () => {
+  // Vercel Cron calls the production URL with GET and `Bearer $CRON_SECRET`,
+  // so a POST-only route answered it 405 and nothing was ever swept.
+  process.env.RETENTION_SWEEP_SECRET = 'a-real-secret'
+  await sql`update orgs set retention_days = 1 where id = ${fixture.acme.id}`
+  await seedArtifact({ age: 10 })
+
+  const { GET } = await import('../app/api/retention/sweep/route')
+  expect((await GET(cronRequest())).status).toBe(401)
+  expect(await sql`select id from log_artifacts`).toHaveLength(1)
+  expect(await (await GET(cronRequest('a-real-secret'))).json()).toEqual({
+    removed: 1,
+    remaining: 0,
+  })
+
+  delete process.env.RETENTION_SWEEP_SECRET
+})
+
 test('a transcript that keeps being re-uploaded still ages out', async () => {
   // `uploaded_at` moves every time a growing Session replaces its object
   // (ADR 0003), so a window measured from it is days since the last write and

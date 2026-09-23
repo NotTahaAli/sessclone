@@ -560,3 +560,25 @@ test('every sessclone function pins pg_temp', async () => {
 
   expect(unpinned.map((row) => row.name)).toEqual([])
 })
+
+test('no security definer function is executable by everyone', async () => {
+  // Postgres grants EXECUTE to PUBLIC on every new function, and Supabase adds
+  // `anon` and `authenticated` on top. A definer helper runs as the table
+  // owner, so a role that can call it reads what the helper reads. The Data
+  // API is off today, which made this unreachable rather than closed; the
+  // dashboard's role and the owner are the only callers these need.
+  const open = await sql<{ name: string }[]>`
+    select routine.proname as name
+      from pg_proc routine
+      join pg_namespace space on space.oid = routine.pronamespace
+     where space.nspname = 'public'
+       and routine.prosecdef
+       and (routine.proacl is null
+            or exists (select 1 from aclexplode(routine.proacl) grant_row
+                        where grant_row.grantee = 0
+                          and grant_row.privilege_type = 'EXECUTE'))
+     order by routine.proname
+  `
+
+  expect(open.map((row) => row.name)).toEqual([])
+})
