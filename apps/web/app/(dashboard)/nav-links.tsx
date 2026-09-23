@@ -54,10 +54,10 @@ const groupsMarkup = (
   { groups, children }: Groups,
   pathname: string | null,
 ) => (
-  <div className="flex flex-col gap-5">
+  <div className="flex flex-col">
     {groups.map((group, index) => (
-      <div key={group.label} className="flex flex-col gap-1">
-        <p className="text-label text-text-muted px-3 uppercase">
+      <div key={group.label} className="flex flex-col">
+        <p className="text-label text-text-muted mx-2 mt-3.5 mb-1 uppercase">
           {group.label}
         </p>
         {linksMarkup(group.items, pathname)}
@@ -82,7 +82,7 @@ export function SidebarLinks({ items }: { items: NavItem[] }) {
 
 const linksMarkup = (items: NavItem[], pathname: string | null) => {
   return (
-    <ul className="flex flex-col gap-1">
+    <ul className="flex flex-col gap-0.5">
       {items.map((item) => {
         const current = isCurrent(pathname, item.href)
         return (
@@ -90,17 +90,13 @@ const linksMarkup = (items: NavItem[], pathname: string | null) => {
             <PendingLink
               href={item.href}
               aria-current={current ? 'page' : undefined}
-              // An accent edge and accent text, and deliberately no fill: the
-              // design system says the active item carries an underline rather
-              // than a fill, because the accent fill is the one primary action
-              // on a surface and a filled nav item competes with it. Dark is
-              // where that matters most — `--accent-subtle` there is a deep
-              // saturated brown, and a nav item painted in it reads as the
-              // loudest thing on the page.
-              className={`hover:bg-surface-hover flex h-[var(--control-h)] items-center rounded-md border-l-2 px-3 text-body ${
+              // Direction A (ticket 111): the current item takes the neutral
+              // `selected` fill and the text colour, and no accent at all —
+              // the accent is kept for live state, as on the transcript page.
+              className={`flex items-center rounded-[7px] px-2 py-1.5 text-body ${
                 current
-                  ? 'border-accent-border text-accent-text'
-                  : 'text-text-secondary border-transparent'
+                  ? 'bg-selected text-text font-medium'
+                  : 'text-text-muted hover:bg-surface-hover hover:text-text'
               }`}
             >
               {item.label}
@@ -167,13 +163,13 @@ const barMarkup = ({ items, behind }: Bar, pathname: string | null) => {
             <PendingLink
               href={item.href}
               aria-current={current ? 'page' : undefined}
-              // The 2px rule above the label is the same accent edge the
-              // sidebar draws down the side of its item, turned through ninety
-              // degrees: one idea, two widths.
-              className={`flex flex-col items-center justify-center gap-1 border-t-2 py-3 text-caption ${
+              // A 2px rule in the text colour above the current label, and no
+              // accent: the accent is for live state (Direction A, ticket
+              // 111). The bottom padding clears a phone's home indicator.
+              className={`flex flex-col items-center justify-center pt-2.5 pb-[max(14px,env(safe-area-inset-bottom))] text-caption ${
                 current
-                  ? 'border-accent-border text-accent-text'
-                  : 'text-text-secondary border-transparent'
+                  ? 'text-text font-medium shadow-[inset_0_2px_0_var(--color-text)]'
+                  : 'text-text-muted'
               }`}
             >
               {item.label}

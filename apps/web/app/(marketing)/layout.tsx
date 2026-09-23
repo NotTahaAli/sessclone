@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { SignedInLink } from './signed-in-link'
+import { Lockup } from '../_ui/logo'
 import type { ReactNode } from 'react'
 
 import { CONTACT_EMAIL, REPOSITORY } from './constants'
@@ -19,10 +20,10 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
         <nav className="mx-auto flex h-16 w-full max-w-[1120px] items-center justify-between gap-4 px-5">
           <Link
             href="/"
-            className="text-heading flex h-[var(--control-h)] items-center font-semibold tracking-tight"
+            className="text-heading flex h-[var(--control-h)] items-center"
             aria-label="sessclone home"
           >
-            sessclone
+            <Lockup />
           </Link>
           <div className="text-body flex items-center gap-5">
             <Link

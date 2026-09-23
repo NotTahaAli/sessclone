@@ -5,6 +5,7 @@ import { readAnonymously } from '../../lib/db'
 import { invitationOrg } from '../../lib/invitations'
 import { logoPath } from '../../lib/org-logo'
 import { OrgMark } from '../org-mark'
+import { LogoMark } from '../_ui/logo'
 import { invitationToken, safeNext } from '../../lib/auth/next-path'
 import { ProviderError } from './provider-error'
 import { PanelCredit } from '../(dashboard)/credit'
@@ -132,6 +133,7 @@ async function Notices({ searchParams }: { searchParams: Query }) {
 export default function SignIn({ searchParams }: { searchParams: Query }) {
   return (
     <main className="mx-auto flex max-w-md flex-col px-4 py-16">
+      <LogoMark size={28} className="text-text mb-4" />
       <h1 className="text-heading-lg">Sign in to sessclone</h1>
 
       <Suspense fallback={null}>

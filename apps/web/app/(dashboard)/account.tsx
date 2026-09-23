@@ -1,5 +1,6 @@
 import { signOut } from '../sign-in/actions'
 import type { Viewer } from '../../lib/viewer'
+import { buttonClass } from '../_ui/primitives'
 
 // AccountMenu and Avatar from the design system's inventory, both first needed
 // at ticket 45.
@@ -36,7 +37,7 @@ export function Avatar({
   return (
     <span
       aria-hidden="true"
-      className={`bg-quiet-bg text-text-secondary inline-flex shrink-0 items-center justify-center rounded-full text-label uppercase ${AVATAR[size]}`}
+      className={`bg-surface-hover text-text-muted inline-flex shrink-0 items-center justify-center rounded-full text-caption uppercase ${AVATAR[size]}`}
     >
       {name.slice(0, 1)}
     </span>
@@ -46,9 +47,11 @@ export function Avatar({
 export function AccountMenu({ viewer }: { viewer: Viewer }) {
   return (
     <details className="group relative">
-      <summary className="hover:bg-surface-hover flex h-[var(--control-h)] cursor-pointer list-none items-center gap-2 rounded-md px-2 text-body">
+      <summary className="hover:bg-surface-hover flex h-[var(--control-h)] cursor-pointer list-none items-center gap-2 rounded-md px-2 text-caption lg:text-[13px]">
         <Avatar name={viewer.displayName ?? viewer.email} />
-        <span className="text-text-secondary truncate">
+        {/* Only the avatar shows on a phone (Direction A); the name stays
+            for a screen reader, since the avatar is hidden from one. */}
+        <span className="text-text-muted truncate max-lg:sr-only">
           {viewer.displayName ?? viewer.email}
         </span>
       </summary>
@@ -68,7 +71,7 @@ export function AccountMenu({ viewer }: { viewer: Viewer }) {
           overhangs into the content column instead, which is what an overlay
           is for. The width is capped at the window either way, for the
           narrowest phone. */}
-      <div className="bg-surface border-rule shadow-overlay absolute top-full right-0 z-10 mt-1 w-64 max-w-[calc(100vw-2rem)] rounded-md border p-3 lg:top-auto lg:right-auto lg:bottom-full lg:left-0 lg:mt-0 lg:mb-1">
+      <div className="bg-ground border-rule shadow-overlay absolute top-full right-0 z-10 mt-1 w-64 max-w-[calc(100vw-2rem)] rounded-lg border p-3 lg:top-auto lg:right-auto lg:bottom-full lg:left-0 lg:mt-0 lg:mb-1">
         {/* Ticket 100: the name leads, and the address stays under it so
             the person can see which account they are signed in as. */}
         <p className="text-text truncate text-body">
@@ -84,16 +87,13 @@ export function AccountMenu({ viewer }: { viewer: Viewer }) {
           {' · '}
           {/* The Role badge. A Role is an authority, not a status, so it takes
               the neutral tokens rather than a status colour. */}
-          <span className="bg-quiet-bg text-quiet-text rounded-sm px-1.5 py-0.5 text-micro uppercase">
+          <span className="border-rule text-text-muted rounded-full border px-2 py-0.5 text-caption">
             {ROLE_LABEL[viewer.role]}
           </span>
         </p>
 
         <form action={signOut} className="mt-3">
-          <button
-            type="submit"
-            className="border-control-border text-text hover:bg-surface-hover h-[var(--control-h)] w-full rounded-md border px-3 text-body"
-          >
+          <button type="submit" className={`${buttonClass()} w-full`}>
             Sign out
           </button>
         </form>

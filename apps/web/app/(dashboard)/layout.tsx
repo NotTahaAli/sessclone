@@ -2,6 +2,7 @@ import { Suspense, type ReactNode } from 'react'
 
 import { AccountMenu } from './account'
 import { AppearanceSync } from './appearance-sync'
+import { LogoMark } from '../_ui/logo'
 import { OrgMark } from '../org-mark'
 import { PanelCredit } from './credit'
 import {
@@ -133,13 +134,18 @@ async function OrgName({ className }: { className: string }) {
   const viewer = await currentViewer()
   if (!viewer) return <span className={className}>No Org</span>
 
-  // Ticket 77: the mark sits beside the name wherever the name is, which is
-  // the design system's rule for OrgMark — never instead of it, since a logo
-  // is not a label. It rides on the viewer's own row rather than being read
-  // here, so the shell still costs one transaction.
+  // Ticket 77: an uploaded logo sits beside the name, never instead of it,
+  // since a logo is not a label. It rides on the viewer's own row rather than
+  // being read here, so the shell still costs one transaction.
+  //
+  // Ticket 111 (assumption, stated): Direction A's brand line is the sessclone
+  // mark then the Org name, so an Org with no logo shows no initial tile — the
+  // tile repeated the first letter of the name right beside it.
   return (
-    <span className="flex items-center gap-2">
-      <OrgMark name={viewer.orgName} src={viewer.orgLogo} size={20} />
+    <span className="flex min-w-0 items-center gap-2">
+      {viewer.orgLogo ? (
+        <OrgMark name={viewer.orgName} src={viewer.orgLogo} size={20} />
+      ) : null}
       <span className={className} title={viewer.orgName}>
         {viewer.orgName}
       </span>
@@ -185,7 +191,7 @@ async function Content({ children }: { children: ReactNode }) {
 function Pending({ className }: { className: string }) {
   return (
     <span
-      className={`bg-surface inline-block h-4 w-32 animate-none rounded ${className}`}
+      className={`bg-surface-hover inline-block h-3 w-24 animate-none rounded ${className}`}
       aria-hidden="true"
     />
   )
@@ -205,6 +211,11 @@ async function AdminEntry() {
   if (!operator) return null
   return <SidebarLinks items={ADMIN_ONLY} />
 }
+
+/** The brand line at both widths: the sessclone mark, then the Org's name in
+ * small capitals (Direction A, ticket 111). */
+const BRAND =
+  'text-text-muted flex min-w-0 items-center gap-2 text-caption tracking-[0.1em] uppercase lg:mx-2 lg:mb-2'
 
 /** Built once at module load rather than per render of the frame. */
 const GROUPS = navGroups()
@@ -235,20 +246,21 @@ const PENDING_BAR = <BottomBarLinksPending items={BOTTOM_BAR} />
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <div className="bg-ground text-text min-h-dvh lg:flex">
-      {/* Desktop: the 232px sidebar, holding the same four destinations and
-          the account block. */}
+      {/* Desktop: the 232px sidebar, holding the same destinations and the
+          account block. Sticky at the window's height, so the groups stay put
+          while a long page scrolls beside them (Direction A, ticket 111). */}
       <aside
         // 232px, which is what the wireframes draw at 1440.
-        className="border-rule hidden w-[232px] shrink-0 flex-col justify-between border-r p-4 lg:flex"
+        className="border-rule hidden w-[232px] shrink-0 flex-col justify-between overflow-y-auto border-r px-3.5 py-[18px] lg:sticky lg:top-0 lg:flex lg:h-dvh"
       >
         <div>
-          <p className="text-label text-text-muted uppercase">sessclone</p>
-          <p className="text-heading mt-1 truncate">
+          <p className={BRAND}>
+            <LogoMark className="text-text" />
             <Suspense fallback={PENDING_SIDEBAR}>
               <OrgName className="block truncate" />
             </Suspense>
           </p>
-          <nav aria-label="Main" className="mt-6">
+          <nav aria-label="Main" className="mt-2">
             <Suspense fallback={PENDING_GROUPS}>
               <SidebarGroups groups={GROUPS}>
                 {/* The one entry that is a database read. Its fallback is
@@ -275,13 +287,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
       {/* Phone: the header carries the Org name and the account control, and
           the four destinations are a bottom bar. */}
-      <header className="border-rule bg-ground sticky top-0 z-10 flex items-center justify-between gap-3 border-b px-4 py-2 lg:hidden">
-        <p className="truncate">
-          <span className="text-label text-text-muted block uppercase">
-            sessclone
-          </span>
+      <header className="border-rule bg-ground sticky top-0 z-10 flex items-center justify-between gap-3 border-b px-4 py-1.5 lg:hidden">
+        <p className={BRAND}>
+          <LogoMark className="text-text" />
           <Suspense fallback={PENDING_HEADER}>
-            <OrgName className="text-heading block truncate" />
+            <OrgName className="block truncate" />
           </Suspense>
         </p>
         <Suspense fallback={null}>
@@ -299,7 +309,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
       {/* The bottom bar is fixed, so the content column reserves room for it
           rather than ending underneath it. */}
-      <main className="grow px-4 py-6 pb-28 lg:px-8 lg:pb-8">
+      <main className="min-w-0 grow px-4 py-5 pb-28 lg:px-7 lg:pb-8">
         <Suspense fallback={PENDING_CONTENT}>
           <Content>{children}</Content>
         </Suspense>
