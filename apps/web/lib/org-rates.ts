@@ -1,6 +1,8 @@
 import type { TransactionSql } from 'postgres'
 
-import type { RateClass } from './rates'
+import { z } from 'zod'
+
+import { RATE_CLASSES, type RateClass } from './rates'
 
 // Ticket 64: an Org that negotiated its own pricing, and the estimates that
 // have to match what it actually pays.
@@ -16,12 +18,14 @@ import type { RateClass } from './rates'
 // because `turn_costs` resolves on the Turn's own day and overwriting an old
 // row rewrites what that day cost. There is no update statement in this file.
 //
-// Who may write is `org_rate_overrides_write`, which is the platform flag:
-// negotiated pricing is agreed with the operator, and an Owner who could write
-// this table could halve their own invoice. Who may *read* is the Org — every
-// Cost its Members see comes from these rows, so hiding them would explain
-// nothing — and no other Org, which `org_rate_overrides_read` enforces and the
-// policy suite proves.
+// Who may write is `org_rate_overrides_write`, the platform flag, and since
+// ticket 121 `org_rate_overrides_own`: the Owner or an Admin of an Org whose
+// Tier has `features.own_rates` (Enterprise), for that Org alone. Billing is
+// per seat, so a rate changes an estimate, never an invoice.
+//
+// Who may *read* is the Org — every Cost its Members see comes from these
+// rows, so hiding them would explain nothing — and no other Org, which
+// `org_rate_overrides_read` enforces and the policy suite proves.
 
 export type OrgRate = {
   id: string
@@ -207,3 +211,55 @@ export const deleteOrgRate = async (
   `
   return rows.length > 0
 }
+
+// The form both rate pages post (ticket 64's admin page, ticket 121's Org
+// page). A Server Action is a POST endpoint whether or not a form was
+// rendered for the caller, so every field is parsed before it reaches a
+// statement.
+const OrgRateForm = z.object({
+  orgId: z.uuid(),
+  // Empty is the override that does not name a model, such as a search.
+  model: z
+    .string()
+    .trim()
+    .max(200)
+    .transform((value) => value || null),
+  class: z.enum(RATE_CLASSES),
+  // Trimmed before the length check: '   ' has length 3 and `Number('   ')` is
+  // 0, and a zero price is worse than no price — the Turn then reads as priced
+  // at nothing rather than as unpriced (ADR 0002).
+  priceUsd: z
+    .string()
+    .trim()
+    // Digits and at most one point: a Server Action is a POST endpoint, and
+    // `Number` alone accepts '0x10' as 16 and '1e5' as 100000.
+    .regex(/^\d+(\.\d+)?$/, 'not a price')
+    .transform(Number)
+    .refine(
+      (value) => Number.isFinite(value) && value >= 0 && value <= 100_000,
+      'not a price',
+    ),
+  // Bounded: a date in the 99th century is a typo, and it would sit at the
+  // bottom of the list forever pricing nothing.
+  effectiveFrom: z.iso
+    .date()
+    .refine((value) => value <= '2100-01-01', 'too far ahead'),
+  // What was agreed and where it is written down. An override with no
+  // provenance is a discount nobody can re-check.
+  note: z
+    .string()
+    .trim()
+    .max(200)
+    .transform((value) => value || null),
+})
+
+/** The fields of one rate, parsed from a form post. */
+export const parseOrgRate = (formData: FormData) =>
+  OrgRateForm.safeParse({
+    orgId: formData.get('orgId'),
+    model: formData.get('model') ?? '',
+    class: formData.get('class'),
+    priceUsd: formData.get('priceUsd'),
+    effectiveFrom: formData.get('effectiveFrom'),
+    note: formData.get('note') ?? '',
+  })

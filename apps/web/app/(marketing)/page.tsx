@@ -275,8 +275,8 @@ export default async function Landing() {
           <h2 className="text-display font-serif">Talk to us</h2>
           <p className="text-body text-text-secondary max-w-[60ch]">
             Tell us how many seats you need and what you are trying to see.
-            Enterprise terms, negotiated rates and a retention policy of your
-            own are all a conversation rather than a form.
+            Enterprise terms, per-model rates you set yourselves and a retention
+            policy of your own start with a conversation rather than a form.
           </p>
           <a
             href={`mailto:${CONTACT_EMAIL}`}

@@ -93,8 +93,9 @@ export default async function Pricing() {
           </h2>
           <p className="text-body text-text-secondary max-w-[60ch]">
             Tell us how many seats you need and what you are trying to see.
-            Negotiated per-model rates and a retention policy of your own are a
-            conversation rather than a form.
+            Per-model rates you set yourselves, so your estimates match what you
+            actually pay, and a retention policy of your own. Seats and terms
+            are a conversation rather than a form.
           </p>
           <a
             href={`mailto:${CONTACT_EMAIL}?subject=sessclone%20Enterprise`}

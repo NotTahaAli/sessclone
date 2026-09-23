@@ -130,6 +130,20 @@ export default async function Page() {
         </span>
       </Link>
 
+      {/* Ticket 121. Listed for every Owner and Admin: the page says so when
+          the plan does not include writing them, and shows the rows either
+          way, since every Member's costs are priced from them. */}
+      <Link
+        href="/settings/org/rates"
+        className="border-rule bg-surface hover:bg-surface-hover block rounded-md border p-4"
+      >
+        <span className="text-heading block">Rates</span>
+        <span className="text-text-secondary mt-1 block text-sm">
+          The per-model rates this Org&apos;s costs are estimated at, where they
+          differ from the published prices.
+        </span>
+      </Link>
+
       {reachesTier(viewer.role) ? (
         <Link
           href="/settings/tier"
