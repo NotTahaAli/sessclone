@@ -9,7 +9,7 @@ import {
 } from '../../../ui/select';
 import { Input } from '../../../ui/input';
 import { Label } from '../../../ui/label';
-import { useState, useRef, useSyncExternalStore, type ComponentProps } from 'react';
+import { useEffect, useState, useRef, useSyncExternalStore, type ComponentProps } from 'react';
 import { cn } from '../../../../lib/cn';
 import {
   Dialog,
@@ -108,6 +108,13 @@ function ServerSelectContent({
     defaultValues: () => structuredClone(defaultValues),
   });
   const timerRef = useRef<number | null>(null);
+  // Ours: a pending change must not fire after unmount.
+  useEffect(
+    () => () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    },
+    [],
+  );
   useListener({
     stf,
     onUpdate() {

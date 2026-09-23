@@ -124,7 +124,7 @@ function Content({ schemeId, scopes, setToken, setOpen }: AuthDialogContentProps
     };
   }, [tokenInfo]);
 
-  const authorize = useQuery(async (values: FormValues) => {
+  const authorize = useQuery(async (signal, values: FormValues) => {
     if (!type) return;
     const token = await requestOAuthToken(scheme, type, {
       ...values,
@@ -132,7 +132,7 @@ function Content({ schemeId, scopes, setToken, setOpen }: AuthDialogContentProps
       scopes,
       clientAuth,
     });
-    if (!token) return;
+    if (!token || signal.aborted) return;
 
     setToken(token);
     setOpen(false);

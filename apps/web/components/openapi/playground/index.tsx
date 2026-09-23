@@ -197,11 +197,21 @@ export default function PlaygroundClient({
     transform: transformAuthInputs,
   });
 
-  const testQuery = useQuery(async (input: FormValues) => {
+  const testQuery = useQuery(async (signal, input: FormValues) => {
     const fetcher = await import('fumadocs-openapi/playground').then((mod) =>
       mod.createBrowserFetcher(mediaAdapters, {
         proxyUrl,
         ...fetchOptions,
+        // Ours: aborted on unmount, reset or a second Send (`useQuery`).
+        async onRequestInit(init) {
+          const next = fetchOptions?.onRequestInit
+            ? await fetchOptions.onRequestInit(init)
+            : init;
+          return {
+            ...next,
+            signal: next.signal ? AbortSignal.any([next.signal, signal]) : signal,
+          };
+        },
       }),
     );
 
@@ -235,6 +245,14 @@ export default function PlaygroundClient({
       timerRef.current = window.setTimeout(triggerExampleUpdate, 400);
     },
   });
+
+  // Ours: a pending example update must not fire after unmount.
+  useEffect(
+    () => () => {
+      if (timerRef.current) window.clearTimeout(timerRef.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     // same object reference = unchanged
