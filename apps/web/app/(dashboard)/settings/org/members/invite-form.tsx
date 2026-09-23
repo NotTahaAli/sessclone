@@ -3,6 +3,7 @@
 import { useActionState } from 'react'
 
 import { sendInvite } from './invite-actions'
+import { Button, cardClass, inputClass } from '../../../../_ui/primitives'
 import type { Delivery } from '../../../../../lib/mailer'
 
 // What sits above the copyable link, given what delivery did (ticket 82). The
@@ -37,48 +38,48 @@ export function InviteForm({ origin }: { origin: string }) {
 
   return (
     <>
-      <form action={formAction} className="mt-4 flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1 text-caption">
+      {/* Direction A's field (ticket 113): the address and the Role in round
+          fields, the primary button beside them. */}
+      <form action={formAction} className="flex flex-wrap gap-1.5 py-1">
+        <label className="sr-only" htmlFor="invite-email">
           Email
-          <input
-            type="email"
-            name="email"
-            required
-            autoComplete="off"
-            placeholder="person@example.com"
-            className="border-control-border text-text rounded border px-3 py-1 text-sm"
-          />
         </label>
-        <label className="flex flex-col gap-1 text-caption">
+        <input
+          id="invite-email"
+          type="email"
+          name="email"
+          required
+          autoComplete="off"
+          placeholder="name@company.com"
+          className={`${inputClass} flex-1 basis-full sm:min-w-44 sm:basis-auto`}
+        />
+        <label className="sr-only" htmlFor="invite-role">
           Role
-          <select
-            name="role"
-            defaultValue="member"
-            className="border-control-border text-text rounded border px-3 py-1 text-sm"
-          >
-            {ROLES.map((role) => (
-              <option key={role.value} value={role.value}>
-                {role.label} — {role.said}
-              </option>
-            ))}
-          </select>
         </label>
-        <button
-          type="submit"
-          disabled={pending}
-          className="border-control-border text-text rounded border px-3 py-1 text-sm"
+        <select
+          id="invite-role"
+          name="role"
+          defaultValue="member"
+          className={`${inputClass} min-w-0 flex-1 sm:max-w-56 sm:flex-none`}
         >
+          {ROLES.map((role) => (
+            <option key={role.value} value={role.value}>
+              {role.label} — {role.said}
+            </option>
+          ))}
+        </select>
+        <Button type="submit" variant="primary" disabled={pending}>
           {pending ? 'Inviting…' : 'Invite'}
-        </button>
+        </Button>
       </form>
 
-      <div role="status" aria-live="polite" className="mt-3">
+      <div role="status" aria-live="polite" className="mt-1">
         {state && 'error' in state ? (
-          <p className="text-bad-text text-sm">{state.error}</p>
+          <p className="text-bad-text text-caption">{state.error}</p>
         ) : null}
         {state && 'link' in state ? (
-          <div className="border-rule bg-surface rounded-md border p-3">
-            <p className="text-sm">
+          <div className={`${cardClass} mt-2`}>
+            <p className="text-caption">
               {deliveryLine(state.delivery, state.email)}
             </p>
             {/* Readonly rather than text, so it is one tap to copy on a phone
@@ -87,7 +88,7 @@ export function InviteForm({ origin }: { origin: string }) {
               readOnly
               value={`${origin}${state.link}`}
               onFocus={select}
-              className="border-control-border text-text mt-2 w-full rounded border px-3 py-1 font-mono text-caption"
+              className={`${inputClass} mt-2 w-full font-mono text-caption`}
             />
           </div>
         ) : null}

@@ -35,17 +35,17 @@ export function ThemeForm({
   const [state, formAction, pending] = useActionState(setOwnTheme, null)
 
   return (
-    <form action={formAction} className="mt-4">
+    <form action={formAction} className="flex flex-col items-end">
       <input type="hidden" name="memberId" value={memberId} />
 
+      {/* Direction A's segmented pill (ticket 113), the chosen segment filled
+          with the text colour. `group` rather than separate controls: they
+          are one choice, and a screen reader should hear them that way. */}
       <fieldset disabled={pending}>
-        <legend className="text-text-secondary text-sm">Light or dark</legend>
-        {/* `group` rather than a list of separate controls: they are one
-            choice, and a screen reader should hear them that way. */}
         <div
           role="group"
           aria-label="Light or dark"
-          className="border-control-border mt-3 inline-flex overflow-hidden rounded border"
+          className="border-rule inline-flex rounded-full border p-0.5 text-caption"
         >
           {OPTIONS.map((option) => {
             const selected = option.value === current
@@ -57,10 +57,8 @@ export function ThemeForm({
                 value={option.value}
                 aria-pressed={selected}
                 title={option.about}
-                className={`h-[var(--control-h)] border-l px-4 text-sm first:border-l-0 ${
-                  selected
-                    ? 'bg-accent-fill text-accent-on-fill border-accent-border'
-                    : 'border-control-border text-text'
+                className={`rounded-full px-2.5 py-1 ${
+                  selected ? 'bg-text text-ground' : 'text-text-muted'
                 }`}
               >
                 {option.label}
@@ -70,12 +68,13 @@ export function ThemeForm({
         </div>
       </fieldset>
 
+      {/* Only a refusal is said; a saved theme is its own confirmation. */}
       <div aria-live="polite">
         {state && 'error' in state ? (
-          <p className="text-bad-text mt-3 text-sm">{state.error}</p>
+          <p className="text-bad-text mt-1 text-caption">{state.error}</p>
         ) : null}
         {state && 'saved' in state ? (
-          <p className="text-ok-text mt-3 text-sm">{state.saved}</p>
+          <p className="sr-only">{state.saved}</p>
         ) : null}
       </div>
     </form>

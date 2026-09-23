@@ -2,35 +2,41 @@
 
 import { useActionState, useCallback, useState } from 'react'
 
-import { PRESETS } from '../../../lib/accent-presets'
+import {
+  Button,
+  CustomSwatch,
+  Swatch,
+  SwatchRow,
+  inputClass,
+} from '../../_ui/primitives'
+import { canonicalHex, PRESETS } from '../../../lib/accent-presets'
 
-// Ticket 77's SeedPicker, from the design system's component inventory: "Six
-// preset swatches, custom swatch, hex field, live preview. Preset selected,
-// custom seed, invalid hex, locked by the Org. Each swatch is a real button
-// with an aria-label."
+// Ticket 77's SeedPicker, redrawn for ticket 113: six preset swatches and a
+// seventh that takes any colour, in one row, with the hex beside them to edit
+// in place. Each swatch is a real button with an aria-label.
 //
 // One component for both surfaces — a Member's own seed and the Org's default
 // — because they are the same control over different rows, and the two
 // differences are props: whether an empty value means "inherit the Org's", and
 // whether the Org has locked it.
 //
-// **The preview is of what is stored, not of what is typed.** Resolving a seed
-// to its tones needs `@material/material-color-utilities`, and the ticket's
-// third criterion is that the library never reaches the browser — so the
-// swatches below are the seeds themselves, and the seven resolved values appear
-// after a save, painted by the page that read them back. A typed hex therefore
-// shows its own colour and not the accent it will become, which is honest: the
-// palette puts a floor under chroma, so the two are not always the same colour
-// and a preview drawn from the typed value would be a promise the product
-// cannot keep.
-
-/** The six presets with their swatch styles, built once at module load. */
-const SWATCHES = PRESETS.map((preset) => ({
-  ...preset,
-  style: { backgroundColor: preset.seed },
-}))
+// **Picking a preset saves it; any other colour is typed or picked, then
+// saved.** The seventh swatch is the platform's own colour input
+// (`CustomSwatch`), and it and the hex field write one value. The field is
+// checked here as it is typed, with the same shape rule the server applies
+// (`canonicalHex`), so a malformed hex is refused before it is posted; the
+// server's `readSeed` still decides, and refuses a grey the palette cannot
+// hold, and that refusal is shown under the row.
+//
+// **The preview is of what is stored, not of what is picked.** Resolving a
+// seed to its tones needs `@material/material-color-utilities`, which never
+// reaches the browser — so the swatch shows the colour picked, and the
+// resolved tones appear after a save, painted by the page that read them back.
 
 export type SeedResult = { error: string } | { saved: string } | null
+
+const isPreset = (hex: string | null) =>
+  hex !== null && PRESETS.some((preset) => preset.seed === hex)
 
 export function SeedPicker({
   action,
@@ -59,10 +65,33 @@ export function SeedPicker({
 }) {
   const [state, formAction, pending] = useActionState(action, null)
   const [typed, setTyped] = useState(current ?? '')
+  const [shown, setShown] = useState(current)
 
-  // The native picker and the hex field write the same value, so they share a
-  // field and differ only in case: a colour input always yields lower case,
-  // and the stored form is upper.
+  // A save re-renders the page with the new stored seed; the field follows
+  // it, so a preset picked after typing does not leave the typed colour
+  // waiting to be saved. Adjusted during render, React's own answer for state
+  // derived from a changed prop, rather than an effect.
+  if (shown !== current) {
+    setShown(current)
+    setTyped(current ?? '')
+  }
+
+  const stored = current ? canonicalHex(current) : null
+  const wanted = canonicalHex(typed)
+  // Something new to save: a valid hex that is not what is stored.
+  const dirty = wanted !== null && wanted !== stored
+  const malformed = typed.trim() !== '' && wanted === null
+  // The seventh swatch wears the custom colour in force, or the one being
+  // picked; the rainbow when neither is off the preset list.
+  const custom = dirty
+    ? isPreset(wanted)
+      ? null
+      : wanted
+    : isPreset(stored)
+      ? null
+      : stored
+
+  // The native picker yields lower case, and the stored form is upper.
   const pick = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) =>
       setTyped(event.target.value.toUpperCase()),
@@ -75,108 +104,98 @@ export function SeedPicker({
   )
 
   return (
-    <form action={formAction} className="mt-4">
+    <form action={formAction} className="flex flex-col items-end gap-1.5">
       <input type="hidden" name={field} value={rowId} />
 
-      <fieldset disabled={locked}>
-        <legend className="text-text-secondary text-sm">{label}</legend>
+      <fieldset
+        disabled={locked || pending}
+        className="flex flex-col items-end gap-1.5"
+      >
+        {/* The form's default button, first in the tree: Enter in the hex
+            field presses this, which posts the field — not the first
+            swatch, which would silently save Clay instead. */}
+        <button
+          type="submit"
+          tabIndex={-1}
+          aria-hidden="true"
+          className="sr-only"
+        >
+          Save
+        </button>
 
-        {/* Each preset is a real submit button carrying its own value, so the
-            common case — picking one of the six measured colours — is one
-            click and needs no typing, and works with the keyboard and with a
-            screen reader naming the colour. */}
-        <div className="mt-3 flex flex-wrap gap-2">
-          {SWATCHES.map((preset) => {
-            const selected =
-              (current ?? '').toUpperCase() === preset.seed.toUpperCase()
-            return (
-              <button
-                key={preset.seed}
-                type="submit"
-                name="seed"
-                value={preset.seed}
-                aria-label={`${preset.name}, ${preset.seed}`}
-                aria-pressed={selected}
-                title={preset.name}
-                className={`h-[var(--control-h)] w-[var(--control-h)] rounded border ${
-                  selected
-                    ? 'border-text ring-accent-border ring-2'
-                    : 'border-control-border'
-                }`}
-                style={preset.style}
-              />
-            )
-          })}
-        </div>
+        {/* Each preset is a submit button carrying its own value, so the
+            common case — one of the six measured colours — is one click. */}
+        <SwatchRow label={label}>
+          {PRESETS.map((preset) => (
+            <Swatch
+              key={preset.seed}
+              type="submit"
+              name="seed"
+              value={preset.seed}
+              color={preset.seed}
+              label={`${preset.name}, ${preset.seed}`}
+              selected={!dirty && stored === preset.seed}
+            />
+          ))}
+          <CustomSwatch
+            value={(custom ?? wanted ?? stored ?? orgSeed).toLowerCase()}
+            onChange={pick}
+            selected={custom !== null}
+            label="Any colour"
+          />
+        </SwatchRow>
 
-        <div className="mt-4 flex flex-wrap items-end gap-3">
-          <div className="flex flex-col gap-1">
-            <label
-              className="text-text-secondary text-sm"
-              htmlFor={`seed-${field}`}
-            >
-              Or a hex colour
-            </label>
-            <div className="flex items-center gap-2">
-              {/* The native colour input, which is the platform's own picker
-                  and costs nothing: it writes into the same field the hex is
-                  typed in, so there is one value and one submit. */}
-              <input
-                type="color"
-                aria-label="Pick a colour"
-                value={/^#[0-9a-f]{6}$/i.test(typed) ? typed : orgSeed}
-                onChange={pick}
-                className="border-control-border h-[var(--control-h)] w-12 rounded border bg-transparent p-1"
-              />
-              <input
-                id={`seed-${field}`}
-                // `typed` rather than a second field named `seed`: a submit
-                // button carries its own name and value, and two entries under
-                // one name would be read in DOM order — so the swatches would
-                // work and the "follow the Org's" button below the field would
-                // silently submit whatever was typed instead of clearing.
-                name="typed"
-                value={typed}
-                onChange={type}
-                placeholder={inheritable ? orgSeed : '#D97757'}
-                spellCheck={false}
-                autoComplete="off"
-                maxLength={9}
-                className="border-control-border text-text h-[var(--control-h)] w-28 rounded border px-3 font-mono text-sm"
-              />
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={pending}
-            className="border-control-border text-text h-[var(--control-h)] rounded border px-3 text-sm"
-          >
-            {pending ? 'Saving…' : 'Save colour'}
-          </button>
-
-          {inheritable && current ? (
+        <div className="flex items-center gap-1.5">
+          <label className="sr-only" htmlFor={`seed-${field}`}>
+            Hex colour
+          </label>
+          {/* `typed` rather than a second field named `seed`: a submit
+              button carries its own name and value, and two entries under one
+              name would be read in DOM order — so the "follow the Org's"
+              button would silently submit whatever was typed instead of
+              clearing. */}
+          <input
+            id={`seed-${field}`}
+            name="typed"
+            value={typed}
+            onChange={type}
+            placeholder={inheritable ? orgSeed : '#D97757'}
+            spellCheck={false}
+            autoComplete="off"
+            maxLength={9}
+            aria-invalid={malformed}
+            aria-describedby={`seed-${field}-note`}
+            className={`${inputClass} h-7 w-24 font-mono text-caption`}
+          />
+          {dirty ? (
+            <Button type="submit" variant="primary" className="h-7">
+              {pending ? 'Saving…' : 'Save'}
+            </Button>
+          ) : null}
+          {inheritable && current && !dirty ? (
             // A named way back, rather than expecting somebody to work out
             // that an empty field means "inherit".
             <button
               type="submit"
               name="seed"
               value=""
-              disabled={pending}
-              className="text-accent-text h-[var(--control-h)] text-sm underline"
+              className="text-text-muted hover:text-text text-caption underline"
             >
-              Follow the Org’s colour
+              Use the Org’s
             </button>
           ) : null}
         </div>
       </fieldset>
 
-      <div aria-live="polite">
-        {state && 'error' in state ? (
-          <p className="text-bad-text mt-3 text-sm">{state.error}</p>
-        ) : null}
-        {state && 'saved' in state ? (
-          <p className="text-ok-text mt-3 text-sm">{state.saved}</p>
+      <div id={`seed-${field}-note`} aria-live="polite" className="text-right">
+        {malformed ? (
+          <p className="text-bad-text text-caption">
+            A seed is a hex colour, like #D97757.
+          </p>
+        ) : state && 'error' in state ? (
+          <p className="text-bad-text text-caption">{state.error}</p>
+        ) : state && 'saved' in state ? (
+          <p className="text-text-muted text-caption">{state.saved}</p>
         ) : null}
       </div>
     </form>

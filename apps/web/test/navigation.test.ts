@@ -10,6 +10,7 @@ import {
   moreItems,
   navGroups,
   settingsFor,
+  settingsIndex,
 } from '../app/(dashboard)/navigation'
 import {
   reachesOrgSettings,
@@ -107,6 +108,27 @@ test('Org settings is absent for a Manager and a Member, not disabled', () => {
   expect(settingsFor('member').map((item) => item.href)).toEqual([
     '/settings/you',
   ])
+})
+
+const hrefs = (role: Parameters<typeof settingsIndex>[0]) =>
+  settingsIndex(role).map((item) => item.href)
+
+test('the settings index lists what each Role reaches and nothing more', () => {
+  // Ticket 113: Members and Tier join the index column, under the same
+  // rule — absent for a Role that would be refused, never listed and refused.
+  expect(hrefs('owner')).toEqual([
+    '/settings/you',
+    '/settings/org',
+    '/settings/org/members',
+    '/settings/tier',
+  ])
+  expect(hrefs('admin')).toEqual([
+    '/settings/you',
+    '/settings/org',
+    '/settings/org/members',
+  ])
+  expect(hrefs('manager')).toEqual(['/settings/you'])
+  expect(hrefs('member')).toEqual(['/settings/you'])
 })
 
 test('transcripts left settings and became a destination', () => {

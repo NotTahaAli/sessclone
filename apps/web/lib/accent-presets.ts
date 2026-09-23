@@ -55,3 +55,25 @@ export const accentProperties = (tones: AccentTones) => ({
   '--accent-subtle-light': tones.subtleLight,
   '--accent-subtle-dark': tones.subtleDark,
 })
+
+/**
+ * A typed colour in its canonical form, `#RRGGBB`, or null when it is not a
+ * hex at all: with or without the `#`, three digits expanded to six, upper
+ * case. `#d97757`, `D97757` and `#D97757` are one colour, and a stored seed is
+ * compared against the presets to decide which swatch is selected.
+ *
+ * The shape only. Whether the palette can hold the colour is `readSeed`'s
+ * question, on the server, because answering it needs the colour library —
+ * which is why this lives here, in the module with no imports, where the
+ * picker in the browser can reach it (ticket 113's custom swatch).
+ */
+export const canonicalHex = (typed: string): string | null => {
+  const match = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(typed.trim())
+  if (!match) return null
+  const digits = match[1]!
+  // `replace` rather than spreading the string: a spread yields code points,
+  // and the lint rule is right that it is the wrong tool on text in general.
+  const full =
+    digits.length === 3 ? digits.replaceAll(/./g, (one) => one + one) : digits
+  return `#${full.toUpperCase()}`
+}

@@ -1,4 +1,4 @@
-import { reachesOrgSettings, type Role } from '../../lib/viewer'
+import { reachesOrgSettings, reachesTier, type Role } from '../../lib/viewer'
 
 // Ticket 85: three groups rather than one flat list.
 //
@@ -101,7 +101,7 @@ export const moreItems = (platformAdmin = false): NavItem[] =>
  * looking for rather than a thing they come to change, and it is `/transcripts`
  * now — listed here would be a second door onto one room.
  */
-export const settingsFor = (role: Role): (NavItem & { about: string })[] => [
+export const settingsFor = (role: Role): SettingsItem[] => [
   {
     href: '/settings/you',
     label: 'Your settings',
@@ -118,3 +118,37 @@ export const settingsFor = (role: Role): (NavItem & { about: string })[] => [
       ]
     : []),
 ]
+
+export type SettingsItem = NavItem & { about: string }
+
+/**
+ * The settings index column (ticket 113): the two destinations above, plus
+ * the two pages that live inside Org settings — Members, and Tier for the
+ * Owner — so each is one tap from the index rather than a link at the foot of
+ * the Org page. Same rule as above: absent, never present and refused.
+ */
+export const settingsIndex = (role: Role): SettingsItem[] => {
+  const [you, org] = settingsFor(role)
+  return [
+    { ...you!, about: 'Name, light or dark, accent, transcript upload' },
+    ...(org
+      ? [
+          { ...org, about: 'Name, accent, logo, timezone, retention' },
+          {
+            href: '/settings/org/members',
+            label: 'Members',
+            about: 'Invitations, Roles, who each Manager sees',
+          },
+        ]
+      : []),
+    ...(reachesTier(role)
+      ? [
+          {
+            href: '/settings/tier',
+            label: 'Tier',
+            about: 'Seats, price and what the Org is on',
+          },
+        ]
+      : []),
+  ]
+}
