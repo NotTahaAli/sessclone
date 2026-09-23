@@ -70,6 +70,7 @@ export const resolveTimeColumn = (
 ): TimeColumn | null => {
   if (!value) return null
   const colon = value.indexOf(':')
+  if (colon < 0) return null
   const [kind, rest] = [value.slice(0, colon), value.slice(colon + 1)]
   if (kind === 'model' && rest && rest.length <= 200) {
     return { kind, model: rest }
@@ -77,6 +78,8 @@ export const resolveTimeColumn = (
   if (
     kind === 'day' &&
     /^\d{4}-\d{2}-\d{2}$/.test(rest) &&
+    // An impossible date is an invalid Date, whose toISOString() throws.
+    !Number.isNaN(Date.parse(`${rest}T00:00:00Z`)) &&
     new Date(`${rest}T00:00:00Z`).toISOString().startsWith(rest)
   ) {
     return { kind, date: rest }

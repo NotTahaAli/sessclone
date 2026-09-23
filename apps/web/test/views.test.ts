@@ -61,6 +61,10 @@ test('an Over time column opens a real day or a model, nothing else', () => {
   expect(resolveTimeColumn('day:yesterday')).toBeNull()
   expect(resolveTimeColumn('model:')).toBeNull()
   expect(resolveTimeColumn('m1')).toBeNull()
+  // No colon is no kind, even when the value starts with one's name.
+  expect(resolveTimeColumn('modelx')).toBeNull()
+  // A month past 12 is an invalid Date, whose toISOString() throws.
+  expect(resolveTimeColumn('day:2026-13-45')).toBeNull()
   expect(resolveTimeColumn(undefined)).toBeNull()
 })
 
