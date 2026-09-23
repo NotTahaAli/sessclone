@@ -6,7 +6,7 @@ import { moreGroups } from '../navigation'
 import { asViewer } from '../../../lib/db'
 import { currentOperator } from '../../../lib/platform-admin'
 import { pendingOrgCount } from '../../../lib/subscriptions'
-import { sessionViewer } from '../../../lib/viewer'
+import { currentViewer } from '../../../lib/viewer'
 
 // Ticket 85: what the phone's More entry opens.
 //
@@ -43,7 +43,7 @@ export default async function More() {
   // layout's own gate asks, so the entry and the refusal cannot disagree.
   const [operator, viewer] = await Promise.all([
     currentOperator(),
-    sessionViewer(),
+    currentViewer(),
   ])
   // Ticket 120: the phone's way to the Admin panel carries the count too.
   const pending = operator
