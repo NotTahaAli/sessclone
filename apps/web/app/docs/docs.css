@@ -1,0 +1,263 @@
+/* Fumadocs, themed to Direction A and scoped to `/docs` (tickets 116, 117).
+
+   Scoping. This file is imported by `app/docs/layout.tsx` only, and it is a
+   second Tailwind entry rather than an addition to `globals.css`, so the rest
+   of the product never downloads it. A stylesheet React has inserted is not
+   removed on a client navigation, though, so a visitor who goes from the docs
+   to the dashboard keeps it loaded. Everything below is written to be inert
+   there:
+
+   - `@reference` takes the app's theme and variants without re-emitting them,
+     and utilities are generated for the docs' own files only (`source(none)`
+     plus the `@source` lines), so nothing here redefines an app class.
+   - Every `--color-fd-*` value is declared under `:root:has(#nd-docs-layout)`,
+     which is true only while the docs layout is mounted. Fumadocs' base rules
+     read those variables with a fallback (`border-color`) or are re-pointed
+     at the app's own tokens below (`body`), so outside the docs they resolve
+     to exactly what `globals.css` already says.
+
+   Theming. No `neutral.css`: its palette is replaced wholesale by the app's
+   tokens, which already switch between light and dark under the same
+   `data-theme` / `prefers-color-scheme` contract as the dashboard, so the
+   docs need no `.dark` class and no second theme switch. */
+
+@reference '../globals.css';
+@import 'tailwindcss/utilities.css' layer(utilities) source(none);
+@import 'fumadocs-ui/css/preset.css';
+@import 'fumadocs-openapi/css/preset.css';
+
+@source '.';
+@source '../../components';
+@source '../../content';
+
+/* The preset declares `dark:` as `.dark`; the app's definition wins back. */
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    &:where(
+      :root:not([data-theme='light']),
+      :root:not([data-theme='light']) *
+    ) {
+      @slot;
+    }
+  }
+  &:where([data-theme='dark'], [data-theme='dark'] *) {
+    @slot;
+  }
+}
+
+/* Registered so `bg-fd-card` and friends exist as utilities; `inline` so the
+   utility reads the scoped variable below rather than a value emitted on
+   `:root` for every page. */
+@theme inline {
+  --color-fd-background: var(--color-fd-background);
+  --color-fd-foreground: var(--color-fd-foreground);
+  --color-fd-muted: var(--color-fd-muted);
+  --color-fd-muted-foreground: var(--color-fd-muted-foreground);
+  --color-fd-popover: var(--color-fd-popover);
+  --color-fd-popover-foreground: var(--color-fd-popover-foreground);
+  --color-fd-card: var(--color-fd-card);
+  --color-fd-card-foreground: var(--color-fd-card-foreground);
+  --color-fd-border: var(--color-fd-border);
+  --color-fd-primary: var(--color-fd-primary);
+  --color-fd-primary-foreground: var(--color-fd-primary-foreground);
+  --color-fd-secondary: var(--color-fd-secondary);
+  --color-fd-secondary-foreground: var(--color-fd-secondary-foreground);
+  --color-fd-accent: var(--color-fd-accent);
+  --color-fd-accent-foreground: var(--color-fd-accent-foreground);
+  --color-fd-ring: var(--color-fd-ring);
+  --color-fd-overlay: var(--color-fd-overlay);
+  --color-fd-info: var(--color-fd-info);
+  --color-fd-warning: var(--color-fd-warning);
+  --color-fd-error: var(--color-fd-error);
+  --color-fd-success: var(--color-fd-success);
+  --color-fd-idea: var(--color-fd-idea);
+  --color-fd-diff-remove: var(--color-fd-diff-remove);
+  --color-fd-diff-remove-symbol: var(--color-fd-diff-remove-symbol);
+  --color-fd-diff-add: var(--color-fd-diff-add);
+  --color-fd-diff-add-symbol: var(--color-fd-diff-add-symbol);
+}
+
+/* Fumadocs' palette, as the app's tokens. On `:root` rather than on the
+   layout so a dialog or popover Fumadocs portals into `<body>` gets it too. */
+:root:has(#nd-docs-layout) {
+  --color-fd-background: var(--color-ground);
+  --color-fd-foreground: var(--color-text);
+  --color-fd-muted: var(--color-surface-hover);
+  --color-fd-muted-foreground: var(--color-text-muted);
+  --color-fd-popover: var(--color-surface);
+  --color-fd-popover-foreground: var(--color-text);
+  --color-fd-card: var(--color-surface);
+  --color-fd-card-foreground: var(--color-text);
+  --color-fd-border: var(--color-rule);
+  /* The app's primary is filled with the text colour; the accent is kept
+     for state. */
+  --color-fd-primary: var(--color-text);
+  --color-fd-primary-foreground: var(--color-ground);
+  --color-fd-secondary: var(--color-surface-hover);
+  --color-fd-secondary-foreground: var(--color-text);
+  --color-fd-accent: var(--color-selected);
+  --color-fd-accent-foreground: var(--color-text);
+  --color-fd-ring: var(--color-text-muted);
+  --color-fd-overlay: var(--color-overlay-scrim);
+  --color-fd-info: var(--color-text-muted);
+  --color-fd-warning: var(--color-warn-text);
+  --color-fd-error: var(--color-bad-text);
+  --color-fd-success: var(--color-ok-text);
+  --color-fd-idea: var(--color-accent-text);
+  --color-fd-diff-remove: var(--color-bad-bg);
+  --color-fd-diff-remove-symbol: var(--color-bad-text);
+  --color-fd-diff-add: var(--color-ok-bg);
+  --color-fd-diff-add-symbol: var(--color-ok-text);
+}
+
+/* The preset paints `body` from `--color-fd-background`, which is unset
+   outside the docs; point it back at what `globals.css` paints. */
+@layer base {
+  body {
+    background-color: var(--color-ground);
+    color: var(--color-text);
+  }
+}
+
+/* Shiki's dual themes switch on `.dark`; follow the app's contract instead. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .shiki:not(.not-fumadocs-codeblock *),
+  :root:not([data-theme='light']) .shiki:not(.not-fumadocs-codeblock *) span,
+  :root:not([data-theme='light']) code.shiki:not(.not-fumadocs-code *) span {
+    color: var(--shiki-dark);
+    font-style: var(--shiki-dark-font-style);
+    background-color: transparent;
+  }
+}
+:root[data-theme='dark'] .shiki:not(.not-fumadocs-codeblock *),
+:root[data-theme='dark'] .shiki:not(.not-fumadocs-codeblock *) span,
+:root[data-theme='dark'] code.shiki:not(.not-fumadocs-code *) span {
+  color: var(--shiki-dark);
+  font-style: var(--shiki-dark-font-style);
+  background-color: transparent;
+}
+
+/* ---- Direction A over Fumadocs' components ----
+   Hairlines instead of boxes, no shadows, pills for controls, one accent. */
+
+#nd-docs-layout,
+#nd-docs-layout * {
+  --tw-shadow: 0 0 #0000;
+}
+
+/* Sidebar rows: 14px, muted; the current page takes the one selected fill. */
+#nd-sidebar a[data-active] {
+  font-size: 14px;
+  border-radius: var(--radius-md);
+}
+#nd-sidebar a[data-active='true'] {
+  background: var(--color-selected);
+  color: var(--color-text);
+  font-weight: 500;
+}
+#nd-sidebar a[data-active='false'] {
+  color: var(--color-text-muted);
+}
+#nd-sidebar a[data-active='false']:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+/* Sidebar separators: the app's SectionBreak, a hairline either side of a
+   small centred label. */
+#nd-sidebar p.inline-flex {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 400;
+  padding-inline: 8px !important;
+}
+#nd-sidebar p.inline-flex::before,
+#nd-sidebar p.inline-flex::after {
+  content: '';
+  height: 1px;
+  background: var(--color-rule);
+  flex: 1;
+}
+
+/* The search trigger and the header buttons: the app's pill. */
+[data-search],
+[data-search-full] {
+  border-radius: 9999px !important;
+  border: 1px solid var(--color-rule) !important;
+  background: var(--color-field) !important;
+  font-size: 13px;
+}
+#nd-sidebar button,
+#nd-nav button,
+#nd-subnav button {
+  border-radius: 9999px;
+}
+
+/* Callouts: no box, a hairline rule in the callout's colour. */
+.prose div[style*='--callout-color'] {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding-block: 2px;
+}
+.prose div[style*='--callout-color'] > [role='none'] {
+  width: 1px;
+  background: var(--callout-color);
+  border-radius: 0;
+}
+
+/* Previous / next: rows under a hairline, not cards. */
+#nd-page div.\@container.grid > a.border {
+  border: 0;
+  border-top: 1px solid var(--color-rule);
+  border-radius: 0;
+  padding-inline: 0;
+}
+#nd-page div.\@container.grid > a.border:hover {
+  background: transparent;
+  color: var(--color-text);
+}
+
+/* Code: the card surface, a hairline, Geist Mono. */
+#nd-docs-layout figure.shiki {
+  border-radius: 10px;
+  border-color: var(--color-rule);
+  background: var(--color-surface);
+  box-shadow: none;
+}
+
+.prose {
+  --tw-prose-links: var(--color-text);
+  --tw-prose-headings: var(--color-text);
+}
+.prose a {
+  text-decoration-color: var(--color-rule-strong);
+}
+.prose a:hover {
+  text-decoration-color: var(--color-accent-fill);
+}
+/* Tables: hairline rows, the app's label type in the head. */
+.prose div:has(> table) {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+.prose table {
+  font-size: 14px;
+}
+.prose table,
+.prose th,
+.prose td {
+  border-inline: 0 !important;
+  background: transparent !important;
+}
+.prose th {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  font-weight: 500;
+}

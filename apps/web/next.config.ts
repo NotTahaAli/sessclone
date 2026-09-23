@@ -1,3 +1,4 @@
+import { createMDX } from 'fumadocs-mdx/next'
 import type { NextConfig } from 'next'
 
 // Cache Components, for ticket 80: the public pricing section reads the Tier
@@ -9,4 +10,5 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
 }
 
-export default nextConfig
+// Ticket 116: `/docs` is MDX under `content/docs`, compiled by Fumadocs.
+export default createMDX()(nextConfig)

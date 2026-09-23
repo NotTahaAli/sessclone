@@ -35,7 +35,17 @@ import { safeNext } from './lib/auth/next-path'
 // `/join` is ticket 49's: whoever opens an invitation may have no account at
 // all, and that page says so and sends them to sign in with the link kept, so
 // the invitation survives the round trip. Redirecting from here would drop it.
-const PUBLIC_PATHS = ['/', '/pricing', '/sign-in', '/auth', '/api', '/join']
+// `/docs` is ticket 116's: the install and self-hosting guides are read before
+// anybody has an account.
+const PUBLIC_PATHS = [
+  '/',
+  '/pricing',
+  '/sign-in',
+  '/auth',
+  '/api',
+  '/join',
+  '/docs',
+]
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request })
