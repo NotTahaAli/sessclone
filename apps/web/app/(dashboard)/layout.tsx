@@ -162,7 +162,17 @@ async function OrgName({ className }: { className: string }) {
 /** The account block, which knows the Role and the address it signs out. */
 async function Account() {
   const viewer = await sessionViewer()
-  return viewer ? <AccountBlock viewer={viewer} /> : null
+  // The account block carries Legal beside Sign out, so the credit under it
+  // leaves Legal out. Without a viewer there is no block, and the credit is
+  // the only place Legal can be.
+  return viewer ? (
+    <>
+      <AccountBlock viewer={viewer} />
+      <PanelCredit legal={false} />
+    </>
+  ) : (
+    <PanelCredit />
+  )
 }
 
 /**
@@ -271,6 +281,8 @@ const BEHIND_MORE = { [MORE.href]: moreItems(true) }
 const PENDING_SIDEBAR = <Pending className="mt-1" />
 const PENDING_HEADER = <Pending className="" />
 const PENDING_CONTENT = <Loading />
+/** The full credit, Legal included, while the account block loads. */
+const PENDING_CREDIT = <PanelCredit />
 // The navigation reads `usePathname()` to mark the current destination, and on
 // a route with a dynamic segment that value only exists at runtime — so these
 // two boundaries are what let `/sessions/[sessionId]`, `/turns/[id]` and
@@ -316,11 +328,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             every deployment rather than only a self-hosted one, because the
             additional term in `NOTICE.md` makes no such distinction. */}
         <div className="flex flex-col gap-4">
-          <Suspense fallback={null}>
+          {/* The credit, with Legal wherever the account block is not
+              there to carry it — including while it loads. */}
+          <Suspense fallback={PENDING_CREDIT}>
             <Account />
           </Suspense>
-          {/* The account block above carries the Legal button here. */}
-          <PanelCredit legal={false} />
         </div>
       </aside>
 

@@ -109,8 +109,31 @@ describe('the panel credit', () => {
     const layout = readFileSync(new URL(`${SHELL}/layout.tsx`, APP), 'utf8')
 
     expect(account).toContain('<LegalButton />')
-    expect(layout).toContain('<PanelCredit legal={false} />')
     expect(layout).toContain('<AccountBlock')
+  })
+
+  // 2026-09-23 review: the sidebar's credit was `legal={false}` on the
+  // assumption the account block sat above it, but `Account()` renders
+  // nothing without a viewer and its Suspense fallback was nothing, so the
+  // desktop sidebar could show no Legal button at all. The credit leaves Legal
+  // out only beside an account block, inside `Account()`, and every other
+  // path — no viewer, still loading — renders the full credit.
+  test('the desktop sidebar has a Legal button with or without an account block', () => {
+    const layout = readFileSync(new URL(`${SHELL}/layout.tsx`, APP), 'utf8')
+    const account = layout.slice(
+      layout.indexOf('async function Account()'),
+      layout.indexOf('async function HeaderAccount()'),
+    )
+
+    expect(layout.match(/<PanelCredit legal=\{false\} \/>/g)).toHaveLength(1)
+    expect(account).toMatch(
+      /<AccountBlock viewer=\{viewer\} \/>\s*<PanelCredit legal=\{false\} \/>/,
+    )
+    expect(account).toMatch(/:\s*\(?\s*<PanelCredit \/>/)
+    expect(layout).toContain('const PENDING_CREDIT = <PanelCredit />')
+    expect(layout).toMatch(
+      /<Suspense fallback=\{PENDING_CREDIT\}>\s*<Account \/>/,
+    )
   })
 
   test.each(SHELLS)(
@@ -119,13 +142,13 @@ describe('the panel credit', () => {
       const layout = readFileSync(new URL(`${shell}/layout.tsx`, APP), 'utf8')
 
       expect(layout).toContain('PanelCredit')
-      // Twice: the sidebar carries it at desktop width and the content column
-      // carries it at phone width, where there is no sidebar to carry
-      // anything. One of the two is visible at a time, and neither width is
-      // without it.
-      expect(layout.match(/<PanelCredit( legal=\{false\})? \/>/g)).toHaveLength(
-        2,
-      )
+      // At least twice: the sidebar carries it at desktop width and the
+      // content column carries it at phone width, where there is no sidebar
+      // to carry anything. (The dashboard's sidebar has three, one per state
+      // of its account block; the case above checks those.)
+      expect(
+        layout.match(/<PanelCredit( legal=\{false\})? \/>/g)?.length,
+      ).toBeGreaterThanOrEqual(2)
     },
   )
 
