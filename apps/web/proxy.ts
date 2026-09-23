@@ -35,7 +35,29 @@ import { safeNext } from './lib/auth/next-path'
 // `/join` is ticket 49's: whoever opens an invitation may have no account at
 // all, and that page says so and sends them to sign in with the link kept, so
 // the invitation survives the round trip. Redirecting from here would drop it.
-const PUBLIC_PATHS = ['/', '/pricing', '/sign-in', '/auth', '/api', '/join']
+// `/docs` is ticket 116's: the install and self-hosting guides are read before
+// anybody has an account. (`/api/search`, the docs search, is under `/api`.)
+// `/privacy` and `/terms` are the legal pages the marketing footer links to.
+const PUBLIC_PATHS = [
+  '/',
+  '/pricing',
+  '/sign-in',
+  '/auth',
+  '/api',
+  '/join',
+  '/docs',
+  '/privacy',
+  '/terms',
+]
+
+// The files crawlers, browsers and link previews fetch with no cookie: the
+// metadata routes Next serves from `app/` (robots, sitemap, icons, Open Graph
+// and Twitter images, the manifest) and `llms.txt`. Exact names at the root,
+// with the `icon*`/`*-image*` families' generated suffixes (`icon0.png`,
+// `opengraph-image-abc123`). A redirect here is a missing favicon or a blank
+// share card, and a crawler reading `/sign-in` as the whole site.
+const PUBLIC_FILE =
+  /^\/(?:robots\.txt|sitemap\.xml|favicon\.ico|manifest\.webmanifest|llms\.txt|(?:apple-)?icon[^/]*|(?:opengraph|twitter)-image[^/]*)$/
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request })
@@ -67,9 +89,11 @@ export async function proxy(request: NextRequest) {
   const { data } = await supabase.auth.getClaims()
 
   const path = request.nextUrl.pathname
-  const isPublic = PUBLIC_PATHS.some(
-    (prefix) => path === prefix || path.startsWith(`${prefix}/`),
-  )
+  const isPublic =
+    PUBLIC_FILE.test(path) ||
+    PUBLIC_PATHS.some(
+      (prefix) => path === prefix || path.startsWith(`${prefix}/`),
+    )
 
   if (!data?.claims && !isPublic) {
     const signIn = request.nextUrl.clone()

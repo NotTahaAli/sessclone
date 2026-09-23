@@ -1,18 +1,21 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useCallback, type ChangeEvent } from 'react'
 
 import { setSeedLock } from './appearance-actions'
+import { Switch } from '../../../_ui/primitives'
 
 // Ticket 77: "chooses whether Members may override it". The design system's
-// Switch, whose rule is that off is always the safe value — and here off is
-// also the default, because an Org that never opens this page is one whose
-// Members may choose.
+// Switch, whose rule is that off is always the safe value.
+//
+// Ticket 113 words the row the positive way the approved design does —
+// "Members choose their own", on by default — and saves when flipped. On means
+// not locked, so the form posts `locked` as the state moved to, exactly as the
+// button it replaces did.
 //
 // A lock keeps each Member's stored colour and stops applying it, rather than
-// clearing it. A rebrand or a customer demo is often temporary, and unlocking
-// should give everybody their choice back rather than make the whole Org pick
-// again.
+// clearing it: a rebrand or a demo is often temporary, and unlocking gives
+// everybody their choice back.
 
 export function LockForm({
   orgId,
@@ -23,36 +26,27 @@ export function LockForm({
 }) {
   const [state, formAction, pending] = useActionState(setSeedLock, null)
 
+  const submit = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) =>
+      event.currentTarget.form?.requestSubmit(),
+    [],
+  )
+
   return (
-    <form action={formAction} className="mt-6">
+    <form action={formAction} className="flex flex-col items-end gap-1">
       <input type="hidden" name="orgId" value={orgId} />
       <input type="hidden" name="locked" value={locked ? 'off' : 'on'} />
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm">
-          Members may choose their own accent:{' '}
-          <strong>{locked ? 'no' : 'yes'}</strong>
-          <span className="text-text-secondary">
-            {locked
-              ? ' — everybody sees the Org’s colour. Light or dark is still theirs.'
-              : ' — the Org’s colour is what somebody gets until they pick one.'}
-          </span>
-        </p>
-        <button
-          type="submit"
-          disabled={pending}
-          className="border-control-border text-text h-[var(--control-h)] rounded border px-3 text-sm"
-        >
-          {locked ? 'Let Members choose' : 'Lock the Org’s colour'}
-        </button>
-      </div>
-
-      <div aria-live="polite">
+      {/* Remounted on the server's answer, so a refused write springs back. */}
+      <Switch
+        key={String(locked)}
+        defaultChecked={!locked}
+        onChange={submit}
+        disabled={pending}
+        aria-label="Members may choose their own accent"
+      />
+      <div aria-live="polite" className="text-right text-caption">
         {state && 'error' in state ? (
-          <p className="text-bad-text mt-3 text-sm">{state.error}</p>
-        ) : null}
-        {state && 'saved' in state ? (
-          <p className="text-ok-text mt-3 text-sm">{state.saved}</p>
+          <p className="text-bad-text">{state.error}</p>
         ) : null}
       </div>
     </form>

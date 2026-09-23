@@ -1,0 +1,207 @@
+---
+title: Install the Collector
+description: Two commands, two answers and a restart — and the restart is the step people skip.
+---
+
+The Collector is a Claude Code plugin, installed once per machine. It reports
+usage only — never a prompt, never a file's contents.
+
+<Callout title="Node 22.18 or newer">
+  Or 23.6, or any 24. The hooks run as `node <file>.mjs` with no build step and
+  import TypeScript directly. On an older Node the plugin installs, starts
+  cleanly and reports nothing; the session-start check names the problem.
+</Callout>
+
+## Install it
+
+```
+/plugin marketplace add NotTahaAli/sessclone
+/plugin install sessclone@sessclone
+```
+
+The marketplace manifest lives in the SessClone repository, so there is no
+second repository to add and nothing to clone. `sessclone@sessclone` is the
+plugin named `sessclone` from the marketplace named `sessclone`; the bare
+`/plugin install sessclone` works too while no other marketplace you have
+added offers that name.
+
+Enabling the plugin prompts for two values, and answering them is the whole
+setup:
+
+- **Deployment URL** — where this machine reports to, the same address you
+  read the dashboard at.
+- **API key** — issued in the dashboard under **Keys**, and shown once. See
+  [API keys](/docs/api-keys).
+
+Claude Code keeps the key in the OS keychain rather than in a file, and hands
+both to the hooks on every session afterwards. Nothing to export, nothing to
+re-do per shell, and nothing plain-text on disk. To change an answer later,
+run `/plugin`, disable `sessclone` and enable it again.
+
+This is also the only route that works in the desktop app, which runs Claude
+Code with the environment a GUI application is given rather than the one your
+`~/.zshrc` builds.
+
+## Without answering the prompt
+
+Both values can come from the environment instead, and an exported one **wins
+over the answer given at the prompt** — which is how one terminal is pointed
+at a second deployment while the machine's own answers stay as they are:
+
+```bash
+export SESSCLONE_API_KEY=sk_your_key_here
+export SESSCLONE_URL=https://sessclone.example.com
+```
+
+Put them in the profile your shell actually loads (`~/.zshrc`, `~/.bashrc`)
+**and** in the terminal you are in, or open a new one: editing a profile does
+not change the shell that is already running. Check with `echo $SESSCLONE_URL`
+in the terminal you will start Claude Code from. The Collector reads the
+environment only and never loads a `.env`, so a key committed to one is a
+leaked key that does not even work.
+
+<Callout type="warn" title="SESSCLONE_URL is not checked for being present">
+  With neither the answer nor the variable it falls back to
+  `http://127.0.0.1:3000` and the session start says nothing — so a machine that
+  has only a key reports into its own laptop forever.
+</Callout>
+
+Claude Code's own settings file takes the same two values, applied to every
+session and to the hooks it starts:
+
+```json title="~/.claude/settings.json"
+{
+  "env": {
+    "SESSCLONE_API_KEY": "sk_your_key_here",
+    "SESSCLONE_URL": "https://sessclone.example.com"
+  }
+}
+```
+
+On Windows that is `%USERPROFILE%\.claude\settings.json`. Create it if it is
+not there; if it is, add the `env` key beside whatever it already holds. It is
+strict JSON, so a trailing comma or a `//` comment is a syntax error. The key is
+then in a plain file, which the keychain route avoids — that is the trade.
+
+## Restart Claude Code
+
+**Hooks take effect on the next start, not in the session that installed
+them.** The session you install in reports nothing, and that is expected rather
+than a broken install.
+
+**No Turn from before the restart is lost.** The first session started after it
+sweeps this machine: it drains anything the retry queue is holding, then
+re-reads every recent transcript from its cursor and reports the Turns it
+finds. Turns from the install session, and from every session before it that
+Claude Code still has a transcript for (its own `cleanupPeriodDays` sweep
+deletes them after 30 days by default), are backfilled that way. The sweep is
+time-boxed and works newest-first, so a very large history is caught up across
+several sessions rather than all in one.
+
+What is _not_ backfilled is a session **event** — the record that a turn ended
+on an API error, or that a session ended cleanly. Those read no transcript, so
+the retry queue is their only durability. Usage is always counted from the
+Turns themselves.
+
+## Check it worked
+
+Start a session, send one turn, and look at **Costs** in the dashboard.
+
+- **Something arrives.** Done. There is nothing else to install on this
+  machine.
+- **The page still says it is waiting, and the key has never been used.** The
+  Collector has not reached the deployment at all: wrong `SESSCLONE_URL`, no
+  network route to it, or the restart has not happened yet.
+- **The key has been used and no Turn has arrived.** A Collector reached the
+  deployment with the key, so the key is not the problem. Usually no turn has
+  ended since the restart, or the cursor is already at the end of every
+  transcript; both resolve on the next turn. A genuine refusal is a `400` from
+  `/api/ingest`, visible in the deployment's own logs.
+- **A misconfiguration is reported in the session itself.** The session-start
+  check writes every problem it finds at once: a missing key, a key that is not
+  `sk_` and 46 characters, a `SESSCLONE_URL` that is not an `http` or `https`
+  URL, a Node older than 22.18, and a state directory that cannot be resolved.
+
+From a clone of the repository, `node scripts/verify-collector.mjs` reads the
+machine and prints what it found — the Node version, the state directory, the
+cursor and queue files, the Device key and the transcripts on disk. It prints a
+key's first three characters and its length and never more, so the output is
+safe to paste to whoever is helping.
+
+The **Failures** view on Costs answers a different question: turns that ended on
+a Claude API error — a rate limit, an overload, a billing problem. It is empty
+while the Collector is not reporting, and is not where a broken install shows
+up.
+
+## In a Claude Code cloud environment
+
+Claude Code on the web has no persistent shell to export a variable in, and the
+container is replaced under you. It is configured **per environment, from
+claude.ai, before a session starts**. Open the environment for editing at
+claude.ai/code.
+
+1. **Setup script.** Paste these two lines. The key on the second line is a
+   placeholder and stays exactly as written; step 2 is what puts the real key
+   on the wire.
+
+   ```bash
+   claude plugin marketplace add NotTahaAli/sessclone
+   claude plugin install sessclone --config url=https://sessclone.com --config api_key=sk_0000000000000000000000000000000000000000000
+   ```
+
+2. **API credential.** Under **API credentials**, select **Add credential**
+   ([Claude's docs](https://code.claude.com/docs/en/cloud-environments#add-api-credentials)):
+   - **Name**: `SessClone`
+   - **Credential type**: Bearer
+   - **Allowed websites**: `sessclone.com`
+   - **Custom headers**: name `Authorization`, prefix `Bearer`, and your key
+     from **Keys** as the value
+
+Anthropic's agent proxy replaces the `Authorization` header on every request to
+that host after it leaves the container. The placeholder is what the Collector
+sends; the proxy swaps in the real key. So the key never reaches the container,
+the session, Claude, or the setup script, which anyone using the environment
+can read. The placeholder has the shape of a real key so the session-start
+check passes; it matches nothing on the deployment.
+
+A self-hosted deployment uses its own `NEXT_PUBLIC_APP_URL` in the command and
+its own host in **Allowed websites**. If the credential is missing or wrong,
+the deployment answers `401` and the next session start prints a line saying
+the key was refused.
+
+Claude offers API credentials on Pro and Max plans only, not yet on Team or
+Enterprise, and not on a self-hosted environment.
+
+### What differs in a cloud environment
+
+- **No Session ever records an end.** Claude Code does not run the `SessionEnd`
+  hook when a cloud container is archived, reclaimed or stopped, so the
+  dashboard shows a cloud Session's last Turn instead of an end time. The
+  Collector reports at every turn boundary, so the one loss is a turn still in
+  flight when the container is killed.
+- **Transcripts upload after every turn**, when archival is on. The whole file
+  goes each time and replaces the stored copy, which is then at most one turn
+  behind.
+- **Every container collapses into one Device.** The Device key is derived from
+  the account (`cloud:<account uuid>`), so burning through containers does not
+  litter the Devices list. Set `SESSCLONE_DEVICE` in the environment's
+  variables to count several environments apart.
+- **The state directory is inside the container.** The cursor and the retry
+  queue do not survive a reclaim.
+
+## A self-hoster's fork
+
+The same two commands, pointed at your own repository:
+
+```
+/plugin marketplace add your-org/your-fork
+/plugin install sessclone@sessclone
+```
+
+**Rename the marketplace in your fork** — `name` in
+`.claude-plugin/marketplace.json` — if anyone on your team might also have the
+upstream marketplace added. Two marketplaces cannot share a name.
+
+Nothing else in the manifest names the upstream repository. Your team's
+`SESSCLONE_URL` is your deployment's `NEXT_PUBLIC_APP_URL`; nothing needs
+editing inside the vendored plugin.

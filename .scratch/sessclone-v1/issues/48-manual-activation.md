@@ -10,3 +10,5 @@
 - [x] Each writes a subscription event carrying who did it and when
 - [x] Entitlement checks read subscription status and Tier, nothing provider-specific
 - [x] An inactive Org is told it is inactive rather than shown a broken dashboard
+
+**Superseded in part by 119 (2026-09-23):** collection no longer keeps working for `inactive`, missing or `cancelled` subscriptions — those Orgs are locked behind a waiting page unless `SIGNUP_APPROVAL=off`. `past_due` keeps this ticket's banner and keeps working.

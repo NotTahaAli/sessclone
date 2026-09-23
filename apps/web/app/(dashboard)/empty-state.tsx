@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 
+import { buttonClass } from '../_ui/primitives'
+
 // EmptyState, from the design system's inventory: a headline, one sentence,
 // and a primary action. Ticket 45 needs it for the state a brand-new Org sees
 // before any Turn arrives; `docs/design/product-ia.md` holds the sentence for
@@ -26,17 +28,17 @@ export function EmptyState({
   action?: { href: string; label: string }
 }) {
   return (
-    <div className="border-rule bg-surface rounded-md border border-dashed p-8 text-center">
+    // Direction A (ticket 112): no box. The headline, the sentence and the
+    // one action, centred in the space the rows would take; the action is
+    // the text-filled primary button, never the accent.
+    <div className="px-4 py-12 text-center">
       <h2 className="text-heading">{headline}</h2>
-      <p className="text-text-secondary mx-auto mt-2 max-w-prose text-body">
+      <p className="text-text-muted mx-auto mt-1.5 max-w-prose text-body">
         {children}
       </p>
       {action ? (
-        <div className="mt-6">
-          <Link
-            href={action.href}
-            className="bg-accent-fill text-accent-on-fill inline-flex h-[var(--control-h)] items-center rounded-md px-4 text-body"
-          >
+        <div className="mt-5">
+          <Link href={action.href} className={buttonClass('primary')}>
             {action.label}
           </Link>
         </div>

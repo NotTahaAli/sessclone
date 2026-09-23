@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import { Suspense } from 'react'
 
-import { signedInUser } from '../../lib/supabase/server'
+import { sessionUser } from '../../lib/supabase/server'
+import { buttonClass, pillClass } from '../_ui/primitives'
 
 // A signed-in visitor on the marketing site was still being told to sign in
 // (Taha, 2026-09-22). The header button and the hero's own call to action both
@@ -27,16 +28,15 @@ import { signedInUser } from '../../lib/supabase/server'
  * call sites are fixed, so both variants are built once at module load.
  */
 const VARIANTS = {
+  // The nav's is a pill: the hero's filled button is the page's one.
   header: {
-    className:
-      'bg-accent-fill text-accent-on-fill border-accent-border flex h-[var(--control-h)] items-center border px-4',
+    className: pillClass,
     signedOut: 'Sign in',
     signedIn: 'Dashboard',
   },
   hero: {
-    className:
-      'bg-accent-fill text-accent-on-fill border-accent-border text-body flex h-[var(--control-h)] items-center border px-5',
-    signedOut: 'Start counting',
+    className: `${buttonClass('primary')} h-10 px-4 text-[14px]`,
+    signedOut: 'Join the waitlist',
     signedIn: 'Open the dashboard',
   },
 } as const
@@ -65,7 +65,7 @@ export function SignedInLink({ variant }: { variant: Variant }) {
 }
 
 async function Resolved({ variant }: { variant: Variant }) {
-  const user = await signedInUser()
+  const user = await sessionUser()
   const { className, signedOut, signedIn } = VARIANTS[variant]
 
   return (

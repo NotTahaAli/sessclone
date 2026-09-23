@@ -13,7 +13,10 @@ import { asUser, owner as sql, seedFixture, type Fixture } from './harness'
 // policies and the action's own code are real.
 
 const signedInUser = vi.hoisted(() => vi.fn())
-vi.mock('../lib/supabase/server', () => ({ signedInUser }))
+vi.mock('../lib/supabase/server', () => ({
+  signedInUser,
+  sessionUser: signedInUser,
+}))
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }))
 
 const deleted: string[] = []

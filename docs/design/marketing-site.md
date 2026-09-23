@@ -14,52 +14,52 @@ in three places. Count it as one."** A question headline ("What is it
 costing you?") tested worse against a visitor who can answer "I do not
 care" and leave.
 
-Order of the page, at both widths:
+Order of the page, at both widths (Direction A, ticket 114, 2026-09-23 —
+the dashboard's rows and status card, so the product looks like its own
+marketing):
 
-1. **Hero** — eyebrow marking it self-hostable, headline, one paragraph, two
-   calls to action, the install command with a copy control. On desktop a
-   product shot sits beside the copy; on a phone the shot moves below the
-   fold and the copy leads.
-2. **Trust strip** — customer logos. Placeholders until real ones exist.
-3. **Three questions, one page** — who spent it, on what, and why. The third
-   names the transcript and immediately says it is opt-in, because that is
-   the objection the claim raises.
-4. **Demo** — a 90 second muted loop with a real play control, beside the
-   three steps a turn takes from the machine to the ledger. The steps carry
-   the bytes-per-turn claim, which is the technical reason to believe the
-   rest.
-5. **Testimonials** — three, each a specific outcome rather than praise.
-6. **FAQ** — six questions, led by "Do you read our code?", because that is
-   the one a reader is actually holding.
-7. **Contact** — email, seats, and what they need. Reachable from the
-   Enterprise tier and from the footer.
+1. **Hero** — headline with "Count it as one." in the accent, one paragraph,
+   "Start counting" (the page's one filled button, in the text colour) and
+   "Self-host free", the install command with a copy control. Beside it on
+   desktop, below it on a phone: a status card of today's collection from an
+   example Org, labelled as an example.
+2. **How it counts** — three rows: on the machine, on the wire (the
+   bytes-per-turn claim), in the ledger.
+3. **Pricing rows** — one row per Tier from the table, linking to `/pricing`.
+4. **Questions** — led by "Do you read our code?".
+
+The placeholder trust strip, demo, testimonials and product shot were dropped
+with the rebuild. Contact is the footer's email.
 
 ## Tone and craft
 
 The site is a developer tool and reads like one: plain claims, numbers where
 there are numbers, no adjectives doing work a fact could do.
 
-- **Instrument Serif** for display, **IBM Plex Sans** for body, **JetBrains
-  Mono** for anything a machine produced — commands, keys, device names,
-  prices, counts.
-- Square corners, hairline rules, flat fills. No gradient washes, no glow, no
-  rounded cards, no emoji.
-- Clay is the only accent and it marks interaction and emphasis, never
-  decoration.
+- Geist for everything, Geist Mono for anything a machine produced —
+  commands, prices, counts. No serif display face.
+- Hairlines and rows, one boxed card per surface at most. No gradient washes,
+  no glow, no emoji feature grids.
+- The accent appears three times: the headline's second sentence, the live
+  glyph, and the logo stroke (plus the "Fits" tag on `/pricing`). Buttons are
+  the text colour, never the accent.
 
-The marketing site is **dark only**. It is a brand surface, and the warm
-terminal reading is the brand. The product, which people live in for hours,
-carries both themes.
-
-The testimonial band was drawn inverted to Ivory at first, as the page's one
-contrast. It read as a section from a different site rather than as emphasis,
-so it is dark like everything else; the page separates its sections with
-hairline rules and panel fills instead.
+**Both themes**, following the visitor's preference (Taha, 2026-09-23). The
+earlier dark-only rule is withdrawn.
 
 ## Pricing presentation
 
-Four tiers in one row on desktop, stacked on a phone, Team marked as the
-common choice with a clay border rather than a larger card.
+`/pricing` (ticket 115): a team-size slider, 1 to 25+, landing on 3. The paid
+Tier whose seat range holds the size is marked "Fits N people" and shows its
+monthly total; the others are dimmed with the reason (1 person only, up to 10
+seats, from 11 people). Self-Hosted — the Tier priced 0/0 — is always shown and
+never marked. Below, a comparison of every Tier, with the marked column
+shaded. The logic is `apps/web/lib/plans.ts`, and everything it prints comes
+from the row. The per-model rates cell reads "Your own per-model rates (e.g.
+an Anthropic discount)" when the Tier's `features.own_rates` is true, which
+ticket 121's migration sets on Enterprise.
+
+The seed, for reference:
 
 | Tier        | Price              | Seats                          |
 | ----------- | ------------------ | ------------------------------ |

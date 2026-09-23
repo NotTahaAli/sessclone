@@ -199,3 +199,79 @@ test('an override that has not started yet is scheduled, not superseded', async 
   // — so the page can tell "not yet" from "no longer" by the date alone.
   expect(rates.find((rate) => rate.current)!.id).toBe(started)
 })
+
+// --- Ticket 121: an Enterprise Org sets its own rates ----------------------
+
+/** Puts an Org on a Tier with or without `features.own_rates`. */
+const onTier = async (orgId: string, ownRates: boolean, status = 'active') => {
+  const [tier] = await sql<{ id: string }[]>`
+    insert into tiers (key, name, features)
+    values (${`tier-${orgId}`}, 'A tier', ${sql.json({ own_rates: ownRates })})
+    returning id
+  `
+  await sql`
+    insert into subscriptions (org_id, tier_id, status)
+    values (${orgId}, ${tier!.id}, ${status})
+  `
+}
+
+const ownRate = (org: Fixture['acme'], role: Parameters<typeof asRole>[1]) =>
+  asRole(org, role, (tx) =>
+    addOrgRate(tx, {
+      orgId: fixture.acme.id,
+      model: 'claude-opus-4-6',
+      class: 'input',
+      priceUsd: 4,
+      effectiveFrom: role === 'owner' ? '2026-09-01' : '2026-09-02',
+      note: null,
+    }),
+  )
+
+test('an Owner or Admin on a Tier with own rates writes their Org’s', async () => {
+  await onTier(fixture.acme.id, true)
+
+  const id = await ownRate(fixture.acme, 'owner')
+  await ownRate(fixture.acme, 'admin')
+  expect(
+    await asRole(fixture.acme, 'admin', (tx) =>
+      deleteOrgRate(tx, fixture.acme.id, id),
+    ),
+  ).toBe(true)
+
+  // A Manager and a Member do not, even on that Tier.
+  await expect(ownRate(fixture.acme, 'manager')).rejects.toThrow(
+    /row-level security/,
+  )
+  await expect(ownRate(fixture.acme, 'member')).rejects.toThrow(
+    /row-level security/,
+  )
+})
+
+test('the flag is the Tier’s, and it opens only the Org’s own rates', async () => {
+  // Acme's Tier does not have it.
+  await onTier(fixture.acme.id, false)
+  await expect(ownRate(fixture.acme, 'owner')).rejects.toThrow(
+    /row-level security/,
+  )
+
+  // Globex's does, and that says nothing about Acme's rows.
+  await onTier(fixture.globex.id, true)
+  await expect(ownRate(fixture.globex, 'owner')).rejects.toThrow(
+    /row-level security/,
+  )
+  const id = await negotiated()
+  expect(
+    await asRole(fixture.globex, 'owner', (tx) =>
+      deleteOrgRate(tx, fixture.acme.id, id),
+    ),
+  ).toBe(false)
+})
+
+test('an ask for a Tier with own rates is not the Tier', async () => {
+  // A sign-up's ask is an `inactive` row (ticket 118); only an approved plan
+  // opens what the Tier includes.
+  await onTier(fixture.acme.id, true, 'inactive')
+  await expect(ownRate(fixture.acme, 'owner')).rejects.toThrow(
+    /row-level security/,
+  )
+})

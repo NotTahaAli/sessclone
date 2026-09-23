@@ -2,6 +2,8 @@ import { Suspense, type ReactNode } from 'react'
 
 import { AccountMenu } from './account'
 import { AppearanceSync } from './appearance-sync'
+import { LogoMark } from '../_ui/logo'
+import { Waiting } from './waiting'
 import { OrgMark } from '../org-mark'
 import { PanelCredit } from './credit'
 import {
@@ -12,15 +14,18 @@ import {
   SidebarLinks,
 } from './nav-links'
 import {
-  ADMIN_PANEL,
+  adminPanelEntry,
   BOTTOM_BAR,
   MORE,
   moreItems,
   navGroups,
 } from './navigation'
 import Loading from './loading'
+import { isLocked } from '../../lib/approval'
+import { asViewer } from '../../lib/db'
 import { currentOperator } from '../../lib/platform-admin'
-import { currentViewer } from '../../lib/viewer'
+import { pendingOrgCount } from '../../lib/subscriptions'
+import { sessionViewer } from '../../lib/viewer'
 
 // Ticket 83: this layout prerenders a static shell.
 //
@@ -130,16 +135,21 @@ function Inactive({
 
 /** The Org name, which every figure under here belongs to. */
 async function OrgName({ className }: { className: string }) {
-  const viewer = await currentViewer()
+  const viewer = await sessionViewer()
   if (!viewer) return <span className={className}>No Org</span>
 
-  // Ticket 77: the mark sits beside the name wherever the name is, which is
-  // the design system's rule for OrgMark — never instead of it, since a logo
-  // is not a label. It rides on the viewer's own row rather than being read
-  // here, so the shell still costs one transaction.
+  // Ticket 77: an uploaded logo sits beside the name, never instead of it,
+  // since a logo is not a label. It rides on the viewer's own row rather than
+  // being read here, so the shell still costs one transaction.
+  //
+  // Ticket 111 (assumption, stated): Direction A's brand line is the sessclone
+  // mark then the Org name, so an Org with no logo shows no initial tile — the
+  // tile repeated the first letter of the name right beside it.
   return (
-    <span className="flex items-center gap-2">
-      <OrgMark name={viewer.orgName} src={viewer.orgLogo} size={20} />
+    <span className="flex min-w-0 items-center gap-2">
+      {viewer.orgLogo ? (
+        <OrgMark name={viewer.orgName} src={viewer.orgLogo} size={20} />
+      ) : null}
       <span className={className} title={viewer.orgName}>
         {viewer.orgName}
       </span>
@@ -149,7 +159,7 @@ async function OrgName({ className }: { className: string }) {
 
 /** The account control, which knows the Role and the address it signs out. */
 async function Account() {
-  const viewer = await currentViewer()
+  const viewer = await sessionViewer()
   return viewer ? <AccountMenu viewer={viewer} /> : null
 }
 
@@ -161,18 +171,30 @@ async function Account() {
  * frame around it is what prerenders.
  */
 async function Content({ children }: { children: ReactNode }) {
-  const viewer = await currentViewer()
+  const viewer = await sessionViewer()
   if (!viewer) return <WithoutOrg />
+
+  // Ticket 119: an Org waiting for approval, or cancelled, sees only this.
+  // The page is not rendered at all, so nothing it reads reaches the reader.
+  if (isLocked(viewer.subscriptionStatus)) {
+    return (
+      <Waiting
+        cancelled={viewer.subscriptionStatus === 'cancelled'}
+        orgName={viewer.orgName}
+        planName={viewer.planName}
+        operator={(await currentOperator()) !== null}
+      />
+    )
+  }
 
   return (
     <>
       {/* Ticket 48: an Org whose subscription is not active is told so, on
           every page, rather than shown a dashboard that quietly means less
-          than it looks like it does. No subscription row is the same answer
-          as an inactive one — it is the state every Org starts in, and the
-          commonest reason a person is reading this notice. Collection keeps
-          working either way: refusing the Org's own history would be a worse
-          answer than saying what is true. */}
+          than it looks like it does. Since ticket 119 that is `past_due`
+          alone — `inactive`, no row and `cancelled` lock the Org above —
+          unless the deployment runs with `SIGNUP_APPROVAL=off`, where all
+          three are this notice again and collection keeps working. */}
       {viewer.subscriptionStatus === 'active' ? null : (
         <Inactive status={viewer.subscriptionStatus ?? 'inactive'} />
       )}
@@ -185,7 +207,7 @@ async function Content({ children }: { children: ReactNode }) {
 function Pending({ className }: { className: string }) {
   return (
     <span
-      className={`bg-surface inline-block h-4 w-32 animate-none rounded ${className}`}
+      className={`bg-surface-hover inline-block h-3 w-24 animate-none rounded ${className}`}
       aria-hidden="true"
     />
   )
@@ -203,12 +225,18 @@ function Pending({ className }: { className: string }) {
 async function AdminEntry() {
   const operator = await currentOperator()
   if (!operator) return null
-  return <SidebarLinks items={ADMIN_ONLY} />
+  // Ticket 120: how many Orgs are waiting for approval, beside the link.
+  const pending = await asViewer(operator.userId, pendingOrgCount)
+  return <SidebarLinks items={adminPanelEntry(pending)} />
 }
+
+/** The brand line at both widths: the sessclone mark, then the Org's name in
+ * small capitals (Direction A, ticket 111). */
+const BRAND =
+  'text-text-muted flex min-w-0 items-center gap-2 text-caption tracking-[0.1em] uppercase lg:mx-2 lg:mb-2'
 
 /** Built once at module load rather than per render of the frame. */
 const GROUPS = navGroups()
-const ADMIN_ONLY = [ADMIN_PANEL]
 /**
  * What More stands in for, so the bar marks it when the reader is on one of
  * them. The admin entry is in this list unconditionally: the bar is part of
@@ -235,20 +263,21 @@ const PENDING_BAR = <BottomBarLinksPending items={BOTTOM_BAR} />
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <div className="bg-ground text-text min-h-dvh lg:flex">
-      {/* Desktop: the 232px sidebar, holding the same four destinations and
-          the account block. */}
+      {/* Desktop: the 232px sidebar, holding the same destinations and the
+          account block. Sticky at the window's height, so the groups stay put
+          while a long page scrolls beside them (Direction A, ticket 111). */}
       <aside
         // 232px, which is what the wireframes draw at 1440.
-        className="border-rule hidden w-[232px] shrink-0 flex-col justify-between border-r p-4 lg:flex"
+        className="border-rule hidden w-[232px] shrink-0 flex-col justify-between overflow-y-auto border-r px-3.5 py-[18px] lg:sticky lg:top-0 lg:flex lg:h-dvh"
       >
         <div>
-          <p className="text-label text-text-muted uppercase">sessclone</p>
-          <p className="text-heading mt-1 truncate">
+          <p className={BRAND}>
+            <LogoMark className="text-text" />
             <Suspense fallback={PENDING_SIDEBAR}>
               <OrgName className="block truncate" />
             </Suspense>
           </p>
-          <nav aria-label="Main" className="mt-6">
+          <nav aria-label="Main" className="mt-2">
             <Suspense fallback={PENDING_GROUPS}>
               <SidebarGroups groups={GROUPS}>
                 {/* The one entry that is a database read. Its fallback is
@@ -275,13 +304,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
       {/* Phone: the header carries the Org name and the account control, and
           the four destinations are a bottom bar. */}
-      <header className="border-rule bg-ground sticky top-0 z-10 flex items-center justify-between gap-3 border-b px-4 py-2 lg:hidden">
-        <p className="truncate">
-          <span className="text-label text-text-muted block uppercase">
-            sessclone
-          </span>
+      <header className="border-rule bg-ground sticky top-0 z-10 flex items-center justify-between gap-3 border-b px-4 py-1.5 lg:hidden">
+        <p className={BRAND}>
+          <LogoMark className="text-text" />
           <Suspense fallback={PENDING_HEADER}>
-            <OrgName className="text-heading block truncate" />
+            <OrgName className="block truncate" />
           </Suspense>
         </p>
         <Suspense fallback={null}>
@@ -299,7 +326,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
       {/* The bottom bar is fixed, so the content column reserves room for it
           rather than ending underneath it. */}
-      <main className="grow px-4 py-6 pb-28 lg:px-8 lg:pb-8">
+      <main className="min-w-0 grow px-4 py-5 pb-28 lg:px-7 lg:pb-8">
         <Suspense fallback={PENDING_CONTENT}>
           <Content>{children}</Content>
         </Suspense>

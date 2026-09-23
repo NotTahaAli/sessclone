@@ -2,7 +2,12 @@ import { readFileSync } from 'node:fs'
 
 import { beforeEach, expect, test } from 'vitest'
 
-import { isActive, orgTier, retentionCeiling } from '../lib/tier'
+import {
+  isActive,
+  orgTier,
+  retentionCeiling,
+  shownCapabilities,
+} from '../lib/tier'
 import { tierPrice, tierSeats } from '../lib/tiers'
 import { asRole, owner as sql, seedFixture, type Fixture } from './harness'
 
@@ -163,4 +168,21 @@ test('the Tier page is the Owner’s, and the guard is on the page not the link'
   // And no Tier key is compared anywhere on it: a capability decided by a key
   // in code is the deployment the `tiers` table exists to avoid.
   expect(page).not.toMatch(/'(team|personal|enterprise|self_hosted)'/)
+})
+
+test('internal flags are not listed as capabilities', () => {
+  // `self_serve` and `own_rates` gate code paths; the page would print them as
+  // "self serve" and "own rates". A real gate, numeric or not, still shows.
+  expect(
+    shownCapabilities({
+      self_serve: true,
+      own_rates: true,
+      sso: true,
+      max_projects: 50,
+      audit_log: false,
+    }),
+  ).toEqual([
+    ['sso', true],
+    ['max_projects', 50],
+  ])
 })

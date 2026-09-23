@@ -1,9 +1,10 @@
 import { z } from 'zod'
 
+import { memberOrgLocked } from '../../../../../lib/approval'
 import { asViewer } from '../../../../../lib/db'
 import { downloadableArtifact } from '../../../../../lib/artifacts'
 import { presignDownload, storageConfigured } from '../../../../../lib/storage'
-import { signedInUser } from '../../../../../lib/supabase/server'
+import { sessionUser } from '../../../../../lib/supabase/server'
 
 // Ticket 60: downloading a whole Session transcript.
 //
@@ -33,7 +34,7 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const user = await signedInUser()
+  const user = await sessionUser()
   // Not a redirect to sign-in: this URL is fetched as often as it is followed,
   // and a 401 is what a fetch can act on.
   if (!user) return new Response('sign in first', { status: 401 })
@@ -41,10 +42,15 @@ export async function GET(
   const id = Id.safeParse((await params).id)
   if (!id.success) return new Response('no such transcript', { status: 404 })
 
-  const artifact = await asViewer(user.id, (tx) =>
-    downloadableArtifact(tx, id.data),
-  )
+  // Ticket 119: the lock of the Org that owns this artifact, not the viewer's.
+  const artifact = await asViewer(user.id, async (tx) => {
+    const row = await downloadableArtifact(tx, id.data)
+    return row && { ...row, locked: await memberOrgLocked(tx, row.memberId) }
+  })
   if (!artifact) return new Response('no such transcript', { status: 404 })
+  if (artifact.locked) {
+    return new Response('this Org is waiting for approval', { status: 403 })
+  }
 
   // A row can outlive its bucket's configuration — a deployment that moved
   // providers, or a self-hoster mid-setup. Say so rather than signing a URL

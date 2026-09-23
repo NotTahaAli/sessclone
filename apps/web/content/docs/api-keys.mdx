@@ -1,0 +1,47 @@
+---
+title: API keys
+description: The one credential a Collector holds, and what the deployment does with it.
+---
+
+A Collector proves who it is with an API key, and nothing else decides where
+its Turns are filed. The key identifies a Member, and through them the Org;
+a report names neither, so nobody can file usage against someone else's Org by
+writing a different id into a payload.
+
+## Issuing one
+
+Keys are issued in the dashboard under **Keys**. A key is `sk_` followed by 43
+characters, 46 in all, and it is **shown once**: the deployment stores only its
+hash, so nobody — the deployment included — can show it to you again. Put it
+straight into the Collector's install prompt ([Install the Collector](/docs/install)).
+
+The Keys page also shows when each key was last used, which is the first thing
+to look at when a machine seems to report nothing: a key that has never been
+used means the Collector has not reached the deployment at all.
+
+## How it travels
+
+The key goes in the `Authorization` header as `Bearer sk_…`, never in the
+request body, which keeps it out of anything that logs a body. The deployment
+checks it before reading the body at all.
+
+On the machine, the key is kept in the OS keychain when you answer the install
+prompt. The Collector never writes it to a log, a transcript or an error
+message: its checks print a key's first three characters and its length, and
+nothing more. That matters because a hook's output appears inside a session,
+and a session is a transcript SessClone may upload.
+
+## When a key is refused
+
+A missing, malformed, unknown or revoked key all get the **same** answer: `401`
+with `WWW-Authenticate: Bearer`. The deployment deliberately does not say which
+it was — a route that did would let anyone probe which keys exist — and the
+remedy is the same in every case.
+
+So whether a well-formed key is _live_ is not answerable from a machine. A
+session that starts after a `401` prints one line saying the key was refused.
+If the key is the suspect, revoke it on the **Keys** page and issue a new one.
+
+In a Claude Code cloud environment the real key is added by Anthropic's proxy,
+not stored in the container; see
+[the cloud setup](/docs/install#in-a-claude-code-cloud-environment).

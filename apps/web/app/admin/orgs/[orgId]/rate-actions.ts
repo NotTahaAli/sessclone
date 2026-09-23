@@ -3,54 +3,23 @@
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 
-import { addOrgRate, deleteOrgRate } from '../../../../lib/org-rates'
+import { revalidateCostPages } from '../../../../lib/cost-paths'
+
+import {
+  addOrgRate,
+  deleteOrgRate,
+  parseOrgRate,
+} from '../../../../lib/org-rates'
 import { asOperator, currentOperator } from '../../../../lib/platform-admin'
-import { RATE_CLASSES } from '../../../../lib/rates'
 
 // Ticket 64's two writes. A Server Action is a POST endpoint whether or not a
-// form was rendered for the caller, so every field is parsed before it reaches
-// a statement — and `org_rate_overrides_write` refuses a non-operator
+// form was rendered for the caller, so every field is parsed (`parseOrgRate`)
+// before it reaches a statement — and `org_rate_overrides_write` refuses a non-operator
 // independently of the check here (ADR 0001).
 //
-// Negotiated pricing is the operator's to set, never the Org's: an Owner who
-// could write this table could halve their own invoice.
-
-const Form = z.object({
-  orgId: z.uuid(),
-  // Empty is the override that does not name a model, such as a search.
-  model: z
-    .string()
-    .trim()
-    .max(200)
-    .transform((value) => value || null),
-  class: z.enum(RATE_CLASSES),
-  // Trimmed before the length check: '   ' has length 3 and `Number('   ')` is
-  // 0, and a zero price is worse than no price — the Turn then reads as priced
-  // at nothing rather than as unpriced (ADR 0002).
-  priceUsd: z
-    .string()
-    .trim()
-    // Digits and at most one point: a Server Action is a POST endpoint, and
-    // `Number` alone accepts '0x10' as 16 and '1e5' as 100000.
-    .regex(/^\d+(\.\d+)?$/, 'not a price')
-    .transform(Number)
-    .refine(
-      (value) => Number.isFinite(value) && value >= 0 && value <= 100_000,
-      'not a price',
-    ),
-  // Bounded: a date in the 99th century is a typo, and it would sit at the
-  // bottom of the list forever pricing nothing.
-  effectiveFrom: z.iso
-    .date()
-    .refine((value) => value <= '2100-01-01', 'too far ahead'),
-  // What was agreed and where it is written down. An override with no
-  // provenance is a discount nobody can re-check.
-  note: z
-    .string()
-    .trim()
-    .max(200)
-    .transform((value) => value || null),
-})
+// The operator may set any Org's rates. Since ticket 121 an Enterprise Org's
+// Owner or Admin may set their own too (`settings/org/rates`): billing is per
+// seat, so a rate changes an estimate and never an invoice.
 
 export const addOrgRateAction = async (
   _previous: unknown,
@@ -62,14 +31,7 @@ export const addOrgRateAction = async (
     }
   }
 
-  const parsed = Form.safeParse({
-    orgId: formData.get('orgId'),
-    model: formData.get('model') ?? '',
-    class: formData.get('class'),
-    priceUsd: formData.get('priceUsd'),
-    effectiveFrom: formData.get('effectiveFrom'),
-    note: formData.get('note') ?? '',
-  })
+  const parsed = parseOrgRate(formData)
   if (!parsed.success) {
     return { error: 'Check the model, the class, the price and the date.' }
   }
@@ -93,7 +55,8 @@ export const addOrgRateAction = async (
 
   // Not just this page: an override reprices every one of that Org's Turns on
   // the next read (ADR 0002), so every cost surface it has is now stale.
-  revalidatePath('/', 'layout')
+  revalidateCostPages()
+  revalidatePath('/admin/orgs/[orgId]', 'page')
   return { added: parsed.data.model ?? 'the unnamed-model price' }
 }
 
@@ -119,6 +82,7 @@ export const deleteOrgRateAction = async (
   )
   if (!deleted) return { error: 'That price was not deleted.' }
 
-  revalidatePath('/', 'layout')
+  revalidateCostPages()
+  revalidatePath('/admin/orgs/[orgId]', 'page')
   return { deleted: true }
 }

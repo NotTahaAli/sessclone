@@ -1,0 +1,25 @@
+---
+title: Ingest
+description: POST /api/ingest — what the Collector sends, and what it gets back.
+full: true
+---
+
+The endpoint every Collector reports to. You do not need it to use SessClone:
+the [Collector](/docs/install) is its only client. It is documented for
+anyone writing another one, and for reading a deployment's logs.
+
+The schemas below are generated from the same zod schemas the route validates
+against, so this page cannot describe a payload the route would refuse. The
+spec itself is [`packages/shared/openapi/ingest.json`](https://github.com/NotTahaAli/sessclone/blob/main/packages/shared/openapi/ingest.json).
+
+<Callout type="warn" title="Send posts a real Turn to this deployment">
+  The playground below is live. With a valid API key, **Send** records the
+  request body as a Turn in that key's Org, on this deployment, exactly as a
+  Collector's report would be. The key stays in the form only: it is not saved
+  in the browser, so a reload asks for it again.
+</Callout>
+
+<APIReference
+  document="ingest"
+  operations={[{ path: '/api/ingest', method: 'post' }]}
+/>

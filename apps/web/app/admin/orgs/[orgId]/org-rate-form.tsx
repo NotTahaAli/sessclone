@@ -4,6 +4,7 @@ import { useActionState, useCallback } from 'react'
 
 import { addOrgRateAction, deleteOrgRateAction } from './rate-actions'
 import { RATE_CLASSES, rateUnit, type RateClass } from '../../../../lib/rates'
+import { buttonClass, inputClass } from '../../../_ui/primitives'
 
 // Client-side for the refusal and the confirmation, as everywhere else in the
 // admin area: a write the policy refuses touches nothing and raises nothing,
@@ -20,12 +21,13 @@ const LABELS: Record<RateClass, string> = {
   web_fetch_request: 'Web fetch',
 }
 
-const FIELD = 'border-control-border text-text rounded border px-3 py-1 text-sm'
+const FIELD = inputClass
 
 export function AddOrgRateForm({
   orgId,
   today,
   models,
+  action = addOrgRateAction,
 }: {
   orgId: string
   /** Resolved on the server, so the form does not render one date and hydrate
@@ -35,8 +37,11 @@ export function AddOrgRateForm({
    * saved: an override naming a model nothing reports prices nothing, and
    * looks exactly like one that works. */
   models: string[]
+  /** The Org's own settings page (ticket 121) posts to its own action, gated
+   * on the Org rather than on the platform flag. */
+  action?: typeof addOrgRateAction
 }) {
-  const [state, formAction, pending] = useActionState(addOrgRateAction, null)
+  const [state, formAction, pending] = useActionState(action, null)
 
   return (
     <>
@@ -97,7 +102,11 @@ export function AddOrgRateForm({
             className={FIELD}
           />
         </label>
-        <button type="submit" disabled={pending} className={FIELD}>
+        <button
+          type="submit"
+          disabled={pending}
+          className={buttonClass('primary')}
+        >
           {pending ? 'Saving…' : 'Set price'}
         </button>
       </form>
@@ -120,13 +129,15 @@ export function DeleteOrgRate({
   orgId,
   rateId,
   said,
+  action = deleteOrgRateAction,
 }: {
   orgId: string
   rateId: string
   /** What is being deleted, for the confirmation and the screen reader. */
   said: string
+  action?: typeof deleteOrgRateAction
 }) {
-  const [state, formAction, pending] = useActionState(deleteOrgRateAction, null)
+  const [state, formAction, pending] = useActionState(action, null)
 
   // Native `confirm`, which is one line and works on a phone. Deleting an
   // override moves this Org back to the published price for every Turn it

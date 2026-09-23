@@ -14,7 +14,10 @@ import { asRole, seedFixture, type Fixture } from './harness'
 // the action's own code are real.
 
 const signedInUser = vi.hoisted(() => vi.fn())
-vi.mock('../lib/supabase/server', () => ({ signedInUser }))
+vi.mock('../lib/supabase/server', () => ({
+  signedInUser,
+  sessionUser: signedInUser,
+}))
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }))
 
 let fixture: Fixture

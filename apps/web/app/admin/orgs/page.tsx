@@ -27,7 +27,7 @@ export default async function Page({
     <div className="flex max-w-3xl flex-col gap-6">
       <PageHeader
         title="Orgs"
-        description="Every Org on this deployment, newest first."
+        description="Every Org on this deployment: those waiting for approval first, then newest first."
       />
 
       <TextFilter
@@ -62,7 +62,11 @@ export default async function Page({
                 {/* No subscription is a state rather than a missing value: v1
                     ships no payment rail, so an Org is un-activated until an
                     operator gets to it (ADR 0004). */}
+                {org.pending ? 'Waiting for approval · ' : ''}
                 {org.tierName ? `${org.tierName} · ${org.status}` : 'no Tier'}
+                {org.requestedSeats && org.requestedSeats > 1
+                  ? ` · asked for ${org.requestedSeats} seats`
+                  : ''}
               </p>
             </Link>
           </li>

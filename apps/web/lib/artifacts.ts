@@ -345,12 +345,15 @@ export const downloadableArtifact = async (
   tx: TransactionSql,
   id: string,
 ): Promise<{
+  memberId: string
   storageKey: string
   filename: string
   contentType: string
 } | null> => {
-  const [row] = await tx<{ storage_key: string; name: string; kind: string }[]>`
-    select storage_key, kind,
+  const [row] = await tx<
+    { member_id: string; storage_key: string; name: string; kind: string }[]
+  >`
+    select member_id, storage_key, kind,
            case when agent_id is null then session_id
                 when kind = 'workflow_journal'
                   then session_id || '-workflow-' || agent_id
@@ -367,6 +370,7 @@ export const downloadableArtifact = async (
         ? ['.journal.jsonl', 'application/x-ndjson']
         : ['.jsonl', 'application/x-ndjson']
   return {
+    memberId: row.member_id,
     storageKey: row.storage_key,
     filename: `${row.name}${extension}`,
     contentType,

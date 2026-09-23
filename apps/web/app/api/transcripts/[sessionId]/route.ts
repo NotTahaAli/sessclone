@@ -1,12 +1,13 @@
 import { z } from 'zod'
 
+import { memberOrgLocked } from '../../../../lib/approval'
 import { asViewer } from '../../../../lib/db'
 import {
   presignDownload,
   storageConfigured,
   ttl,
 } from '../../../../lib/storage'
-import { signedInUser } from '../../../../lib/supabase/server'
+import { sessionUser } from '../../../../lib/supabase/server'
 import { transcriptFiles } from '../../../../lib/transcript-files'
 
 // Tickets 105-107: every stored file of one Session, each with a presigned GET
@@ -27,7 +28,7 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ sessionId: string }> },
 ) {
-  const user = await signedInUser()
+  const user = await sessionUser()
   if (!user) return new Response('sign in first', { status: 401 })
 
   const sessionId = SessionId.safeParse((await params).sessionId)
@@ -36,9 +37,15 @@ export async function GET(
   )
   if (!sessionId.success || !member.success) return notFound()
 
-  const rows = await asViewer(user.id, (tx) =>
-    transcriptFiles(tx, member.data, sessionId.data),
+  // Ticket 119: the lock of the Org that owns these rows, not the viewer's.
+  const rows = await asViewer(user.id, async (tx) =>
+    (await memberOrgLocked(tx, member.data))
+      ? null
+      : transcriptFiles(tx, member.data, sessionId.data),
   )
+  if (!rows) {
+    return new Response('this Org is waiting for approval', { status: 403 })
+  }
   if (!rows.some((row) => row.kind === 'transcript')) return notFound()
 
   if (!storageConfigured()) {

@@ -29,26 +29,27 @@
    rather than through a generated utility, and Tailwind otherwise emits only
    the theme variables it sees used. */
 @theme static {
-  /* Type. Three families, each with a job: mono carries every number, label
-     and identifier, sans carries prose, serif appears on the marketing site
-     and nowhere in the dashboard. The first entry of each stack is served by
-     next/font in `layout.tsx`, which self-hosts the Google Fonts files. */
+  /* Type (Direction A, ticket 111). Geist carries prose and names, Geist
+     Mono carries every number, value and identifier. Serif survives only for
+     the marketing headlines ticket 112 has not rebuilt yet. The first entry
+     of each stack is served by next/font in `layout.tsx`, self-hosted. */
   --font-sans:
-    var(--font-instrument-sans), system-ui, 'Segoe UI', Helvetica, Arial,
-    sans-serif;
+    var(--font-geist), system-ui, 'Segoe UI', Helvetica, Arial, sans-serif;
   --font-mono:
-    var(--font-jetbrains-mono), ui-monospace, 'SF Mono', Monaco, monospace;
+    var(--font-geist-mono), ui-monospace, 'SF Mono', Monaco, monospace;
   --font-serif: Georgia, 'Times New Roman', serif;
 
   /* The scale. Ten steps and no eleventh; letter-spacing is 0 everywhere
-     except label and micro at .08em and figure-xl at -.02em. */
-  --text-figure-xl: 34px;
+     except label and micro at .08em, and figure-xl and the headings at a
+     slight negative. Figures are mono at 500, not bold: Direction A's big
+     number is quiet type at size, not weight. */
+  --text-figure-xl: 30px;
   --text-figure-xl--line-height: 1.1;
-  --text-figure-xl--font-weight: 700;
+  --text-figure-xl--font-weight: 500;
   --text-figure-xl--letter-spacing: -0.02em;
   --text-figure-lg: 20px;
   --text-figure-lg--line-height: 1.2;
-  --text-figure-lg--font-weight: 700;
+  --text-figure-lg--font-weight: 500;
   --text-figure: 13px;
   --text-figure--line-height: 1.4;
   --text-figure--font-weight: 400;
@@ -63,9 +64,11 @@
   --text-heading-lg: 20px;
   --text-heading-lg--line-height: 1.3;
   --text-heading-lg--font-weight: 600;
+  --text-heading-lg--letter-spacing: -0.01em;
   --text-heading: 15px;
   --text-heading--line-height: 1.35;
   --text-heading--font-weight: 600;
+  --text-heading--letter-spacing: -0.01em;
   --text-body: 14px;
   --text-body--line-height: 1.5;
   --text-body--font-weight: 400;
@@ -80,17 +83,25 @@
   /* Space and radius. A 4px base, eight steps, and a layout that needs a
      ninth is a layout to revisit. */
   --spacing: 0.25rem;
-  --radius-sm: 2px;
-  --radius-md: 4px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
   --radius-full: 9999px;
 
   /* Ground and surfaces. Light is the declared default here; the two rules
      below this block redeclare the same names for dark. */
+  /* Direction A ("Log", ticket 111): warm ivory, hairlines instead of
+     boxes. `selected` is the one fill a current row or nav item takes,
+     `meter` paints a bar that is not the current one, `field` is an input's
+     own ground. */
   --color-ground: #faf9f5;
   --color-surface: #ffffff;
-  --color-surface-hover: rgb(115 114 108 / 0.1);
-  --color-rule: rgb(31 30 29 / 0.15);
-  --color-rule-strong: rgb(31 30 29 / 0.3);
+  --color-surface-hover: #f0eee7;
+  --color-selected: #ebe8df;
+  --color-meter: #1e1d1b;
+  --color-field: #ffffff;
+  --color-rule: #e5e2d9;
+  --color-rule-strong: #cfcbc0;
   --color-control-border: rgb(31 30 29 / 0.6);
   --color-overlay-scrim: rgb(20 20 19 / 0.45);
 
@@ -98,7 +109,7 @@
      ground and on a surface; all four clear AA for body text. */
   --color-text: #141413;
   --color-text-secondary: #4d4c48;
-  --color-text-muted: #73726c;
+  --color-text-muted: #69675f;
   --color-text-inverse: #faf9f5;
 
   /* Status. Fill and text are separate tokens on purpose: the fill is the one
@@ -106,8 +117,8 @@
      the ground, and on three of the five families they are different values.
      The background and border steps are the base at 12% and 32%, written as a
      mix so one base is the only figure to change. */
-  --color-ok-base: #558a42;
-  --color-ok-text: #4a7a38;
+  --color-ok-base: #4d7c4a;
+  --color-ok-text: #4d7c4a;
   --color-ok-bg: color-mix(in srgb, var(--color-ok-base) 12%, transparent);
   --color-ok-border: color-mix(in srgb, var(--color-ok-base) 32%, transparent);
   --color-warn-base: #c9a82d;
@@ -195,6 +206,9 @@
   /* Every control's height. No component sets its own. Not a Tailwind
      namespace, so it is a plain custom property read through var(). */
   --control-h: 36px;
+  /* Pills, the primary button, the segmented control: Direction A's compact
+     rounded controls, 30px and 36px under a coarse pointer. */
+  --pill-h: 30px;
 }
 
 /* Three-state theming: a light default above, a dark branch under the system
@@ -203,19 +217,22 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
-    --color-ground: #1a1918;
-    --color-surface: #262624;
-    --color-surface-hover: rgb(245 244 237 / 0.08);
-    --color-rule: rgb(245 244 237 / 0.12);
-    --color-rule-strong: rgb(245 244 237 / 0.26);
+    --color-ground: #1f1e1d;
+    --color-surface: #262524;
+    --color-surface-hover: #2b2a28;
+    --color-selected: #302f2c;
+    --color-meter: #ece9df;
+    --color-field: #1a1918;
+    --color-rule: #34332f;
+    --color-rule-strong: #4a4843;
     --color-control-border: rgb(245 244 237 / 0.45);
     --color-overlay-scrim: rgb(0 0 0 / 0.62);
-    --color-text: #f5f4ed;
+    --color-text: #f0eee6;
     --color-text-secondary: #c2c0b6;
-    --color-text-muted: #9c9a92;
+    --color-text-muted: #a3a19a;
     --color-text-inverse: #141413;
-    --color-ok-base: #8fbf6a;
-    --color-ok-text: #8fbf6a;
+    --color-ok-base: #86b582;
+    --color-ok-text: #86b582;
     --color-warn-base: #e0c35a;
     --color-warn-text: #e0c35a;
     --color-bad-base: #f08a7e;
@@ -238,19 +255,22 @@
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --color-ground: #1a1918;
-  --color-surface: #262624;
-  --color-surface-hover: rgb(245 244 237 / 0.08);
-  --color-rule: rgb(245 244 237 / 0.12);
-  --color-rule-strong: rgb(245 244 237 / 0.26);
+  --color-ground: #1f1e1d;
+  --color-surface: #262524;
+  --color-surface-hover: #2b2a28;
+  --color-selected: #302f2c;
+  --color-meter: #ece9df;
+  --color-field: #1a1918;
+  --color-rule: #34332f;
+  --color-rule-strong: #4a4843;
   --color-control-border: rgb(245 244 237 / 0.45);
   --color-overlay-scrim: rgb(0 0 0 / 0.62);
-  --color-text: #f5f4ed;
+  --color-text: #f0eee6;
   --color-text-secondary: #c2c0b6;
-  --color-text-muted: #9c9a92;
+  --color-text-muted: #a3a19a;
   --color-text-inverse: #141413;
-  --color-ok-base: #8fbf6a;
-  --color-ok-text: #8fbf6a;
+  --color-ok-base: #86b582;
+  --color-ok-text: #86b582;
   --color-warn-base: #e0c35a;
   --color-warn-text: #e0c35a;
   --color-bad-base: #f08a7e;
@@ -275,6 +295,7 @@
 @media (pointer: coarse), (width < 40rem) {
   :root {
     --control-h: 44px;
+    --pill-h: 36px;
   }
 }
 
@@ -283,6 +304,7 @@
     background-color: var(--color-ground);
     color: var(--color-text);
     font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
   }
 
   /* Wherever digits stack in a column. Cheaper here than remembered at every

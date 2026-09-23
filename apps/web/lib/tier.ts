@@ -29,6 +29,12 @@ export type OrgTier = TierPricing & {
    * counts Members who have not been removed rather than Devices.
    */
   seatsUsed: number
+  /**
+   * The ceiling the database enforces right now, from
+   * `sessclone_org_seat_ceiling` itself so the page and the trigger cannot
+   * disagree: null for an unapproved sign-up ask, `maxSeats` otherwise.
+   */
+  seatCeiling: number | null
   currentPeriodEnd: Date | null
 }
 
@@ -46,6 +52,7 @@ type TierRow = {
   archival_available: boolean
   features: Record<string, unknown>
   seats_used: string
+  seat_ceiling: number | null
   current_period_end: Date | null
 }
 
@@ -88,7 +95,8 @@ export const orgTier = async (
            subscription.current_period_end,
            (select count(*) from members
              where members.org_id = subscription.org_id
-               and members.removed_at is null) as seats_used
+               and members.removed_at is null) as seats_used,
+           sessclone_org_seat_ceiling(subscription.org_id) as seat_ceiling
       from subscriptions subscription
       join tiers tier on tier.id = subscription.tier_id
      where subscription.org_id = ${orgId}
@@ -115,6 +123,7 @@ export const orgTier = async (
     archivalAvailable: row.archival_available,
     features: row.features,
     seatsUsed: Number(row.seats_used),
+    seatCeiling: row.seat_ceiling,
     currentPeriodEnd: row.current_period_end,
   }
 }
@@ -132,3 +141,29 @@ export const retentionCeiling = (tier: OrgTier): string =>
  * cancelled subscription is on the Team Tier and entitled to nothing.
  */
 export const isActive = (tier: OrgTier): boolean => tier.status === 'active'
+
+/**
+ * Feature keys that gate code paths rather than describe the plan: which Tiers
+ * a sign-up may ask for (`self_serve`) and the rate editor's gate
+ * (`own_rates`, which the rates page itself surfaces). Listing them under
+ * "Also on this Tier" reads as prose nobody wrote.
+ */
+const INTERNAL_FEATURES: ReadonlySet<string> = new Set([
+  'self_serve',
+  'own_rates',
+])
+
+/**
+ * The capabilities the Tier page lists: every feature that is on (anything but
+ * `false` or null, so a numeric gate still shows) and not internal.
+ */
+export const shownCapabilities = (
+  features: Record<string, unknown>,
+): [string, unknown][] =>
+  Object.entries(features).filter(
+    ([key, value]) =>
+      !INTERNAL_FEATURES.has(key) &&
+      value !== false &&
+      value !== null &&
+      value !== undefined,
+  )

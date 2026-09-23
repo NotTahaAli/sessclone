@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import type { ReactNode } from 'react'
 
 import { ADMIN_DESTINATIONS } from './navigation'
+import { LogoMark } from '../_ui/logo'
 import { PanelCredit } from '../(dashboard)/credit'
 import { BottomBarLinks, SidebarLinks } from '../(dashboard)/nav-links'
 import { currentOperator } from '../../lib/platform-admin'
@@ -43,6 +44,10 @@ export const instant = false
 // Org shell: no Org name, no account switcher, nothing that implies the person
 // is looking at one Org's numbers.
 
+/** The brand line, as the Org shell draws it (ticket 111). */
+const BRAND =
+  'text-text-muted flex items-center gap-2 text-caption tracking-[0.1em] uppercase lg:mx-2'
+
 export default async function AdminLayout({
   children,
 }: {
@@ -53,11 +58,13 @@ export default async function AdminLayout({
 
   return (
     <div className="bg-ground text-text min-h-dvh lg:flex">
-      <aside className="border-rule hidden w-[232px] shrink-0 flex-col justify-between border-r p-4 lg:flex">
+      <aside className="border-rule hidden w-[232px] shrink-0 flex-col justify-between overflow-y-auto border-r px-3.5 py-[18px] lg:sticky lg:top-0 lg:flex lg:h-dvh">
         <div>
-          <p className="text-label text-text-muted uppercase">sessclone</p>
-          <p className="text-heading mt-1">Platform</p>
-          <nav aria-label="Platform administration" className="mt-6">
+          <p className={BRAND}>
+            <LogoMark className="text-text" />
+            Platform
+          </p>
+          <nav aria-label="Platform administration" className="mt-4">
             <SidebarLinks items={ADMIN_DESTINATIONS} />
           </nav>
         </div>
@@ -79,11 +86,9 @@ export default async function AdminLayout({
       </aside>
 
       <header className="border-rule bg-ground sticky top-0 z-10 flex items-center justify-between gap-3 border-b px-4 py-2 lg:hidden">
-        <p className="truncate">
-          <span className="text-label text-text-muted block uppercase">
-            sessclone
-          </span>
-          <span className="text-heading block truncate">Platform</span>
+        <p className={BRAND}>
+          <LogoMark className="text-text" />
+          Platform
         </p>
         <span
           className="text-text-muted truncate text-caption"
@@ -93,7 +98,7 @@ export default async function AdminLayout({
         </span>
       </header>
 
-      <main className="grow px-4 py-6 pb-28 lg:px-8 lg:pb-8">
+      <main className="min-w-0 grow px-4 py-5 pb-28 lg:px-7 lg:pb-8">
         {children}
         {/* At phone width the sidebar is not rendered at all, so the notices
             go under the content instead. One of the two is visible at a

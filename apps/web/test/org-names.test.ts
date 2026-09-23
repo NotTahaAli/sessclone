@@ -24,7 +24,10 @@ import {
 // applies to. The one stub is who Supabase says is signed in.
 
 const signedInUser = vi.hoisted(() => vi.fn())
-vi.mock('../lib/supabase/server', () => ({ signedInUser }))
+vi.mock('../lib/supabase/server', () => ({
+  signedInUser,
+  sessionUser: signedInUser,
+}))
 
 let fixture: Fixture
 

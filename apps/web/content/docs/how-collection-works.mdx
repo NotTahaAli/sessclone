@@ -1,0 +1,107 @@
+---
+title: How collection works
+description: What the Collector reads, when it reports, and why no Turn is lost to a closed laptop.
+---
+
+The Collector is a set of Claude Code hooks. It reads the transcripts Claude
+Code already writes on your machine, turns the new entries into Turns — token
+counts, model, timing, Session, Project and Device — and reports them to your
+deployment's [ingest endpoint](/docs/api/ingest). It sends usage only, never a
+prompt or a file's contents.
+
+## Reporting from a cursor
+
+The Collector keeps one **cursor** per transcript: the last message it reported
+and a byte offset into the file. At each turn boundary it reads only what the
+transcript grew by since then, so a steady-state report is a few hundred bytes
+rather than a resend of the session.
+
+The cursor is stored only after the deployment accepted the report carrying
+it, and the deployment echoes back the cursor it accepted. A response lost in
+flight therefore re-reports rather than skips, and the deployment stores
+nothing twice: every Turn has one identity, and a repeat of it is acknowledged
+and ignored.
+
+A cursor is a cache, never a record. Missing, unreadable or past the end of a
+replaced file all mean "read from the top", which costs bandwidth and never a
+Turn. Cursors live in the [state directory](/docs/configuration#collector),
+one file per transcript, named by a hash because a transcript path carries
+your own directory names.
+
+One request carries at most 100 reports of at most 5,000 Turns each, and at
+most 100 stop failures. The Collector splits a long transcript across requests
+itself rather than sending one the deployment would refuse.
+
+## When the deployment is unreachable
+
+A failed report is retried three times over about two and a half seconds. A
+report that still will not go is written to a **queue** in the state
+directory, and the next session started on this machine drains that queue and
+then re-reads every recent transcript from its cursor. So a laptop that closed
+on a train, or a deployment down for an hour, catches up on its own at the next
+session with no Turn lost.
+
+That sweep is time-boxed to fit inside the session-start hook and works
+newest-first, so a very large backlog — a fresh install over a year of existing
+history, say — is caught up across several sessions rather than all in one.
+
+<Callout title="The one residual gap">
+  A dropped _Turn_ is always recovered, because its cursor did not advance. A
+  dropped session **event** — a stop failure or a clean session end — reads no
+  transcript and has only the queue behind it, which holds at most 500 entries
+  for at most 14 days. Keep the state directory writable and this gap stays
+  closed.
+</Callout>
+
+## Failures and session ends
+
+A turn that ends on an API error — a rate limit, an overload, a billing
+problem — writes no usage and so appears in no Turn. The `StopFailure` hook
+reports it instead: the error type, the detail Claude Code gave, and when it
+fired. It reads no transcript and moves no cursor. These are what the
+**Failures** view on Costs lists.
+
+When a session ends cleanly, `SessionEnd` reports that too. A session with no
+recorded end — a killed container, say — is simply re-read until its cursor
+goes stale, which costs bandwidth, never a Turn.
+
+## When the key is refused
+
+A refusal is final, so it writes no cursor and queues nothing. Every report
+records the deployment's last answer in the state directory, and a session
+that starts after a `401` prints one line saying the key was refused. See
+[API keys](/docs/api-keys).
+
+## Behind a proxy
+
+Node's `fetch` ignores `HTTPS_PROXY` unless Node was started with
+`NODE_USE_ENV_PROXY=1`, so a hook that finds `HTTPS_PROXY` set starts itself
+again with that switch, which also honours `NO_PROXY`. It needs Node 22.21 or
+newer; an older Node connects directly.
+
+A proxy that inspects TLS needs its CA in `NODE_EXTRA_CA_CERTS`, and a proxy
+that wants NTLM or Kerberos is not supported — only credentials in the proxy
+URL are. To keep a direct connection, put the deployment's host in `NO_PROXY`.
+
+## Transcripts (archival)
+
+Uploading the raw transcripts is off until a Member turns it on, and even then
+it is the deployment's decision, not the Collector's. For each transcript the
+Collector asks the deployment for an upload URL, and uploads only if the answer
+is one. Nothing leaves the machine while archival is switched off, while the
+Project is excluded, while the Org's Tier excludes archival, or when these
+exact bytes are already stored.
+
+The bytes go straight to storage through that presigned URL and never through
+the application. The deployment then reads the object back before it records
+the upload, so a failed or truncated upload never shows as downloadable.
+
+Transcripts are uploaded at the end of each session and by the session-start
+sweep. The sweep reports Turns first, so on a machine with a long history the
+newest sessions are archived first. In a Claude Code cloud container, which
+never runs `SessionEnd`, the transcript is uploaded in the background after
+every turn instead.
+
+Claude Code's own `cleanupPeriodDays` sweep deletes transcripts after 30 days
+by default, so a transcript not collected within that window is gone, whatever
+SessClone does.

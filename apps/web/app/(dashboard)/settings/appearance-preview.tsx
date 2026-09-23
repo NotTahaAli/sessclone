@@ -1,3 +1,4 @@
+import { Field } from '../../_ui/primitives'
 import type { AccentTones } from '../../../lib/accent-presets'
 
 // Ticket 77, third criterion: the derived values are computed once on save and
@@ -44,38 +45,32 @@ export function AccentPreview({
     style: { backgroundColor: tones[one.token] },
   }))
 
+  // Ticket 113: one settings row, not a panel — the seed in force on the
+  // right with the seven values it resolved to beside it, each named on
+  // hover and for a screen reader.
   return (
-    <div className="border-rule mt-4 rounded border p-4">
-      <p className="text-text-secondary text-sm">
-        The accent in force is <span className="font-mono">{seed}</span>, and
-        these are the seven values it resolved to. They are computed once when a
-        colour is saved and stored beside it, so no colour library is shipped to
-        the browser and nothing is recomputed per page.
-      </p>
-      <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {swatches.map((one) => (
-          <div key={one.token} className="flex items-center gap-2">
+    <Field
+      label="Resolves to"
+      hint="Computed once when a colour is saved and stored beside it, so no colour library reaches the browser. Every accent fill carries its border: tone 60 measures about 3:1 against the page."
+    >
+      <span className="flex items-center gap-2">
+        <span className="text-text-muted font-mono text-caption">{seed}</span>
+        <span role="list" aria-label="Resolved tones" className="flex gap-1">
+          {swatches.map((one) => (
             <span
-              // A swatch is decoration; the hex beside it is the information,
-              // so this is hidden rather than described twice.
-              aria-hidden="true"
-              className="border-rule-strong h-8 w-8 shrink-0 rounded border"
+              key={one.token}
+              role="listitem"
+              title={`${one.label}: ${one.value} — ${one.about}`}
+              className="border-rule-strong block size-3.5 rounded-full border"
               style={one.style}
-            />
-            <div className="min-w-0">
-              <dt className="text-text text-caption">{one.label}</dt>
-              <dd className="text-text-muted font-mono text-micro">
-                {one.value}
-              </dd>
-            </div>
-          </div>
-        ))}
-      </dl>
-      <p className="text-text-muted mt-3 text-caption">
-        Every accent fill carries its border: tone 60 measures about 3.0 against
-        the page across the presets, which is the 3:1 minimum with nothing to
-        spare, so the fill never carries its own boundary.
-      </p>
-    </div>
+            >
+              <span className="sr-only">
+                {one.label} {one.value}
+              </span>
+            </span>
+          ))}
+        </span>
+      </span>
+    </Field>
   )
 }

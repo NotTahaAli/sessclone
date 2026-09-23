@@ -1,10 +1,15 @@
 import { Suspense } from 'react'
 
 import { sendMagicLink, signInWithGitHub } from './actions'
+import { approvalRequired } from '../../lib/approval'
 import { readAnonymously } from '../../lib/db'
 import { invitationOrg } from '../../lib/invitations'
 import { logoPath } from '../../lib/org-logo'
+import { SIGNUP_PLANS } from '../../lib/subscriptions'
+import { marketingTiers, tierPrice } from '../../lib/tiers'
 import { OrgMark } from '../org-mark'
+import { LogoMark } from '../_ui/logo'
+import { buttonClass, inputClass } from '../_ui/primitives'
 import { invitationToken, safeNext } from '../../lib/auth/next-path'
 import { ProviderError } from './provider-error'
 import { PanelCredit } from '../(dashboard)/credit'
@@ -38,15 +43,17 @@ const MESSAGES: Record<string, string> = {
 // Matched, never rendered as it arrives — see `app/auth/callback/route.ts`.
 const PROVIDER_CODE = /^[a-z_]{1,64}$/
 
-/** The one control both forms submit through, so they read as one choice. */
-const BUTTON =
-  'inline-flex h-[var(--control-h)] w-full items-center justify-center rounded-md px-4 text-body'
+/** Direction A's round button at full width (ticket 111): one primary. */
+const PRIMARY = `${buttonClass('primary')} w-full`
+const SECONDARY = `${buttonClass()} w-full`
 
 type Query = Promise<{
   error?: string
   sent?: string
   code?: string
   next?: string
+  /** A plan preselected by the pricing page's "Join waitlist". */
+  plan?: string
 }>
 
 /**
@@ -91,6 +98,73 @@ async function InvitedBy({ searchParams }: { searchParams: Query }) {
   )
 }
 
+/**
+ * The plan a new sign-up asks for (ticket 118): Personal, or Team and its
+ * size. It is only an ask — the Org waits for the operator to approve it
+ * (ticket 119) — and it is ignored for anybody who already has an Org.
+ *
+ * Absent with `SIGNUP_APPROVAL=off`, and on the way to an invitation, where
+ * the visitor is joining somebody else's Org rather than starting one. The
+ * Tiers are the cached rows the pricing page reads, so a size the operator
+ * changed is the size offered.
+ */
+async function PlanChoice({ searchParams }: { searchParams: Query }) {
+  const { next, plan } = await searchParams
+  if (invitationToken(safeNext(next))) return null
+  // With approval switched off nobody confirms a plan, so there is none to ask.
+  if (!approvalRequired()) return null
+
+  const tiers = (await marketingTiers()).filter((tier) =>
+    (SIGNUP_PLANS as readonly string[]).includes(tier.key),
+  )
+  if (tiers.length === 0) return null
+  const team = tiers.find((tier) => tier.key === 'team')
+  // Only a key on offer is honoured; anything else falls back to the first.
+  const chosen = tiers.some((tier) => tier.key === plan) ? plan : tiers[0]!.key
+
+  return (
+    <fieldset className="mt-6 flex flex-col gap-2">
+      <legend className="text-text-muted mb-2 text-caption">
+        New here? Choose a plan
+      </legend>
+      {tiers.map((tier) => (
+        <label key={tier.key} className="flex items-center gap-2 text-body">
+          <input
+            type="radio"
+            name="plan"
+            value={tier.key}
+            defaultChecked={tier.key === chosen}
+          />
+          {tier.name}
+          <span className="text-text-muted text-caption">
+            {[tierPrice(tier).amount, tierPrice(tier).unit]
+              .filter(Boolean)
+              .join(' ')}
+          </span>
+        </label>
+      ))}
+      {team ? (
+        <label className="text-text-secondary flex items-center gap-2 text-caption">
+          Team size
+          <input
+            name="seats"
+            type="number"
+            required
+            min={team.minSeats ?? 1}
+            max={team.maxSeats ?? undefined}
+            defaultValue={team.minSeats ?? 2}
+            className={`${inputClass} w-20`}
+          />
+        </label>
+      ) : null}
+      <p className="text-text-muted text-caption">
+        Paid plans open by invitation from the waitlist: signing up puts your
+        organisation on it, and it opens once approved.
+      </p>
+    </fieldset>
+  )
+}
+
 /** What a failed round trip left in the query string, if anything. */
 async function Notices({ searchParams }: { searchParams: Query }) {
   const { error, sent, code } = await searchParams
@@ -132,7 +206,8 @@ async function Notices({ searchParams }: { searchParams: Query }) {
 export default function SignIn({ searchParams }: { searchParams: Query }) {
   return (
     <main className="mx-auto flex max-w-md flex-col px-4 py-16">
-      <h1 className="text-heading-lg">Sign in to sessclone</h1>
+      <LogoMark size={28} className="text-text mb-4" />
+      <h1 className="text-heading-lg">Sign in to SessClone</h1>
 
       <Suspense fallback={null}>
         <InvitedBy searchParams={searchParams} />
@@ -145,48 +220,49 @@ export default function SignIn({ searchParams }: { searchParams: Query }) {
       {/* The same failure, when Supabase reported it in the fragment. */}
       <ProviderError />
 
-      <form action={signInWithGitHub} className="mt-6">
+      {/* One form and two ways to submit it, so the plan below travels with
+          either (ticket 118). GitHub skips validation: it needs no address. */}
+      <form action={sendMagicLink}>
         <Suspense fallback={null}>
           <ReturnTo searchParams={searchParams} />
         </Suspense>
+
+        {/* First, so the choice is made before either button is pressed. */}
+        <Suspense fallback={null}>
+          <PlanChoice searchParams={searchParams} />
+        </Suspense>
+
         <button
           type="submit"
-          className={`${BUTTON} bg-accent-fill text-accent-on-fill`}
+          formAction={signInWithGitHub}
+          formNoValidate
+          className={`${PRIMARY} mt-6`}
         >
           Continue with GitHub
         </button>
-      </form>
 
-      <form
-        action={sendMagicLink}
-        className="border-rule bg-surface mt-6 flex flex-col gap-2 rounded-md border p-4"
-      >
-        <Suspense fallback={null}>
-          <ReturnTo searchParams={searchParams} />
-        </Suspense>
-        <label htmlFor="email" className="text-text-secondary text-caption">
-          Or get a sign-in link by email
-        </label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          required
-          placeholder="you@example.com"
-          className="border-control-border text-text h-[var(--control-h)] w-full rounded border px-3 text-body"
-        />
-        <button
-          type="submit"
-          className={`${BUTTON} border-control-border text-text border`}
-        >
-          Email me a link
-        </button>
+        <div className="border-rule mt-6 flex flex-col gap-2 border-t pt-4">
+          <label htmlFor="email" className="text-text-muted text-caption">
+            Or get a sign-in link by email
+          </label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            required
+            placeholder="you@example.com"
+            className={`${inputClass} w-full`}
+          />
+          <button type="submit" className={SECONDARY}>
+            Email me a link
+          </button>
+        </div>
       </form>
 
       <p className="text-text-muted mt-6 text-caption">
         There is no password to set or forget. Signing in for the first time
-        creates an organisation with you as its owner.
+        creates an organisation with you as its owner, on the plan you chose.
       </p>
 
       <div className="mt-12">

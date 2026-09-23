@@ -1,3 +1,4 @@
+import { Row } from '../../_ui/primitives'
 import { adviceFor, type FailureTone } from '../../../lib/failure-advice'
 import type { FailureRow, Failures } from '../../../lib/failures'
 
@@ -5,16 +6,23 @@ import type { FailureRow, Failures } from '../../../lib/failures'
 // a single column — the reader checks this from a phone when nothing arrived,
 // so nothing here relies on a wide screen.
 //
-// Each row leads with the failure type as a monospace chip, coloured by what
-// it means: red lost or needs a person, amber resolves itself, neutral for a
-// type we have nothing to say about. Then when it failed, the Session, the
-// Device and the Member — and a sentence saying what to do, or, when there is
-// no advice for the type, the recorded message exactly as it was recorded.
+// Direction A (ticket 112): a row, not a card. The failure type leads in
+// mono, in the colour of what it means — red lost or needs a person, amber
+// resolves itself, muted for a type we have nothing to say about — with when
+// it failed on the right. Under it the Session, Device and Member, then a
+// sentence saying what to do, or, when there is no advice for the type, the
+// recorded message exactly as it was recorded.
 
-const CHIP: Record<FailureTone, string> = {
-  lost: 'bg-bad-bg text-bad-text border-bad-border',
-  transient: 'bg-warn-bg text-warn-text border-warn-border',
-  neutral: 'bg-quiet-bg text-quiet-text border-quiet-border',
+const TONE: Record<FailureTone, string> = {
+  lost: 'text-bad-text',
+  transient: 'text-warn-text',
+  neutral: 'text-text',
+}
+
+const MARK: Record<FailureTone, string> = {
+  lost: '✕',
+  transient: '○',
+  neutral: '○',
 }
 
 /** A short session id: the tail carries no meaning a reader needs at a glance. */
@@ -37,7 +45,7 @@ export function FailuresList({
 
   if (failures.rows.length === 0) {
     return (
-      <p className="border-rule text-text-muted rounded border border-dashed p-6 text-sm">
+      <p className="text-text-muted py-3 text-body">
         No Session failed in this period. A failure here is a turn that ended on
         an API error — a rate limit, an overload, a billing problem — so an
         empty list is the good outcome.
@@ -48,7 +56,7 @@ export function FailuresList({
   return (
     <ol className="flex flex-col">
       {failures.rows.map((row) => (
-        <Row
+        <Failure
           key={row.id}
           row={row}
           when={when.format(new Date(row.occurredAt))}
@@ -64,7 +72,7 @@ export function FailuresList({
   )
 }
 
-function Row({ row, when }: { row: FailureRow; when: string }) {
+function Failure({ row, when }: { row: FailureRow; when: string }) {
   const advice = adviceFor(row.errorType)
 
   // Who and where it failed, joined into one muted line: the Session always,
@@ -79,54 +87,51 @@ function Row({ row, when }: { row: FailureRow; when: string }) {
     .join(' · ')
 
   return (
-    <li className="border-rule flex flex-col gap-1.5 border-b py-3">
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-        {/* `break-all` and `max-w-full`: the type is collector-controlled text
-            of up to 64 characters (ticket 40's schema), and 64 unbreakable
-            monospace characters are wider than a phone — without these it
-            forces the whole page to scroll sideways. */}
+    <li className="border-rule border-b pb-2 last:border-b-0">
+      {/* The type is collector-controlled text of up to 64 characters
+          (ticket 40's schema); the row truncates it rather than letting 64
+          unbreakable characters push the page sideways on a phone. */}
+      <Row
+        mark={MARK[advice.tone]}
+        markClass={TONE[advice.tone]}
+        meta={when}
+        sub={context}
+      >
         <span
-          className={`max-w-full rounded border px-2 py-0.5 font-mono text-caption break-all ${CHIP[advice.tone]}`}
+          title={row.errorType}
+          className={`font-mono ${TONE[advice.tone]}`}
         >
           {row.errorType}
         </span>
-        <time
-          dateTime={row.occurredAt}
-          className="text-text-muted font-mono text-caption"
-        >
-          {when}
-        </time>
-      </div>
-
-      <p className="text-text-muted text-caption break-all">{context}</p>
+      </Row>
 
       {/* Known type: the advice, and whether it touched the bill. Unknown type:
           the recorded message as recorded, never a generic stand-in. */}
-      {advice.advice ? (
-        <div className="flex flex-col gap-1">
-          <p className="text-body text-text-secondary">{advice.advice}</p>
-          <p className="text-caption">
-            <span
-              className={
+      <div className="flex flex-col gap-1 pl-[22px] text-body">
+        {advice.advice ? (
+          <>
+            <p className="text-text-secondary">{advice.advice}</p>
+            <p
+              className={`text-caption ${
                 advice.costsAffected ? 'text-bad-text' : 'text-text-muted'
-              }
+              }`}
             >
               {advice.costsAffected
                 ? 'This affected your cost.'
                 : 'Your cost is unaffected.'}
-            </span>
-          </p>
-          {row.message ? (
-            <p className="text-text-muted text-caption break-all">
-              Reported: {row.message}
             </p>
-          ) : null}
-        </div>
-      ) : (
-        <p className="text-body text-text-secondary break-all">
-          {row.message ?? 'No message was recorded for this failure.'}
-        </p>
-      )}
+            {row.message ? (
+              <p className="text-text-muted text-caption break-all">
+                Reported: {row.message}
+              </p>
+            ) : null}
+          </>
+        ) : (
+          <p className="text-text-secondary break-all">
+            {row.message ?? 'No message was recorded for this failure.'}
+          </p>
+        )}
+      </div>
     </li>
   )
 }

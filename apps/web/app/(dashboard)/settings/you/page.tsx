@@ -15,20 +15,24 @@ import { InlineName } from '../../inline-name'
 import { PageHeader } from '../../page-header'
 import { AccentPreview } from '../appearance-preview'
 import { SeedPicker } from '../seed-picker'
+import { SwitchForm } from '../switch-form'
+import { Field, Row, SectionBreak } from '../../../_ui/primitives'
 import { viewerAppearance } from '../../../../lib/appearance'
 import { asViewer } from '../../../../lib/db'
 import { signedInUser } from '../../../../lib/supabase/server'
 
 // Ticket 72: `/settings/you`, the destination `docs/design/product-ia.md`
-// gives every Role, carrying the settings that are the Member's own. Archival
-// is the first of them, and a Manager's own Scope (ticket 46) is the second;
-// appearance (77) and the Member's Log Artifacts (60, 73) land beside them
-// later.
+// gives every Role, carrying the settings that are the Member's own: archival,
+// a Manager's own Scope (ticket 46), appearance (77) and the name (91).
 //
 // ADR 0005 is what this page is the surface of, and its two rules shape every
 // control here: the master switch is the Member's own and starts off, and the
 // per-Project setting is an opt-out list *inside* it — so a Project with no
 // row inherits the switch, and a new repository is archived without a visit.
+//
+// Ticket 113 draws it as rows: label on the left, value or control on the
+// right, edited in place. A switch saves when flipped, a pencil opens the
+// name, a swatch saves when pressed — no boxed form, no Save for one value.
 
 /** One shared empty list, so a membership with no Projects is not a new array. */
 const EMPTY: ArchivalProject[] = []
@@ -41,7 +45,7 @@ export default async function YourSettings() {
   if (!user) return null
 
   // One transaction, which is what `asViewer` opens and what carries the
-  // viewer's claim. The two statements are independent, so they go together.
+  // viewer's claim. The statements are independent, so they go together.
   const [memberships, projects, scopes, appearance, displayName] =
     await asViewer(user.id, (tx) =>
       Promise.all([
@@ -54,8 +58,7 @@ export default async function YourSettings() {
     )
 
   // Grouped once here rather than filtered inside the render, which would be
-  // a pass over the whole list per membership. One pass, one array each, and
-  // each array is pushed into rather than rebuilt.
+  // a pass over the whole list per membership.
   const byMember = new Map<string, ArchivalProject[]>()
   for (const project of projects) {
     let group = byMember.get(project.member_id)
@@ -63,123 +66,98 @@ export default async function YourSettings() {
     group.push(project)
   }
 
-  return (
-    // Capped at a readable measure. Inside `Panel` this page sat in a 3xl
-    // column; the shell's content column is 1208px at 1440, which is right for
-    // a chart and far past a measure anybody wants to read a paragraph at.
-    <div className="flex max-w-3xl flex-col gap-6">
-      <PageHeader title="Your settings" />
+  const first = memberships[0]
 
+  return (
+    <div className="flex max-w-3xl flex-col">
+      <PageHeader title="Your settings" back="/settings" />
+
+      <SectionBreak>Profile</SectionBreak>
       {/* Ticket 91, first because it is the one thing on this page other
           people see. A pencil rather than a form: it is one short string. */}
-      <section aria-labelledby="name">
-        <h2 id="name" className="text-heading-lg">
-          Your name
-        </h2>
-        <p className="text-text-secondary mt-2 mb-3 text-sm">
-          What you are called on every surface that would otherwise print your
-          address. The address stays beside it, because two people with the same
-          first name is ordinary. Save an empty box to go back to the address
-          alone.
-        </p>
-        <p className="text-body">
-          <InlineName
-            action={setName}
-            current={displayName}
-            fallback={user.email ?? 'your address'}
-            label="Your name"
-            placeholder="Taha"
-          />
-        </p>
-      </section>
+      <Field
+        label="Name"
+        hint="Shown wherever your address would be, with the address beside it. Save an empty box to go back to the address alone."
+      >
+        <InlineName
+          action={setName}
+          current={displayName}
+          fallback={user.email ?? 'your address'}
+          label="Your name"
+          placeholder="Taha"
+        />
+      </Field>
+      <Field label="Email">{user.email ?? '—'}</Field>
 
       <YourScopes scopes={scopes} />
 
-      {/* Ticket 77. First of the personal settings because it is the one that
-          changes what the rest of them look like, and the only one somebody
-          might come here for on their first visit. */}
-      {memberships[0] ? (
-        <section aria-labelledby="appearance" className="mt-8">
-          <h2 id="appearance" className="text-heading-lg">
-            Appearance
-          </h2>
-          <p className="text-text-secondary mt-2 text-sm">
-            Light or dark is always yours. The accent colour is yours unless
-            your Org has locked it, and either way it only paints buttons, links
-            and the active navigation underline — never the status colours or a
-            breakdown&apos;s chart series, which have to mean the same thing
-            across a desk.
-          </p>
-
-          <ThemeForm
-            memberId={memberships[0].member_id}
-            current={appearance.theme}
-          />
-
+      {/* Ticket 77. Light or dark is always yours; the accent is yours unless
+          the Org has locked it, and it only paints the few things that are
+          "now" — never the status colours or a chart's series, which have to
+          mean the same thing across a desk. */}
+      {first ? (
+        <>
+          <SectionBreak>Appearance</SectionBreak>
+          <Field label="Theme">
+            <ThemeForm memberId={first.member_id} current={appearance.theme} />
+          </Field>
           {appearance.locked ? (
-            <p className="border-rule text-text-secondary mt-6 rounded border border-dashed p-4 text-sm">
-              Your Org has locked its accent colour, so everybody sees{' '}
-              <span className="font-mono">{appearance.orgSeed}</span>. If you
-              had chosen one it is still stored, and it applies again if the
-              lock is lifted.
-            </p>
+            <Field
+              label="Accent"
+              hint="Your Org has locked its accent colour. If you had chosen one it is still stored, and applies again when the lock is lifted."
+            >
+              {appearance.orgSeed}
+            </Field>
           ) : (
-            <SeedPicker
-              action={setOwnAccent}
-              field="memberId"
-              rowId={memberships[0].member_id}
-              current={appearance.ownSeed}
-              orgSeed={appearance.orgSeed}
-              inheritable
-              label={
+            <Field
+              label="Accent"
+              hint={
                 appearance.ownSeed
-                  ? 'Your accent colour'
-                  : 'Your accent colour, currently your Org’s'
+                  ? 'Yours, on your screens only. The last swatch takes any colour.'
+                  : 'Your Org’s, until you pick one. The last swatch takes any colour; yours shows on your screens only.'
               }
-            />
+            >
+              <SeedPicker
+                action={setOwnAccent}
+                field="memberId"
+                rowId={first.member_id}
+                current={appearance.ownSeed}
+                orgSeed={appearance.orgSeed}
+                inheritable
+                label={
+                  appearance.ownSeed
+                    ? 'Your accent colour'
+                    : 'Your accent colour, currently your Org’s'
+                }
+              />
+            </Field>
           )}
-
           <AccentPreview seed={appearance.seed} tones={appearance.tones} />
-        </section>
+        </>
       ) : null}
 
-      <section aria-labelledby="archival" className="mt-8">
-        <h2 id="archival" className="text-heading-lg">
-          Transcript archival
-        </h2>
-        <p className="text-text-secondary mt-2 text-sm">
-          Usage and cost are always reported. Archival is separate: it uploads
-          the session transcripts themselves, so they can be downloaded and read
-          later. It is off until you turn it on, and nobody in your Org can turn
-          it on for you.
+      <SectionBreak>Transcript upload</SectionBreak>
+      <BeforeYouOptIn />
+
+      {memberships.length === 0 ? (
+        <p className="text-text-muted py-3 text-body">
+          You are not a Member of an Org yet, so there is nothing to archive.
         </p>
+      ) : (
+        memberships.map((membership) => (
+          <OrgArchival
+            key={membership.member_id}
+            membership={membership}
+            projects={byMember.get(membership.member_id) ?? EMPTY}
+          />
+        ))
+      )}
 
-        <BeforeYouOptIn />
-
-        {memberships.length === 0 ? (
-          <p className="border-rule text-text-muted mt-6 rounded border border-dashed p-6 text-sm">
-            You are not a Member of an Org yet, so there is nothing to archive.
-          </p>
-        ) : (
-          memberships.map((membership) => (
-            <OrgArchival
-              key={membership.member_id}
-              membership={membership}
-              projects={byMember.get(membership.member_id) ?? EMPTY}
-              // A person in one Org does not need to be told which Org.
-              named={memberships.length > 1}
-            />
-          ))
-        )}
-      </section>
-
-      {/* Ticket 87: the stored transcripts left this page and became
-          `/transcripts`. What stays here is the switch — a change to make,
-          rather than a thing to find — and a way to the list for somebody who
-          came looking for it. */}
-      <p className="text-text-secondary mt-6 text-sm">
+      {/* Ticket 87: the stored transcripts are `/transcripts`. What stays
+          here is the switch — a change to make, rather than a thing to find. */}
+      <p className="text-text-muted mt-4 text-caption">
         What has already been uploaded, and the controls to delete it, are on{' '}
-        <Link href="/transcripts" className="text-accent-text underline">
+        <Link href="/transcripts" className="text-text underline">
           Transcripts
         </Link>
         .
@@ -190,259 +168,156 @@ export default async function YourSettings() {
 
 /**
  * What a transcript from a shared environment contains, said before the switch
- * rather than after it (ticket 72, finding 74).
- *
- * The Member's own laptop transcripts are the Member's own work. A Claude
- * Projects session is not: it carries the project's conversation, and
- * everybody else in that project writes into it too. Turning the switch on is
- * therefore a decision about more than your own messages, and somebody who
- * only learns that from the archive has learned it too late.
+ * rather than after it (ticket 72, finding 74). A Claude Projects session
+ * carries the project's conversation, and everybody else in that project
+ * writes into it too — so turning the switch on is a decision about more than
+ * your own messages, and somebody who learns that from the archive has learned
+ * it too late.
  */
 function BeforeYouOptIn() {
   return (
-    <div className="border-warn-border bg-warn-bg mt-4 rounded border p-4 text-sm">
-      <h3 className="font-medium">Before you turn this on</h3>
-      <p className="text-text-secondary mt-2">
-        A transcript holds everything the session saw: your prompts, the
+    <div className="text-text-muted py-1 text-caption">
+      <p>
+        Usage and cost are always reported. Archival is separate: it uploads the
+        session transcripts themselves, for Owners and Admins to read later. It
+        is off until you turn it on, and nobody in your Org can turn it on for
+        you.
+      </p>
+      <p className="mt-1.5">
+        <span className="text-warn-text font-medium">
+          Before you turn it on:
+        </span>{' '}
+        a transcript holds everything the session saw — your prompts, the
         model&apos;s replies, the files it read and the commands it ran. That
         can include source code and, in a file it happened to open, a
-        credential.
-      </p>
-      <p className="text-text-secondary mt-2">
-        From a shared environment it holds more than your own work. In Claude
-        Projects a session carries the project&apos;s own conversation, so the
-        messages other members wrote there are in the transcript you upload.
+        credential. From a shared environment it holds more than your own work:
+        in Claude Projects a session carries the project&apos;s own
+        conversation, so the messages other members wrote there are in the
+        transcript you upload.
       </p>
     </div>
   )
 }
 
+/**
+ * One membership's switch, and every Project under it as an indented row.
+ * The Org is named on the row, since a person in two Orgs has two switches.
+ */
 function OrgArchival({
   membership,
   projects,
-  named,
 }: {
   membership: ArchivalMembership
   projects: ArchivalProject[]
-  named: boolean
 }) {
   const on = membership.archival_enabled
 
   return (
-    <div className="border-rule mt-6 rounded border p-4">
-      {named ? (
-        <h3 className="text-heading">{membership.org_name}</h3>
-      ) : (
-        <h3 className="sr-only">{membership.org_name}</h3>
-      )}
-
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm">
-          Archival is <strong>{on ? 'on' : 'off'}</strong>
-          {on ? (
-            <span className="text-text-secondary">
-              {' '}
-              — new sessions upload unless you exclude their Project below.
-            </span>
-          ) : (
-            <span className="text-text-secondary">
-              {' '}
-              — nothing leaves your machines.
-            </span>
-          )}
-        </p>
-        <Toggle
-          action={setArchival}
-          memberId={membership.member_id}
-          to={on ? 'off' : 'on'}
-          label={on ? 'Turn archival off' : 'Turn archival on'}
-        />
-      </div>
-
-      {/* ADR 0005: off is forward-only. Two intentions, two actions — stop
-          collecting, and destroy what you hold. Said where it is about to be
-          acted on, which is beside a switch that is currently on. */}
-      {on ? (
-        <p className="text-text-muted mt-2 text-sm">
-          Turning archival off stops new uploads. It keeps what is already
-          stored, which then ages out under your Org&apos;s retention setting.
-          Deleting stored transcripts is a separate action.
-        </p>
-      ) : null}
-
-      <ProjectList membership={membership} projects={projects} />
-    </div>
-  )
-}
-
-/**
- * Every Project the Member has Sessions in, so an exclusion can be made
- * without guessing a key — which matters most for a `local:` key, being a
- * hostname and an absolute path that nobody types correctly from memory.
- */
-function ProjectList({
-  membership,
-  projects,
-}: {
-  membership: ArchivalMembership
-  projects: ArchivalProject[]
-}) {
-  if (projects.length === 0) {
-    return (
-      <p className="text-text-muted mt-4 text-sm">
-        No Projects yet. One appears here once a Collector reports a session
-        from it.
-      </p>
-    )
-  }
-
-  return (
     <>
-      <h4 className="text-label text-text-muted mt-6 uppercase">Projects</h4>
-      <p className="text-text-secondary mt-2 text-sm">
-        A new Project follows the switch above. Exclude the ones that should
-        never upload.
-      </p>
-
-      <ul className="mt-3">
-        {projects.map((project) => {
-          // Null is the common case and the important one: no row, so the
-          // Project inherits the switch rather than holding a decision.
-          const excluded = project.archival_enabled === false
-
-          return (
-            <li
-              key={project.project_id}
-              className="border-rule flex flex-wrap items-center justify-between gap-3 border-b py-3"
-            >
-              <div className="min-w-0">
-                <p className="font-mono text-sm break-all">{project.key}</p>
-                <p className="text-text-muted text-sm">
-                  {excluded
-                    ? 'Excluded — sessions here never upload.'
-                    : membership.archival_enabled
-                      ? 'Archived.'
-                      : 'Would be archived, once the switch is on.'}
-                </p>
-              </div>
-              <Toggle
-                action={setProject}
-                memberId={membership.member_id}
-                projectId={project.project_id}
-                to={excluded ? 'on' : 'off'}
-                label={
-                  excluded ? `Include ${project.key}` : `Exclude ${project.key}`
-                }
-                short={excluded ? 'Include' : 'Exclude'}
-              />
-            </li>
-          )
-        })}
-      </ul>
-    </>
-  )
-}
-
-/**
- * One form, one button, one write. A `form` rather than a checkbox because the
- * page is a Server Component: this posts and re-renders without a line of
- * client JavaScript, and works with it turned off.
- *
- * `to` is the state being moved to rather than a toggle, so two presses of a
- * stale page land on the same setting instead of flipping it twice.
- */
-function Toggle({
-  action,
-  memberId,
-  projectId,
-  to,
-  label,
-  short,
-}: {
-  action: (formData: FormData) => void
-  memberId: string
-  projectId?: string
-  to: 'on' | 'off'
-  label: string
-  short?: string
-}) {
-  return (
-    <form action={action}>
-      <input type="hidden" name="memberId" value={memberId} />
-      {projectId ? (
-        <input type="hidden" name="projectId" value={projectId} />
-      ) : null}
-      <input type="hidden" name="to" value={to} />
-      <button
-        type="submit"
-        className="border-control-border text-text rounded border px-3 py-1 text-sm whitespace-nowrap"
+      <Field
+        label={membership.org_name}
+        // ADR 0005: off is forward-only. Two intentions, two actions — stop
+        // collecting, and destroy what you hold — said beside a switch that
+        // is currently on.
+        hint={
+          on
+            ? 'On: new sessions upload unless you exclude their Project below. Turning it off stops new uploads and keeps what is stored, which ages out under your Org’s retention; deleting is a separate action.'
+            : 'Off: nothing leaves your machines.'
+        }
       >
-        {short ? (
-          <>
-            {short}
-            <span className="sr-only"> {label}</span>
-          </>
-        ) : (
-          label
-        )}
-      </button>
-    </form>
+        <SwitchForm
+          action={setArchival}
+          hidden={`memberId=${membership.member_id}`}
+          checked={on}
+          label={`Archive transcripts for ${membership.org_name}`}
+        />
+      </Field>
+      {projects.length === 0 ? (
+        <p className="text-text-muted py-2 pl-3.5 text-caption">
+          No Projects yet. One appears here once a Collector reports a session
+          from it.
+        </p>
+      ) : (
+        // Every Project the Member has Sessions in, so an exclusion can be
+        // made without guessing a key — which matters most for a `local:`
+        // key, a hostname and a path nobody types correctly from memory.
+        // Null is the common case: no row, so it follows the switch.
+        projects.map((project) => {
+          const excluded = project.archival_enabled === false
+          return (
+            <Field
+              key={project.project_id}
+              indent
+              mono
+              label={project.key}
+              hint={
+                excluded
+                  ? 'Excluded — sessions here never upload.'
+                  : on
+                    ? undefined
+                    : 'Would be archived, once the switch is on.'
+              }
+            >
+              <SwitchForm
+                action={setProject}
+                hidden={`memberId=${membership.member_id}&projectId=${project.project_id}`}
+                checked={!excluded}
+                label={`Archive ${project.key}`}
+              />
+            </Field>
+          )
+        })
+      )}
+    </>
   )
 }
 
 /**
  * A Manager's own Scope, which is ticket 46's second criterion.
  *
- * It is about trust rather than convenience. A Manager who cannot see their
- * Scope cannot tell a Member they were never given from a Member who has
- * reported nothing, and will read the first as a bug in the product. So the
- * empty case says out loud that it is empty and who changes it, rather than
- * rendering nothing and leaving them to guess.
- *
- * Absent entirely for anybody who is not a Manager: the section would be a
- * paragraph about a Role they do not hold.
+ * A Manager who cannot see their Scope cannot tell a Member they were never
+ * given from a Member who has reported nothing. So the empty case says out
+ * loud that it is empty and who changes it. Absent for anybody who is not a
+ * Manager.
  */
 function YourScopes({ scopes }: { scopes: OwnScope[] }) {
   if (scopes.length === 0) return null
 
   return (
-    <section aria-labelledby="scope">
-      <h2 id="scope" className="text-heading-lg">
-        Your Scope
-      </h2>
-      <p className="text-text-secondary mt-2 text-sm">
-        As a Manager you see these Members and nobody else. An Owner or an Admin
-        decides who is on the list.
-      </p>
-
+    <>
       {scopes.map((scope) => (
-        <div
+        <section
           key={scope.managerMemberId}
-          className="border-rule mt-4 rounded border p-4"
+          aria-label={`Your Scope in ${scope.orgName}`}
         >
-          {scopes.length > 1 ? (
-            <h3 className="text-heading">{scope.orgName}</h3>
-          ) : (
-            <h3 className="sr-only">{scope.orgName}</h3>
-          )}
-
+          <SectionBreak>
+            {scopes.length > 1
+              ? `Your Scope in ${scope.orgName}`
+              : 'Your Scope'}
+          </SectionBreak>
           {scope.members.length === 0 ? (
-            <p className="text-text-muted text-sm">
+            <p className="text-text-muted py-1 text-body">
               Nobody yet, so Costs shows you your own Turns and no one
               else&apos;s. An Owner or an Admin of {scope.orgName} can add
               people.
             </p>
           ) : (
-            <ul className="mt-2 flex flex-col gap-1">
-              {scope.members.map((member) => (
-                <li key={member.memberId} className="text-sm break-all">
-                  {member.email}
-                </li>
-              ))}
-            </ul>
+            <>
+              <p className="text-text-muted text-caption">
+                As a Manager you see these Members and nobody else. An Owner or
+                an Admin decides who is on the list.
+              </p>
+              <ol>
+                {scope.members.map((member) => (
+                  <li key={member.memberId}>
+                    <Row lead="none" name={member.email} />
+                  </li>
+                ))}
+              </ol>
+            </>
           )}
-        </div>
+        </section>
       ))}
-    </section>
+    </>
   )
 }

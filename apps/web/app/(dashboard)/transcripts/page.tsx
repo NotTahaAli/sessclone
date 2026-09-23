@@ -2,6 +2,7 @@ import Link from 'next/link'
 
 import { StoredTranscripts } from './stored-transcripts'
 import { PageHeader } from '../page-header'
+import { Row } from '../../_ui/primitives'
 import { listArchivalMemberships } from '../../../lib/archival'
 import {
   storedProjects,
@@ -77,20 +78,17 @@ export default async function Transcripts({
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
-      <PageHeader
-        title="Transcripts"
-        description="The session transcripts that have been archived, yours and — where your Role reaches them — your team’s."
-      />
+      <PageHeader title="Transcripts" />
 
       <section aria-labelledby="yours">
-        <h2 id="yours" className="text-heading-lg">
+        <h2 id="yours" className={GROUP_HEADING}>
           Yours
         </h2>
-        <p className="text-text-secondary mt-2 text-sm">
+        <p className="text-text-muted mt-1 text-caption">
           What has already been uploaded from your machines. Deleting one
           destroys the transcript itself, not the session&apos;s usage or cost —
           those are always reported. This cannot be undone.{' '}
-          <Link href="/settings/you" className="text-accent-text underline">
+          <Link href="/settings/you" className="text-text underline">
             Archival is a setting
           </Link>
           , and it is off until you turn it on.
@@ -101,7 +99,6 @@ export default async function Transcripts({
           sessions={mySessions.sessions}
           // Either cap being reached means the page is not the whole picture.
           more={mySessions.more || mine.more}
-          heading={false}
           timezone={viewer.orgTimezone}
           // Named only when there is more than one Org to tell apart, as the
           // archival section on Your settings names them only then.
@@ -150,56 +147,46 @@ function Team({
   const stamp = when(timezone)
 
   return (
-    <section aria-labelledby="team" className="mt-8">
-      <h2 id="team" className="text-heading-lg">
+    <section aria-labelledby="team">
+      <h2 id="team" className={GROUP_HEADING}>
         Your team&apos;s
       </h2>
-      <p className="text-text-secondary mt-2 text-sm">
+      <p className="text-text-muted mt-1 text-caption">
         Transcripts stored by the people you can see. A transcript is the
         Member&apos;s own to delete, so these can be read and not removed from
         here.
       </p>
 
       {projects.length === 0 ? (
-        <p className="border-rule text-text-muted mt-4 rounded border border-dashed p-6 text-sm">
+        <p className="text-text-muted py-3 text-body">
           Nothing stored. A transcript appears here once a Member turns archival
           on and one of their sessions has finished.
         </p>
       ) : (
-        <ul className="mt-4 flex flex-col gap-3">
+        <ol className="mt-2">
           {projects.map((project) => (
             <li key={groupKey(project)}>
-              <Link
+              <Row
                 href={`/transcripts?${new URLSearchParams({
                   member: project.memberId,
                   project: project.projectId ?? 'none',
                 })}`}
-                className="border-rule bg-surface hover:bg-surface-hover block rounded-md border p-4"
+                meta={`${project.sessions} stored`}
+                sub={`${project.memberEmail ?? 'A Member'} · ${
+                  project.orgName ? `${project.orgName} · ` : ''
+                }last ${stamp.format(project.newest)}`}
               >
-                <p
-                  className={
-                    project.projectKey
-                      ? 'font-mono text-sm break-all'
-                      : 'text-sm italic'
-                  }
-                >
+                <span className={project.projectKey ? 'font-mono' : ''}>
                   {name(project)}
-                </p>
-                <p className="text-text-muted mt-1 text-sm">
-                  {project.memberEmail ?? 'A Member'} ·{' '}
-                  {project.orgName ? `${project.orgName} · ` : ''}
-                  {project.sessions} session
-                  {project.sessions === 1 ? '' : 's'} ·{' '}
-                  {stamp.format(project.newest)}
-                </p>
-              </Link>
+                </span>
+              </Row>
             </li>
           ))}
-        </ul>
+        </ol>
       )}
 
       {more ? (
-        <p className="text-text-muted mt-4 text-sm">
+        <p className="text-text-muted mt-4 text-caption">
           The {projects.length} most recently used projects are listed.
         </p>
       ) : null}
@@ -245,7 +232,7 @@ async function Group({
         <PageHeader title="Nothing stored" />
         <p className="text-text-secondary text-body">
           There is no stored transcript here, or it is not yours to read.{' '}
-          <Link href="/transcripts" className="text-accent-text underline">
+          <Link href="/transcripts" className="underline">
             All transcripts
           </Link>
         </p>
@@ -257,14 +244,19 @@ async function Group({
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
-      <PageHeader
-        title={name(listed)}
-        description={`${listed.memberEmail ?? 'A Member'}${
-          listed.orgName ? ` · ${listed.orgName}` : ''
-        } · ${listed.sessions} stored session${
-          listed.sessions === 1 ? '' : 's'
-        }. A transcript is the Member’s own to delete, so these can be read and not removed from here.`}
-      />
+      <div>
+        <PageHeader title={name(listed)} />
+        <p className="text-text-muted mt-2 text-caption">
+          <Link href="/transcripts" className="hover:text-text">
+            ‹ All transcripts
+          </Link>
+          {` · ${listed.memberEmail ?? 'A Member'}${
+            listed.orgName ? ` · ${listed.orgName}` : ''
+          } · ${listed.sessions} stored session${
+            listed.sessions === 1 ? '' : 's'
+          }. A transcript is the Member’s own to delete, so these can be read and not removed from here.`}
+        </p>
+      </div>
 
       <StoredTranscripts
         projects={projects}
@@ -275,9 +267,9 @@ async function Group({
         orgNames={EMPTY_NAMES}
       />
 
-      <div className="flex gap-4 text-sm">
-        <Link href="/transcripts" className="underline">
-          All transcripts
+      <div className="flex gap-4 text-body">
+        <Link href="/transcripts" className="text-text-muted hover:text-text">
+          ‹ All transcripts
         </Link>
         {more && last ? (
           <Link
@@ -303,6 +295,9 @@ const when = (timezone: string) =>
     timeStyle: 'short',
     timeZone: timezone,
   })
+
+/** Whose transcripts a listing holds: the small label over each listing. */
+const GROUP_HEADING = 'text-text-muted text-label uppercase'
 
 /** One empty map, rather than a new one on every render of a group. */
 const EMPTY_NAMES = new Map<string, string>()

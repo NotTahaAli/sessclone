@@ -5,7 +5,7 @@ import {
   hexFromArgb,
 } from '@material/material-color-utilities'
 
-import { type AccentTones, CLAY_SEED } from './accent-presets'
+import { type AccentTones, canonicalHex, CLAY_SEED } from './accent-presets'
 
 // Ticket 77: one seed colour in, the derived half of the token system out.
 //
@@ -27,7 +27,12 @@ import { type AccentTones, CLAY_SEED } from './accent-presets'
 // database already holds.
 
 export type { AccentTones } from './accent-presets'
-export { accentProperties, CLAY_SEED, PRESETS } from './accent-presets'
+export {
+  accentProperties,
+  canonicalHex,
+  CLAY_SEED,
+  PRESETS,
+} from './accent-presets'
 
 /** The tones the design system reads off `a1`, per token. */
 const TONES = {
@@ -39,9 +44,6 @@ const TONES = {
   subtleLight: 95,
   subtleDark: 20,
 } as const
-
-/** Six digits with a leading `#`. Three-digit shorthand is expanded first. */
-const HEX = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i
 
 /**
  * The chroma a seed needs before the palette can hold it.
@@ -67,17 +69,11 @@ export type SeedRefusal = 'not_a_hex' | 'too_neutral'
 export const readSeed = (
   typed: string,
 ): { seed: string } | { refusal: SeedRefusal } => {
-  const match = HEX.exec(typed.trim())
-  if (!match) return { refusal: 'not_a_hex' }
+  // The shape check is shared with the picker (`canonicalHex`), so the
+  // browser refuses exactly what this refuses as not a hex.
+  const seed = canonicalHex(typed)
+  if (!seed) return { refusal: 'not_a_hex' }
 
-  const digits = match[1]!
-  // `replace` rather than spreading the string: these are hex digits, but a
-  // spread of a string yields code points and the lint rule is right that it
-  // is the wrong tool on text in general.
-  const full =
-    digits.length === 3 ? digits.replaceAll(/./g, (one) => one + one) : digits
-
-  const seed = `#${full.toUpperCase()}`
   // Measured on the seed itself, not on the ramp: the ramp is never neutral,
   // which is the whole reason this check exists.
   if (Hct.fromInt(argbFromHex(seed)).chroma < CHROMA_FLOOR) {

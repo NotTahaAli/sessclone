@@ -25,10 +25,11 @@ vi.mock('../lib/db', async () => {
   return { asViewer: harness.asUser }
 })
 
-vi.mock('../lib/supabase/server', () => ({
-  signedInUser: async () =>
-    session.userId === null ? null : { id: session.userId },
-}))
+vi.mock('../lib/supabase/server', () => {
+  const who = async () =>
+    session.userId === null ? null : { id: session.userId }
+  return { signedInUser: who, sessionUser: who }
+})
 
 vi.mock('../lib/storage', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/storage')>()),
@@ -121,6 +122,23 @@ test('the download is named after the Session, and an Agent Run says which', asy
   )
 })
 
+test('an Org waiting for approval downloads nothing, its own included', async () => {
+  // Ticket 119. The same guard sits on the two transcript routes beside this
+  // one; proven here, once.
+  const id = await seedArtifact({
+    memberId: fixture.acme.members.member,
+    orgId: fixture.acme.id,
+  })
+
+  vi.stubEnv('SIGNUP_APPROVAL', undefined)
+  try {
+    expect((await as('member', id)).status).toBe(403)
+  } finally {
+    vi.unstubAllEnvs()
+  }
+  expect((await as('member', id)).status).toBe(302)
+})
+
 test('a platform admin downloads nothing', async () => {
   const id = await seedArtifact({
     memberId: fixture.acme.members.member,
@@ -186,4 +204,33 @@ test('a deployment that cannot sign says so rather than redirecting nowhere', as
   storage.configured = true
   storage.signs = false
   expect((await as('member', id)).status).toBe(503)
+})
+
+test('the lock is the owning Org’s, not the viewer’s other Org’s', async () => {
+  // Ticket 119. Acme's Member also belongs to Globex, which nobody approved.
+  // Acme is active, so the viewer's first Org is unlocked — and a Globex
+  // transcript is still refused. The two transcript routes share the helper.
+  const tierId = await sql<{ id: string }[]>`
+    insert into tiers (key, name) values ('team', 'Team') returning id
+  `.then(([tier]) => tier!.id)
+  await sql`
+    insert into subscriptions (org_id, tier_id, status)
+    values (${fixture.acme.id}, ${tierId}, 'active')
+  `
+  const [membership] = await sql<{ id: string }[]>`
+    insert into members (org_id, user_id, role)
+    values (${fixture.globex.id}, ${fixture.acme.users.member}, 'member')
+    returning id
+  `
+  const id = await seedArtifact({
+    memberId: membership!.id,
+    orgId: fixture.globex.id,
+  })
+
+  vi.stubEnv('SIGNUP_APPROVAL', undefined)
+  try {
+    expect((await as('member', id)).status).toBe(403)
+  } finally {
+    vi.unstubAllEnvs()
+  }
 })

@@ -1,6 +1,7 @@
 import postgres from 'postgres'
 
 import { hashApiKey } from './api-keys'
+import { approvalRequired } from './approval'
 import { poolOptions } from './db'
 
 // Ticket 34's verification, in one place because ticket 58 is the second route
@@ -56,10 +57,10 @@ export type Caller = { keyId: string; memberId: string; orgId: string }
  * become a scan over every key in the deployment on the hottest path in the
  * product.
  *
- * Three conditions, and all three are the database's rather than a route's.
+ * Four conditions, and all four are the database's rather than a route's.
  * `revoked_at is null` is what makes revocation immediate, and `removed_at is
  * null` keeps a removed Member's forgotten key from carrying on reporting into
- * an Org they left.
+ * an Org they left. The fourth is ticket 119's lock.
  */
 export const resolveCaller = async (sql: postgres.Sql, presented: string) => {
   const [caller] = await sql<Caller[]>`
@@ -71,6 +72,13 @@ export const resolveCaller = async (sql: postgres.Sql, presented: string) => {
      where api_key.key_hash = ${hashApiKey(presented)}
        and api_key.revoked_at is null
        and member.removed_at is null
+       -- Ticket 119: a locked Org's key is no key at all, answered with the
+       -- same 401 so the route cannot be asked whose keys are waiting. The
+       -- statuses are UNLOCKED_STATUSES in lib/approval.ts.
+       and (${!approvalRequired()}
+            or exists (select 1 from subscriptions subscription
+                        where subscription.org_id = member.org_id
+                          and subscription.status in ('active', 'past_due')))
   `
   return caller
 }

@@ -11,7 +11,10 @@ import { asUser, seedFixture, type Fixture } from './harness'
 // POST to whether or not a form was rendered for them.
 
 const signedInUser = vi.hoisted(() => vi.fn())
-vi.mock('../lib/supabase/server', () => ({ signedInUser }))
+vi.mock('../lib/supabase/server', () => ({
+  signedInUser,
+  sessionUser: signedInUser,
+}))
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }))
 
 let fixture: Fixture

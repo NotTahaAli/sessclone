@@ -28,12 +28,21 @@ export type MarketingTier = {
   basePriceUsd: number | null
   /** Per seat per month. A seat is a person, not a machine. */
   seatPriceUsd: number | null
+  /** Seats the base price already covers; only the rest are charged. */
+  includedSeats: number
   minSeats: number | null
   maxSeats: number | null
   retentionMaxDays: number | null
   archivalAvailable: boolean
   /** What the card lists. Prose, in the reader's terms. */
   includes: string[]
+  /** `features.manager_scopes`, `features.sso` and `features.own_rates`:
+   * the gates the pricing comparison marks (ticket 115). `ownRates` is null
+   * when the key is absent, which is not the same as `false` (ticket 121 adds
+   * it). */
+  managerScopes: boolean
+  sso: boolean
+  ownRates: boolean | null
   sortOrder: number
 }
 
@@ -48,7 +57,7 @@ export const readMarketingTiers = async (
 ): Promise<MarketingTier[]> => {
   const rows = await tx<TierRow[]>`
     select key, name, description, base_price_usd, seat_price_usd,
-           min_seats, max_seats, retention_max_days, archival_available,
+           included_seats, min_seats, max_seats, retention_max_days, archival_available,
            features, sort_order
       from tiers
      where available
@@ -65,11 +74,15 @@ export const readMarketingTiers = async (
       row.base_price_usd === null ? null : Number(row.base_price_usd),
     seatPriceUsd:
       row.seat_price_usd === null ? null : Number(row.seat_price_usd),
+    includedSeats: row.included_seats,
     minSeats: row.min_seats,
     maxSeats: row.max_seats,
     retentionMaxDays: row.retention_max_days,
     archivalAvailable: row.archival_available,
     includes: includesOf(row.features),
+    managerScopes: flagOf(row.features, 'manager_scopes') === true,
+    sso: flagOf(row.features, 'sso') === true,
+    ownRates: flagOf(row.features, 'own_rates'),
     sortOrder: row.sort_order,
   }))
 }
@@ -85,12 +98,23 @@ const includesOf = (features: unknown) => {
     : []
 }
 
+/** A boolean key of `features`, or null when it is absent or not a boolean:
+ * the column is operator-editable jsonb. */
+const flagOf = (features: unknown, key: string): boolean | null => {
+  const value =
+    features && typeof features === 'object'
+      ? Object.getOwnPropertyDescriptor(features, key)?.value
+      : undefined
+  return typeof value === 'boolean' ? value : null
+}
+
 type TierRow = {
   key: string
   name: string
   description: string | null
   base_price_usd: string | null
   seat_price_usd: string | null
+  included_seats: number
   min_seats: number | null
   max_seats: number | null
   retention_max_days: number | null

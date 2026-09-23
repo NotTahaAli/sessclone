@@ -9,7 +9,10 @@ import { owner as sql, seedFixture, type Fixture } from './harness'
 // for them.
 
 const signedInUser = vi.hoisted(() => vi.fn())
-vi.mock('../lib/supabase/server', () => ({ signedInUser }))
+vi.mock('../lib/supabase/server', () => ({
+  signedInUser,
+  sessionUser: signedInUser,
+}))
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }))
 
 // `lib/db`'s `asViewer` connects as `DATABASE_URL`, which in this harness is

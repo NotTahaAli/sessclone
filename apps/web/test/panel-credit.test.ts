@@ -46,6 +46,9 @@ const NOT_SIGNED_IN = new Set([
   // It is outside every shell and renders `PanelCredit` itself, which the case
   // below checks rather than taking on trust.
   'join',
+  // Ticket 116: the public docs, read before anybody has an account. Public
+  // like `(marketing)`, not a panel page, so the panel's notice is not theirs.
+  'docs',
 ])
 
 /** Every `page.tsx` under `app/`, as a path relative to it. */
@@ -71,7 +74,7 @@ describe('the panel credit', () => {
     expect(credit).toContain('No warranty')
     expect(credit).toContain('convey this work')
     expect(credit).toContain('LICENSE_URL')
-    expect(credit).toContain('sessclone')
+    expect(credit).toContain('SessClone')
   })
 
   test.each(SHELLS)(

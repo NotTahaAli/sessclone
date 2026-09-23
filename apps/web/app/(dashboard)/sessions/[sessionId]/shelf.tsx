@@ -3,6 +3,7 @@
 import { useActionState } from 'react'
 
 import { setSessionStateAction, type ShelfState } from './actions'
+import { Button } from '../../../_ui/primitives'
 import type { SessionState } from '../../../../lib/names'
 
 // Ticket 92: which shelf this Session sits on, and the two buttons that move
@@ -95,17 +96,15 @@ const button = (
   const verb = shelf === 'archived' ? 'Archive' : 'Hide'
 
   return (
-    <button
+    <Button
       type="submit"
       name="state"
       value={on ? 'listed' : shelf}
       disabled={pending}
       aria-pressed={on}
-      className={`border-control-border h-8 rounded border px-3 text-caption disabled:opacity-60 ${
-        on ? 'bg-surface-hover text-text' : 'text-text-secondary'
-      }`}
+      className={on ? 'bg-selected' : ''}
     >
       {on ? `Put back on the list` : verb}
-    </button>
+    </Button>
   )
 }

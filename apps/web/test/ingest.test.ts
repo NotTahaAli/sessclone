@@ -648,3 +648,50 @@ test('the same session end reported twice leaves one row', async () => {
   >`select count(*) from session_events`
   expect(rows!.count).toBe('1')
 })
+
+// --- Ticket 119: an Org waiting for approval ------------------------------
+
+const subscribe = async (orgId: string, status: string) => {
+  const [tier] = await sql<{ id: string }[]>`
+    insert into tiers (key, name) values (${`tier-${status}`}, 'A tier')
+    returning id
+  `
+  await sql`
+    insert into subscriptions (org_id, tier_id, status)
+    values (${orgId}, ${tier!.id}, ${status}::subscription_status)
+  `
+}
+
+test('a locked Org’s key gets the same 401 as a key nobody issued', async () => {
+  vi.stubEnv('SIGNUP_APPROVAL', undefined)
+  try {
+    // Acme has no row (never approved); Globex was cancelled.
+    await subscribe(fixture.globex.id, 'cancelled')
+
+    const answers = await Promise.all(
+      [acmeKey, globexKey, generateApiKey().key].map(async (key) => {
+        const response = await post(payload(), key)
+        return [response.status, await response.json()]
+      }),
+    )
+    // One answer for all three, so a key's Org cannot be probed from here.
+    const refused = [401, { error: 'no live API key was presented' }]
+    expect(answers).toEqual([refused, refused, refused])
+    await nothingWasWritten()
+  } finally {
+    vi.unstubAllEnvs()
+  }
+})
+
+test('past due still collects, and so does everything when approval is off', async () => {
+  vi.stubEnv('SIGNUP_APPROVAL', undefined)
+  try {
+    await subscribe(fixture.acme.id, 'past_due')
+    expect((await post(payload())).status).toBe(200)
+
+    vi.stubEnv('SIGNUP_APPROVAL', 'off')
+    expect((await post(payload(), globexKey)).status).toBe(200)
+  } finally {
+    vi.unstubAllEnvs()
+  }
+})

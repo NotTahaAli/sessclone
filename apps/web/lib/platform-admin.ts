@@ -2,7 +2,7 @@ import type { TransactionSql } from 'postgres'
 import { cache } from 'react'
 
 import { asViewer } from './db'
-import { signedInUser } from './supabase/server'
+import { sessionUser } from './supabase/server'
 
 // Ticket 62: who reaches the operator's area, answered once per request.
 //
@@ -32,11 +32,11 @@ export type Operator = {
  *
  * `cache` for the same reason `currentViewer` has it: the admin layout and the
  * page it wraps both call this while rendering one request, and without it
- * that is two `signedInUser()` round trips and two transactions for one
+ * that is two `sessionUser()` round trips and two transactions for one
  * navigation.
  */
 export const currentOperator = cache(async (): Promise<Operator | null> => {
-  const user = await signedInUser()
+  const user = await sessionUser()
   if (!user) return null
 
   const [row] = await asViewer(

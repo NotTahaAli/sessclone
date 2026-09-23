@@ -1,6 +1,7 @@
-import { NextResponse, type NextRequest } from 'next/server'
+import { after, NextResponse, type NextRequest } from 'next/server'
 
-import { safeNext } from '../../../lib/auth/next-path'
+import { invitationToken, safeNext } from '../../../lib/auth/next-path'
+import { parsePlan } from '../../../lib/auth/plan'
 import { z } from 'zod'
 
 import {
@@ -14,6 +15,7 @@ import {
   viewerAppearance,
 } from '../../../lib/appearance'
 import { asViewer } from '../../../lib/db'
+import { notifySignup } from '../../../lib/signup-notice'
 import { supabaseServer } from '../../../lib/supabase/server'
 
 // Where both ways in come back to.
@@ -110,7 +112,20 @@ export async function GET(request: NextRequest) {
   // leaves somebody signed in with no Org and a 500 they can only repeat. A
   // refused sign-in they can read is the better end of that.
   try {
-    await ensureOrgForSigner(claims.sub, claims.email)
+    // Ticket 118: the plan they picked, for a sign-up. Ticket 119: none of
+    // their own for somebody on the way to an invitation, who would otherwise
+    // open the dashboard on an Org waiting for approval.
+    const org = await ensureOrgForSigner(claims.sub, claims.email, {
+      plan: parsePlan(params),
+      createOrg: !invitationToken(next),
+    })
+    // Ticket 120: the platform admins hear about a new Org, when SMTP is
+    // configured. After the response, so a slow mail server never slows a
+    // sign-in; `notifySignup` never throws.
+    if (org?.created) {
+      const [userId, { orgId }] = [claims.sub, org]
+      after(() => notifySignup(userId, orgId))
+    }
   } catch (cause) {
     // The visitor is told their Org could not be set up and nothing more, on
     // purpose: the reason is a database error, which names tables and roles.
