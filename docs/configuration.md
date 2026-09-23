@@ -256,6 +256,19 @@ the owning role — it crosses every Org, while a Member's own delete is all the
 policies allow (ADR 0005) — which is why it is a secret-gated route and not
 anything a browser can reach.
 
+### Analytics (optional)
+
+| Variable                                 | Required | Default | What it is                                                              |
+| ---------------------------------------- | -------- | ------- | ----------------------------------------------------------------------- |
+| `NEXT_PUBLIC_CLOUDFLARE_ANALYTICS_TOKEN` | no       | —       | Cloudflare Web Analytics site token. Cookieless; loads on every page    |
+| `NEXT_PUBLIC_CLARITY_PROJECT_ID`         | no       | —       | Microsoft Clarity project id. Marketing pages only, never the dashboard |
+
+Unset, nothing loads. Clarity asks visitors in Europe first and does not load
+if they decline (`apps/web/app/(marketing)/clarity.tsx`). Both are read at build
+time, so a change needs a redeploy. `robots.txt` blocks crawlers on every
+deployment except `https://sessclone.com`, so a self-hosted copy stays out of
+search results (`apps/web/lib/site.ts`).
+
 ### Storage
 
 Log Artifacts go straight to storage through a presigned PUT; the application

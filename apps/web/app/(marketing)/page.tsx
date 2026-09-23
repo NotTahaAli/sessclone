@@ -4,6 +4,7 @@ import { SignedInLink } from './signed-in-link'
 import { TiersUnavailable } from './tiers-unavailable'
 import { shortPrice } from '../../lib/plans'
 import { marketingTiers } from '../../lib/tiers'
+import { CANONICAL_ORIGIN, SITE_DESCRIPTION, canonical } from '../../lib/site'
 import {
   buttonClass,
   cardClass,
@@ -79,11 +80,35 @@ const FAQ = [
   },
 ]
 
+export const metadata = { alternates: { canonical: canonical('/') } }
+
+// Structured data for search results: what the product is and where its
+// source lives. No price here, since prices are rows in the `tiers` table and
+// a second copy would drift from them.
+const JSON_LD = JSON.stringify({
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'SessClone',
+  url: CANONICAL_ORIGIN,
+  description: SITE_DESCRIPTION,
+  applicationCategory: 'DeveloperApplication',
+  operatingSystem: 'macOS, Linux, Windows',
+  license: 'https://www.gnu.org/licenses/agpl-3.0.html',
+  sameAs: [REPOSITORY],
+})
+const JSON_LD_HTML = { __html: JSON_LD }
+
 export default async function Landing() {
   const tiers = await marketingTiers()
 
   return (
     <>
+      <script
+        type="application/ld+json"
+        // A constant built above from string literals, nothing a visitor sends.
+        // oxlint-disable-next-line no-danger
+        dangerouslySetInnerHTML={JSON_LD_HTML}
+      />
       <section
         className={`${FRAME} grid grid-cols-[minmax(0,1fr)] gap-8 pt-4 pb-6 lg:grid-cols-[1.05fr_.95fr] lg:items-center lg:gap-14 lg:pt-14 lg:pb-10`}
       >

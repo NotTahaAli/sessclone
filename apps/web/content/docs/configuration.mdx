@@ -109,6 +109,19 @@ Member is shown, so your team is told to report to your deployment. It is not
 derived from request headers: a forwarded `Host` is attacker-controllable, and
 an invite link is a credential.
 
+### Analytics (optional)
+
+| Variable                                 | Required | What it is                                                              |
+| ---------------------------------------- | -------- | ----------------------------------------------------------------------- |
+| `NEXT_PUBLIC_CLOUDFLARE_ANALYTICS_TOKEN` | no       | Cloudflare Web Analytics site token. Cookieless; loads on every page    |
+| `NEXT_PUBLIC_CLARITY_PROJECT_ID`         | no       | Microsoft Clarity project id. Marketing pages only, never the dashboard |
+
+Unset, nothing loads. Clarity asks visitors in Europe first and does not load
+if they decline (`apps/web/app/(marketing)/clarity.tsx`). Both are read at build
+time, so a change needs a redeploy. `robots.txt` blocks crawlers on every
+deployment except `https://sessclone.com`, so a self-hosted copy stays out of
+search results (`apps/web/lib/site.ts`).
+
 ### Storage
 
 Transcripts go straight to storage through a presigned PUT; the application

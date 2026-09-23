@@ -2,6 +2,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 
 import { Lockup } from '../_ui/logo'
+import { ClarityAnalytics } from './clarity'
 import { CONTACT_EMAIL, FRAME, REPOSITORY } from './constants'
 import { SignedInLink } from './signed-in-link'
 
@@ -72,6 +73,7 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
           </div>
         </div>
       </footer>
+      <ClarityAnalytics />
     </div>
   )
 }
