@@ -129,15 +129,15 @@ never carries the bytes. Only the S3 API is used, so Supabase Storage,
 Cloudflare R2, AWS S3, Oracle Cloud Object Storage and MinIO are the same code
 path. With these unset, archival is off and everything else works.
 
-| Variable                      | Required | Default | What it is                                                                     |
-| ----------------------------- | -------- | ------- | ------------------------------------------------------------------------------ |
-| `STORAGE_ENDPOINT`            | yes      | —       | S3 API endpoint URL. The provider's S3 endpoint, not its dashboard             |
-| `STORAGE_REGION`              | no       | `auto`  | Region. `auto` suits R2 and Supabase; AWS needs the real one, e.g. `eu-west-2` |
-| `STORAGE_BUCKET`              | yes      | —       | Bucket holding transcripts. Must **not** be public: reads are presigned        |
-| `STORAGE_ACCESS_KEY_ID`       | yes      | —       | Access key id                                                                  |
-| `STORAGE_SECRET_ACCESS_KEY`   | yes      | —       | Secret access key                                                              |
-| `STORAGE_FORCE_PATH_STYLE`    | no       | `true`  | Path-style addressing. Required by MinIO and Supabase; AWS accepts it          |
-| `STORAGE_PRESIGN_TTL_SECONDS` | no       | `300`   | Life of an issued URL. A presigned URL is a bearer credential — keep it short  |
+| Variable                      | Required     | Default | What it is                                                                     |
+| ----------------------------- | ------------ | ------- | ------------------------------------------------------------------------------ |
+| `STORAGE_ENDPOINT`            | for archival | —       | S3 API endpoint URL. The provider's S3 endpoint, not its dashboard             |
+| `STORAGE_REGION`              | no           | `auto`  | Region. `auto` suits R2 and Supabase; AWS needs the real one, e.g. `eu-west-2` |
+| `STORAGE_BUCKET`              | for archival | —       | Bucket holding transcripts. Must **not** be public: reads are presigned        |
+| `STORAGE_ACCESS_KEY_ID`       | for archival | —       | Access key id                                                                  |
+| `STORAGE_SECRET_ACCESS_KEY`   | for archival | —       | Secret access key                                                              |
+| `STORAGE_FORCE_PATH_STYLE`    | no           | `true`  | Path-style addressing. Required by MinIO and Supabase; AWS accepts it          |
+| `STORAGE_PRESIGN_TTL_SECONDS` | no           | `300`   | Life of an issued URL. A presigned URL is a bearer credential — keep it short  |
 
 [Self-hosting](/docs/self-hosting#3-check-your-bucket-actually-works) has the
 script that checks a bucket speaks every part of the S3 API this uses, and the
