@@ -21,6 +21,14 @@ One rule runs through the whole thing: the ground is fixed and the accent is
 derived, so an Org can recolour the product without recolouring the product's
 meaning.
 
+**Direction A ("Log", ticket 111) replaces ticket 16's visual layer.** Taha
+picked it on 2026-09-23 from the drafts at
+https://claude.ai/artifact/Uuajtx2pP65ZrLhMRjJhir: the whole dashboard styled
+like the transcript viewer — warm ivory and warm charcoal, Geist and Geist
+Mono, rows and hairlines instead of boxes and shadows. The seed-derived accent
+machinery below is unchanged; what changed is where the accent is allowed to
+appear (see _Direction A_ below), the neutrals, the type and the radii.
+
 ## The shape of the system
 
 | Half       | What is in it                                                                                                                                        |
@@ -51,33 +59,41 @@ Contrast ratios are the WCAG 2.x relative-luminance formula throughout.
 
 ## Colour — ground and surface, fixed
 
-Anthropic's warm grey ramp. Never substitute a cool or neutral grey: the warmth
-is what makes Ivory read as paper rather than as an unstyled page.
+Direction A (ticket 111): warm ivory and warm charcoal, and hairlines where
+ticket 16 drew boxes. Never substitute a cool or neutral grey: the warmth is
+what makes Ivory read as paper rather than as an unstyled page. The rules are
+opaque now rather than alpha, so a hairline is the same colour on the ground,
+on a selected row and on a surface.
 
-| Token                    | Light                           | Dark                         | Worst-bg ratio | Role                                                                                                                |
-| ------------------------ | ------------------------------- | ---------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `--color-ground`         | `#FAF9F5`                       | `#1A1918`                    | —              | Page. Never `#FFFFFF` in light.                                                                                     |
-| `--color-surface`        | `#FFFFFF`                       | `#262624`                    | —              | Cards, panels, table bodies.                                                                                        |
-| `--color-surface-hover`  | `rgba(115,114,108,.10)`         | `rgba(245,244,237,.08)`      | —              | Row hover _and_ selected row. Selection is a state, so it lives here and not on the accent.                         |
-| `--color-rule`           | `rgba(31,30,29,.15)`            | `rgba(245,244,237,.12)`      | —              | Default 1px border and divider. Decorative, not a control boundary.                                                 |
-| `--color-rule-strong`    | `rgba(31,30,29,.30)`            | `rgba(245,244,237,.26)`      | —              | Table head underline, section edge. Not an input border: it composites to 1.90 light and 2.25 dark.                 |
-| `--color-control-border` | `rgba(31,30,29,.60)`            | `rgba(245,244,237,.45)`      | 4.31 / 3.98    | The resting border of an input, select, checkbox or secondary button. Clears the 3:1 of WCAG 1.4.11 in both themes. |
-| `--color-overlay-scrim`  | `rgba(20,20,19,.45)`            | `rgba(0,0,0,.62)`            | —              | Behind a dialog.                                                                                                    |
-| `--shadow-overlay`       | `0 8px 24px rgba(20,20,19,.16)` | `0 8px 24px rgba(0,0,0,.50)` | —              | Dialogs and menus only, over `--color-overlay-scrim`. Cards, tables and banners cast nothing.                       |
+| Token                    | Light                           | Dark                         | Role                                                                                                                          |
+| ------------------------ | ------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `--color-ground`         | `#FAF9F5`                       | `#1F1E1D`                    | Page. Never `#FFFFFF` in light.                                                                                               |
+| `--color-surface`        | `#FFFFFF`                       | `#262524`                    | The rare card (`cardClass`), menus' ground is `--color-ground`.                                                               |
+| `--color-surface-hover`  | `#F0EEE7`                       | `#2B2A28`                    | Row and nav hover; a meter's empty track; the avatar disc.                                                                    |
+| `--color-selected`       | `#EBE8DF`                       | `#302F2C`                    | The one filled row on a surface (the row a side column shows) and the current nav item. Neutral: selection is not the accent. |
+| `--color-meter`          | `#1E1D1B`                       | `#ECE9DF`                    | A meter bar or chart bar that is not the current one.                                                                         |
+| `--color-field`          | `#FFFFFF`                       | `#1A1918`                    | A text field's own ground (`inputClass`).                                                                                     |
+| `--color-rule`           | `#E5E2D9`                       | `#34332F`                    | Every hairline: section breaks, the header's underline, a field's divider, a pill's outline. Decorative.                      |
+| `--color-rule-strong`    | `#CFCBC0`                       | `#4A4843`                    | A switch's off track; a table head underline.                                                                                 |
+| `--color-control-border` | `rgba(31,30,29,.60)`            | `rgba(245,244,237,.45)`      | The resting border of a control that must clear 1.4.11's 3:1 (the seed picker's hex field). Pills do not use it.              |
+| `--color-overlay-scrim`  | `rgba(20,20,19,.45)`            | `rgba(0,0,0,.62)`            | Behind a dialog.                                                                                                              |
+| `--shadow-overlay`       | `0 8px 24px rgba(20,20,19,.16)` | `0 8px 24px rgba(0,0,0,.50)` | Menus and dialogs only. Rows, sections, cards cast nothing.                                                                   |
 
 ## Colour — text, fixed
 
 Each ratio is the worse of the token on `--color-ground` and on
-`--color-surface`. All four clear AA for body text; the muted step is the floor
-for text at 12px and above, and below 12px nothing lighter than
-`--color-text-secondary` is used.
+`--color-surface` (and, for muted, on `--color-selected`, since a selected
+row's sub line is muted). All four clear AA for body text.
 
-| Token                    | Light     | Worst bg | Dark      | Worst bg | Role                                                                                                                              |
-| ------------------------ | --------- | -------- | --------- | -------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `--color-text`           | `#141413` | 17.50    | `#F5F4ED` | 13.75    | Figures, names, headings.                                                                                                         |
-| `--color-text-secondary` | `#4D4C48` | 8.16     | `#C2C0B6` | 8.31     | Body copy inside a banner or card; any text below 12px.                                                                           |
-| `--color-text-muted`     | `#73726C` | 4.58     | `#9C9A92` | 5.38     | Labels, units, column heads, unpriced rows. 12px and up only.                                                                     |
-| `--color-text-inverse`   | `#FAF9F5` | 17.50    | `#141413` | 16.72    | On a solid `--color-text` fill, the one non-accent fill in the system: `#FAF9F5` on `#141413` light, `#141413` on `#F5F4ED` dark. |
+| Token                    | Light     | Worst bg | Dark      | Worst bg | Role                                                                         |
+| ------------------------ | --------- | -------- | --------- | -------- | ---------------------------------------------------------------------------- |
+| `--color-text`           | `#141413` | 17.50    | `#F0EEE6` | 13.17    | Names, figures, headings; the primary button's fill.                         |
+| `--color-text-secondary` | `#4D4C48` | 8.16     | `#C2C0B6` | 8.39     | Prose inside a banner. Direction A rarely needs it: muted carries the rest.  |
+| `--color-text-muted`     | `#69675F` | 4.63     | `#A3A19A` | 5.18     | Sub lines, meta values, section labels, group labels, idle nav items, units. |
+| `--color-text-inverse`   | `#FAF9F5` | 17.50    | `#141413` | 15.87    | Text on a `--color-text` fill.                                               |
+
+`--color-ok-text` moves to `#4D7C4A` light (4.64) and `#86B582` dark (6.52), the
+✓ of a finished session. The other status families are unchanged.
 
 ## Colour — accent, derived from a seed
 
@@ -203,55 +219,55 @@ green from the red still reads the direction.
 
 ## Type
 
-Three families, each with a job. Mono carries every number, label and
-identifier, because this is a product about machine output and a figure that
-shifts column as it changes width is a figure nobody trusts. Sans carries prose.
-Serif appears on the marketing site and nowhere in the dashboard.
+Direction A (ticket 111) uses two families. **Geist Mono** carries every
+number, value and identifier — a figure that shifts column as it changes width
+is a figure nobody trusts. **Geist** carries names, headings and prose. Both
+are variable fonts, SIL OFL 1.1, self-hosted by `next/font/google` in
+`app/layout.tsx`. The serif step survives only for the marketing headlines
+ticket 112 has not rebuilt; the approved landing uses Geist 600.
 
-| Token          | Stack                                                                    | How it is served                                      |
-| -------------- | ------------------------------------------------------------------------ | ----------------------------------------------------- |
-| `--font-mono`  | `'JetBrains Mono', ui-monospace, 'SF Mono', Monaco, monospace`           | SIL OFL 1.1, self-hosted from the Google Fonts files. |
-| `--font-sans`  | `'Instrument Sans', system-ui, 'Segoe UI', Helvetica, Arial, sans-serif` | SIL OFL 1.1, self-hosted from the Google Fonts files. |
-| `--font-serif` | `Georgia, 'Times New Roman', serif`                                      | System faces. Nothing is served for the serif step.   |
-
-Anthropic Mono, Anthropic Sans and Anthropic Serif may replace the first entry
-of each stack in any deployment licensed for them; no other value changes, and
-the metrics of the stacks above are what the layout is built on.
+| Token          | Stack                                                                   |
+| -------------- | ----------------------------------------------------------------------- |
+| `--font-sans`  | `Geist, system-ui, 'Segoe UI', Helvetica, Arial, sans-serif`            |
+| `--font-mono`  | `'Geist Mono', ui-monospace, 'SF Mono', Monaco, monospace`              |
+| `--font-serif` | `Georgia, 'Times New Roman', serif` — marketing only, until ticket 112. |
 
 ### The scale
 
-| Step       | Family | Size / line-height / weight | Letter-spacing | Example use                                        |
-| ---------- | ------ | --------------------------- | -------------- | -------------------------------------------------- |
-| figure-xl  | mono   | 34 / 1.1 / 700              | -.02em         | `$1,284.60`                                        |
-| figure-lg  | mono   | 20 / 1.2 / 700              | 0              | `14,802`                                           |
-| figure     | mono   | 13 / 1.4 / 400              | 0              | `$418.02 · 1,204 Turns`                            |
-| label      | mono   | 11 / 1.3 / 500              | .08em, caps    | `ESTIMATED COST / SEPTEMBER`                       |
-| micro      | mono   | 10 / 1.3 / 400              | .08em          | `41 Turns unpriced`                                |
-| heading-lg | sans   | 20 / 1.3 / 600              | 0              | `Members`                                          |
-| heading    | sans   | 15 / 1.35 / 600             | 0              | `Org logo`                                         |
-| body       | sans   | 14 / 1.5 / 400              | 0              | Prose in a banner or a card.                       |
-| caption    | sans   | 12 / 1.4 / 400              | 0              | `SVG or PNG, transparent, square, at least 128px.` |
-| display    | serif  | 38 / 1.15 / 400             | 0              | Marketing headline only.                           |
+| Step       | Family | Size / line-height / weight | Letter-spacing | Example use                                     |
+| ---------- | ------ | --------------------------- | -------------- | ----------------------------------------------- |
+| figure-xl  | mono   | 30 / 1.1 / 500              | -.02em         | The month's total: `$16.09`                     |
+| figure-lg  | mono   | 20 / 1.2 / 500              | 0              | `14,802`                                        |
+| figure     | mono   | 13 / 1.4 / 400              | 0              | A row's value: `$13.44`                         |
+| label      | sans   | 11 / 1.3 / 500              | .08em, caps    | Sidebar group labels, `THIS MONTH`              |
+| micro      | sans   | 10 / 1.3 / 400              | .08em          | Rare; nothing new should need it                |
+| heading-lg | sans   | 20 / 1.3 / 600              | -.01em         | The page title in `PageHeader`                  |
+| heading    | sans   | 15 / 1.35 / 600             | -.01em         | A side column's title                           |
+| body       | sans   | 14 / 1.5 / 400              | 0              | A row's name, a field's label                   |
+| caption    | sans   | 12 / 1.4 / 400              | 0              | A row's sub line, a section break, a field hint |
+| display    | serif  | 38 / 1.15 / 400             | 0              | Marketing headline, until ticket 112            |
 
-Letter-spacing is 0 everywhere except three steps: label and micro at .08em, and
-figure-xl at -.02em. Numerals sit on `font-variant-numeric: tabular-nums`
-wherever digits stack in a column.
+A row's meta value (a duration, `running`) is mono 12px muted; a row's figure
+is mono 13px in the text colour. Numerals sit on `tabular-nums` wherever digits
+stack in a column.
 
 ## Space, radius, focus
 
 A 4px base. Eight steps — 4, 8, 12, 16, 20, 24, 32, 48 — and a layout that needs
 a ninth is a layout to revisit.
 
-| Token           | Value                              | Role                                                                                                                                |
-| --------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `--spacing`     | 0.25rem (4px)                      | Tailwind's base multiplier. Every step below is a multiple of it.                                                                   |
-| 1 · 2 · 3       | 4px · 8px · 12px                   | Inside a control: icon gap, label gap, input padding.                                                                               |
-| 4 · 5 · 6       | 16px · 20px · 24px                 | Card padding, gaps between cards, table cell padding.                                                                               |
-| 8 · 12          | 32px · 48px                        | Between sections, and above a page heading.                                                                                         |
-| `--radius-sm`   | 2px                                | Badges, chart bar caps.                                                                                                             |
-| `--radius-md`   | 4px                                | Everything else: buttons, inputs, cards, banners.                                                                                   |
-| `--radius-full` | 9999px                             | Avatars only.                                                                                                                       |
-| `--control-h`   | 36px pointer / 44px at phone width | Every control's height. No component sets its own. Not a Tailwind namespace, so it is a plain custom property read through `var()`. |
+| Token           | Value                              | Role                                                                                                                        |
+| --------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `--spacing`     | 0.25rem (4px)                      | Tailwind's base multiplier. Every step below is a multiple of it.                                                           |
+| 1 · 2 · 3       | 4px · 8px · 12px                   | Inside a control: icon gap, label gap, input padding.                                                                       |
+| 4 · 5 · 6       | 16px · 20px · 24px                 | Card padding, gaps between cards, table cell padding.                                                                       |
+| 8 · 12          | 32px · 48px                        | Between sections, and above a page heading.                                                                                 |
+| `--radius-sm`   | 4px                                | Badges, chart bar caps.                                                                                                     |
+| `--radius-md`   | 8px                                | A selected row, a hover fill, a menu item, a banner.                                                                        |
+| `--radius-lg`   | 12px                               | A menu panel, the rare card.                                                                                                |
+| `--radius-full` | 9999px                             | Pills, buttons, text fields, the segmented control, switches, swatches, avatars. Direction A's controls are round.          |
+| `--control-h`   | 36px pointer / 44px at phone width | Hit height of a nav link, the account summary, and the pages not yet rebuilt. A plain custom property read through `var()`. |
+| `--pill-h`      | 30px / 36px coarse or phone        | Height of a pill, a button and a text field (Direction A). Also a plain custom property.                                    |
 
 Focus is a 3px outline in `--color-accent-fill` at full strength with a 1px
 offset, plus `--color-accent-border` on the control itself. At full strength the
@@ -391,6 +407,64 @@ it is written by that script rather than rendered by the server. The cookie is
 presentation and never authority — it carries no id and no claim, every value
 is checked against a shape before it is applied, and the worst a tampered one
 can do is recolour that browser's own pages.
+
+## Direction A — primitives, shell, mark
+
+### The accent, as sparingly as the transcript page
+
+The transcript viewer is the style source, and its accent use is deliberately
+minimal. Everywhere, the accent paints only: a **live** state (the ✱ of a
+running session, in `--color-accent-text`), the **current** bar of a meter or
+chart (`--color-accent-fill`), the **logo's** bottom stroke, and the focus
+ring. It does not paint the current nav item, the primary button, links at
+rest, or a selected row — those are neutral (`--color-selected`, a
+`--color-text` fill). This supersedes "Accent is interaction" above for
+anything built from here on.
+
+### Primitives (`apps/web/app/_ui/`)
+
+Pages are built from these, not from bespoke markup. `primitives.tsx` is
+server-safe; `pill-menu.tsx` is the one client module.
+
+| Primitive                                            | What it is                                                                                                                                                                                                                           |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Row`                                                | Grid `14px / 1fr / auto`: lead (› by default, a `StatusGlyph`, or `null`), truncating name, right mono value or muted meta, then optional `Meter` and sub. `href` makes it a link with hover; `selected` gives the one neutral fill. |
+| `Meter`                                              | 3px bar, `--color-meter` ink on the hover track; `current` paints it in the accent.                                                                                                                                                  |
+| `StatusGlyph`                                        | ✱ live (accent), ✓ ok, ○ idle. Decorative; the row says the state in words.                                                                                                                                                          |
+| `SectionBreak`                                       | A hairline either side of a centred 12px muted label. An `h2` by default. The only divider between groups of rows.                                                                                                                   |
+| `Pill`, `pillClass`                                  | Round outline control, 13px, label + muted `· detail` + `ChevronDown`.                                                                                                                                                               |
+| `PillMenu`, `MenuItem`, `MenuHeading`, `MenuDivider` | The header pill menu: a native popover under the pill, right-aligned; items tick the current choice and close the menu.                                                                                                              |
+| `ChevronDown`                                        | 12px SVG, stroke 1.6, round caps, centred. **Never the ⌄ glyph** — it sits off-centre in most faces.                                                                                                                                 |
+| `Button`, `buttonClass`                              | Round, 13px 500. `primary` is filled with `--color-text` (inverse text), one per surface; `secondary` is a hairline outline.                                                                                                         |
+| `inputClass`                                         | Round text field on `--color-field`, pairs with a primary button on one line.                                                                                                                                                        |
+| `Switch`                                             | 34×20 track, a real `role="switch"` checkbox; on is `--color-text`, off is `--color-rule-strong`.                                                                                                                                    |
+| `Segmented`                                          | A radio group drawn as one pill; the chosen segment is filled with `--color-text`.                                                                                                                                                   |
+| `Swatch`, `CustomSwatch`, `SwatchRow`                | 20px discs 6px apart, selected with a 2px ground gap and a text-colour ring. The custom swatch is a native colour input over a conic rainbow.                                                                                        |
+| `Field`                                              | A settings line: label left, value or control right, hint under, hairline between lines. A plain string value is drawn mono and muted.                                                                                               |
+| `cardClass`                                          | The one boxed surface, for a summary that must read as a unit. Rare.                                                                                                                                                                 |
+| `PageHeader` (`app/(dashboard)/page-header.tsx`)     | 20px title with `actions` (pills, buttons) on its line, over a hairline.                                                                                                                                                             |
+
+### Shell
+
+- **Desktop:** a 232px sidebar, sticky at the window's height. Brand line (the
+  sessclone mark, then the Org name in 12px spaced caps, with the Org's
+  uploaded logo between them when there is one), then three groups — **Usage**
+  (Costs, Sessions, Transcripts), **Collector** (Keys, Devices), **Manage**
+  (Settings, Admin panel) — under 11px caps labels. The current item takes
+  `--color-selected` and the text colour at 500; the rest are muted. The
+  account and the licence credit sit at the foot.
+- **Phone:** a header with the brand line and the avatar alone, and the bottom
+  bar of Costs / Sessions / Transcripts / More, the current entry marked by a
+  2px rule in the text colour above its label.
+
+### The mark — R1 "Sigma prompt"
+
+The prompt chevron closed into a sum sign: `M18 4.5H6l6.5 7.5L6 19.5` in
+`currentColor` at stroke 2.2, and `M11 19.5h7` in the accent at 2.4, round caps
+and joins, on a 24 viewBox. `LogoMark` and `Lockup` (mark + "sessclone" at 600,
+-.02em) live in `app/_ui/logo.tsx`; the favicon is `app/icon.svg` (Clay stroke,
+body switching with the system theme) and the iOS icon is `app/apple-icon.png`
+(180px, on Ivory), both picked up by Next's metadata file conventions.
 
 ## Component inventory
 

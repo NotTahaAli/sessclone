@@ -12,7 +12,7 @@
 
 **Status:** todo
 
-- [ ] Tokens and fonts in `globals.css`, light and dark, `data-theme` and system
-- [ ] Primitives built and used by the transcript page too
-- [ ] Logo, favicon, app icon
-- [ ] Screenshots 1440x900 + 390x844, light and dark
+- [x] Tokens and fonts in `globals.css`, light and dark, `data-theme` and system
+- [ ] Primitives built and used by the transcript page too — built in `apps/web/app/_ui/` and used by the shell; the transcript page already reads the shared tokens, and switching its markup to the primitives is left to the thread that owns that page
+- [x] Logo, favicon, app icon
+- [x] Screenshots 1440x900 + 390x844, light and dark
