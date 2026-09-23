@@ -17,12 +17,13 @@ const ROLES = ['owner', 'admin', 'manager', 'member']
 export function PersonControls({
   memberId,
   role,
-  email,
+  who,
   removed,
 }: {
   memberId: string
   role: string
-  email: string
+  /** Who the controls act on, for a screen reader: their name, else address. */
+  who: string
   removed: boolean
 }) {
   const [state, action, pending] = useActionState(run, null)
@@ -32,7 +33,7 @@ export function PersonControls({
       <form action={action} className="flex flex-wrap items-center gap-2">
         <input type="hidden" name="memberId" value={memberId} />
         <label className="sr-only" htmlFor={`role-${memberId}`}>
-          Role for {email}
+          Role for {who}
         </label>
         {/* A select and a button rather than a select that submits itself: a
             Role change is not something to do by scrolling past a control. */}
@@ -66,7 +67,7 @@ export function PersonControls({
           className="border-control-border text-text rounded border px-3 py-1 text-sm whitespace-nowrap"
         >
           {removed ? 'Re-admit' : 'Remove'}
-          <span className="sr-only"> {email}</span>
+          <span className="sr-only"> {who}</span>
         </button>
       </form>
 

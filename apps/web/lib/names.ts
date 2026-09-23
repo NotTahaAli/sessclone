@@ -204,3 +204,51 @@ export const projectNickname = async (
   `
   return row?.nickname ?? null
 }
+
+/**
+ * Renames an Org (ticket 101).
+ *
+ * `orgs_write` is Owner or Admin, so this asks nobody who the caller is. There
+ * is no clearing: an Org always has a name, and `orgs.name`'s check refuses a
+ * blank, so the action turns an empty box away before it gets here.
+ */
+export const renameOrg = async (
+  tx: TransactionSql,
+  orgId: string,
+  name: string,
+): Promise<boolean> => {
+  const rows = await tx`
+    update orgs set name = ${name} where id = ${orgId} returning id
+  `
+  return rows.length > 0
+}
+
+/**
+ * Sets what platform administrators call an Org, or clears it given null
+ * (ticket 102).
+ *
+ * `org_operator_names_admin` is the platform administrator only, so an Owner
+ * running this writes nothing and reads nothing back. Clearing deletes the
+ * row, as a Session's label does, so absence is the one way to say "none".
+ */
+export const setOrgOperatorName = async (
+  tx: TransactionSql,
+  orgId: string,
+  name: string | null,
+): Promise<boolean> => {
+  if (!name) {
+    // A name that was never there is still cleared, so an empty delete is
+    // success; a caller the policy refuses never reaches this (the action
+    // checks `currentOperator` first) and reads as success too.
+    await tx`delete from org_operator_names where org_id = ${orgId}`
+    return true
+  }
+
+  const rows = await tx`
+    insert into org_operator_names (org_id, name) values (${orgId}, ${name})
+    on conflict (org_id)
+      do update set name = excluded.name, updated_at = now()
+    returning org_id
+  `
+  return rows.length > 0
+}
