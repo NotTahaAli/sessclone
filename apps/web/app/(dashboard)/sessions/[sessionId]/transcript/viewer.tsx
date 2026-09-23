@@ -45,7 +45,8 @@ import {
   type StoredFile,
   type TurnCost,
 } from './data'
-import { FilterBar, type PresetActions } from './filter-bar'
+import { FilterBar, ViewMenu, type PresetActions } from './filter-bar'
+import { BackIcon, ReloadIcon } from './icons'
 import { clockFormat } from './format'
 import { Sheet } from './sheet'
 
@@ -60,6 +61,9 @@ import { Sheet } from './sheet'
 // next Reload, which aborts whatever is still in flight and starts afresh.
 
 const WIDTHS_KEY = 'sessclone:transcript-widths'
+
+const ICON_BUTTON =
+  'text-text-secondary hover:bg-surface-hover hover:text-text grid size-9 shrink-0 place-items-center rounded-md'
 
 /** One load of the file list, and what hangs off it until the next Reload. */
 type Load = {
@@ -392,40 +396,49 @@ export function TranscriptViewer({
   return (
     <ViewerContext.Provider value={viewer}>
       <div className="flex flex-col gap-3">
-        {/* The page's only chrome (Taha, 2026-09-23): the chat starts right
-            under it, and everything else is behind the options button. */}
+        {/* The page's only chrome (Taha, 2026-09-23): icons, and one pill for
+            the preset and thinking mode, as Claude's apps do for settings. */}
         <div className="flex items-center gap-2">
           <Link
             href={backHref}
             aria-label="Back to the Session"
-            className="text-text-secondary hover:bg-surface-hover hover:text-text grid size-9 shrink-0 place-items-center rounded-md text-heading"
+            className={ICON_BUTTON}
           >
-            ‹
+            <BackIcon />
           </Link>
           <div className="min-w-0 flex-1">
             <h1 className="text-heading truncate">Transcript</h1>
-            <p className="text-text-muted truncate font-mono text-micro">
+            <p className="text-text-muted truncate font-mono text-micro max-sm:hidden">
               {sessionId}
             </p>
           </div>
+          <ViewMenu
+            preset={preset}
+            onChange={setPreset}
+            saved={saved}
+            openFilters={openOptions}
+          />
           <button
             type="button"
-            onClick={openOptions}
-            aria-label="View options"
-            title="View options"
-            className="text-text-secondary hover:bg-surface-hover hover:text-text grid size-9 shrink-0 place-items-center rounded-md text-heading"
+            onClick={reload}
+            aria-label="Reload"
+            title="Reload"
+            className={ICON_BUTTON}
           >
-            ⋯
+            <ReloadIcon />
           </button>
         </div>
-        <Sheet open={options} onClose={closeOptions} title="View options">
+        <Sheet
+          open={options}
+          onClose={closeOptions}
+          title="Filters and presets"
+        >
           <FilterBar
             preset={preset}
             onChange={setPreset}
             saved={saved}
             onSaved={setSaved}
             actions={actions}
-            reload={reload}
           />
         </Sheet>
 

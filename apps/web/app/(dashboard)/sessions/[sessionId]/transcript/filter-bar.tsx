@@ -2,10 +2,13 @@
 
 import {
   useCallback,
+  useId,
+  useRef,
   useState,
   useTransition,
-  type ChangeEvent,
+  type CSSProperties,
   type FormEvent,
+  type ToggleEvent,
 } from 'react'
 
 import {
@@ -17,6 +20,7 @@ import {
   type ThinkingMode,
 } from '@sessclone/shared'
 
+import { ChevronDownIcon } from './icons'
 import type { SavedPreset } from '../../../../../lib/view-presets'
 
 // Ticket 106: which rows a column shows. A preset is a set of chips plus a
@@ -90,7 +94,6 @@ export function FilterBar({
   saved,
   onSaved,
   actions,
-  reload,
 }: {
   preset: Preset
   onChange: (preset: Preset) => void
@@ -98,7 +101,6 @@ export function FilterBar({
   saved: SavedPreset[] | null
   onSaved: (saved: SavedPreset[]) => void
   actions: PresetActions | null
-  reload: () => void
 }) {
   const [naming, setNaming] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
@@ -109,30 +111,6 @@ export function FilterBar({
   const isDefault = own
     ? own.isDefault
     : selected === 'normal' && !list.some((one) => one.isDefault)
-
-  const pick = useCallback(
-    (event: ChangeEvent<HTMLSelectElement>) => {
-      const id = event.target.value
-      const next =
-        id === 'normal'
-          ? NORMAL
-          : id === 'all'
-            ? ALL
-            : list.find((one) => one.id === id)
-      if (next) {
-        onChange({ categories: next.categories, thinking: next.thinking })
-      }
-    },
-    [list, onChange],
-  )
-
-  const think = useCallback(
-    (event: ChangeEvent<HTMLSelectElement>) => {
-      const thinking = THINKING.find((mode) => mode === event.target.value)
-      if (thinking) onChange({ ...preset, thinking })
-    },
-    [preset, onChange],
-  )
 
   const toggle = useCallback(
     (category: Category) =>
@@ -204,120 +182,84 @@ export function FilterBar({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1">
-          <span className="text-text-muted text-label uppercase">View</span>
-          <select className={control} value={selected} onChange={pick}>
-            <option value="normal">Normal</option>
-            <option value="all">All</option>
-            {list.map((one) => (
-              <option key={one.id} value={one.id}>
-                {one.name}
-                {one.isDefault ? ' (default)' : ''}
-              </option>
-            ))}
-            {selected === 'custom' ? (
-              <option value="custom" disabled>
-                Custom
-              </option>
+      <p className="text-text-muted text-caption">
+        {preset.categories.length} of {CATEGORIES.length} row types on
+      </p>
+      <div className="flex flex-col gap-3">
+        <ul className="flex flex-wrap gap-2" aria-label="Row types">
+          {CATEGORIES.map((category) => (
+            <Chip
+              key={category}
+              category={category}
+              on={preset.categories.includes(category)}
+              toggle={toggle}
+            />
+          ))}
+        </ul>
+
+        {actions && saved ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {naming ? (
+              <form
+                onSubmit={save}
+                className="flex flex-wrap items-center gap-2"
+              >
+                <label className="sr-only" htmlFor="preset-name">
+                  Name for this preset
+                </label>
+                <input
+                  id="preset-name"
+                  name="name"
+                  autoFocus
+                  required
+                  maxLength={60}
+                  placeholder="Preset name"
+                  className={`${control} text-base`}
+                />
+                <button type="submit" disabled={pending} className={button}>
+                  {pending ? 'Saving…' : 'Save'}
+                </button>
+                <button type="button" onClick={stopNaming} className={button}>
+                  Cancel
+                </button>
+              </form>
+            ) : (
+              <button type="button" onClick={startNaming} className={button}>
+                Save as preset
+              </button>
+            )}
+            {selected !== 'custom' && selected !== 'all' ? (
+              <button
+                type="button"
+                disabled={pending || isDefault}
+                onClick={makeDefault}
+                className={button}
+              >
+                {isDefault ? 'Your default' : 'Make default'}
+              </button>
             ) : null}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-text-muted text-label uppercase">Thinking</span>
-          <select className={control} value={preset.thinking} onChange={think}>
-            {THINKING.map((mode) => (
-              <option key={mode} value={mode}>
-                {THINKING_LABEL[mode]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button type="button" onClick={reload} className={`${button} ml-auto`}>
-          Reload
-        </button>
+            {own ? (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={remove}
+                className={`${button} border-bad-border text-bad-text`}
+              >
+                Delete “{own.name}”
+              </button>
+            ) : null}
+          </div>
+        ) : (
+          <p className="text-text-muted text-caption">
+            Your saved presets did not load; Normal and All still work.
+          </p>
+        )}
+        {message ? (
+          <p role="alert" className="text-bad-text text-caption">
+            {message}
+          </p>
+        ) : null}
       </div>
-
-      <details>
-        <summary className="text-text-secondary hover:text-text w-fit cursor-pointer text-caption">
-          Filters · {preset.categories.length} of {CATEGORIES.length} on
-        </summary>
-        <div className="mt-3 flex flex-col gap-3">
-          <ul className="flex flex-wrap gap-2" aria-label="Row types">
-            {CATEGORIES.map((category) => (
-              <Chip
-                key={category}
-                category={category}
-                on={preset.categories.includes(category)}
-                toggle={toggle}
-              />
-            ))}
-          </ul>
-
-          {actions && saved ? (
-            <div className="flex flex-wrap items-center gap-2">
-              {naming ? (
-                <form
-                  onSubmit={save}
-                  className="flex flex-wrap items-center gap-2"
-                >
-                  <label className="sr-only" htmlFor="preset-name">
-                    Name for this preset
-                  </label>
-                  <input
-                    id="preset-name"
-                    name="name"
-                    autoFocus
-                    required
-                    maxLength={60}
-                    placeholder="Preset name"
-                    className={`${control} text-base`}
-                  />
-                  <button type="submit" disabled={pending} className={button}>
-                    {pending ? 'Saving…' : 'Save'}
-                  </button>
-                  <button type="button" onClick={stopNaming} className={button}>
-                    Cancel
-                  </button>
-                </form>
-              ) : (
-                <button type="button" onClick={startNaming} className={button}>
-                  Save as preset
-                </button>
-              )}
-              {selected !== 'custom' && selected !== 'all' ? (
-                <button
-                  type="button"
-                  disabled={pending || isDefault}
-                  onClick={makeDefault}
-                  className={button}
-                >
-                  {isDefault ? 'Your default' : 'Make default'}
-                </button>
-              ) : null}
-              {own ? (
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={remove}
-                  className={`${button} border-bad-border text-bad-text`}
-                >
-                  Delete “{own.name}”
-                </button>
-              ) : null}
-            </div>
-          ) : (
-            <p className="text-text-muted text-caption">
-              Your saved presets did not load; Normal and All still work.
-            </p>
-          )}
-          {message ? (
-            <p role="alert" className="text-bad-text text-caption">
-              {message}
-            </p>
-          ) : null}
-        </div>
-      </details>
     </div>
   )
 }
@@ -348,5 +290,186 @@ function Chip({
         {CATEGORY_LABEL[category]}
       </button>
     </li>
+  )
+}
+
+/**
+ * The header's one view control (Taha, 2026-09-23), shaped like the model
+ * picker in Claude's apps: a pill naming the preset and thinking mode, opening
+ * a menu of both, with the finer filters one step further in. A native
+ * popover, so the browser gives it the top layer, Escape and click-away.
+ */
+export function ViewMenu({
+  preset,
+  onChange,
+  saved,
+  openFilters,
+}: {
+  preset: Preset
+  onChange: (preset: Preset) => void
+  saved: SavedPreset[] | null
+  openFilters: () => void
+}) {
+  const id = useId()
+  const menu = useRef<HTMLDivElement>(null)
+  const pill = useRef<HTMLButtonElement>(null)
+  const [place, setPlace] = useState<CSSProperties>({})
+  const list = saved ?? EMPTY
+  const selected = presetId(preset, list)
+  const name =
+    selected === 'normal'
+      ? 'Normal'
+      : selected === 'all'
+        ? 'All'
+        : (list.find((one) => one.id === selected)?.name ?? 'Custom')
+
+  // The top layer ignores the pill's position, so the menu is placed under
+  // it each time it opens, right edges aligned, before its first paint.
+  // ponytail: not re-placed on a resize while open; close and reopen fixes it.
+  const onToggle = useCallback((event: ToggleEvent<HTMLDivElement>) => {
+    const box = pill.current?.getBoundingClientRect()
+    if (event.newState === 'open' && box) {
+      setPlace({
+        top: box.bottom + 6,
+        right: Math.max(8, document.documentElement.clientWidth - box.right),
+      })
+    }
+  }, [])
+  const close = useCallback(() => menu.current?.hidePopover(), [])
+  const filters = useCallback(() => {
+    close()
+    openFilters()
+  }, [close, openFilters])
+
+  return (
+    <>
+      <button
+        ref={pill}
+        type="button"
+        popoverTarget={id}
+        className="border-rule text-text hover:bg-surface-hover flex h-9 min-w-0 shrink items-center gap-1.5 rounded-full border px-3 text-caption"
+      >
+        <span className="truncate">{name}</span>
+        <span className="text-text-muted truncate">
+          · <span className="max-sm:hidden">Thinking </span>
+          {THINKING_LABEL[preset.thinking].toLowerCase()}
+        </span>
+        <ChevronDownIcon />
+      </button>
+      <div
+        ref={menu}
+        id={id}
+        popover="auto"
+        onBeforeToggle={onToggle}
+        aria-label="View options"
+        style={place}
+        className="border-rule bg-ground text-text fixed inset-auto m-0 w-64 rounded-xl border p-1 shadow-lg"
+      >
+        <MenuHeading>View</MenuHeading>
+        <MenuOption
+          on={selected === 'normal'}
+          pick={onChange}
+          categories={NORMAL.categories}
+          thinking={NORMAL.thinking}
+          label="Normal"
+          close={close}
+        />
+        <MenuOption
+          on={selected === 'all'}
+          pick={onChange}
+          categories={ALL.categories}
+          thinking={ALL.thinking}
+          label="All"
+          close={close}
+        />
+        {list.map((one) => (
+          <MenuOption
+            key={one.id}
+            on={selected === one.id}
+            pick={onChange}
+            categories={one.categories}
+            thinking={one.thinking}
+            label={one.isDefault ? `${one.name} (default)` : one.name}
+            close={close}
+          />
+        ))}
+        {selected === 'custom' ? (
+          <p className="flex items-center gap-2 px-2 py-1.5 text-caption">
+            <Tick on />
+            Custom
+          </p>
+        ) : null}
+        <hr className="border-rule my-1" />
+        <MenuHeading>Thinking</MenuHeading>
+        {THINKING.map((mode) => (
+          <MenuOption
+            key={mode}
+            on={preset.thinking === mode}
+            pick={onChange}
+            categories={preset.categories}
+            thinking={mode}
+            label={THINKING_LABEL[mode]}
+            close={close}
+          />
+        ))}
+        <hr className="border-rule my-1" />
+        <button
+          type="button"
+          onClick={filters}
+          className="hover:bg-surface-hover flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-caption"
+        >
+          <span className="w-4" />
+          Filters and presets…
+        </button>
+      </div>
+    </>
+  )
+}
+
+function MenuHeading({ children }: { children: string }) {
+  return (
+    <p className="text-text-muted px-2 pt-1.5 pb-0.5 text-micro uppercase">
+      {children}
+    </p>
+  )
+}
+
+function MenuOption({
+  on,
+  pick,
+  categories,
+  thinking,
+  label,
+  close,
+}: {
+  on: boolean
+  pick: (preset: Preset) => void
+  categories: Category[]
+  thinking: ThinkingMode
+  label: string
+  close: () => void
+}) {
+  const press = useCallback(() => {
+    pick({ categories, thinking })
+    close()
+  }, [pick, categories, thinking, close])
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      onClick={press}
+      className="hover:bg-surface-hover flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-caption"
+    >
+      <Tick on={on} />
+      <span className="truncate">{label}</span>
+    </button>
+  )
+}
+
+function Tick({ on }: { on: boolean }) {
+  return (
+    <span aria-hidden="true" className="text-accent-text w-4 shrink-0">
+      {on ? '✓' : ''}
+    </span>
   )
 }

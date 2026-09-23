@@ -11,6 +11,8 @@ export type Envelope =
   | {
       kind: 'wake'
       author: string | null
+      /** The message's id in the project, which reactions and edits name. */
+      id: string | null
       /** The person's own words, entities decoded. */
       body: string
       /** Names of files attached to the message; the files are not stored. */
@@ -53,7 +55,8 @@ export function parseEnvelope(text: string): Envelope | null {
   const message =
     /<message\b([^>]*\btrigger="true"[^>]*)>([\s\S]*?)<\/message>/.exec(rest)
   if (!message) return null
-  const author = /\bauthor="([^"]*)"/.exec(message[1] ?? '')?.[1]
+  const author = /\sauthor="([^"]*)"/.exec(message[1] ?? '')?.[1]
+  const id = /\sid="([^"]*)"/.exec(message[1] ?? '')?.[1]
 
   const files: string[] = []
   const uploads = /<untrusted-uploads\b[\s\S]*?<\/untrusted-uploads\b/.exec(
@@ -69,6 +72,7 @@ export function parseEnvelope(text: string): Envelope | null {
   return {
     kind: 'wake',
     author: author ? decode(author) : null,
+    id: id ?? null,
     body: decode(message[2] ?? '').trim(),
     files,
     images,
