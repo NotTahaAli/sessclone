@@ -50,7 +50,7 @@ export type FailureRow = {
   /** The Session whose failure this is: whose, then which. */
   memberId: string
   /** Whether the viewer marked this Session's failures seen since this one
-   * fired. A viewed failure stays listed; it only stops being counted. */
+   * arrived. A viewed failure stays listed; it only stops being counted. */
   viewed: boolean
 }
 

@@ -33,10 +33,14 @@ const shortId = (id: string, limit = 20) =>
 
 export function FailuresList({
   failures,
+  unviewed,
   timezone,
   params,
 }: {
   failures: Failures
+  /** Failed Sessions in the period the viewer has not marked seen — the
+   * pill's count, which reaches past the capped rows. */
+  unviewed: number
   /** The Org's timezone, so a time reads in the same zone the range is cut in. */
   timezone: string
   /** The current query: the period a mark applies to rides in the form. */
@@ -58,11 +62,9 @@ export function FailuresList({
     )
   }
 
-  const unseen = failures.rows.some((row) => !row.viewed)
-
   return (
     <>
-      {unseen ? (
+      {unviewed > 0 ? (
         <form
           action={markFailuresViewedAction}
           className="-mt-1 mb-1 flex justify-end"

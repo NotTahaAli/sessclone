@@ -288,7 +288,12 @@ function Body({
     return (
       <>
         <SectionBreak>Failed turns</SectionBreak>
-        <FailuresList failures={failures} timezone={timezone} params={params} />
+        <FailuresList
+          failures={failures}
+          unviewed={failuresCount}
+          timezone={timezone}
+          params={params}
+        />
       </>
     )
   }
