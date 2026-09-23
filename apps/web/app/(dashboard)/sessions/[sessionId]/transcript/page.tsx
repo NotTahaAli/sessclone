@@ -1,7 +1,5 @@
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
-import { PageHeader } from '../../../page-header'
 import { currentViewer } from '../../../../../lib/viewer'
 import {
   deletePreset,
@@ -50,22 +48,14 @@ export default async function TranscriptPage({
   const presets = await listPresets().catch(() => null)
 
   return (
-    <div className="flex flex-col gap-4">
-      <Link
-        href={`/sessions/${encodeURIComponent(sessionId)}?member=${member}`}
-        className="text-text-secondary hover:text-text w-fit text-caption"
-      >
-        ‹ Session
-      </Link>
-      <PageHeader title="Transcript" />
-      <TranscriptViewer
-        sessionId={sessionId}
-        memberId={member}
-        timezone={viewer.orgTimezone}
-        presets={presets?.ok ? presets.value : null}
-        actions={ACTIONS}
-        settingsHref="/settings/you#archival"
-      />
-    </div>
+    <TranscriptViewer
+      sessionId={sessionId}
+      memberId={member}
+      timezone={viewer.orgTimezone}
+      presets={presets?.ok ? presets.value : null}
+      actions={ACTIONS}
+      settingsHref="/settings/you#archival"
+      backHref={`/sessions/${encodeURIComponent(sessionId)}?member=${member}`}
+    />
   )
 }

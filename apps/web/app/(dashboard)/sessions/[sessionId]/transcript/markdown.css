@@ -1,0 +1,187 @@
+/* Claude's replies in the transcript viewer, in the dashboard's own tokens so
+   light, dark and the Org's seed colour all carry through. Highlighting maps
+   highlight.js's classes onto the same status and accent colours. */
+
+.md {
+  font-size: var(--text-body);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.md > :first-child {
+  margin-top: 0;
+}
+.md > :last-child {
+  margin-bottom: 0;
+}
+.md p,
+.md ul,
+.md ol,
+.md blockquote,
+.md .md-code,
+.md .md-table {
+  margin: 0 0 0.75em;
+}
+.md h1,
+.md h2,
+.md h3,
+.md h4 {
+  font-weight: 600;
+  margin: 1.1em 0 0.5em;
+  line-height: 1.3;
+}
+.md h1 {
+  font-size: 1.3em;
+}
+.md h2 {
+  font-size: 1.15em;
+}
+.md h3,
+.md h4 {
+  font-size: 1em;
+}
+.md ul {
+  list-style: disc;
+  padding-left: 1.4em;
+}
+.md ol {
+  list-style: decimal;
+  padding-left: 1.4em;
+}
+.md li + li {
+  margin-top: 0.25em;
+}
+.md li > p {
+  margin: 0;
+}
+.md a {
+  color: var(--color-accent-text);
+  text-decoration: underline;
+}
+.md strong {
+  font-weight: 600;
+}
+.md hr {
+  border: 0;
+  border-top: 1px solid var(--color-rule);
+  margin: 1em 0;
+}
+.md blockquote {
+  border-left: 2px solid var(--color-rule-strong);
+  padding-left: 0.8em;
+  color: var(--color-text-secondary);
+}
+.md :not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  background: var(--color-surface-hover);
+  border-radius: 5px;
+  padding: 0.1em 0.35em;
+}
+
+.md-table {
+  overflow-x: auto;
+}
+.md table {
+  border-collapse: collapse;
+  font-size: var(--text-caption);
+}
+.md th,
+.md td {
+  border: 1px solid var(--color-rule);
+  padding: 0.3em 0.6em;
+  text-align: left;
+}
+.md th {
+  background: var(--color-surface);
+  font-weight: 600;
+}
+
+.md-code {
+  border: 1px solid var(--color-rule);
+  border-radius: 10px;
+  background: var(--color-surface);
+  overflow: hidden;
+}
+.md-code-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.25em 0.5em 0.25em 0.8em;
+  border-bottom: 1px solid var(--color-rule);
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  color: var(--color-text-muted);
+}
+.md-code-bar button {
+  border-radius: 6px;
+  padding: 0.2em 0.6em;
+  font-family: var(--font-sans);
+}
+.md-code-bar button:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+.md-code pre {
+  margin: 0;
+  padding: 0.7em 0.9em;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  line-height: 1.55;
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-built_in,
+.hljs-doctag,
+.hljs-meta .hljs-keyword {
+  color: var(--color-accent-text);
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-meta .hljs-string {
+  color: var(--color-ok-text);
+}
+.hljs-number,
+.hljs-literal,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-variable.language_ {
+  color: var(--color-info-text);
+}
+.hljs-title,
+.hljs-title.function_,
+.hljs-title.class_,
+.hljs-section,
+.hljs-type {
+  color: var(--color-warn-text);
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-property,
+.hljs-params,
+.hljs-template-variable {
+  color: var(--color-text-secondary);
+}
+.hljs-name,
+.hljs-tag,
+.hljs-selector-class,
+.hljs-selector-id,
+.hljs-deletion {
+  color: var(--color-bad-text);
+}
+.hljs-meta {
+  color: var(--color-text-muted);
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 600;
+}

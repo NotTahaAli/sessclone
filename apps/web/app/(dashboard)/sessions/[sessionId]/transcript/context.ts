@@ -48,3 +48,6 @@ export const ColumnContext = createContext<{
   index: number
   agentId: string | null
 }>({ index: 0, agentId: null })
+
+/** Every Item loaded in the column, for rows that look back (an artifact's HTML). */
+export const ItemsContext = createContext<readonly Item[]>([])

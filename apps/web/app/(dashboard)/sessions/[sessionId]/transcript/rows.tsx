@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type MouseEvent,
   type ReactNode,
   type SyntheticEvent,
 } from 'react'
@@ -20,7 +21,13 @@ import {
 
 import { compact, count, usd } from '../../../../../lib/money'
 import { agentColumn, workflowColumn } from './columns'
-import { ColumnContext, TaskStatusContext, useViewer } from './context'
+import { artifactInfo, writtenBefore } from './artifacts'
+import {
+  ColumnContext,
+  ItemsContext,
+  TaskStatusContext,
+  useViewer,
+} from './context'
 import type { TurnCost } from './data'
 import {
   duration,
@@ -31,31 +38,44 @@ import {
   STATUS_LABEL,
   toolSummary,
 } from './format'
+import { parseEnvelope } from './envelope'
+import { MarkdownText } from './markdown'
+import { Sheet, useLongPress } from './sheet'
+import { isArtifact, stepsLabel, type Display, type StepGroup } from './steps'
 
-// Tickets 105-108: one row of a column. Every row starts with its clock time;
-// its details say how far into the Session it ran and, where there is one,
-// how long it took. Anything the viewer does not recognise is a row of raw
+// Tickets 105-108: one row of a column, drawn as a chat (Taha, 2026-09-23):
+// your messages in a bubble on the right, Claude's as plain markdown, and the
+// work between them folded into one line. Times show on hover or a tap; a
+// row's details say how far into the Session it ran and how long it took. Anything the viewer does not recognise is a row of raw
 // JSON rather than a broken page — the format is Claude Code's internal one.
 
 type Of<K extends Item['kind']> = Extract<Item, { kind: K }>
 
 /** Stable across chunk loads, so a prepended chunk does not remount the rest. */
-export const rowKey = (row: Row, index: number) =>
+export const rowKey = (row: Display, index: number): string =>
   row.kind === 'item'
     ? row.item.id
     : row.kind === 'section'
       ? `section:${index}`
-      : row.use.id
+      : row.kind === 'steps'
+        ? `steps:${rowKey(row.rows[0]!, index)}`
+        : row.use.id
 
-export function RowView({ row }: { row: Row }) {
+export function RowView({ row }: { row: Display }) {
   switch (row.kind) {
+    case 'steps':
+      return <StepsRow group={row} />
     case 'section':
       return <Rule>{sectionLabel(row.model, row.effort)}</Rule>
     case 'tool':
-      return <ToolRow row={row} />
+      return isArtifact(row) ? (
+        <ArtifactCard row={row} />
+      ) : (
+        <ToolRow row={row} />
+      )
     case 'skill':
       return (
-        <Shell at={row.use.at}>
+        <Shell>
           <Disclosure kind="Skill" name={row.skill}>
             <Meta at={row.use.at} />
             <Pre>
@@ -68,13 +88,13 @@ export function RowView({ row }: { row: Row }) {
       )
     case 'agent':
       return (
-        <Shell at={row.use.at}>
+        <Shell>
           <AgentBlock row={row} />
         </Shell>
       )
     case 'workflow':
       return (
-        <Shell at={row.use.at}>
+        <Shell>
           <WorkflowBlock row={row} />
         </Shell>
       )
@@ -83,6 +103,76 @@ export function RowView({ row }: { row: Row }) {
     default:
       return null
   }
+}
+
+/**
+ * Consecutive thinking, tool calls and hooks between two messages, folded into
+ * one line. Its time runs from the first step's start to the last one's end.
+ */
+function StepsRow({ group }: { group: StepGroup }) {
+  const [open, setOpen] = useState(false)
+  const flip = useCallback(() => setOpen((was) => !was), [])
+  const failed = group.rows.some(
+    (row) =>
+      (row.kind === 'tool' && row.result?.isError) ||
+      (row.kind === 'item' && row.item.kind === 'hook' && row.item.failed),
+  )
+  const took =
+    group.startAt && group.endAt
+      ? Date.parse(group.endAt) - Date.parse(group.startAt)
+      : Number.NaN
+  return (
+    <Shell>
+      <button
+        type="button"
+        onClick={flip}
+        aria-expanded={open}
+        className="group/steps text-text-muted hover:text-text flex w-full items-baseline gap-2 text-left text-caption"
+      >
+        <span
+          aria-hidden="true"
+          className={`inline-block w-2 shrink-0 transition-transform motion-reduce:transition-none ${open ? 'rotate-90' : ''}`}
+        >
+          ›
+        </span>
+        <span className={failed ? 'text-bad-text' : ''}>
+          {stepsLabel(group.rows)}
+          {failed ? ' · an error' : ''}
+        </span>
+        <Hover at={group.startAt} className="ml-auto" />
+        {Number.isNaN(took) ? null : (
+          <span className="font-mono text-micro">{duration(took)}</span>
+        )}
+      </button>
+      {open ? (
+        <ol className="border-rule mt-1 ml-1 flex flex-col border-l-2">
+          {group.rows.map((row, index) => (
+            <RowView key={rowKey(row, index)} row={row} />
+          ))}
+        </ol>
+      ) : null}
+    </Shell>
+  )
+}
+
+/** A clock time that shows on hover, focus or a tap of its row. */
+function Hover({
+  at,
+  className = '',
+}: {
+  at: string | null
+  className?: string
+}) {
+  const { clock } = useViewer()
+  if (!at) return null
+  return (
+    <time
+      dateTime={at}
+      className={`text-text-muted font-mono text-micro tabular-nums opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100 group-data-[shown]/row:opacity-100 motion-reduce:transition-none ${className}`}
+    >
+      {clock.format(new Date(at))}
+    </time>
+  )
 }
 
 function ItemRow({ item }: { item: Item }) {
@@ -95,7 +185,7 @@ function ItemRow({ item }: { item: Item }) {
       return <ThinkingRow item={item} />
     case 'hook':
       return (
-        <Shell at={item.at}>
+        <Shell>
           <Disclosure
             kind="Hook"
             text={`${item.event}${item.name ? ` · ${item.name}` : ''}${item.failed ? ' · failed' : ''}`}
@@ -117,7 +207,7 @@ function ItemRow({ item }: { item: Item }) {
       )
     case 'interrupt':
       return (
-        <Shell at={item.at}>
+        <Shell>
           <p className="text-warn-text text-caption">
             Interrupted{item.text ? ` · ${item.text}` : ''}
           </p>
@@ -125,7 +215,7 @@ function ItemRow({ item }: { item: Item }) {
       )
     case 'api_error':
       return (
-        <Shell at={item.at}>
+        <Shell>
           <p className="border-bad-border bg-bad-bg text-bad-text rounded-md border px-3 py-2 text-caption [overflow-wrap:anywhere]">
             API error · {item.text}
           </p>
@@ -133,7 +223,7 @@ function ItemRow({ item }: { item: Item }) {
       )
     case 'slash_command':
       return (
-        <Shell at={item.at}>
+        <Shell>
           <p className="font-mono text-caption [overflow-wrap:anywhere]">
             /{item.name.replace(/^\//, '')} {item.args}
           </p>
@@ -144,7 +234,7 @@ function ItemRow({ item }: { item: Item }) {
     case 'queue':
     case 'tool_result':
       return (
-        <Shell at={item.at}>
+        <Shell>
           <Disclosure
             kind={
               item.kind === 'injected'
@@ -164,7 +254,7 @@ function ItemRow({ item }: { item: Item }) {
       )
     case 'unknown':
       return (
-        <Shell at={item.at}>
+        <Shell>
           <Disclosure kind="Entry" name={item.type ?? 'unrecognised'}>
             <Meta at={item.at} />
             <Pre>{json(item.raw)}</Pre>
@@ -179,55 +269,262 @@ function ItemRow({ item }: { item: Item }) {
 /** Past this, a message starts clamped: a pasted log should not fill a phone. */
 const LONG = 700
 
-function UserRow({ item }: { item: Of<'user'> }) {
-  const long = item.text.length > LONG || item.text.split('\n', 13).length > 12
-  const [open, setOpen] = useState(false)
-  const flip = useCallback(() => setOpen((was) => !was), [])
+const isLong = (text: string) =>
+  text.length > LONG || text.split('\n', 13).length > 12
+
+/**
+ * A message, yours or Claude's. Its time and actions show on hover or focus,
+ * and on a phone after a tap; press and hold opens Copy and Select text.
+ * Until Select text is chosen a phone does not select on a hold, so the two
+ * menus never both appear.
+ */
+function Message({
+  at,
+  copyText,
+  mine,
+  author,
+  info,
+  children,
+}: {
+  at: string | null
+  /** The message as it was written, markdown and all. */
+  copyText: string
+  mine: boolean
+  /** Who wrote it, above the bubble, when that is worth saying. */
+  author?: string | null
+  /** Claude's messages only: what the "i" button's popup describes. */
+  info?: Of<'assistant'>
+  children: ReactNode
+}) {
+  const [shown, setShown] = useState(false)
+  const [menu, setMenu] = useState(false)
+  const [infoOpen, setInfoOpen] = useState(false)
+  const [selectable, setSelectable] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const body = useRef<HTMLDivElement>(null)
+
+  const copy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(copyText)
+      setCopied(true)
+    } catch {
+      setCopied(false)
+    }
+  }, [copyText])
+  const hold = useLongPress(useCallback(() => setMenu(true), []))
+  const onClick = useCallback((event: MouseEvent) => {
+    // A tap, not a click on a link or button inside the message.
+    if (event.target instanceof Element && event.target.closest('a, button'))
+      return
+    setShown((was) => !was)
+  }, [])
+  const closeMenu = useCallback(() => setMenu(false), [])
+  const menuCopy = useCallback(() => {
+    setMenu(false)
+    void copy()
+  }, [copy])
+  const menuSelect = useCallback(() => {
+    setMenu(false)
+    setSelectable(true)
+    // After the class change lands, so the selection is not refused.
+    requestAnimationFrame(() => {
+      // The words only, not the chips and buttons around them.
+      const element = body.current?.querySelector('[data-text]') ?? body.current
+      const selection = window.getSelection()
+      if (element && selection) selection.selectAllChildren(element)
+    })
+  }, [])
+  const openInfo = useCallback(() => setInfoOpen(true), [])
+  const closeInfo = useCallback(() => setInfoOpen(false), [])
+  const menuInfo = useCallback(() => {
+    setMenu(false)
+    setInfoOpen(true)
+  }, [])
+
   return (
-    <Shell at={item.at}>
-      <div className="border-rule bg-surface rounded-md border px-3 py-2">
-        <p
-          className={`text-body whitespace-pre-wrap [overflow-wrap:anywhere] ${long && !open ? 'line-clamp-8' : ''}`}
-        >
-          {item.text}
-        </p>
-        {long ? (
-          <button
-            type="button"
-            onClick={flip}
-            aria-expanded={open}
-            className="text-accent-text mt-1 text-caption underline"
-          >
-            {open ? 'Show less' : 'Show all'}
-          </button>
+    <li
+      data-shown={shown ? '' : undefined}
+      className={`group/row flex flex-col gap-1 px-4 py-2 [contain-intrinsic-size:auto_3rem] [content-visibility:auto] ${mine ? 'items-end' : 'items-stretch'}`}
+    >
+      {author ? (
+        <span className="text-text-muted px-1 text-micro">{author}</span>
+      ) : null}
+      <div
+        ref={body}
+        onClick={onClick}
+        {...hold}
+        className={`${selectable ? '' : 'pointer-coarse:select-none pointer-coarse:[-webkit-touch-callout:none]'} ${
+          mine
+            ? 'bg-surface-hover max-w-[85%] rounded-2xl px-3.5 py-2'
+            : 'min-w-0'
+        }`}
+      >
+        {children}
+      </div>
+      <div
+        className={`flex items-center gap-1 ${mine ? 'flex-row-reverse' : ''}`}
+      >
+        <Hover at={at} className="px-1" />
+        <Action label={copied ? 'Copied' : 'Copy'} onClick={copy}>
+          {copied ? '✓' : '⧉'}
+        </Action>
+        {info ? (
+          <Action label="About this message" onClick={openInfo}>
+            <span className="font-serif italic">i</span>
+          </Action>
         ) : null}
       </div>
-    </Shell>
+      <Sheet open={menu} onClose={closeMenu} title="Message">
+        <div className="flex flex-col">
+          <MenuItem onClick={menuCopy}>Copy</MenuItem>
+          <MenuItem onClick={menuSelect}>Select text</MenuItem>
+          {info ? (
+            <MenuItem onClick={menuInfo}>About this message</MenuItem>
+          ) : null}
+        </div>
+      </Sheet>
+      {info ? (
+        <Sheet open={infoOpen} onClose={closeInfo} title="About this message">
+          {infoOpen ? <Breakdown item={info} /> : null}
+        </Sheet>
+      ) : null}
+    </li>
+  )
+}
+
+/** A small action under a message, shown on hover, focus or a tap. */
+function Action({
+  label,
+  onClick,
+  children,
+}: {
+  label: string
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className="text-text-muted hover:bg-surface-hover hover:text-text grid size-7 place-items-center rounded-md text-caption opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100 group-data-[shown]/row:opacity-100 focus-visible:opacity-100 motion-reduce:transition-none"
+    >
+      {children}
+    </button>
+  )
+}
+
+function MenuItem({
+  onClick,
+  children,
+}: {
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="hover:bg-surface-hover rounded-md px-3 py-3 text-left text-body"
+    >
+      {children}
+    </button>
+  )
+}
+
+function UserRow({ item }: { item: Of<'user'> }) {
+  const envelope = useMemo(() => parseEnvelope(item.text), [item.text])
+  const [open, setOpen] = useState(false)
+  const flip = useCallback(() => setOpen((was) => !was), [])
+
+  if (envelope?.kind === 'context') {
+    return (
+      <Shell>
+        <Disclosure kind="Session context">
+          <Pre>{item.text}</Pre>
+        </Disclosure>
+      </Shell>
+    )
+  }
+  const text = envelope ? envelope.body : item.text
+  const long = isLong(text)
+  const attached = envelope
+    ? [
+        ...envelope.files,
+        ...(envelope.files.length === 0 && envelope.images
+          ? Array.from({ length: envelope.images }, () => 'image')
+          : []),
+      ]
+    : []
+  return (
+    <Message at={item.at} copyText={text} mine author={envelope?.author}>
+      {attached.length ? (
+        <span className="mb-1 flex flex-wrap justify-end gap-1">
+          {attached.map((name, index) => (
+            <span
+              // Two attachments can share a name; order alone tells them apart.
+              // oxlint-disable-next-line react/no-array-index-key
+              key={`${name}:${index}`}
+              title="Attached; the file itself is not in the transcript"
+              className="border-rule bg-ground text-text-secondary rounded-md border px-2 py-0.5 text-micro"
+            >
+              {name}
+            </span>
+          ))}
+        </span>
+      ) : null}
+      <p
+        data-text
+        className={`text-body whitespace-pre-wrap [overflow-wrap:anywhere] ${long && !open ? 'line-clamp-8' : ''}`}
+      >
+        {text}
+      </p>
+      {long || envelope ? (
+        <span className="mt-1 flex justify-end gap-3">
+          {long ? (
+            <button
+              type="button"
+              onClick={flip}
+              aria-expanded={open}
+              className="text-accent-text text-caption underline"
+            >
+              {open ? 'Show less' : 'Show all'}
+            </button>
+          ) : null}
+          {envelope ? <RawText text={item.text} /> : null}
+        </span>
+      ) : null}
+    </Message>
+  )
+}
+
+/** The message exactly as Claude received it, envelope and all. */
+function RawText({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  const show = useCallback(() => setOpen(true), [])
+  const hide = useCallback(() => setOpen(false), [])
+  return (
+    <>
+      <button
+        type="button"
+        onClick={show}
+        className="text-text-muted text-caption underline"
+      >
+        Raw
+      </button>
+      <Sheet open={open} onClose={hide} title="As Claude received it">
+        <Pre>{text}</Pre>
+      </Sheet>
+    </>
   )
 }
 
 function AssistantRow({ item }: { item: Of<'assistant'> }) {
-  const [open, setOpen] = useState(false)
-  const flip = useCallback(() => setOpen((was) => !was), [])
   return (
-    <Shell at={item.at}>
-      <div className="flex items-start gap-2">
-        <p className="min-w-0 flex-1 text-body whitespace-pre-wrap [overflow-wrap:anywhere]">
-          {item.text}
-        </p>
-        <button
-          type="button"
-          onClick={flip}
-          aria-expanded={open}
-          aria-label="About this message"
-          title="About this message"
-          className="border-rule text-text-muted hover:text-text grid size-6 shrink-0 place-items-center rounded-full border font-serif text-caption italic"
-        >
-          i
-        </button>
-      </div>
-      {open ? <Breakdown item={item} /> : null}
-    </Shell>
+    <Message at={item.at} copyText={item.text} mine={false} info={item}>
+      <MarkdownText text={item.text} />
+    </Message>
   )
 }
 
@@ -310,9 +607,9 @@ function ThinkingRow({ item }: { item: Of<'thinking'> }) {
       'thinking_tokens',
     )
     return (
-      <Shell at={item.at}>
+      <Shell>
         <p className="text-text-muted text-caption italic">
-          thinking ·{' '}
+          Thought ·{' '}
           {typeof tokens === 'number' && tokens > 0
             ? `${count.format(tokens)} tokens, `
             : ''}
@@ -322,13 +619,13 @@ function ThinkingRow({ item }: { item: Of<'thinking'> }) {
     )
   }
   return (
-    <Shell at={item.at}>
+    <Shell>
       {thinking === 'verbose' ? (
         <p className="text-text-secondary border-rule border-l-2 pl-3 text-caption whitespace-pre-wrap italic [overflow-wrap:anywhere]">
           {text}
         </p>
       ) : (
-        <Disclosure kind="Thinking">
+        <Disclosure kind="Thought">
           <p className="text-text-secondary text-caption whitespace-pre-wrap italic [overflow-wrap:anywhere]">
             {text}
           </p>
@@ -338,11 +635,91 @@ function ThinkingRow({ item }: { item: Of<'thinking'> }) {
   )
 }
 
+/**
+ * An artifact publish: its card, its link, and a preview of the HTML the
+ * transcript wrote for it. The preview runs in a sandboxed frame with no
+ * same-origin access, so the page cannot read the dashboard, its cookies or
+ * its storage.
+ */
+function ArtifactCard({ row }: { row: Extract<Row, { kind: 'tool' }> }) {
+  const info = useMemo(() => artifactInfo(row), [row])
+  const items = useContext(ItemsContext)
+  const [open, setOpen] = useState(false)
+  const flip = useCallback(() => setOpen((was) => !was), [])
+  const written = useMemo(
+    () => (open ? writtenBefore(items, info.path, row.use.offset) : null),
+    [open, items, info.path, row.use.offset],
+  )
+  const name = info.path.split('/').pop() ?? info.path
+  return (
+    <Shell>
+      <div className="border-rule bg-surface flex flex-col overflow-hidden rounded-xl border">
+        <div className="flex items-start gap-3 p-3">
+          <span
+            aria-hidden="true"
+            className="border-rule bg-ground text-text-muted grid size-9 shrink-0 place-items-center rounded-md border font-mono text-micro"
+          >
+            {'</>'}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-body font-medium [overflow-wrap:anywhere]">
+              {info.title ?? name}
+            </span>
+            <span className="text-text-muted block text-caption [overflow-wrap:anywhere]">
+              {info.description ?? `Artifact · ${name}`}
+            </span>
+          </span>
+          {info.url ? (
+            <a
+              href={info.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="border-control-border hover:bg-surface-hover shrink-0 rounded-md border px-2.5 py-1 text-caption"
+            >
+              Open ↗
+            </a>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          onClick={flip}
+          aria-expanded={open}
+          className="border-rule text-text-secondary hover:bg-surface-hover border-t px-3 py-2 text-left text-caption"
+        >
+          {open ? 'Hide preview' : 'Show preview'}
+        </button>
+        {written?.status === 'found' ? (
+          <>
+            {written.stale ? (
+              <p className="text-warn-text border-rule border-t px-3 py-1.5 text-caption">
+                The file was edited after this; the preview is the version first
+                written.
+              </p>
+            ) : null}
+            <iframe
+              title={`Preview of ${info.title ?? name}`}
+              sandbox="allow-scripts"
+              srcDoc={written.html}
+              loading="lazy"
+              className="border-rule h-[28rem] w-full border-t bg-white"
+            />
+          </>
+        ) : written ? (
+          <p className="text-text-muted border-rule border-t px-3 py-2 text-caption">
+            The page&apos;s HTML is not in this transcript, so there is no
+            preview. {info.url ? 'Open shows the published page.' : ''}
+          </p>
+        ) : null}
+      </div>
+    </Shell>
+  )
+}
+
 function ToolRow({ row }: { row: Extract<Row, { kind: 'tool' }> }) {
   const { showToolOutput } = useViewer()
   const failed = row.result?.isError ?? false
   return (
-    <Shell at={row.use.at}>
+    <Shell>
       <Disclosure
         name={row.use.name}
         text={toolSummary(row.use.name, row.use.input)}
@@ -612,21 +989,13 @@ function WorkflowBlock({ row }: { row: Extract<Row, { kind: 'workflow' }> }) {
   )
 }
 
-function Shell({ at, children }: { at: string | null; children: ReactNode }) {
-  const { clock } = useViewer()
+function Shell({ children }: { children: ReactNode }) {
   return (
-    <li className="flex gap-3 px-3 py-2 [contain-intrinsic-size:auto_3rem] [content-visibility:auto]">
-      <time
-        dateTime={at ?? undefined}
-        className="text-text-muted w-14 shrink-0 pt-0.5 font-mono text-micro tabular-nums"
-      >
-        {at ? clock.format(new Date(at)) : '—'}
-      </time>
-      <div className="flex min-w-0 flex-1 flex-col">{children}</div>
+    <li className="group/row flex min-w-0 flex-col px-4 py-1 [contain-intrinsic-size:auto_2rem] [content-visibility:auto]">
+      {children}
     </li>
   )
 }
-
 /** A rule across the column with a label: a model change, a compaction. */
 function Rule({ children }: { children: ReactNode }) {
   return (
