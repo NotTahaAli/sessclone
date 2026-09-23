@@ -52,9 +52,11 @@ export default async function Turn({
         title="One Turn"
         description={`${when(viewer.orgTimezone).format(
           new Date(row.occurredAt),
-        )}${facts.memberEmail ? ` · ${facts.memberEmail}` : ''}${
-          facts.deviceLabel ? ` · ${facts.deviceLabel}` : ''
-        }`}
+        )}${
+          facts.memberName || facts.memberEmail
+            ? ` · ${facts.memberName ?? facts.memberEmail}`
+            : ''
+        }${facts.deviceLabel ? ` · ${facts.deviceLabel}` : ''}`}
       />
 
       {/* Back to the Session this Turn is part of, which is the question a

@@ -26,10 +26,11 @@ const AVATAR = {
 } as const
 
 export function Avatar({
-  email,
+  name,
   size = 24,
 }: {
-  email: string
+  /** The display name when there is one, else the address: its first letter. */
+  name: string
   size?: keyof typeof AVATAR
 }) {
   return (
@@ -37,7 +38,7 @@ export function Avatar({
       aria-hidden="true"
       className={`bg-quiet-bg text-text-secondary inline-flex shrink-0 items-center justify-center rounded-full text-label uppercase ${AVATAR[size]}`}
     >
-      {email.slice(0, 1)}
+      {name.slice(0, 1)}
     </span>
   )
 }
@@ -46,8 +47,10 @@ export function AccountMenu({ viewer }: { viewer: Viewer }) {
   return (
     <details className="group relative">
       <summary className="hover:bg-surface-hover flex h-[var(--control-h)] cursor-pointer list-none items-center gap-2 rounded-md px-2 text-body">
-        <Avatar email={viewer.email} />
-        <span className="text-text-secondary truncate">{viewer.email}</span>
+        <Avatar name={viewer.displayName ?? viewer.email} />
+        <span className="text-text-secondary truncate">
+          {viewer.displayName ?? viewer.email}
+        </span>
       </summary>
 
       {/* The panel opens away from the edge the summary sits against, and
@@ -66,7 +69,16 @@ export function AccountMenu({ viewer }: { viewer: Viewer }) {
           is for. The width is capped at the window either way, for the
           narrowest phone. */}
       <div className="bg-surface border-rule shadow-overlay absolute top-full right-0 z-10 mt-1 w-64 max-w-[calc(100vw-2rem)] rounded-md border p-3 lg:top-auto lg:right-auto lg:bottom-full lg:left-0 lg:mt-0 lg:mb-1">
-        <p className="text-text truncate text-body">{viewer.email}</p>
+        {/* Ticket 100: the name leads, and the address stays under it so
+            the person can see which account they are signed in as. */}
+        <p className="text-text truncate text-body">
+          {viewer.displayName ?? viewer.email}
+        </p>
+        {viewer.displayName ? (
+          <p className="text-text-muted truncate text-caption">
+            {viewer.email}
+          </p>
+        ) : null}
         <p className="text-text-muted mt-1 truncate text-caption">
           {viewer.orgName}
           {' · '}

@@ -32,7 +32,7 @@ export default async function Page({
 
       <TextFilter
         name="name"
-        label="Filter by name"
+        label="Filter by name or admin name"
         value={filter}
         placeholder="acme"
         clearHref="/admin/orgs"
@@ -50,8 +50,10 @@ export default async function Page({
               className="border-rule bg-surface flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 rounded-md border p-3"
             >
               <div>
-                <p className="text-body">{org.name}</p>
+                {/* Ticket 102: the admin name leads, the Org's own beside it. */}
+                <p className="text-body">{org.operatorName ?? org.name}</p>
                 <p className="text-text-muted text-caption">
+                  {org.operatorName ? `${org.name} · ` : ''}
                   {org.seats} {org.seats === 1 ? 'seat' : 'seats'} · since{' '}
                   {org.createdAt.toISOString().slice(0, 10)}
                 </p>

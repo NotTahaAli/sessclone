@@ -30,6 +30,9 @@ export const HISTORY_PAGE = 20
 export type AdminOrg = {
   id: string
   name: string
+  /** What platform administrators call it (ticket 102), or null. The
+   * policy returns nothing here to anybody else. */
+  operatorName: string | null
   createdAt: Date
   seats: number
   /** Null when the Org has no subscription row: real, and not an error. */
@@ -43,6 +46,7 @@ export type AdminOrg = {
 type OrgRow = {
   id: string
   name: string
+  operator_name: string | null
   created_at: Date
   seats: string
   tier_id: string | null
@@ -76,6 +80,7 @@ export const listOrgs = async (
   const rows = await tx<OrgRow[]>`
     select org.id,
            org.name,
+           operator.name as operator_name,
            org.created_at,
            seats.count as seats,
            tier.id as tier_id,
@@ -84,13 +89,19 @@ export const listOrgs = async (
            subscription.status,
            subscription.current_period_end
       from orgs org
+      left join org_operator_names operator on operator.org_id = org.id
       left join subscriptions subscription on subscription.org_id = org.id
       left join tiers tier on tier.id = subscription.tier_id
       left join lateral (
         select count(*) from members
          where members.org_id = org.id and members.removed_at is null
       ) seats on true
-     ${name ? tx`where org.name ilike ${`%${name}%`}` : tx``}
+     ${
+       name
+         ? tx`where org.name ilike ${`%${name}%`}
+                 or operator.name ilike ${`%${name}%`}`
+         : tx``
+     }
      order by org.created_at desc
      limit ${limit + 1}
   `
@@ -99,6 +110,7 @@ export const listOrgs = async (
     orgs: rows.slice(0, limit).map((row) => ({
       id: row.id,
       name: row.name,
+      operatorName: row.operator_name,
       createdAt: row.created_at,
       seats: Number(row.seats),
       tierId: row.tier_id,
@@ -125,6 +137,7 @@ export const adminOrg = async (
   const [row] = await tx<OrgRow[]>`
     select org.id,
            org.name,
+           operator.name as operator_name,
            org.created_at,
            seats.count as seats,
            tier.id as tier_id,
@@ -133,6 +146,7 @@ export const adminOrg = async (
            subscription.status,
            subscription.current_period_end
       from orgs org
+      left join org_operator_names operator on operator.org_id = org.id
       left join subscriptions subscription on subscription.org_id = org.id
       left join tiers tier on tier.id = subscription.tier_id
       left join lateral (
@@ -147,6 +161,7 @@ export const adminOrg = async (
   return {
     id: row.id,
     name: row.name,
+    operatorName: row.operator_name,
     createdAt: row.created_at,
     seats: Number(row.seats),
     tierId: row.tier_id,
@@ -195,7 +210,7 @@ export const subscriptionHistory = async (
            event.status,
            tier.name as tier_name,
            event.note,
-           actor.email as actor_email,
+           coalesce(actor.display_name, actor.email) as actor_email,
            event.provider,
            event.occurred_at
       from subscription_events event

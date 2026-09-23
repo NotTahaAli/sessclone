@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { setOrgSeed } from './appearance-actions'
+import { setOrgName } from './actions'
+import { InlineName } from '../../inline-name'
 import { LockForm } from './lock-form'
 import { RetentionForm } from './retention-form'
 import { TimezoneForm } from './timezone-form'
@@ -51,6 +53,27 @@ export default async function Page() {
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <PageHeader title="Org settings" />
+
+      {/* Ticket 101. A pencil, as every other name is: one short string. */}
+      <section aria-labelledby="org-name">
+        <h2 id="org-name" className="text-heading-lg">
+          Name
+        </h2>
+        <p className="text-text-secondary mt-2 mb-3 text-sm">
+          What everybody in this Org sees in the navigation and in the
+          invitations you send.
+        </p>
+        <p className="text-body">
+          <InlineName
+            action={setOrgName}
+            hidden={`orgId=${viewer.orgId}`}
+            current={viewer.orgName}
+            fallback={viewer.orgName}
+            label="The Org’s name"
+            placeholder="Acme"
+          />
+        </p>
+      </section>
 
       <TimezoneSetting
         orgId={viewer.orgId}
