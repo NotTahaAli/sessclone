@@ -130,7 +130,7 @@ const PHASES = [
     label: 'Transcripts',
     type: 'frontend',
     pos: [960, 800],
-    range: [103, 109],
+    range: [103, 110],
   },
 ]
 

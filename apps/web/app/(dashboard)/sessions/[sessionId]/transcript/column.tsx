@@ -30,12 +30,14 @@ import {
 } from './columns'
 import {
   ColumnContext,
+  HearthContext,
   ItemsContext,
   TaskStatusContext,
   useViewer,
 } from './context'
 import { concat, readBytes, type StoredFile } from './data'
 import { Badge, RowView, rowKey } from './rows'
+import { readHearth } from './hearth'
 import { groupSteps } from './steps'
 import { taskStatuses } from './tasks'
 
@@ -51,6 +53,7 @@ function Rows({ items, preset }: { items: Item[]; preset: Preset }) {
     [items, preset],
   )
   const statuses = useMemo(() => taskStatuses(items), [items])
+  const hearth = useMemo(() => readHearth(items), [items])
   if (rows.length === 0) {
     return (
       <p className="text-text-muted p-4 text-caption">
@@ -60,13 +63,15 @@ function Rows({ items, preset }: { items: Item[]; preset: Preset }) {
   }
   return (
     <ItemsContext.Provider value={items}>
-      <TaskStatusContext.Provider value={statuses}>
-        <ol className="mx-auto flex max-w-3xl flex-col py-3">
-          {rows.map((row, index) => (
-            <RowView key={rowKey(row, index)} row={row} />
-          ))}
-        </ol>
-      </TaskStatusContext.Provider>
+      <HearthContext.Provider value={hearth}>
+        <TaskStatusContext.Provider value={statuses}>
+          <ol className="flex flex-col py-3">
+            {rows.map((row, index) => (
+              <RowView key={rowKey(row, index)} row={row} />
+            ))}
+          </ol>
+        </TaskStatusContext.Provider>
+      </HearthContext.Provider>
     </ItemsContext.Provider>
   )
 }

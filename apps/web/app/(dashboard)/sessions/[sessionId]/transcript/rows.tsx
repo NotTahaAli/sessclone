@@ -23,7 +23,17 @@ import { compact, count, usd } from '../../../../../lib/money'
 import { agentColumn, workflowColumn } from './columns'
 import { artifactInfo, sealed, writtenBefore } from './artifacts'
 import {
+  currentReactions,
+  emojiOf,
+  hearthTool,
+  parseStatus,
+  type Edit,
+  type Reaction,
+} from './hearth'
+import { CheckIcon, CodeIcon, CopyIcon, InfoIcon } from './icons'
+import {
   ColumnContext,
+  HearthContext,
   ItemsContext,
   TaskStatusContext,
   useViewer,
@@ -32,6 +42,7 @@ import type { TurnCost } from './data'
 import {
   duration,
   field,
+  toolName,
   json,
   offset,
   sectionLabel,
@@ -68,11 +79,22 @@ export function RowView({ row }: { row: Display }) {
     case 'section':
       return <Rule>{sectionLabel(row.model, row.effort)}</Rule>
     case 'tool':
-      return isArtifact(row) ? (
-        <ArtifactCard row={row} />
-      ) : (
-        <ToolRow row={row} />
-      )
+      if (isArtifact(row)) return <ArtifactCard row={row} />
+      switch (hearthTool(row.use.name)) {
+        case 'reply':
+          // A reply that failed never reached anyone: it stays a tool call.
+          return row.result?.isError ? (
+            <ToolRow row={row} />
+          ) : (
+            <ReplyRow row={row} />
+          )
+        case 'update_status':
+          return <StatusCard row={row} />
+        case 'ask_decision':
+          return <DecisionCard row={row} />
+        default:
+          return <ToolRow row={row} />
+      }
     case 'skill':
       return (
         <Shell>
@@ -269,6 +291,10 @@ function ItemRow({ item }: { item: Item }) {
 /** Past this, a message starts clamped: a pasted log should not fill a phone. */
 const LONG = 700
 
+const NO_REACTIONS: Reaction[] = []
+
+const str = (value: unknown) => (typeof value === 'string' ? value : '')
+
 const isLong = (text: string) =>
   text.length > LONG || text.split('\n', 13).length > 12
 
@@ -285,6 +311,8 @@ function Message({
   author,
   info,
   raw,
+  hearthId,
+  versions,
   children,
 }: {
   at: string | null
@@ -297,8 +325,20 @@ function Message({
   info?: Of<'assistant'>
   /** The message exactly as Claude received it, when it arrived wrapped. */
   raw?: string
+  /** Its id in the Claude Project, which reactions name. */
+  hearthId?: string | null
+  /** Every version when it was edited, oldest first. */
+  versions?: Edit[]
   children: ReactNode
 }) {
+  const hearth = useContext(HearthContext)
+  const history = (hearthId && hearth.reactions.get(hearthId)) || NO_REACTIONS
+  const current = currentReactions(history)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const openHistory = useCallback(() => setHistoryOpen(true), [])
+  const closeHistory = useCallback(() => setHistoryOpen(false), [])
+  const edited = !!versions && versions.length > 1
+  const hasInfo = !!info || history.length > 0
   const [shown, setShown] = useState(false)
   const [menu, setMenu] = useState(false)
   const [infoOpen, setInfoOpen] = useState(false)
@@ -346,6 +386,10 @@ function Message({
     setMenu(false)
     setInfoOpen(true)
   }, [])
+  const menuHistory = useCallback(() => {
+    setMenu(false)
+    setHistoryOpen(true)
+  }, [])
 
   return (
     <li
@@ -367,21 +411,44 @@ function Message({
       >
         {children}
       </div>
+      {current.length || edited ? (
+        <div
+          className={`flex flex-wrap items-center gap-1.5 ${mine ? 'justify-end' : ''}`}
+        >
+          {current.map((emoji) => (
+            <span
+              key={emoji}
+              className="border-rule bg-surface rounded-full border px-2 py-0.5 text-caption"
+            >
+              {emojiOf(emoji)}
+            </span>
+          ))}
+          {edited ? (
+            <button
+              type="button"
+              onClick={openHistory}
+              className="text-text-muted hover:text-text text-caption underline"
+            >
+              edited
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       <div
         className={`flex items-center gap-1 ${mine ? 'flex-row-reverse' : ''}`}
       >
         <Hover at={at} className="px-1" />
         <Action label={copied ? 'Copied' : 'Copy'} onClick={copy}>
-          {copied ? '✓' : '⧉'}
+          {copied ? <CheckIcon /> : <CopyIcon />}
         </Action>
         {raw ? (
           <Action label="As Claude received it" onClick={openRaw}>
-            <span className="font-mono text-micro">{'</>'}</span>
+            <CodeIcon />
           </Action>
         ) : null}
-        {info ? (
+        {hasInfo ? (
           <Action label="About this message" onClick={openInfo}>
-            <span className="font-serif italic">i</span>
+            <InfoIcon />
           </Action>
         ) : null}
       </div>
@@ -389,8 +456,11 @@ function Message({
         <div className="flex flex-col">
           <MenuItem onClick={menuCopy}>Copy</MenuItem>
           <MenuItem onClick={menuSelect}>Select text</MenuItem>
-          {info ? (
+          {hasInfo ? (
             <MenuItem onClick={menuInfo}>About this message</MenuItem>
+          ) : null}
+          {edited ? (
+            <MenuItem onClick={menuHistory}>Edit history</MenuItem>
           ) : null}
         </div>
       </Sheet>
@@ -399,9 +469,13 @@ function Message({
           <Pre>{raw}</Pre>
         </Sheet>
       ) : null}
-      {info ? (
-        <Sheet open={infoOpen} onClose={closeInfo} title="About this message">
-          {infoOpen ? <Breakdown item={info} /> : null}
+      <Sheet open={infoOpen} onClose={closeInfo} title="About this message">
+        {info ? <Breakdown item={info} /> : null}
+        {history.length ? <ReactionHistory history={history} /> : null}
+      </Sheet>
+      {edited ? (
+        <Sheet open={historyOpen} onClose={closeHistory} title="Edit history">
+          <History versions={versions} />
         </Sheet>
       ) : null}
     </li>
@@ -480,6 +554,7 @@ function UserRow({ item }: { item: Of<'user'> }) {
       mine
       author={envelope?.author}
       raw={envelope ? item.text : undefined}
+      hearthId={envelope?.kind === 'wake' ? envelope.id : null}
     >
       {attached.length ? (
         <span className="mb-1 flex flex-wrap justify-end gap-1">
@@ -521,6 +596,248 @@ function AssistantRow({ item }: { item: Of<'assistant'> }) {
     <Message at={item.at} copyText={item.text} mine={false} info={item}>
       <MarkdownText text={item.text} />
     </Message>
+  )
+}
+
+/**
+ * A `reply` call: the message the person saw, drawn as Claude's message at
+ * the text it has now. "edited" opens every version; reactions sit under it.
+ */
+function ReplyRow({ row }: { row: Extract<Row, { kind: 'tool' }> }) {
+  const hearth = useContext(HearthContext)
+  const id = hearth.replyIds.get(row.use.toolUseId) ?? null
+  const versions = useMemo<Edit[]>(
+    () => [
+      { text: str(field(row.use.input, 'text')), at: row.use.at },
+      ...((id && hearth.edits.get(id)) || []),
+    ],
+    [row.use.input, row.use.at, id, hearth.edits],
+  )
+  const latest = versions.at(-1)?.text ?? ''
+  const outputs = useMemo(() => {
+    const list = field(row.use.input, 'attached_outputs')
+    return Array.isArray(list)
+      ? list.flatMap((output, index) => {
+          const ref = field(output, 'ref')
+          // Once each: a repeated ref is one output, and the ref is the key.
+          if (
+            typeof ref !== 'string' ||
+            list.findIndex((other) => field(other, 'ref') === ref) !== index
+          )
+            return []
+          const title = field(output, 'title')
+          return [
+            {
+              ref,
+              label:
+                typeof title === 'string' && title
+                  ? title
+                  : (ref.split('/').pop() ?? ref),
+              href: ref.startsWith('https://') ? ref : null,
+            },
+          ]
+        })
+      : []
+  }, [row.use.input])
+  return (
+    <Message
+      at={row.use.at}
+      copyText={latest}
+      mine={false}
+      hearthId={id}
+      versions={versions}
+    >
+      <MarkdownText text={latest} />
+      {outputs.length ? (
+        <span className="mt-2 flex flex-wrap gap-1.5">
+          {outputs.map((output) =>
+            output.href ? (
+              <a
+                key={output.ref}
+                href={output.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="border-rule bg-surface hover:bg-surface-hover rounded-md border px-2 py-1 text-caption"
+              >
+                {output.label} ↗
+              </a>
+            ) : (
+              <span
+                key={output.ref}
+                className="border-rule bg-surface text-text-secondary rounded-md border px-2 py-1 text-caption"
+              >
+                {output.label}
+              </span>
+            ),
+          )}
+        </span>
+      ) : null}
+    </Message>
+  )
+}
+
+const MARK = {
+  done: { sign: '✓', tone: 'text-ok-text' },
+  doing: { sign: '✱', tone: 'text-accent-text' },
+  todo: { sign: '○', tone: 'text-text-muted' },
+} as const
+
+/** An `update_status` call: the checklist the thread showed at that moment. */
+function StatusCard({ row }: { row: Extract<Row, { kind: 'tool' }> }) {
+  const status = useMemo(
+    () => parseStatus(str(field(row.use.input, 'text'))),
+    [row.use.input],
+  )
+  return (
+    <Shell>
+      <div className="border-rule bg-surface flex flex-col gap-1 rounded-xl border px-3 py-2.5">
+        <span className="flex items-baseline gap-2">
+          <span className="text-text-muted text-micro uppercase">Status</span>
+          <span className="min-w-0 flex-1 truncate text-caption font-medium">
+            {status.header}
+          </span>
+          <Hover at={row.use.at} />
+        </span>
+        <ul className="flex flex-col gap-0.5">
+          {status.lines.map((line, index) => (
+            <li
+              // A checklist can repeat a line; its place is its identity.
+              // oxlint-disable-next-line react/no-array-index-key
+              key={index}
+              className="flex gap-2 text-caption"
+            >
+              <span
+                aria-hidden="true"
+                className={`w-3 shrink-0 ${line.mark ? MARK[line.mark].tone : ''}`}
+              >
+                {line.mark ? MARK[line.mark].sign : ''}
+              </span>
+              <span
+                className={
+                  line.mark === 'todo'
+                    ? 'text-text-muted'
+                    : line.mark === 'doing'
+                      ? 'text-text'
+                      : 'text-text-secondary'
+                }
+              >
+                <span className="sr-only">
+                  {line.mark === 'done'
+                    ? 'Done: '
+                    : line.mark === 'doing'
+                      ? 'In progress: '
+                      : line.mark === 'todo'
+                        ? 'Not started: '
+                        : ''}
+                </span>
+                {line.text}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </Shell>
+  )
+}
+
+/** An `ask_decision` call: the question, its options, the recommended one. */
+function DecisionCard({ row }: { row: Extract<Row, { kind: 'tool' }> }) {
+  const input = row.use.input
+  const options = field(input, 'options')
+  const recommended = field(input, 'recommended')
+  const reason = field(input, 'reason')
+  const context = field(input, 'context')
+  return (
+    <Shell>
+      <div className="border-rule bg-surface flex flex-col gap-2 rounded-xl border p-3">
+        <span className="flex items-baseline gap-2">
+          <span className="text-text-muted text-micro uppercase">Decision</span>
+          <Hover at={row.use.at} className="ml-auto" />
+        </span>
+        <p className="text-body font-medium [overflow-wrap:anywhere]">
+          {str(field(input, 'question'))}
+        </p>
+        {typeof context === 'string' && context ? (
+          <p className="text-text-secondary text-caption [overflow-wrap:anywhere]">
+            {context}
+          </p>
+        ) : null}
+        <ol className="flex flex-col gap-1.5">
+          {(Array.isArray(options) ? options : []).map((option, index) => (
+            <li
+              // Options are positional: `recommended` is an index.
+              // oxlint-disable-next-line react/no-array-index-key
+              key={index}
+              className={`rounded-md border px-2.5 py-1.5 ${index === recommended ? 'border-accent-border' : 'border-rule'}`}
+            >
+              <span className="flex items-baseline gap-2 text-caption font-medium">
+                {str(field(option, 'label'))}
+                {index === recommended ? (
+                  <span className="text-accent-text text-micro uppercase">
+                    Recommended
+                  </span>
+                ) : null}
+              </span>
+              <span className="text-text-secondary block text-caption">
+                {str(field(option, 'consequence'))}
+              </span>
+            </li>
+          ))}
+        </ol>
+        {typeof reason === 'string' && reason ? (
+          <p className="text-text-muted text-caption">{reason}</p>
+        ) : null}
+      </div>
+    </Shell>
+  )
+}
+
+/** Every version of an edited message, oldest first, with when it changed. */
+function History({ versions }: { versions: Edit[] }) {
+  const { clock } = useViewer()
+  return (
+    <ol className="flex flex-col gap-3">
+      {versions.map((version, index) => (
+        <li
+          // Versions are ordered and may repeat a text; order is identity.
+          // oxlint-disable-next-line react/no-array-index-key
+          key={index}
+          className="border-rule flex flex-col gap-1 border-l-2 pl-3"
+        >
+          <span className="text-text-muted font-mono text-micro">
+            {index === 0 ? 'Original' : `Edit ${index}`}
+            {version.at ? ` · ${clock.format(new Date(version.at))}` : ''}
+          </span>
+          <MarkdownText text={version.text} />
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+function ReactionHistory({ history }: { history: Reaction[] }) {
+  const { clock } = useViewer()
+  return (
+    <div className="flex flex-col gap-1">
+      <p className="text-text-muted text-micro uppercase">Reactions</p>
+      <ol className="flex flex-col gap-0.5 text-caption">
+        {history.map((reaction, index) => (
+          <li
+            // The same emoji can go on and off; order is identity.
+            // oxlint-disable-next-line react/no-array-index-key
+            key={index}
+            className="flex gap-2"
+          >
+            <span className="text-text-muted w-16 shrink-0 font-mono text-micro">
+              {reaction.at ? clock.format(new Date(reaction.at)) : '—'}
+            </span>
+            <span>
+              {reaction.added ? 'Added' : 'Removed'} {emojiOf(reaction.emoji)}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </div>
   )
 }
 
@@ -718,7 +1035,7 @@ function ToolRow({ row }: { row: Extract<Row, { kind: 'tool' }> }) {
   return (
     <Shell>
       <Disclosure
-        name={row.use.name}
+        name={toolName(row.use.name)}
         text={toolSummary(row.use.name, row.use.input)}
         aside={`${failed ? 'error · ' : ''}${
           row.durationMs === null

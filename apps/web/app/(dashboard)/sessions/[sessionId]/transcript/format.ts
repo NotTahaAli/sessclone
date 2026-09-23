@@ -74,12 +74,23 @@ export const toolSummary = (name: string, input: unknown) => {
         ? pick('file_path', 'notebook_path')
         : ['Grep', 'Glob'].includes(name)
           ? pick('pattern')
-          : null
+          : // A hearthbot call names a message id first; what changed is more use.
+            name.startsWith('mcp__hearthbot__')
+            ? pick('emoji', 'text', 'reason')
+            : null
   if (named) return named
   const first = Object.values(input).find(
     (value): value is string => typeof value === 'string' && !!value.trim(),
   )
   return first ? clip(first) : ''
+}
+
+/** `mcp__hearthbot__react` reads as `hearthbot · react`; other names as they are. */
+export const toolName = (name: string) => {
+  const [prefix, server, ...tool] = name.split('__')
+  return prefix === 'mcp' && server && tool.length
+    ? `${server} · ${tool.join('__')}`
+    : name
 }
 
 /** `claude-opus-5-5 · high`; the plain model id, which never goes stale. */

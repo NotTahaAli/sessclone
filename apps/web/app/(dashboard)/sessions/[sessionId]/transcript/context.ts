@@ -5,6 +5,7 @@ import { createContext, useContext } from 'react'
 import type { Item, JournalAgent, ThinkingMode } from '@sessclone/shared'
 
 import type { Column } from './columns'
+import { EMPTY_HEARTH, type Hearth } from './hearth'
 import type { StoredFile, TurnCost } from './data'
 
 /** What every row can reach without being handed it through each level. */
@@ -51,3 +52,6 @@ export const ColumnContext = createContext<{
 
 /** Every Item loaded in the column, for rows that look back (an artifact's HTML). */
 export const ItemsContext = createContext<readonly Item[]>([])
+
+/** The column's hearthbot calls: which reply made which message, its edits and emoji. */
+export const HearthContext = createContext<Hearth>(EMPTY_HEARTH)

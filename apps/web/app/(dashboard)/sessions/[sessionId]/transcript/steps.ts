@@ -35,9 +35,16 @@ const STEP_ITEMS = new Set([
   'unknown',
 ])
 
+/** Hearthbot calls the person saw: a message, a checklist, a question. */
+const SHOWN = new Set([
+  'mcp__hearthbot__reply',
+  'mcp__hearthbot__update_status',
+  'mcp__hearthbot__ask_decision',
+])
+
 const isStep = (row: Row) =>
   row.kind === 'skill' ||
-  (row.kind === 'tool' && !isArtifact(row)) ||
+  (row.kind === 'tool' && !isArtifact(row) && !SHOWN.has(row.use.name)) ||
   (row.kind === 'item' && STEP_ITEMS.has(row.item.kind))
 
 const startOf = (row: Row): string | null =>

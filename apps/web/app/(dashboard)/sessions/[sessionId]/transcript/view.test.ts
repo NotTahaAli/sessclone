@@ -7,6 +7,8 @@ import { renderToStaticMarkup } from 'react-dom/server'
 
 import { sealed, writtenBefore } from './artifacts'
 import { decode, parseEnvelope } from './envelope'
+import { toolName } from './format'
+import { currentReactions, emojiOf, parseStatus, readHearth } from './hearth'
 import { MarkdownText } from './markdown'
 import { groupSteps, stepsLabel } from './steps'
 
@@ -128,6 +130,34 @@ describe('groupSteps', () => {
       'tool',
     ])
   })
+
+  it('shows hearthbot replies, checklists and questions, folds the rest', () => {
+    const out = groupSteps([
+      tool(0),
+      tool(2, 'mcp__hearthbot__reply'),
+      tool(4, 'mcp__hearthbot__react'),
+      tool(6, 'mcp__hearthbot__update_message'),
+      tool(8, 'mcp__hearthbot__update_status'),
+      tool(10, 'mcp__hearthbot__ask_decision'),
+    ])
+    expect(out.map((row) => row.kind)).toEqual([
+      'tool',
+      'tool',
+      'steps',
+      'tool',
+      'tool',
+    ])
+  })
+})
+
+describe('toolName', () => {
+  it('names an MCP tool by server and tool, and leaves the rest alone', () => {
+    expect(toolName('mcp__hearthbot__update_status')).toBe(
+      'hearthbot · update_status',
+    )
+    expect(toolName('Bash')).toBe('Bash')
+    expect(toolName('mcp__solo')).toBe('mcp__solo')
+  })
 })
 
 describe('stepsLabel', () => {
@@ -143,7 +173,7 @@ const wake = `[image]
 <wake reason="mention" current-time="2026-09-23T14:31:25Z">
   <project id="chan_1" type="project">
     <thread ts="cmsg_1">
-      <message trigger="true" from="human" trust="principal" author="Taha" id="cmsg_2">I want it like claude&#39;s &lt;chat&gt;.</message>
+      <message trigger="true" from="human" trust="principal" author="Taha" author-id="user_1" id="cmsg_2">I want it like claude&#39;s &lt;chat&gt;.</message>
     </thread>
   </project>
   <system-note>Act on it.</system-note>
@@ -159,6 +189,7 @@ describe('parseEnvelope', () => {
     expect(parseEnvelope(wake)).toEqual({
       kind: 'wake',
       author: 'Taha',
+      id: 'cmsg_2',
       body: "I want it like claude's <chat>.",
       files: ['image.png'],
       images: 1,
@@ -241,5 +272,92 @@ describe('MarkdownText', () => {
     const out = html('```ts\nconst a = 1\n```')
     expect(out).toContain('>ts<')
     expect(out).toContain('hljs-keyword')
+  })
+})
+
+describe('readHearth', () => {
+  const result = (
+    offset: number,
+    toolUseId: string,
+    text = '{"ok":true}',
+    isError = false,
+  ): Item => ({
+    ...base(offset),
+    kind: 'tool_result',
+    toolUseId,
+    isError,
+    text,
+    detail: null,
+  })
+  const hearth = readHearth([
+    use(0, 'mcp__hearthbot__reply', { text: 'v1' }),
+    result(1, 't0', '{"message_id":"cmsg_a","thread_id":"cmsg_t"}'),
+    use(2, 'mcp__hearthbot__update_message', {
+      message_id: 'cmsg_a',
+      text: 'v2',
+    }),
+    result(3, 't2'),
+    use(4, 'mcp__hearthbot__update_message', {
+      message_id: 'cmsg_a',
+      text: 'refused',
+    }),
+    result(5, 't4', 'message not found', true),
+    use(6, 'mcp__hearthbot__react', { message_id: 'cmsg_a', emoji: '+1' }),
+    result(7, 't6'),
+    use(8, 'mcp__hearthbot__react', { message_id: 'cmsg_a', emoji: 'eyes' }),
+    result(9, 't8'),
+    use(10, 'mcp__hearthbot__unreact', { message_id: 'cmsg_a', emoji: '👀' }),
+    result(11, 't10'),
+    use(12, 'mcp__hearthbot__react', {
+      message_id: 'cmsg_a',
+      emoji: 'thumbsup',
+    }),
+    result(13, 't12'),
+    use(14, 'mcp__hearthbot__react', { message_id: 'cmsg_a', emoji: 'tada' }),
+    // No result: the call never landed, so nobody saw the emoji.
+    use(16, 'mcp__hearthbot__reply', { text: 'lost' }),
+    result(17, 't16', 'rate limited', true),
+  ])
+
+  it('ties a reply call to the message it made, and that message to its edits', () => {
+    expect(hearth.replyIds.get('t0')).toBe('cmsg_a')
+    expect(hearth.edits.get('cmsg_a')?.map((edit) => edit.text)).toEqual(['v2'])
+  })
+
+  it('ignores edits and reactions that failed or never answered', () => {
+    expect(hearth.edits.get('cmsg_a')).toHaveLength(1)
+    expect(hearth.reactions.get('cmsg_a')).toHaveLength(4)
+    expect(hearth.replyIds.has('t16')).toBe(false)
+  })
+
+  it('shows only reactions not taken back, whichever way the emoji was written', () => {
+    expect(currentReactions(hearth.reactions.get('cmsg_a'))).toEqual(['👍'])
+    expect(emojiOf('+1')).toBe('👍')
+    expect(emojiOf('🙂')).toBe('🙂')
+    expect(emojiOf('nope_code')).toBe(':nope_code:')
+    expect(emojiOf('constructor')).toBe(':constructor:')
+  })
+})
+
+describe('parseStatus', () => {
+  it('reads the header and each marked step', () => {
+    expect(
+      parseStatus('Task\n\n✓ Read it\n**✓ Built it**\n✱ Testing\n○ Ship'),
+    ).toEqual({
+      header: 'Task',
+      lines: [
+        { mark: 'done', text: 'Read it' },
+        { mark: 'done', text: 'Built it' },
+        { mark: 'doing', text: 'Testing' },
+        { mark: 'todo', text: 'Ship' },
+      ],
+    })
+  })
+
+  it('drops bold wherever it sits', () => {
+    expect(parseStatus('**Task**\n✓ **Built** it')).toEqual({
+      header: 'Task',
+      lines: [{ mark: 'done', text: 'Built it' }],
+    })
   })
 })
