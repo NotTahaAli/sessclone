@@ -1,74 +1,67 @@
 import Link from 'next/link'
-import { SignedInLink } from './signed-in-link'
-import { Lockup } from '../_ui/logo'
 import type { ReactNode } from 'react'
 
-import { CONTACT_EMAIL, REPOSITORY } from './constants'
+import { Lockup } from '../_ui/logo'
+import { CONTACT_EMAIL, FRAME, REPOSITORY } from './constants'
+import { SignedInLink } from './signed-in-link'
 
-// MarketingFrame. Nav, footer, repository link — the two public pages hang
-// from it, and both themes and every width are its job rather than each
-// page's. The site shares every control and every colour token with the
-// dashboard and adds one display step: a serif face for headlines.
+// MarketingFrame, in Direction A (ticket 114): the dashboard's own ground,
+// type and hairlines, so the product looks like its own marketing. Both
+// themes, following the visitor's preference; the accent stays the Clay
+// default, since a signed-out visitor has no Org and so no seed.
 //
-// The accent is always Clay here: a signed-out visitor has no Org and so no
-// seed to apply, which is what `globals.css` already defaults to. Light and
-// dark still follow the visitor's own preference.
+// `/docs` is another ticket's (116); the nav links to it and builds nothing.
+
+const LINK = 'hover:text-text flex h-[var(--pill-h)] items-center'
+
 export default function MarketingLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-dvh flex-col">
-      <header className="border-rule border-b">
-        <nav className="mx-auto flex h-16 w-full max-w-[1120px] items-center justify-between gap-4 px-5">
+    <div className="bg-ground text-text flex min-h-dvh flex-col">
+      <header>
+        <nav
+          className={`${FRAME} flex items-center justify-between gap-4 py-3.5 lg:py-[18px]`}
+        >
           <Link
             href="/"
-            className="text-heading flex h-[var(--control-h)] items-center"
             aria-label="sessclone home"
+            className="flex items-center"
           >
             <Lockup />
           </Link>
-          <div className="text-body flex items-center gap-5">
-            <Link
-              href="/pricing"
-              className="hover:text-accent-text flex h-[var(--control-h)] items-center"
-            >
+          <div className="text-text-muted flex items-center gap-4 text-[13px]">
+            <Link href="/pricing" className={LINK}>
               Pricing
             </Link>
-            <a
-              href={REPOSITORY}
-              className="hover:text-accent-text flex h-[var(--control-h)] items-center"
-            >
-              Repository
+            <Link href="/docs" className={LINK}>
+              Docs
+            </Link>
+            <a href={REPOSITORY} className={`${LINK} max-sm:hidden`}>
+              GitHub
             </a>
             <SignedInLink variant="header" />
           </div>
         </nav>
       </header>
 
-      <main className="flex-1">{children}</main>
+      <main className="min-w-0 flex-1">{children}</main>
 
       <footer className="border-rule border-t">
-        <div className="text-caption text-text-muted mx-auto flex w-full max-w-[1120px] flex-col gap-3 px-5 py-8 sm:flex-row sm:items-center sm:justify-between">
-          <p>
-            sessclone — Claude Code usage and cost, for a whole team.
-            Self-hostable, free at any size.
-          </p>
-          <div className="flex flex-wrap gap-5">
-            <Link
-              href="/pricing"
-              className="hover:text-accent-text flex h-[var(--control-h)] items-center"
-            >
+        <div
+          className={`${FRAME} text-text-muted flex flex-col gap-2 py-6 text-caption sm:flex-row sm:items-center sm:justify-between`}
+        >
+          <p>sessclone · Claude Code usage and cost, for a whole team.</p>
+          <div className="flex flex-wrap gap-x-4">
+            <Link href="/pricing" className={LINK}>
               Pricing
             </Link>
-            <a
-              href={REPOSITORY}
-              className="hover:text-accent-text flex h-[var(--control-h)] items-center"
-            >
-              Repository
+            <Link href="/docs" className={LINK}>
+              Docs
+            </Link>
+            <a href={REPOSITORY} className={LINK}>
+              GitHub
             </a>
-            <a
-              href={`mailto:${CONTACT_EMAIL}`}
-              className="hover:text-accent-text flex h-[var(--control-h)] items-center"
-            >
-              Contact
+            <a href={`mailto:${CONTACT_EMAIL}`} className={LINK}>
+              {CONTACT_EMAIL}
             </a>
           </div>
         </div>
