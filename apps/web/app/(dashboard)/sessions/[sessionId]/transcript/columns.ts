@@ -95,3 +95,24 @@ export const earlierRange = (
   loadedFrom <= 0
     ? null
     : { start: Math.max(0, loadedFrom - chunk), end: loadedFrom - 1 }
+
+/** Room at the top that counts as "near the start" and triggers a load. */
+export const NEAR_TOP = 600
+
+/**
+ * Whether the main column should fetch the next earlier chunk without being
+ * scrolled: there is more before `from`, and either nothing has parsed yet —
+ * a last line longer than a chunk yields no whole line, and an empty column
+ * has nothing to scroll — or what has does not fill the view.
+ */
+export const keepReading = ({
+  from,
+  items,
+  scrollHeight,
+  clientHeight,
+}: {
+  from: number
+  items: number
+  scrollHeight: number
+  clientHeight: number
+}) => from > 0 && (items === 0 || scrollHeight <= clientHeight + NEAR_TOP)

@@ -21,7 +21,7 @@ import {
   type Preset,
 } from '@sessclone/shared'
 
-import { agentColumn, earlierRange } from './columns'
+import { NEAR_TOP, agentColumn, earlierRange, keepReading } from './columns'
 import { ColumnContext, TaskStatusContext, useViewer } from './context'
 import { concat, readBytes, type StoredFile } from './data'
 import { Badge, RowView, rowKey } from './rows'
@@ -57,8 +57,6 @@ function Rows({ items, preset }: { items: Item[]; preset: Preset }) {
   )
 }
 
-/** Room at the top that counts as "near the start" and triggers a load. */
-const NEAR_TOP = 600
 const EMPTY = new Uint8Array(0)
 
 type Loaded = {
@@ -153,7 +151,7 @@ export function MainColumn({
         const element = scroller.current
         settle.current = toStart
           ? 'top'
-          : first || !element
+          : state.items.length === 0 || !element
             ? 'bottom'
             : { fromBottom: element.scrollHeight - element.scrollTop }
         current.current = next
@@ -180,23 +178,31 @@ export function MainColumn({
   useLayoutEffect(() => {
     const element = scroller.current
     const target = settle.current
-    if (!element || target === null || loaded.items.length === 0) return
-    settle.current = null
-    element.scrollTop =
-      target === 'bottom'
-        ? element.scrollHeight
-        : target === 'top'
-          ? 0
-          : element.scrollHeight - target.fromBottom
-    // A filter can leave a chunk with too few rows to scroll; keep reading
-    // until there is something to scroll or nothing left.
+    if (!element) return
+    if (target !== null && loaded.items.length > 0) {
+      settle.current = null
+      element.scrollTop =
+        target === 'bottom'
+          ? element.scrollHeight
+          : target === 'top'
+            ? 0
+            : element.scrollHeight - target.fromBottom
+    }
+    // A chunk that parsed to nothing (a last line longer than a chunk), or a
+    // filter leaving too few rows to scroll: keep reading until there is
+    // something to scroll or nothing left.
     if (
-      loaded.from > 0 &&
-      element.scrollHeight <= element.clientHeight + NEAR_TOP
+      loaded.from < file.sizeBytes &&
+      keepReading({
+        from: loaded.from,
+        items: loaded.items.length,
+        scrollHeight: element.scrollHeight,
+        clientHeight: element.clientHeight,
+      })
     ) {
       void load(false)
     }
-  }, [loaded, load])
+  }, [loaded, load, file.sizeBytes])
 
   const onScroll = useCallback(() => {
     const element = scroller.current

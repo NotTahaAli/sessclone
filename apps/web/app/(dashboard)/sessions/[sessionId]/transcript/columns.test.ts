@@ -4,6 +4,7 @@ import {
   agentColumn,
   columnWidths,
   earlierRange,
+  keepReading,
   readWidths,
   toggleColumn,
   workflowColumn,
@@ -66,5 +67,22 @@ describe('earlierRange', () => {
     expect(earlierRange(2500, 1000)).toEqual({ start: 1500, end: 2499 })
     expect(earlierRange(700, 1000)).toEqual({ start: 0, end: 699 })
     expect(earlierRange(0, 1000)).toBeNull()
+  })
+})
+
+describe('keepReading', () => {
+  const view = { scrollHeight: 5000, clientHeight: 800 }
+  it('keeps reading while nothing has parsed, even when the view looks full', () => {
+    // A last line over a chunk long: no whole line yet, nothing to scroll.
+    expect(keepReading({ from: 3_000_000, items: 0, ...view })).toBe(true)
+  })
+  it('keeps reading while the rows do not overflow the view', () => {
+    expect(
+      keepReading({ from: 10, items: 3, scrollHeight: 900, clientHeight: 800 }),
+    ).toBe(true)
+  })
+  it('stops once the rows overflow, or at the start of the file', () => {
+    expect(keepReading({ from: 10, items: 3, ...view })).toBe(false)
+    expect(keepReading({ from: 0, items: 0, ...view })).toBe(false)
   })
 })
