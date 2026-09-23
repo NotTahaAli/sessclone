@@ -48,22 +48,22 @@ work.
 | ------------------------------- | -------- | ------------------------------------------------------------------------------ |
 | `NEXT_PUBLIC_SUPABASE_URL`      | yes      | Project URL. `NEXT_PUBLIC_` because the browser needs it                       |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes      | Anon key. Public by design; row-level security protects the rows, not this key |
-| `SUPABASE_SERVICE_ROLE_KEY`     | yes      | **Bypasses every policy.** Server-only, and only on ingest paths               |
 
 Sign-in is GitHub OAuth and a magic link; no password is created or stored.
 Both are configured in the Supabase project: GitHub needs a client id and
 secret under Authentication, and both need `<NEXT_PUBLIC_APP_URL>/auth/callback`
 in the project's allowed redirect URLs.
 
-`SUPABASE_SERVICE_ROLE_KEY` is the most dangerous value here. It is never read
-by a page, a client component or anything else the browser can reach, and it
-carries no `NEXT_PUBLIC_` prefix so that a mistake is a build-time absence
-rather than a shipped credential.
+The Supabase service role key is **not needed**: no code reads it. Ingest
+writes through `INGEST_DATABASE_URL` instead, so leave the service role key out
+of the deployment's environment entirely — a key that bypasses every policy is
+safest where nothing can read it.
 
 The magic-link email is sent by Supabase and configured in the Supabase
-project's own SMTP settings. The invitation email is the app's own, below.
+project's own SMTP settings. The invitation email and the sign-up note are the
+app's own, below.
 
-### Invitation email
+### Email (SMTP)
 
 | Variable    | Required | What it is                                                                      |
 | ----------- | -------- | ------------------------------------------------------------------------------- |
@@ -74,6 +74,29 @@ Both or neither. With them set, inviting someone emails them the join link;
 without, the inviter is given the link to pass on themselves — the same link
 the email would carry. `smtp://` uses STARTTLS when the server offers it;
 `smtps://` is TLS from the first byte.
+
+The same two variables send the platform admins a note each time somebody signs
+up and creates an Org waiting for approval, with a link to that Org under
+**/admin → Orgs**. Unset, nothing is sent; the Admin panel lists waiting Orgs
+first and counts them on its navigation link either way.
+
+### Sign-up approval
+
+| Variable          | Required | Default | What it is                                                    |
+| ----------------- | -------- | ------- | ------------------------------------------------------------- |
+| `SIGNUP_APPROVAL` | no       | on      | `off` lets a new Org in without a platform admin approving it |
+
+On by default, self-hosted deployments included. An Org whose subscription is
+`inactive` — where every sign-up starts, on the plan it picked — or which has
+no subscription row, or is `cancelled`, is locked: the dashboard shows only a
+waiting page and Sign out, no key can be created, and ingest answers its
+existing keys with the same 401 as any unknown key. `past_due` is not locked;
+it keeps its notice and works. A platform admin approves an Org by setting it
+`active` under **/admin → Orgs**, where waiting Orgs are listed first.
+
+Any value other than `off` (case-insensitive) leaves it on. With it off, every
+status behaves as it did before the lock: a notice on every page, collection
+working. Read per request, so a restart is enough to change it.
 
 ### Public base URL
 
@@ -105,7 +128,9 @@ path. With these unset, archival is off and everything else works.
 
 [Self-hosting](/docs/self-hosting#3-check-your-bucket-actually-works) has the
 script that checks a bucket speaks every part of the S3 API this uses, and the
-CORS rule the transcript viewer needs.
+CORS rule the transcript viewer needs. That script reads the same variables,
+plus `STORAGE_COMPAT_CREATE_BUCKET=true` to create the bucket before checking
+it.
 
 ### Retention sweep
 
@@ -200,6 +225,12 @@ after 30 days by default and would take the cursors and the queue with it:
 
 Only the Linux row has been observed on a real machine so far; treat the other
 two as the intended behaviour.
+
+`HTTPS_PROXY` (or `https_proxy`) is honoured: when one is set, the Collector
+restarts its hook once with `NODE_USE_ENV_PROXY=1` so Node's `fetch` goes
+through the proxy. That is what a Claude Code cloud environment needs, since
+its egress proxy is what adds the credential. You never set
+`NODE_USE_ENV_PROXY` yourself.
 
 `CLAUDE_CONFIG_DIR` is Claude Code's variable. The Collector reads it —
 `CLAUDE_CONFIG_DIR`, else `~/.claude`, exactly as Claude Code does — to find
