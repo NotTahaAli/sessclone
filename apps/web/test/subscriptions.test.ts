@@ -505,3 +505,39 @@ test("the history reads each event's agreed price back", async () => {
     { priceBaseCents: null, priceSeatCents: null },
   ])
 })
+
+test('a status-only change keeps the agreed price', async () => {
+  const tierId = await seedTier('enterprise')
+  const set = (price: { priceBaseCents?: null; priceSeatCents?: null } = {}) =>
+    asOperator((tx) =>
+      setSubscription(tx, {
+        orgId: fixture.acme.id,
+        tierId,
+        status: 'past_due',
+        note: null,
+        ...price,
+      }),
+    )
+  await asOperator((tx) =>
+    setSubscription(tx, {
+      orgId: fixture.acme.id,
+      tierId,
+      status: 'active',
+      note: null,
+      priceBaseCents: 50_000,
+      priceSeatCents: 800,
+    }),
+  )
+
+  // Omitted is "leave it"; only an explicit null clears it.
+  expect(await set()).toEqual({ saved: true, recorded: true })
+  const price = () => sql<{ base: number | null; seat: number | null }[]>`
+    select price_base_cents as base, price_seat_cents as seat
+      from subscriptions where org_id = ${fixture.acme.id}
+  `
+  expect(await price()).toEqual([{ base: 50_000, seat: 800 }])
+  expect(await set()).toEqual({ saved: true, recorded: false })
+
+  await set({ priceBaseCents: null, priceSeatCents: null })
+  expect(await price()).toEqual([{ base: null, seat: null }])
+})

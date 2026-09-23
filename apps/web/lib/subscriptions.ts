@@ -335,7 +335,8 @@ export const setSubscription = async (
     tierId: string
     status: SubscriptionStatus
     note: string | null
-    /** The price agreed with the Org, monthly US cents; null clears it. */
+    /** The price agreed with the Org, monthly US cents; null clears it and
+     * omitted keeps what is stored, so a status-only change cannot erase it. */
     priceBaseCents?: number | null
     priceSeatCents?: number | null
   },
@@ -353,6 +354,15 @@ export const setSubscription = async (
      where org_id = ${subscription.orgId}
   `
 
+  const base =
+    subscription.priceBaseCents === undefined
+      ? (before?.price_base_cents ?? null)
+      : subscription.priceBaseCents
+  const seat =
+    subscription.priceSeatCents === undefined
+      ? (before?.price_seat_cents ?? null)
+      : subscription.priceSeatCents
+
   await tx`
     select set_config('sessclone.subscription_note',
                       ${subscription.note ?? ''}, true)
@@ -363,8 +373,7 @@ export const setSubscription = async (
       (org_id, tier_id, status, provider, price_base_cents, price_seat_cents)
     values (${subscription.orgId}, ${subscription.tierId},
             ${subscription.status}, 'manual',
-            ${subscription.priceBaseCents ?? null},
-            ${subscription.priceSeatCents ?? null})
+            ${base}, ${seat})
     on conflict (org_id) do update
        set tier_id = excluded.tier_id,
            status = excluded.status,
@@ -385,7 +394,7 @@ export const setSubscription = async (
       (!before ||
         before.tier_id !== subscription.tierId ||
         before.status !== subscription.status ||
-        before.price_base_cents !== (subscription.priceBaseCents ?? null) ||
-        before.price_seat_cents !== (subscription.priceSeatCents ?? null)),
+        before.price_base_cents !== base ||
+        before.price_seat_cents !== seat),
   }
 }
