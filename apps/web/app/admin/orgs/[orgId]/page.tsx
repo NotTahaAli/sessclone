@@ -181,7 +181,9 @@ export default async function Page({
             <li key={event.id}>
               <Row
                 lead="none"
-                name={`${event.tierName} · ${event.status}`}
+                name={`${event.tierName} · ${event.status} · ${
+                  agreedPrice(event) ?? 'Tier price'
+                }`}
                 meta={`${event.occurredAt
                   .toISOString()
                   .slice(0, 16)

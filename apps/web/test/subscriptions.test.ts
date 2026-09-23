@@ -474,3 +474,34 @@ test('a price-only change is a change, and the history keeps the price', async (
     { note: 'agreed on the call', base: 50_000 },
   ])
 })
+
+test("the history reads each event's agreed price back", async () => {
+  const tierId = await seedTier('enterprise')
+  const set = (priceBaseCents: number | null, priceSeatCents: number | null) =>
+    asOperator((tx) =>
+      setSubscription(tx, {
+        orgId: fixture.acme.id,
+        tierId,
+        status: 'active',
+        note: null,
+        priceBaseCents,
+        priceSeatCents,
+      }),
+    )
+
+  await set(null, null)
+  await set(50_000, 800)
+
+  const history = await asOperator((tx) =>
+    subscriptionHistory(tx, fixture.acme.id),
+  )
+  expect(
+    history.map(({ priceBaseCents, priceSeatCents }) => ({
+      priceBaseCents,
+      priceSeatCents,
+    })),
+  ).toEqual([
+    { priceBaseCents: 50_000, priceSeatCents: 800 },
+    { priceBaseCents: null, priceSeatCents: null },
+  ])
+})

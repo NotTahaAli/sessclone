@@ -211,6 +211,10 @@ export type SubscriptionEvent = {
   actorName: string | null
   provider: string
   occurredAt: Date
+  /** The price agreed when this happened, monthly US cents; both null when
+   * the Tier's own price applied. */
+  priceBaseCents: number | null
+  priceSeatCents: number | null
 }
 
 /**
@@ -235,6 +239,8 @@ export const subscriptionHistory = async (
       actor_name: string | null
       provider: string
       occurred_at: Date
+      price_base_cents: number | null
+      price_seat_cents: number | null
     }[]
   >`
     select event.id::text as id,
@@ -243,7 +249,9 @@ export const subscriptionHistory = async (
            event.note,
            coalesce(actor.display_name, actor.email) as actor_name,
            event.provider,
-           event.occurred_at
+           event.occurred_at,
+           event.price_base_cents,
+           event.price_seat_cents
       from subscription_events event
       join tiers tier on tier.id = event.tier_id
       left join users actor on actor.id = event.actor_user_id
@@ -260,6 +268,8 @@ export const subscriptionHistory = async (
     actorName: row.actor_name,
     provider: row.provider,
     occurredAt: row.occurred_at,
+    priceBaseCents: row.price_base_cents,
+    priceSeatCents: row.price_seat_cents,
   }))
 }
 
