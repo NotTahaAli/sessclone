@@ -81,9 +81,23 @@ function CodeBox({
 
 const COMPONENTS: Components = {
   pre: CodeBox,
-  a: ({ node: _node, ...props }) => (
-    <a {...props} target="_blank" rel="noopener noreferrer" />
-  ),
+  // External links open in a new tab; in-page ones (footnotes) do not.
+  a: ({ node: _node, ...props }) =>
+    props.href?.startsWith('#') ? (
+      <a {...props} />
+    ) : (
+      <a {...props} target="_blank" rel="noopener noreferrer" />
+    ),
+  // Never fetched: an image URL in a transcript could carry a secret out to
+  // whoever serves it, from every reader's browser. A link, opened on purpose.
+  img: ({ src, alt }) =>
+    typeof src === 'string' && src ? (
+      <a href={src} target="_blank" rel="noopener noreferrer">
+        {alt || src}
+      </a>
+    ) : (
+      <span>{alt}</span>
+    ),
   table: ({ node: _node, ...props }) => (
     <div className="md-table">
       <table {...props} />

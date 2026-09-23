@@ -21,7 +21,7 @@ import {
 
 import { compact, count, usd } from '../../../../../lib/money'
 import { agentColumn, workflowColumn } from './columns'
-import { artifactInfo, writtenBefore } from './artifacts'
+import { artifactInfo, sealed, writtenBefore } from './artifacts'
 import {
   ColumnContext,
   ItemsContext,
@@ -284,6 +284,7 @@ function Message({
   mine,
   author,
   info,
+  raw,
   children,
 }: {
   at: string | null
@@ -294,11 +295,16 @@ function Message({
   author?: string | null
   /** Claude's messages only: what the "i" button's popup describes. */
   info?: Of<'assistant'>
+  /** The message exactly as Claude received it, when it arrived wrapped. */
+  raw?: string
   children: ReactNode
 }) {
   const [shown, setShown] = useState(false)
   const [menu, setMenu] = useState(false)
   const [infoOpen, setInfoOpen] = useState(false)
+  const [rawOpen, setRawOpen] = useState(false)
+  const openRaw = useCallback(() => setRawOpen(true), [])
+  const closeRaw = useCallback(() => setRawOpen(false), [])
   const [selectable, setSelectable] = useState(false)
   const [copied, setCopied] = useState(false)
   const body = useRef<HTMLDivElement>(null)
@@ -368,6 +374,11 @@ function Message({
         <Action label={copied ? 'Copied' : 'Copy'} onClick={copy}>
           {copied ? '✓' : '⧉'}
         </Action>
+        {raw ? (
+          <Action label="As Claude received it" onClick={openRaw}>
+            <span className="font-mono text-micro">{'</>'}</span>
+          </Action>
+        ) : null}
         {info ? (
           <Action label="About this message" onClick={openInfo}>
             <span className="font-serif italic">i</span>
@@ -383,6 +394,11 @@ function Message({
           ) : null}
         </div>
       </Sheet>
+      {raw ? (
+        <Sheet open={rawOpen} onClose={closeRaw} title="As Claude received it">
+          <Pre>{raw}</Pre>
+        </Sheet>
+      ) : null}
       {info ? (
         <Sheet open={infoOpen} onClose={closeInfo} title="About this message">
           {infoOpen ? <Breakdown item={info} /> : null}
@@ -458,7 +474,13 @@ function UserRow({ item }: { item: Of<'user'> }) {
       ]
     : []
   return (
-    <Message at={item.at} copyText={text} mine author={envelope?.author}>
+    <Message
+      at={item.at}
+      copyText={text}
+      mine
+      author={envelope?.author}
+      raw={envelope ? item.text : undefined}
+    >
       {attached.length ? (
         <span className="mb-1 flex flex-wrap justify-end gap-1">
           {attached.map((name, index) => (
@@ -480,43 +502,17 @@ function UserRow({ item }: { item: Of<'user'> }) {
       >
         {text}
       </p>
-      {long || envelope ? (
-        <span className="mt-1 flex justify-end gap-3">
-          {long ? (
-            <button
-              type="button"
-              onClick={flip}
-              aria-expanded={open}
-              className="text-accent-text text-caption underline"
-            >
-              {open ? 'Show less' : 'Show all'}
-            </button>
-          ) : null}
-          {envelope ? <RawText text={item.text} /> : null}
-        </span>
+      {long ? (
+        <button
+          type="button"
+          onClick={flip}
+          aria-expanded={open}
+          className="text-accent-text mt-1 block text-caption underline"
+        >
+          {open ? 'Show less' : 'Show all'}
+        </button>
       ) : null}
     </Message>
-  )
-}
-
-/** The message exactly as Claude received it, envelope and all. */
-function RawText({ text }: { text: string }) {
-  const [open, setOpen] = useState(false)
-  const show = useCallback(() => setOpen(true), [])
-  const hide = useCallback(() => setOpen(false), [])
-  return (
-    <>
-      <button
-        type="button"
-        onClick={show}
-        className="text-text-muted text-caption underline"
-      >
-        Raw
-      </button>
-      <Sheet open={open} onClose={hide} title="As Claude received it">
-        <Pre>{text}</Pre>
-      </Sheet>
-    </>
   )
 }
 
@@ -669,7 +665,7 @@ function ArtifactCard({ row }: { row: Extract<Row, { kind: 'tool' }> }) {
               {info.description ?? `Artifact · ${name}`}
             </span>
           </span>
-          {info.url ? (
+          {info.url && info.url.startsWith('https://') ? (
             <a
               href={info.url}
               target="_blank"
@@ -699,15 +695,16 @@ function ArtifactCard({ row }: { row: Extract<Row, { kind: 'tool' }> }) {
             <iframe
               title={`Preview of ${info.title ?? name}`}
               sandbox="allow-scripts"
-              srcDoc={written.html}
+              srcDoc={sealed(written.html)}
               loading="lazy"
               className="border-rule h-[28rem] w-full border-t bg-white"
             />
           </>
         ) : written ? (
           <p className="text-text-muted border-rule border-t px-3 py-2 text-caption">
-            The page&apos;s HTML is not in this transcript, so there is no
-            preview. {info.url ? 'Open shows the published page.' : ''}
+            The page&apos;s HTML is not in the loaded part of this transcript,
+            so there is no preview.{' '}
+            {info.url ? 'Open shows the published page.' : ''}
           </p>
         ) : null}
       </div>

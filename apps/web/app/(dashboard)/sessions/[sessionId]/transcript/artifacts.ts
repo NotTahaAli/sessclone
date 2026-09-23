@@ -28,6 +28,25 @@ export const artifactInfo = (
   }
 }
 
+/**
+ * The preview's own Content-Security-Policy. The frame is already sandboxed
+ * without same-origin, so it cannot reach the dashboard; this also stops the
+ * page sending anything anywhere (the HTML may quote secrets from the
+ * session), while still loading scripts and fonts from the CDNs artifacts use.
+ * Placed after any doctype, since a tag before it would drop the page into
+ * quirks mode.
+ */
+const PREVIEW_CSP =
+  "default-src 'none'; script-src 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data: blob:"
+
+export const sealed = (html: string) => {
+  const meta = `<meta http-equiv="Content-Security-Policy" content="${PREVIEW_CSP}">`
+  const doctype = /^\s*<!doctype[^>]*>/i.exec(html)
+  return doctype
+    ? `${doctype[0]}${meta}${html.slice(doctype[0].length)}`
+    : `${meta}${html}`
+}
+
 export type Written =
   | {
       status: 'found'

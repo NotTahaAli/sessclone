@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useRef,
   type MouseEvent,
   type PointerEvent,
@@ -26,11 +27,11 @@ export function Sheet({
   children: ReactNode
 }) {
   const dialog = useRef<HTMLDialogElement>(null)
+  const heading = useId()
+  // Mounted only while open, so a long transcript carries no closed dialogs.
   useEffect(() => {
     const element = dialog.current
-    if (!element) return
-    if (open && !element.open) element.showModal()
-    if (!open && element.open) element.close()
+    if (open && element && !element.open) element.showModal()
   }, [open])
   // A click on the backdrop lands on the dialog itself, outside its box.
   const onClick = useCallback(
@@ -39,30 +40,31 @@ export function Sheet({
     },
     [onClose],
   )
+  if (!open) return null
   return (
     <dialog
       ref={dialog}
-      aria-label={title}
+      aria-labelledby={heading}
       onClose={onClose}
       onClick={onClick}
       className="bg-ground text-text border-rule backdrop:bg-overlay-scrim fixed inset-x-0 top-auto bottom-0 m-0 max-h-[85dvh] w-full max-w-none overflow-y-auto rounded-t-2xl border p-0 lg:inset-0 lg:m-auto lg:max-h-[80dvh] lg:w-[28rem] lg:rounded-xl"
     >
-      {open ? (
-        <div className="flex flex-col gap-3 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-heading">{title}</h2>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close"
-              className="text-text-muted hover:bg-surface-hover hover:text-text grid size-8 place-items-center rounded-md"
-            >
-              ✕
-            </button>
-          </div>
-          {children}
+      <div className="flex flex-col gap-3 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <div className="flex items-center justify-between gap-2">
+          <h2 id={heading} className="text-heading">
+            {title}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="text-text-muted hover:bg-surface-hover hover:text-text grid size-8 place-items-center rounded-md"
+          >
+            ✕
+          </button>
         </div>
-      ) : null}
+        {children}
+      </div>
     </dialog>
   )
 }
