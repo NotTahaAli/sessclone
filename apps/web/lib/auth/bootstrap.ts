@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 
+import { approvalRequired } from '../approval'
 import { asViewer } from '../db'
 import { requestPlan, type SignupPlan } from '../subscriptions'
 
@@ -152,7 +153,8 @@ export const ensureOrgForSigner = async (
     // In a savepoint, and a refusal swallowed: a size the Tier does not allow
     // is an ask the operator settles, not a sign-in that fails. The Org still
     // exists and still waits; it simply waits with no plan on it.
-    if (plan) {
+    // Not at all with approval switched off: nobody would ever confirm it.
+    if (plan && approvalRequired()) {
       await tx
         .savepoint((sp) => requestPlan(sp, { orgId, ...plan }))
         .catch((cause: unknown) => {

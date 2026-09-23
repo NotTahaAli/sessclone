@@ -184,3 +184,23 @@ test('re-admitting a Member cannot take the Org over its Tier’s ceiling', asyn
     ),
   ).toBe(true)
 })
+
+test('a plan nobody approved sets no ceiling', async () => {
+  // A sign-up's ask is an `inactive` row (ticket 118). With approval switched
+  // off nobody activates it, and a Personal ask must not cap the Org at one.
+  const [tier] = await sql<{ id: string }[]>`
+    insert into tiers (key, name, seat_price_usd, max_seats, sort_order)
+    values ('capped', 'Capped', 10, ${await seats(fixture.acme.id)}, 1)
+    returning id
+  `
+  await sql`
+    insert into subscriptions (org_id, tier_id, status)
+    values (${fixture.acme.id}, ${tier!.id}, 'inactive')
+  `
+
+  expect(
+    await asRole(fixture.acme, 'owner', (tx) =>
+      setMemberRemoved(tx, fixture.acme.members.removed, false),
+    ),
+  ).toBe(true)
+})

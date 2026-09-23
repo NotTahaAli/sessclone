@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 
-import { beforeEach, describe, expect, test } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { asUser, owner as sql, seedFixture, type Fixture } from './harness'
 
@@ -147,6 +147,23 @@ describe('the plan a sign-up asks for (ticket 118)', () => {
 
   beforeEach(async () => {
     await sql.unsafe(readFileSync(TIER_SEED, 'utf8'))
+    // Asked for only where an operator approves it (ticket 119).
+    vi.stubEnv('SIGNUP_APPROVAL', 'on')
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  test('is not asked for with approval switched off', async () => {
+    // Nobody would ever confirm it, and an unconfirmed ask is not a plan.
+    vi.stubEnv('SIGNUP_APPROVAL', 'off')
+    const org = await ensureOrgForSigner(randomUUID(), 'solo@example.test', {
+      plan: { tierKey: 'personal', seats: 1 },
+    })
+
+    expect(org?.created).toBe(true)
+    expect(await planOf(org!.orgId)).toEqual([])
   })
 
   test('is written as an inactive row on that Tier, with the Team size', async () => {

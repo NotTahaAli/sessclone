@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
 
 import { sendMagicLink, signInWithGitHub } from './actions'
+import { approvalRequired } from '../../lib/approval'
 import { readAnonymously } from '../../lib/db'
 import { invitationOrg } from '../../lib/invitations'
 import { logoPath } from '../../lib/org-logo'
@@ -102,13 +103,16 @@ async function InvitedBy({ searchParams }: { searchParams: Query }) {
  * size. It is only an ask — the Org waits for the operator to approve it
  * (ticket 119) — and it is ignored for anybody who already has an Org.
  *
- * Absent on the way to an invitation, where the visitor is joining somebody
- * else's Org rather than starting one. The Tiers are the cached rows the
- * pricing page reads, so a size the operator changed is the size offered.
+ * Absent with `SIGNUP_APPROVAL=off`, and on the way to an invitation, where
+ * the visitor is joining somebody else's Org rather than starting one. The
+ * Tiers are the cached rows the pricing page reads, so a size the operator
+ * changed is the size offered.
  */
 async function PlanChoice({ searchParams }: { searchParams: Query }) {
   const { next, plan } = await searchParams
   if (invitationToken(safeNext(next))) return null
+  // With approval switched off nobody confirms a plan, so there is none to ask.
+  if (!approvalRequired()) return null
 
   const tiers = (await marketingTiers()).filter((tier) =>
     (SIGNUP_PLANS as readonly string[]).includes(tier.key),
