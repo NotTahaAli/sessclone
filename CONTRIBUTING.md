@@ -1,10 +1,20 @@
 # Contributing
 
+Thanks for looking. Bug reports, fixes, docs and features are all welcome.
+
+- **Code of conduct.** Everyone taking part agrees to
+  [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
+- **Security issues** go through [`SECURITY.md`](SECURITY.md), never a public
+  issue: transcripts carry source code and sometimes credentials.
+- **Questions and help** are covered by [`SUPPORT.md`](SUPPORT.md).
+- **Setting up.** [`README.md`](README.md#development) has the install, the
+  local Postgres roles and the commands CI runs.
+
 ## Licence of what you send
 
 Contributions are accepted under **AGPL-3.0-only together with the additional
 term in [`NOTICE.md`](NOTICE.md)** — the section 7(b) term that keeps the
-panel's legal notices and the sessclone credit visible. Opening a pull request
+panel's legal notices and the SessClone credit visible. Opening a pull request
 is an offer of your work under those terms. You keep the copyright in what you
 wrote.
 
@@ -25,6 +35,22 @@ git commit -s -m "fix(ingest): stop double-counting a resumed session"
 That line is the [Developer Certificate of Origin](https://developercertificate.org)
 1.1: you are saying you have the right to send this work under this project's
 licence. It is one flag on one command, and it is the whole ceremony.
+
+The [DCO app](https://github.com/apps/dco) checks every pull request and marks
+it failing while any commit lacks the line. To fix a branch after the fact,
+`git rebase --signoff main` and force-push.
+
+## Commit messages
+
+The history follows [Conventional Commits](https://www.conventionalcommits.org):
+`type(scope): summary`, lower case, no trailing full stop. The types in use are
+`feat`, `fix`, `perf`, `docs`, `test` and `chore`; the scope is the area
+touched, such as `web`, `collector`, `db` or `ingest`, and may be left out.
+
+```text
+fix(collector): send sidecars only to a server that echoes the kind
+docs: some migrations run after the deploy, not before
+```
 
 ## There is no Contributor Licence Agreement
 
@@ -63,7 +89,8 @@ pnpm test        # vitest, every suite
 pnpm format      # prettier --check
 ```
 
-The database suites need a local Postgres; `README.md` says how to get one.
+The database suites need a local Postgres;
+[`README.md`](README.md#the-database) says how to get one.
 
 ## Running it yourself, and sending it back
 

@@ -183,7 +183,7 @@ claude.ai/code.
 
    ```bash
    claude plugin marketplace add NotTahaAli/sessclone
-   claude plugin install sessclone --config url=https://sessclone.vercel.app --config api_key=sk_0000000000000000000000000000000000000000000
+   claude plugin install sessclone --config url=https://sessclone.com --config api_key=sk_0000000000000000000000000000000000000000000
    ```
 
 2. **API credential.** Under **API credentials**, select **Add credential**
@@ -191,7 +191,7 @@ claude.ai/code.
 
    - **Name**: `SessClone`
    - **Credential type**: Bearer
-   - **Allowed websites**: `sessclone.vercel.app`
+   - **Allowed websites**: `sessclone.com`
    - **Custom headers**: name `Authorization`, prefix `Bearer`, and your key
      from **Keys** as the value
 
@@ -214,7 +214,7 @@ session start prints a line saying the key was refused.
 Claude offers API credentials on Pro and Max plans only, not yet on Team or
 Enterprise, and not on a self-hosted environment.
 
-Ticket 32's "one setup step per machine" reads as "one setup step per
+The usual "one setup step per machine" reads as "one setup step per
 environment" here, performed in a browser.
 
 ### What differs in a cloud environment

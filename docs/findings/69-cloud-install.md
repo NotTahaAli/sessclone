@@ -32,14 +32,14 @@ variable exported inside a session dies with the container that set it.
 
 ## Results
 
-| Environment                  | Device key                                   | Turns arrived                 | Notes                                |
-| ---------------------------- | -------------------------------------------- | ----------------------------- | ------------------------------------ |
-| Claude Projects, container 1 | `cloud:6c6ec04b-15a2-4eba-915f-ae53ff0e1e8d` | yes — backfilled by the sweep | 14 Turns, one Session, 2026-09-22    |
-| Claude Projects, container 2 | `cloud:6c6ec04b-15a2-4eba-915f-ae53ff0e1e8d` | yes                           | same key, second Session             |
-| With a subagent              | `cloud:6c6ec04b-15a2-4eba-915f-ae53ff0e1e8d` | yes                           | 21 Turns at `spawn_depth` 1          |
-| Abandoned after a turn       | `cloud:6c6ec04b-15a2-4eba-915f-ae53ff0e1e8d` | yes                           | nothing lost                         |
-| Killed mid-turn              | `cloud:6c6ec04b-15a2-4eba-915f-ae53ff0e1e8d` | baseline only                 | the in-flight turn is lost for good  |
-| Moved between repositories   | every container above                        | yes                           | two Project keys per Session (below) |
+| Environment                  | Device key             | Turns arrived                 | Notes                                |
+| ---------------------------- | ---------------------- | ----------------------------- | ------------------------------------ |
+| Claude Projects, container 1 | `cloud:<account-uuid>` | yes — backfilled by the sweep | 14 Turns, one Session, 2026-09-22    |
+| Claude Projects, container 2 | `cloud:<account-uuid>` | yes                           | same key, second Session             |
+| With a subagent              | `cloud:<account-uuid>` | yes                           | 21 Turns at `spawn_depth` 1          |
+| Abandoned after a turn       | `cloud:<account-uuid>` | yes                           | nothing lost                         |
+| Killed mid-turn              | `cloud:<account-uuid>` | baseline only                 | the in-flight turn is lost for good  |
+| Moved between repositories   | every container above  | yes                           | two Project keys per Session (below) |
 
 ### Paste per environment
 
@@ -53,7 +53,7 @@ delivered from it:
 ```
 Platform     linux — Linux 6.18.44-fc-v37
 Node         22.22.2 — ok
-Device key   cloud:6c6ec04b-15a2-4eba-915f-ae53ff0e1e8d
+Device key   cloud:<account-uuid>
 URL          https://supabase.vercel.app
 Key          not set
 
@@ -93,7 +93,7 @@ reaches the next container and not the running one. Its first turn boundary
 delivered.
 
 **Turns arrive, and the backfill is real.** 11 Turns in one Session, under
-`cloud:6c6ec04b-15a2-4eba-915f-ae53ff0e1e8d`. The earliest Turn _occurred_ at
+`cloud:<account-uuid>`. The earliest Turn _occurred_ at
 09:40:11Z and the whole batch was _received_ at 09:41:08Z, when the first `Stop`
 hook ran: work done before the Collector was live arrived anyway, read from the
 transcript by cursor rather than re-run. That is point 2, and it is the property

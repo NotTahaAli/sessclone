@@ -1,6 +1,6 @@
 {
   "name": "sessclone",
-  "description": "The sessclone Collector plugin.",
+  "description": "The SessClone Collector plugin.",
   "owner": {
     "name": "sessclone contributors"
   },
@@ -8,7 +8,7 @@
     {
       "name": "sessclone",
       "source": "./packages/plugin",
-      "description": "Sends Claude Code usage to a sessclone deployment."
+      "description": "Sends Claude Code usage to a SessClone deployment."
     }
   ]
 }

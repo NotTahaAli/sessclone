@@ -155,7 +155,7 @@ look identical on the filesystem, so this cannot be fixed by keying Session
 identity on the project directory without breaking the sweep it exists to
 serve.
 
-It belongs to ticket 36, and this ADR deliberately does **not** hand it a
+It was left to ticket 36 (since done), and this ADR deliberately does **not** hand it a
 discriminator, because the obvious one does not survive being measured. A
 nested run's transcript is self-contained — no `parentUuid` points outside its
 file — which suggests that a moved Session's second file would dangle a
