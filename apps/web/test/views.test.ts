@@ -3,7 +3,9 @@ import { expect, test } from 'vitest'
 import {
   DEFAULT_VIEW,
   isDimension,
+  resolveTimeColumn,
   resolveView,
+  tickDates,
   viewHref,
 } from '../app/(dashboard)/costs/views'
 
@@ -39,4 +41,41 @@ test('an unknown view in the URL falls back rather than erroring', () => {
   expect(resolveView('failures')).toBe('failures')
   expect(resolveView('nonsense')).toBe(DEFAULT_VIEW)
   expect(resolveView(undefined)).toBe(DEFAULT_VIEW)
+})
+
+test('an Over time column opens a real day or a model, nothing else', () => {
+  expect(resolveTimeColumn('day:2026-09-23')).toEqual({
+    kind: 'day',
+    date: '2026-09-23',
+  })
+  expect(resolveTimeColumn('model:claude-opus-4-6')).toEqual({
+    kind: 'model',
+    model: 'claude-opus-4-6',
+  })
+  // A model name may itself hold a colon; only the first one is the kind's.
+  expect(resolveTimeColumn('model:vendor:x')).toEqual({
+    kind: 'model',
+    model: 'vendor:x',
+  })
+  expect(resolveTimeColumn('day:2026-02-30')).toBeNull()
+  expect(resolveTimeColumn('day:yesterday')).toBeNull()
+  expect(resolveTimeColumn('model:')).toBeNull()
+  expect(resolveTimeColumn('m1')).toBeNull()
+  expect(resolveTimeColumn(undefined)).toBeNull()
+})
+
+test('the chart labels its first day, its last, and today between them', () => {
+  const days = Array.from(
+    { length: 30 },
+    (_, index) => `2026-09-${String(index + 1).padStart(2, '0')}`,
+  )
+  expect(tickDates(days, '2026-09-23')).toEqual([
+    '2026-09-01',
+    '2026-09-23',
+    '2026-09-30',
+  ])
+  // Today on top of an end would print over it, so the end speaks for it.
+  expect(tickDates(days, '2026-09-29')).toEqual(['2026-09-01', '2026-09-30'])
+  expect(tickDates(days, '2026-10-05')).toEqual(['2026-09-01', '2026-09-30'])
+  expect(tickDates(['2026-09-01'], '2026-09-01')).toEqual(['2026-09-01'])
 })

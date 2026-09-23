@@ -177,6 +177,19 @@ export type SessionFilter = {
 /** `(last turn, session id)`: the ordering key, so a page cannot repeat a row. */
 export type SessionCursor = { lastTurnAt: string; sessionId: string }
 
+/** `<iso>,<session id>` from a URL, or nothing: anything else is page one. */
+export const sessionCursorOf = (
+  value: string | string[] | undefined,
+): SessionCursor | undefined => {
+  const raw = (Array.isArray(value) ? value[0] : value) ?? ''
+  const comma = raw.indexOf(',')
+  if (comma < 1) return undefined
+  const lastTurnAt = raw.slice(0, comma)
+  const sessionId = raw.slice(comma + 1)
+  if (!sessionId || Number.isNaN(Date.parse(lastTurnAt))) return undefined
+  return { lastTurnAt, sessionId }
+}
+
 /**
  * The Sessions of a period, newest first.
  *

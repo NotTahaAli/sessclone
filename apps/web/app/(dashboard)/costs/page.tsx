@@ -2,13 +2,20 @@ import Link from 'next/link'
 
 import { Cut } from './[dimension]/[id]/cut'
 import { FailuresList } from './failures-list'
+import { TimeColumnView } from './over-time-column'
 import { RangeControl } from './range-control'
 import { RankedList } from './ranked-list'
-import { dayName, Sparkline, Summary } from './summary'
-import { isDimension, resolveView, VIEWS, type View } from './views'
+import { OverTime } from './over-time'
+import { Summary } from './summary'
+import {
+  isDimension,
+  resolveTimeColumn,
+  resolveView,
+  VIEWS,
+  type View,
+} from './views'
 import { EmptyState } from '../empty-state'
 import { Finder, FinderColumn, FinderList } from '../finder'
-import { todayIn } from '../sessions/status'
 import { InstallCollector } from '../install-collector'
 import { PageHeader } from '../page-header'
 import { hrefWith, one, type Query } from '../query'
@@ -31,7 +38,6 @@ import {
   sessionFailures,
   type Failures,
 } from '../../../lib/failures'
-import { compact, count, usd } from '../../../lib/money'
 import { resolveRange, type RangeParams } from '../../../lib/range'
 import { dailySpend, spendSeries, type SpendSeries } from '../../../lib/series'
 import { currentViewer } from '../../../lib/viewer'
@@ -124,6 +130,10 @@ export default async function Costs({
     !(open === 'none' && view === 'members')
       ? { dimension: view, id: open }
       : null
+  // Over time's rows and bars open a day's Sessions or a model's tokens.
+  const timeColumn =
+    state === 'collecting' && view === 'time' ? resolveTimeColumn(open) : null
+  const opened = column !== null || timeColumn !== null
 
   return (
     <div className="flex flex-col">
@@ -142,8 +152,8 @@ export default async function Costs({
           ) : null
         }
       />
-      <Finder column={column !== null}>
-        <FinderList column={column !== null}>
+      <Finder column={opened}>
+        <FinderList column={opened}>
           <Body
             facts={facts}
             view={view}
@@ -165,6 +175,16 @@ export default async function Costs({
               resolved={resolved}
               query={params}
               closeHref={hrefWith('/costs', params, { open: undefined })}
+            />
+          </FinderColumn>
+        ) : null}
+        {timeColumn ? (
+          <FinderColumn>
+            <TimeColumnView
+              viewer={viewer}
+              column={timeColumn}
+              resolved={resolved}
+              query={params}
             />
           </FinderColumn>
         ) : null}
@@ -266,7 +286,12 @@ function Body({
       // One of the two is always present, decided by the view above: the read
       // the other view would need was never issued.
       return view === 'time' || !isDimension(view) || ranked === null ? (
-        <OverTime series={spend!} timezone={timezone} />
+        <OverTime
+          series={spend!}
+          timezone={timezone}
+          params={params}
+          open={open}
+        />
       ) : (
         <Ranked cut={ranked} dimension={view} params={params} open={open} />
       )
@@ -293,95 +318,6 @@ function Body({
         </EmptyState>
       )
   }
-}
-
-/**
- * Spend over time: the summary with a bar a day beside it, then the models
- * the money went to and the days that had any.
- *
- * The By model rows are the legend of ticket 52's stacked chart, as rows: the
- * five largest models and Other, from the same series. The By day rows are
- * what that chart's table carried — the numbers a phone reader and a screen
- * reader get instead of a tooltip. Days with nothing in them are left out:
- * the bars already show the gap.
- */
-function OverTime({
-  series,
-  timezone,
-}: {
-  series: SpendSeries
-  timezone: string
-}) {
-  if (series.turns === 0) {
-    // Not the onboarding state: Turns exist, this window has none of them.
-    return (
-      <EmptyState headline="Nothing in this period">
-        Turns have arrived, but none of them fall between these dates. Pick a
-        wider period above.
-      </EmptyState>
-    )
-  }
-
-  const peak = Math.max(...series.series.map((entry) => entry.costUsd), 0)
-  const used = series.days.filter((day) => day.turns > 0).toReversed()
-
-  return (
-    <>
-      <Summary
-        costUsd={series.costUsd}
-        tokens={series.tokens}
-        turns={series.turns}
-        unpricedTurns={series.unpricedTurns}
-      >
-        <Sparkline days={series.days} today={todayIn(timezone)} />
-      </Summary>
-
-      {series.series.length > 0 ? (
-        <>
-          <SectionBreak>By model</SectionBreak>
-          <ol>
-            {series.series.map((entry) => (
-              <li key={entry.label}>
-                <Row
-                  lead="none"
-                  value={usd(entry.costUsd)}
-                  meter={peak > 0 ? entry.costUsd / peak : 0}
-                >
-                  <span className="font-mono">{entry.label}</span>
-                </Row>
-              </li>
-            ))}
-          </ol>
-        </>
-      ) : null}
-
-      <SectionBreak>By day</SectionBreak>
-      <ol>
-        {used.map((day) => (
-          <li key={day.date}>
-            <Row
-              lead="none"
-              name={dayName(day.date)}
-              // A day whose every Turn is unpriced is unknown, not zero.
-              value={day.unpricedTurns === day.turns ? '—' : usd(day.costUsd)}
-              sub={`${compact.format(day.tokens)} tokens · ${count.format(
-                day.turns,
-              )} ${day.turns === 1 ? 'turn' : 'turns'}${
-                day.unpricedTurns > 0
-                  ? ` · ${count.format(day.unpricedTurns)} unpriced`
-                  : ''
-              }`}
-            />
-          </li>
-        ))}
-      </ol>
-
-      <p className="text-text-muted mt-4 text-caption">
-        Cost is an estimate, derived from the usage reported and the published
-        prices. Days are the Org&apos;s own.
-      </p>
-    </>
-  )
 }
 
 /** What each breakdown's rows are, as the break above them says it. */

@@ -146,6 +146,13 @@ const PHASES = [
     pos: [500, 800],
     range: [118, 121],
   },
+  {
+    id: 'review',
+    label: 'Review Fixes',
+    type: 'frontend',
+    pos: [730, 1000],
+    range: [122, 127],
+  },
 ]
 
 const phaseOf = (n) =>
