@@ -1,8 +1,8 @@
 import Link from 'next/link'
 
-import { canonical } from '../../../lib/site'
-import { CONTACT_EMAIL, REPOSITORY } from '../constants'
-import { Legal } from '../legal'
+import { canonical, siteHost } from '../../../lib/site'
+import { REPOSITORY } from '../constants'
+import { Contact, Legal } from '../legal'
 
 export const metadata = {
   title: 'Terms',
@@ -14,10 +14,10 @@ export default function Terms() {
   return (
     <Legal title="Terms" updated="23 September 2026">
       <p>
-        These terms cover the hosted service at sessclone.com. By creating an
-        account you agree to them. The source code is separate: it is licensed
-        under the <a href={`${REPOSITORY}/blob/main/LICENSE`}>AGPL-3.0</a> with
-        the additional term in{' '}
+        These terms cover the service at {siteHost()}. By creating an account
+        you agree to them. The source code is separate: it is licensed under the{' '}
+        <a href={`${REPOSITORY}/blob/main/LICENSE`}>AGPL-3.0</a> with the
+        additional term in{' '}
         <a href={`${REPOSITORY}/blob/main/NOTICE.md`}>NOTICE.md</a>, and nothing
         here limits that licence.
       </p>
@@ -70,7 +70,7 @@ export default function Terms() {
       <h2>Changes</h2>
       <p>
         We will say when these terms change, by email for material changes.
-        Questions go to <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
+        Questions go to <Contact />.
       </p>
     </Legal>
   )

@@ -256,18 +256,25 @@ the owning role — it crosses every Org, while a Member's own delete is all the
 policies allow (ADR 0005) — which is why it is a secret-gated route and not
 anything a browser can reach.
 
-### Analytics (optional)
+### Public pages (optional)
 
-| Variable                                 | Required | Default | What it is                                                                |
-| ---------------------------------------- | -------- | ------- | ------------------------------------------------------------------------- |
-| `NEXT_PUBLIC_CLOUDFLARE_ANALYTICS_TOKEN` | no       | —       | Cloudflare Web Analytics site token. Cookieless; marketing pages and docs |
-| `NEXT_PUBLIC_CLARITY_PROJECT_ID`         | no       | —       | Microsoft Clarity project id. Marketing pages only, never the dashboard   |
+| Variable                                 | Required | Default | What it is                                                                          |
+| ---------------------------------------- | -------- | ------- | ----------------------------------------------------------------------------------- |
+| `SEARCH_INDEXING`                        | no       | off     | `on` lets search engines crawl the public pages. Anything else blocks every crawler |
+| `NEXT_PUBLIC_CONTACT_EMAIL`              | no       | —       | Address the public pages offer for contact. Unset, contact links are hidden         |
+| `NEXT_PUBLIC_CLOUDFLARE_ANALYTICS_TOKEN` | no       | —       | Cloudflare Web Analytics site token. Cookieless; marketing pages and docs           |
+| `NEXT_PUBLIC_CLARITY_PROJECT_ID`         | no       | —       | Microsoft Clarity project id. Marketing pages only, never the dashboard             |
 
-Unset, nothing loads. Clarity asks visitors in Europe first and does not load
-if they decline (`apps/web/app/(marketing)/clarity.tsx`). Both are read at build
-time, so a change needs a redeploy. `robots.txt` blocks crawlers on every
-deployment except `https://sessclone.com`, so a self-hosted copy stays out of
-search results (`apps/web/lib/site.ts`).
+Read in `apps/web/lib/site.ts` and the two analytics components. A self-hosted
+copy stays out of search results and loads no analytics unless its operator
+sets these. Canonical links, the sitemap and `llms.txt` are built from
+`NEXT_PUBLIC_APP_URL`. Clarity asks visitors in Europe first and does not load
+if they decline (`apps/web/app/(marketing)/clarity.tsx`). The `NEXT_PUBLIC_`
+variables are read at build time, so a change needs a redeploy.
+
+The Privacy and Terms pages describe the hosted service at sessclone.com: its
+providers and its analytics. Replace them with your own before you open a
+deployment to people outside your team.
 
 ### Storage
 

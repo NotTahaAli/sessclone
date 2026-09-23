@@ -109,18 +109,24 @@ Member is shown, so your team is told to report to your deployment. It is not
 derived from request headers: a forwarded `Host` is attacker-controllable, and
 an invite link is a credential.
 
-### Analytics (optional)
+### Public pages (optional)
 
-| Variable                                 | Required | What it is                                                                |
-| ---------------------------------------- | -------- | ------------------------------------------------------------------------- |
-| `NEXT_PUBLIC_CLOUDFLARE_ANALYTICS_TOKEN` | no       | Cloudflare Web Analytics site token. Cookieless; marketing pages and docs |
-| `NEXT_PUBLIC_CLARITY_PROJECT_ID`         | no       | Microsoft Clarity project id. Marketing pages only, never the dashboard   |
+| Variable                                 | Required | What it is                                                                          |
+| ---------------------------------------- | -------- | ----------------------------------------------------------------------------------- |
+| `SEARCH_INDEXING`                        | no       | `on` lets search engines crawl the public pages. Anything else blocks every crawler |
+| `NEXT_PUBLIC_CONTACT_EMAIL`              | no       | Address the public pages offer for contact. Unset, contact links are hidden         |
+| `NEXT_PUBLIC_CLOUDFLARE_ANALYTICS_TOKEN` | no       | Cloudflare Web Analytics site token. Cookieless; marketing pages and docs           |
+| `NEXT_PUBLIC_CLARITY_PROJECT_ID`         | no       | Microsoft Clarity project id. Marketing pages only, never the dashboard             |
 
-Unset, nothing loads. Clarity asks visitors in Europe first and does not load
-if they decline (`apps/web/app/(marketing)/clarity.tsx`). Both are read at build
-time, so a change needs a redeploy. `robots.txt` blocks crawlers on every
-deployment except `https://sessclone.com`, so a self-hosted copy stays out of
-search results (`apps/web/lib/site.ts`).
+A self-hosted copy stays out of search results and loads no analytics unless
+you set these. Canonical links, the sitemap and `llms.txt` are built from
+`NEXT_PUBLIC_APP_URL`. Clarity asks visitors in Europe first and does not load
+if they decline. The `NEXT_PUBLIC_` variables are read at build time, so a
+change needs a redeploy.
+
+The Privacy and Terms pages describe the hosted service at sessclone.com: its
+providers and its analytics. Replace them with your own before you open a
+deployment to people outside your team.
 
 ### Storage
 

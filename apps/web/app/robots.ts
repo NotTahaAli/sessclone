@@ -1,12 +1,12 @@
 import type { MetadataRoute } from 'next'
 
-import { CANONICAL_ORIGIN, isCanonicalSite } from '../lib/site'
+import { canonical, searchIndexing, siteUrl } from '../lib/site'
 
-// Only the canonical site is crawlable (see `lib/site.ts`). There, the public
-// pages are open and everything behind sign-in is closed: a crawler following
+// Crawlable only where `SEARCH_INDEXING=on` (see `lib/site.ts`). There, the
+// public pages are open and everything behind sign-in is closed: a crawler following
 // a link into the dashboard only finds the sign-in redirect.
 export default function robots(): MetadataRoute.Robots {
-  if (!isCanonicalSite()) return { rules: { userAgent: '*', disallow: '/' } }
+  if (!searchIndexing()) return { rules: { userAgent: '*', disallow: '/' } }
   return {
     rules: {
       userAgent: '*',
@@ -27,7 +27,7 @@ export default function robots(): MetadataRoute.Robots {
         '/more',
       ],
     },
-    sitemap: `${CANONICAL_ORIGIN}/sitemap.xml`,
-    host: CANONICAL_ORIGIN,
+    sitemap: canonical('/sitemap.xml'),
+    host: siteUrl(),
   }
 }

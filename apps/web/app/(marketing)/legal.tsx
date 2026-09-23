@@ -1,9 +1,14 @@
 import type { ReactNode } from 'react'
 
+import { contactEmail } from '../../lib/site'
 import { FRAME } from './constants'
 
 // The frame the Privacy and Terms pages share: one readable column, the
 // headings and lists styled here so the pages stay plain JSX prose.
+//
+// Both pages describe the hosted service: its providers and its analytics. A
+// self-hosted deployment should replace them with its own (see
+// `docs/self-hosting.md`); the host name and contact already follow the env.
 //
 // Both pages were drafted by Claude for the launch (2026-09-23) and have NOT
 // been reviewed by a lawyer; that review is Taha's to arrange before paid
@@ -29,5 +34,15 @@ export function Legal({
         {children}
       </article>
     </div>
+  )
+}
+
+/** The operator's address as a link, or plain words when none is set. */
+export function Contact() {
+  const email = contactEmail()
+  return email ? (
+    <a href={`mailto:${email}`}>{email}</a>
+  ) : (
+    <>the operator of this deployment</>
   )
 }

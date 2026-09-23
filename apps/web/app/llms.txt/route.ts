@@ -1,5 +1,5 @@
 import { source, type DocsPage } from '../../lib/docs'
-import { CANONICAL_ORIGIN, SITE_DESCRIPTION } from '../../lib/site'
+import { SITE_DESCRIPTION, canonical } from '../../lib/site'
 
 // https://llmstxt.org: a Markdown index an assistant can read in one request
 // instead of crawling the docs. Built from the same page tree as `/docs`.
@@ -8,7 +8,7 @@ export function GET() {
     .getPages()
     .map(
       (page: DocsPage) =>
-        `- [${page.data.title}](${CANONICAL_ORIGIN}${page.url})${page.data.description ? `: ${page.data.description}` : ''}`,
+        `- [${page.data.title}](${canonical(page.url)})${page.data.description ? `: ${page.data.description}` : ''}`,
     )
   const body = [
     '# SessClone',
@@ -21,7 +21,7 @@ export function GET() {
     '',
     '## Optional',
     '',
-    `- [Pricing](${CANONICAL_ORIGIN}/pricing)`,
+    `- [Pricing](${canonical('/pricing')})`,
     '- [Source code](https://github.com/NotTahaAli/sessclone)',
     '',
   ].join('\n')

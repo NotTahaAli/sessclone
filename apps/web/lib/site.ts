@@ -11,21 +11,28 @@ export const siteUrl = () =>
   )
 
 /**
- * The one origin search engines should list. Every other deployment of this
- * code (a self-hosted copy, `sessclone.vercel.app`, a preview) serves the same
- * marketing pages, so they point their canonical links here and their robots
- * file keeps crawlers out: duplicates would compete with the real site.
+ * Whether search engines may crawl this deployment: `SEARCH_INDEXING=on`.
+ * Off by default, so a self-hosted copy stays out of search results unless
+ * its operator opts in; the hosted service sets it in production.
  */
-export const CANONICAL_ORIGIN = 'https://sessclone.com'
+export const searchIndexing = () => process.env.SEARCH_INDEXING === 'on'
 
-export const isCanonicalSite = () => siteUrl() === CANONICAL_ORIGIN
+/** This deployment's host name, for prose ("the service at …"). */
+export const siteHost = () => new URL(siteUrl()).host
+
+/**
+ * Where visitors write to the operator: `NEXT_PUBLIC_CONTACT_EMAIL`. Null when
+ * unset, and every contact link is hidden then, so a self-hosted copy never
+ * sends its visitors to somebody else's inbox.
+ */
+export const contactEmail = () => process.env.NEXT_PUBLIC_CONTACT_EMAIL || null
 
 export const SITE_DESCRIPTION =
   'Claude Code usage and cost for a whole team: laptops, cloud sessions and CI in one priced ledger. Open source, free to self-host.'
 
-/** The canonical link for a public page, always on `CANONICAL_ORIGIN`. */
+/** The absolute link for a public page, for canonical links and indexes. */
 export const canonical = (path: string) =>
-  `${CANONICAL_ORIGIN}${path === '/' ? '' : path}`
+  `${siteUrl()}${path === '/' ? '' : path}`
 
 /** The public marketing pages: the sitemap lists them, and Clarity runs only
  * on them (`app/(marketing)/clarity.tsx`). */

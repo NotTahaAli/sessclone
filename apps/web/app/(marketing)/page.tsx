@@ -4,7 +4,7 @@ import { SignedInLink } from './signed-in-link'
 import { TiersUnavailable } from './tiers-unavailable'
 import { shortPrice } from '../../lib/plans'
 import { marketingTiers } from '../../lib/tiers'
-import { CANONICAL_ORIGIN, SITE_DESCRIPTION, canonical } from '../../lib/site'
+import { SITE_DESCRIPTION, canonical, siteUrl } from '../../lib/site'
 import {
   buttonClass,
   cardClass,
@@ -89,7 +89,7 @@ const JSON_LD = JSON.stringify({
   '@context': 'https://schema.org',
   '@type': 'SoftwareApplication',
   name: 'SessClone',
-  url: CANONICAL_ORIGIN,
+  url: siteUrl(),
   description: SITE_DESCRIPTION,
   applicationCategory: 'DeveloperApplication',
   operatingSystem: 'macOS, Linux, Windows',

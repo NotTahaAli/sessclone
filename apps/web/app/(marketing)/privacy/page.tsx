@@ -1,9 +1,9 @@
 import Link from 'next/link'
 
-import { canonical } from '../../../lib/site'
+import { canonical, siteHost } from '../../../lib/site'
 import { ClarityChoice } from '../clarity'
-import { CONTACT_EMAIL, REPOSITORY } from '../constants'
-import { Legal } from '../legal'
+import { REPOSITORY } from '../constants'
+import { Contact, Legal } from '../legal'
 
 export const metadata = {
   title: 'Privacy',
@@ -21,17 +21,16 @@ export default function Privacy() {
   return (
     <Legal title="Privacy" updated="23 September 2026">
       <p>
-        This page covers the hosted service at sessclone.com. If you run
-        SessClone yourself, your data stays on your own database and storage and
-        none of it reaches us.
+        This page covers the service at {siteHost()}. SessClone is open source:
+        a copy you run yourself keeps your data on your own database and
+        storage.
       </p>
 
       <h2>Who we are</h2>
       <p>
-        SessClone is an open-source project run by its maintainer (
-        <a href={REPOSITORY}>github.com/NotTahaAli</a>). Write to{' '}
-        <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> about anything
-        on this page.
+        The service at {siteHost()} is run by its operator, who decides how the
+        data below is used. Write to <Contact /> about anything on this page.
+        The source code is at <a href={REPOSITORY}>GitHub</a>.
       </p>
 
       <h2>What we collect</h2>
@@ -65,9 +64,9 @@ export default function Privacy() {
         A Member sees their own usage. Owners and Admins see every Member&apos;s
         usage and archived transcripts, and can download them; a Manager sees
         the same for the Members in their scope. Nobody outside your Org can
-        read any of it: the database enforces that on every query. The
-        maintainer can reach the database to run the service and uses that only
-        to operate, secure and support it.
+        read any of it: the database enforces that on every query. The operator
+        can reach the database to run the service and uses that only to operate,
+        secure and support it.
       </p>
 
       <h2>How long we keep it</h2>
@@ -118,10 +117,8 @@ export default function Privacy() {
       <h2>Your rights</h2>
       <p>
         You can ask for a copy of your data, a correction, or deletion, and you
-        can object to processing. Email{' '}
-        <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>. If you are in
-        the EEA or the UK you can also complain to your data protection
-        authority.
+        can object to processing. Email <Contact />. If you are in the EEA or
+        the UK you can also complain to your data protection authority.
       </p>
 
       <h2>Children</h2>
