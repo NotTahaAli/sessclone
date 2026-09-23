@@ -6,6 +6,7 @@ import {
   earlierRange,
   keepReading,
   rangesToStart,
+  splitEarlier,
   readWidths,
   toggleColumn,
   workflowColumn,
@@ -96,5 +97,20 @@ describe('rangesToStart', () => {
       { start: 0, end: 499 },
     ])
     expect(rangesToStart(0, 1000)).toEqual([])
+  })
+})
+
+describe('splitEarlier', () => {
+  const bytes = (text: string) => new TextEncoder().encode(text)
+  it('drops a last line still being written instead of emitting it broken', () => {
+    expect(splitEarlier(bytes('{"a":1}\n{"b":'), 0).lines).toEqual([
+      { text: '{"a":1}', offset: 0 },
+    ])
+    const end = splitEarlier(bytes('x"}\n{"a":1}\n{"b":'), 100)
+    expect(end.lines).toEqual([{ text: '{"a":1}', offset: 104 }])
+    expect(end.head).toEqual(bytes('x"}\n'))
+  })
+  it('keeps every line of a chunk that ends in a newline', () => {
+    expect(splitEarlier(bytes('{"a":1}\n{"b":2}\n'), 0).lines).toHaveLength(2)
   })
 })

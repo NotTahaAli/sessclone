@@ -2,6 +2,8 @@
 // open, how wide each is, and which bytes of the main transcript to fetch
 // next. The component only renders what these decide.
 
+import { splitChunk } from '@sessclone/shared'
+
 /** One open column. `main` is the Session; the others open from a block. */
 export type Column =
   | { kind: 'main'; key: 'main' }
@@ -133,3 +135,14 @@ export const keepReading = ({
   scrollHeight: number
   clientHeight: number
 }) => from > 0 && (items === 0 || scrollHeight <= clientHeight + NEAR_TOP)
+
+/**
+ * One chunk of the main transcript, read backwards, cut into whole lines.
+ *
+ * The file's end is never taken as the end of a line: the transcript may be
+ * live, and a last line without its newline is one still being written. That
+ * fragment is dropped (it is `tail`) rather than parsed as a broken entry; the
+ * next Reload reads it whole.
+ */
+export const splitEarlier = (bytes: Uint8Array, start: number) =>
+  splitChunk(bytes, start, { atFileStart: start === 0, atFileEnd: false })

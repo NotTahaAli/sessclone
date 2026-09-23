@@ -14,7 +14,6 @@ import {
 import {
   buildTimeline,
   parseLines,
-  splitChunk,
   visibleRows,
   type Item,
   type JournalAgent,
@@ -27,6 +26,7 @@ import {
   earlierRange,
   keepReading,
   rangesToStart,
+  splitEarlier,
 } from './columns'
 import { ColumnContext, TaskStatusContext, useViewer } from './context'
 import { concat, readBytes, type StoredFile } from './data'
@@ -142,20 +142,12 @@ export function MainColumn({
           if (whole) {
             // A server that ignored Range sent the whole file.
             parts.length = 0
-            parts.push(
-              parseLines(
-                splitChunk(bytes, 0, { atFileStart: true, atFileEnd: true })
-                  .lines,
-              ),
-            )
+            parts.push(parseLines(splitEarlier(bytes, 0).lines))
             from = 0
             head = EMPTY
             break
           }
-          const split = splitChunk(concat(bytes, head), range.start, {
-            atFileStart: range.start === 0,
-            atFileEnd: from === latest.current.sizeBytes,
-          })
+          const split = splitEarlier(concat(bytes, head), range.start)
           parts.push(parseLines(split.lines))
           from = range.start
           head = split.head
