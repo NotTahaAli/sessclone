@@ -48,3 +48,8 @@ docs/tickets/*.visual-check.*
 
 # spike 05 harness output (regenerable, may carry session payloads)
 docs/findings/05-harness/hooks.log
+
+# deploy and test credentials
+.vercel/
+playwright/.auth/
+*.pem

@@ -1,0 +1,39 @@
+name: Feature request
+description: Something SessClone should do and does not.
+title: '[Feature]: '
+labels: [enhancement, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Not sure it is a feature yet? Start a discussion instead.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to do, and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you have tried instead
+    validations:
+      required: false
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where it applies
+      multiple: true
+      options:
+        - Hosted (sessclone.com)
+        - Self-hosted
+        - Collector plugin
+    validations:
+      required: false
