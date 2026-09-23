@@ -27,9 +27,16 @@ comment on column log_artifacts.kind is
   'sidecars.';
 
 -- The identity grows by the kind, so a run's sidecar is not refused as a
--- second copy of its transcript. Dropped and added in one statement, so there
--- is no moment without a unique key for the confirm route's `on conflict`.
+-- second copy of its transcript.
+--
+-- The old key stays for now. Production applies migrations before the new
+-- code deploys, and the code still live in that window upserts with
+-- `on conflict (member_id, session_id, agent_id)`, which needs a unique key on
+-- exactly those columns. Keeping both costs nothing a transcript can notice:
+-- every row the new key would refuse the old key refuses too. What the old key
+-- does refuse meanwhile is a sidecar beside its own run's transcript, and the
+-- confirm route answers that with a 503 the Collector retries. The old key is
+-- dropped by `20260923140000_artifact_kind_drop_old_key.sql`, after the deploy.
 alter table log_artifacts
-  drop constraint log_artifacts_member_id_session_id_agent_id_key,
   add constraint log_artifacts_identity_key
     unique nulls not distinct (member_id, session_id, agent_id, kind);

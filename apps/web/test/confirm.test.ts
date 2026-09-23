@@ -504,3 +504,50 @@ test('a run’s sidecar and a workflow’s journal are rows of their own kind be
   })
   expect(await artifacts()).toHaveLength(3)
 })
+
+test('between the deploy and the old key’s drop, a sidecar beside its transcript is a 503 to retry, and transcripts still record', async () => {
+  // Ticket 104's deploy order: `20260923120000` keeps the three-column key
+  // for the code still live, and `20260923140000` drops it after the deploy.
+  // This is the window between them, rebuilt inside the test.
+  await sql`
+    alter table log_artifacts
+      add constraint log_artifacts_member_id_session_id_agent_id_key
+        unique nulls not distinct (member_id, session_id, agent_id)
+  `
+  try {
+    await withArchival(fixture.acme.id)
+    await seedSession()
+    await seedSession({ agentId: 'agent-7' })
+    const base = `orgs/${fixture.acme.id}/members/${fixture.acme.members.member}/projects/github.com-acme-api/session-1`
+
+    // Transcripts upsert as before, twice over, on the new key.
+    expect((await ask()).status).toBe(200)
+    expect((await ask({ sha256: 'b'.repeat(64) })).status).toBe(200)
+    expect(
+      (
+        await ask({
+          agentId: 'agent-7',
+          storageKey: `${base}/agents/agent-7.jsonl`,
+        })
+      ).status,
+    ).toBe(200)
+
+    // The run's sidecar collides with the old key: transient, not a 400
+    // (which says "never retry") and not a 500.
+    const [status, body] = await answer(
+      await ask({
+        agentId: 'agent-7',
+        kind: 'agent_meta',
+        storageKey: `${base}/agents/agent-7.meta.json`,
+      }),
+    )
+    expect(status).toBe(503)
+    expect(body).toMatchObject({ error: expect.stringMatching(/retry/) })
+    expect(await artifacts()).toHaveLength(2)
+  } finally {
+    await sql`
+      alter table log_artifacts
+        drop constraint if exists log_artifacts_member_id_session_id_agent_id_key
+    `
+  }
+})

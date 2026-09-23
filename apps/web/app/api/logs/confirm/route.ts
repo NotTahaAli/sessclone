@@ -251,7 +251,14 @@ export async function POST(request: Request) {
  * never succeed on retry, and anything else is worth retrying. */
 const databaseFailure = (error: unknown) => {
   const code = error instanceof postgres.PostgresError ? error.code : ''
-  return code.startsWith('22') || code.startsWith('23')
+  // Ticket 104's deploy window: the old three-column key outlives this code's
+  // deploy until `20260923140000` drops it, and meanwhile refuses a run's
+  // sidecar beside its transcript. That refusal ends by itself, so it is the
+  // retry answer rather than the permanent one.
+  const oldKey =
+    error instanceof postgres.PostgresError &&
+    error.constraint_name === 'log_artifacts_member_id_session_id_agent_id_key'
+  return !oldKey && (code.startsWith('22') || code.startsWith('23'))
     ? refused(
         'the database refused this request',
         error instanceof Error ? error.message : undefined,
