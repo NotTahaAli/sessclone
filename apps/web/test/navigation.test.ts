@@ -61,10 +61,10 @@ test('the phone bar carries the first group and a way to the rest', () => {
 test('More holds every destination the bar does not', () => {
   // Generated from the groups rather than listed twice, so a destination added
   // to a later group cannot go missing from the phone.
-  expect(moreItems()).toEqual([
-    { href: '/keys', label: 'Keys' },
-    { href: '/devices', label: 'Devices' },
-    { href: '/settings', label: 'Settings' },
+  expect(moreItems().map((item) => item.href)).toEqual([
+    '/keys',
+    '/devices',
+    '/settings',
   ])
 
   const bar = new Set(BOTTOM_BAR.map((item) => item.href))
@@ -297,4 +297,10 @@ test('the operator is read from the database, not from the session', () => {
 
   expect(source).toContain('sessclone_is_platform_admin()')
   expect(source).toContain('cache(')
+})
+
+test('every destination draws an icon, the admin area included', () => {
+  // 2026-09-23: icons on every nav item, sidebar, bottom bar and More alike.
+  const items = [...everyHref(true), ...ADMIN_DESTINATIONS]
+  expect(items.filter((item) => !item.icon)).toEqual([])
 })

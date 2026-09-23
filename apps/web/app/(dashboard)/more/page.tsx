@@ -1,6 +1,7 @@
 import { PageHeader } from '../page-header'
 import { PendingLink } from '../pending-link'
-import { moreItems } from '../navigation'
+import { GROUP_HEADING, NavGlyph } from '../nav-glyph'
+import { moreGroups } from '../navigation'
 import { asViewer } from '../../../lib/db'
 import { currentOperator } from '../../../lib/platform-admin'
 import { pendingOrgCount } from '../../../lib/subscriptions'
@@ -49,31 +50,37 @@ export default async function More() {
       <PageHeader title="More" />
       {/* Direction A (ticket 112): plain rows with chevrons, one per
           destination, what it is for on the line under. */}
-      <ul className="mt-2">
-        {moreItems(operator !== null).map((item) => (
-          <li key={item.href}>
-            <PendingLink href={item.href} className={ROW}>
-              <span className="grid grid-cols-[14px_minmax(0,1fr)] gap-x-2">
-                <span
-                  aria-hidden="true"
-                  className="text-text-muted text-[13px]"
-                >
-                  ›
-                </span>
-                <span>
-                  {item.label}
-                  {item.href === '/admin' && pending > 0
-                    ? ` · ${pending} waiting for approval`
-                    : ''}
-                </span>
-                <span className="text-text-muted col-start-2 text-caption">
-                  {ABOUT[item.href]}
-                </span>
-              </span>
-            </PendingLink>
-          </li>
+      {/* Under the sidebar's own group headings (2026-09-23), so a phone
+          reads the same map a desktop does. */}
+      <div className="mt-2">
+        {moreGroups(operator !== null).map((group) => (
+          <section key={group.label}>
+            <h2 className={`${GROUP_HEADING} !mx-0`}>{group.label}</h2>
+            <ul>
+              {group.items.map((item) => (
+                <li key={item.href}>
+                  <PendingLink href={item.href} className={ROW}>
+                    <span className="grid grid-cols-[16px_minmax(0,1fr)] items-center gap-x-2.5">
+                      <span className="text-text-muted">
+                        <NavGlyph icon={item.icon} />
+                      </span>
+                      <span>
+                        {item.label}
+                        {item.href === '/admin' && pending > 0
+                          ? ` · ${pending} waiting for approval`
+                          : ''}
+                      </span>
+                      <span className="text-text-muted col-start-2 text-caption">
+                        {ABOUT[item.href]}
+                      </span>
+                    </span>
+                  </PendingLink>
+                </li>
+              ))}
+            </ul>
+          </section>
         ))}
-      </ul>
+      </div>
     </div>
   )
 }
