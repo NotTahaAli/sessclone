@@ -1,4 +1,4 @@
-import { Instrument_Sans, JetBrains_Mono } from 'next/font/google'
+import { Geist, Geist_Mono } from 'next/font/google'
 import type { ReactNode } from 'react'
 
 import { AppearanceScript } from './appearance-script'
@@ -16,15 +16,17 @@ import './globals.css'
 // Nothing is loaded for the serif step: the design system serves the display
 // face from system faces (Georgia and its fallbacks) and a webfont for one
 // headline would be a download for a single line of text.
-const sans = Instrument_Sans({
+// Direction A (ticket 111): Geist and Geist Mono, both variable fonts, so no
+// weight list is needed.
+const sans = Geist({
   subsets: ['latin'],
-  variable: '--font-instrument-sans',
+  variable: '--font-geist',
   display: 'swap',
 })
 
-const mono = JetBrains_Mono({
+const mono = Geist_Mono({
   subsets: ['latin'],
-  variable: '--font-jetbrains-mono',
+  variable: '--font-geist-mono',
   display: 'swap',
 })
 
