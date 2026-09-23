@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 
+import { revalidateCostPages } from '../../../../lib/cost-paths'
+
 import {
   addOrgRate,
   deleteOrgRate,
@@ -53,7 +55,8 @@ export const addOrgRateAction = async (
 
   // Not just this page: an override reprices every one of that Org's Turns on
   // the next read (ADR 0002), so every cost surface it has is now stale.
-  revalidatePath('/', 'layout')
+  revalidateCostPages()
+  revalidatePath('/admin/orgs/[orgId]', 'page')
   return { added: parsed.data.model ?? 'the unnamed-model price' }
 }
 
@@ -79,6 +82,7 @@ export const deleteOrgRateAction = async (
   )
   if (!deleted) return { error: 'That price was not deleted.' }
 
-  revalidatePath('/', 'layout')
+  revalidateCostPages()
+  revalidatePath('/admin/orgs/[orgId]', 'page')
   return { deleted: true }
 }

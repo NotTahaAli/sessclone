@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 
+import { revalidateCostPages } from '../../../lib/cost-paths'
+
 import { asOperator, currentOperator } from '../../../lib/platform-admin'
 import { addRate, deleteRate, RATE_CLASSES } from '../../../lib/rates'
 import {
@@ -94,7 +96,8 @@ export const addRateAction = async (
 
   // Not just this page: a new Rate reprices every Org's waiting Turns on the
   // next read (ADR 0002), so every cost surface is now stale.
-  revalidatePath('/', 'layout')
+  revalidateCostPages()
+  revalidatePath('/admin/rates')
   return { added: parsed.data.model ?? 'the unnamed-model rate' }
 }
 
@@ -121,7 +124,8 @@ export const deleteRateAction = async (
   const deleted = await asOperator((tx) => deleteRate(tx, id.data))
   if (!deleted) return { error: 'That price was not deleted.' }
 
-  revalidatePath('/', 'layout')
+  revalidateCostPages()
+  revalidatePath('/admin/rates')
   return { deleted: true }
 }
 
@@ -220,7 +224,8 @@ const applyPricing = async (formData: FormData): Promise<SyncState> => {
           'The published prices changed since you fetched them. Nothing was applied; fetch again.',
       }
     }
-    revalidatePath('/', 'layout')
+    revalidateCostPages()
+    revalidatePath('/admin/rates')
     return { applied: applied.count, models: applied.models }
   } catch (error) {
     const code =

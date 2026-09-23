@@ -11,7 +11,8 @@ vi.mock('../lib/supabase/server', () => ({
   signedInUser,
   sessionUser: signedInUser,
 }))
-vi.mock('next/cache', () => ({ revalidatePath: () => {} }))
+const revalidatePath = vi.hoisted(() => vi.fn())
+vi.mock('next/cache', () => ({ revalidatePath }))
 
 let fixture: Fixture
 
@@ -19,6 +20,7 @@ beforeEach(async () => {
   fixture = await seedFixture()
   vi.resetModules()
   signedInUser.mockReset()
+  revalidatePath.mockReset()
 })
 
 /** A fresh module per case: `currentViewer` is `cache`d for one request. */
@@ -63,4 +65,12 @@ test('a Member, or another Org’s id, is refused before any statement', async (
   ).toHaveProperty('error')
 
   expect(await rows()).toEqual([])
+})
+
+test('a saved rate expires the cost pages, not the whole site', async () => {
+  const { addOwnRateAction } = await actAs(fixture.acme.users.owner)
+  await addOwnRateAction(null, form(fixture.acme.id))
+
+  expect(revalidatePath).toHaveBeenCalledWith('/costs', 'layout')
+  expect(revalidatePath).not.toHaveBeenCalledWith('/', 'layout')
 })

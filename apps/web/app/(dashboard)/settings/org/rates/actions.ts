@@ -1,8 +1,8 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 
+import { revalidateCostPages } from '../../../../../lib/cost-paths'
 import { asViewer } from '../../../../../lib/db'
 import {
   addOrgRate,
@@ -59,7 +59,7 @@ export const addOwnRateAction = async (
   }
 
   // Every cost surface reprices on the next read (ADR 0002).
-  revalidatePath('/', 'layout')
+  revalidateCostPages()
   return { added: parsed.data.model ?? 'the unnamed-model rate' }
 }
 
@@ -81,6 +81,6 @@ export const deleteOwnRateAction = async (
   )
   if (!deleted) return { error: 'That rate was not deleted.' }
 
-  revalidatePath('/', 'layout')
+  revalidateCostPages()
   return { deleted: true }
 }
