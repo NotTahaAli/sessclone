@@ -149,6 +149,7 @@ async function PlanChoice({ searchParams }: { searchParams: Query }) {
           <input
             name="seats"
             type="number"
+            required
             min={team.minSeats ?? 1}
             max={team.maxSeats ?? undefined}
             defaultValue={team.minSeats ?? 2}

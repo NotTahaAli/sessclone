@@ -10,6 +10,7 @@ import { appUrl } from '../../lib/auth/app-url'
 import { safeNext } from '../../lib/auth/next-path'
 import { parsePlan, planQuery } from '../../lib/auth/plan'
 import { supabaseServer } from '../../lib/supabase/server'
+import { marketingTiers } from '../../lib/tiers'
 
 // The two ways in, and the way out. Both ways in are passwordless: there is no
 // `signUp`, no `signInWithPassword` and no password field anywhere in this
@@ -32,13 +33,16 @@ const Email = z.email().max(320)
  * `safeNext` is the check, and the callback runs it again on the way back:
  * this one is a convenience, that one is the rule.
  */
-const destination = (formData: FormData) => {
+const destination = async (formData: FormData) => {
   const next = safeNext(formData.get('next'))
   // Ticket 118: the plan a new sign-up asked for rides along too. Ignored by
-  // the callback for anybody who already has an Org.
+  // the callback for anybody who already has an Org. Clamped to the Team
+  // Tier's size here, the form's boundary, from the same cached rows the form
+  // was drawn from.
+  const team = (await marketingTiers()).find((tier) => tier.key === 'team')
   const query = [
     next ? `next=${encodeURIComponent(next)}` : '',
-    planQuery(parsePlan(formData)),
+    planQuery(parsePlan(formData, team)),
   ].filter(Boolean)
   return query.length ? `?${query.join('&')}` : ''
 }
@@ -46,7 +50,7 @@ const destination = (formData: FormData) => {
 /** Sends the visitor to GitHub. Returns only by redirecting. */
 export const signInWithGitHub = async (formData: FormData) => {
   const supabase = await supabaseServer()
-  const next = destination(formData)
+  const next = await destination(formData)
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'github',
@@ -73,7 +77,7 @@ export const sendMagicLink = async (formData: FormData) => {
   const { error } = await supabase.auth.signInWithOtp({
     email: email.data,
     options: {
-      emailRedirectTo: `${appUrl()}${CALLBACK}${destination(formData)}`,
+      emailRedirectTo: `${appUrl()}${CALLBACK}${await destination(formData)}`,
     },
   })
 

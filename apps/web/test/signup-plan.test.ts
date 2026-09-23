@@ -27,3 +27,16 @@ test('anything else is no plan rather than an error', () => {
   expect(parsePlan(params('plan=team&seats=2.5'))).toBeNull()
   expect(planQuery(null)).toBe('')
 })
+
+test('a Team size is clamped to the Team Tier’s bounds', () => {
+  // The GitHub button skips the form's own min and max, and a size the Tier
+  // refuses would leave the Org with no plan at all.
+  const team = { minSeats: 2, maxSeats: 50 }
+  expect(parsePlan(params('plan=team&seats=1'), team)?.seats).toBe(2)
+  expect(parsePlan(params('plan=team&seats=900'), team)?.seats).toBe(50)
+  expect(parsePlan(params('plan=team&seats=7'), team)?.seats).toBe(7)
+  expect(
+    parsePlan(params('plan=team&seats=900'), { minSeats: null, maxSeats: null })
+      ?.seats,
+  ).toBe(900)
+})

@@ -8,8 +8,9 @@ import { SIGNUP_PLANS, type SignupPlan } from '../subscriptions'
 // Parsed at both ends, because both ends are trust boundaries — a form post
 // and a query string. Anything unrecognised is no plan rather than an error:
 // the sign-in still succeeds, and the Org waits for the operator either way.
-// The Team size is bounded here only loosely; the Tier's own `min_seats` and
-// `max_seats` are the rule, enforced by `subscriptions_request`.
+// The Team size is bounded here loosely, and clamped to the Tier's own
+// `min_seats` and `max_seats` when the caller has them; `subscriptions_request`
+// is still the rule.
 
 const Plan = z
   .object({
@@ -24,15 +25,32 @@ const Plan = z
   }))
 
 type Source = { get: (name: string) => unknown }
+type Bounds = { minSeats: number | null; maxSeats: number | null }
 
-/** The plan in a form or a query string, or null when there is none. */
-export const parsePlan = (source: Source): SignupPlan | null => {
+/**
+ * The plan in a form or a query string, or null when there is none.
+ *
+ * With the Team Tier's bounds, a Team size is clamped into them: the GitHub
+ * button skips the form's own `min`/`max`, and a size the Tier refuses would
+ * otherwise leave the Org with no plan at all (`bootstrap.ts` swallows the
+ * refusal).
+ */
+export const parsePlan = (source: Source, team?: Bounds): SignupPlan | null => {
   const seats = source.get('seats')
   const parsed = Plan.safeParse({
     plan: source.get('plan'),
     seats: seats === '' || seats === null ? undefined : seats,
   })
-  return parsed.success ? parsed.data : null
+  if (!parsed.success) return null
+  const plan = parsed.data
+  if (!team || plan.tierKey !== 'team' || plan.seats === null) return plan
+  return {
+    ...plan,
+    seats: Math.min(
+      Math.max(plan.seats, team.minSeats ?? 1),
+      team.maxSeats ?? Infinity,
+    ),
+  }
 }
 
 /** The same plan as query parameters, for the callback URL. */
