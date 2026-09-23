@@ -190,7 +190,15 @@ export const shownCapabilities = (
       return []
     }
     if (said.some((line) => line.includes(label.toLowerCase()))) return []
-    return [{ label, value: value === true ? null : String(value) }]
+    return [
+      {
+        label,
+        value:
+          typeof value === 'string' || typeof value === 'number'
+            ? String(value)
+            : null,
+      },
+    ]
   })
   return { includes, flags }
 }
