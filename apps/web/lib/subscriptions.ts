@@ -232,6 +232,35 @@ export const subscriptionHistory = async (
   }))
 }
 
+/** The plans a sign-up may ask for (ticket 118, Taha's pick). Tier keys are
+ * the stable names code uses when it has to name a Tier; Enterprise is
+ * "contact us" and Self-Hosted is not sold, so neither is offered. */
+export const SIGNUP_PLANS = ['personal', 'team'] as const
+export type SignupPlan = { tierKey: string; seats: number | null }
+
+/**
+ * Asks for a plan: an `inactive` row on that Tier, which is what the operator
+ * confirms (ticket 118). `subscriptions_request` is the rule — the Org's
+ * Owner, once, inactive, a size the Tier allows — and a refusal throws.
+ *
+ * Returns false when the Org already has a row: asking again changes nothing,
+ * which keeps sign-in idempotent. No `returning`, so the write never depends
+ * on the select policy seeing a row inserted in the same transaction.
+ */
+export const requestPlan = async (
+  tx: TransactionSql,
+  request: SignupPlan & { orgId: string },
+): Promise<boolean> => {
+  const result = await tx`
+    insert into subscriptions (org_id, tier_id, status, requested_seats)
+    select ${request.orgId}, tier.id, 'inactive', ${request.seats}
+      from tiers tier
+     where tier.key = ${request.tierKey}
+    on conflict (org_id) do nothing
+  `
+  return result.count > 0
+}
+
 /**
  * Sets an Org's Tier and status, and records why.
  *

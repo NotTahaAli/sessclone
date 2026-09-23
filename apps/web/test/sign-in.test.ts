@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 
 import { beforeEach, describe, expect, test } from 'vitest'
 
@@ -29,7 +30,7 @@ const { ensureOrgForSigner } = await import('../lib/auth/bootstrap')
 let fixture: Fixture
 
 const signIn = (email: string, id = randomUUID()) =>
-  ensureOrgForSigner(id, email).then((org) => ({ ...org, userId: id }))
+  ensureOrgForSigner(id, email).then((org) => ({ ...org!, userId: id }))
 
 beforeEach(async () => {
   fixture = await seedFixture()
@@ -95,7 +96,11 @@ describe('signing out and back in', () => {
       'returning@example.test',
     )
 
-    expect(second).toEqual({ orgId: first.orgId, memberId: first.memberId })
+    expect(second).toEqual({
+      orgId: first.orgId,
+      memberId: first.memberId,
+      created: false,
+    })
     expect(await sql`select count(*)::int as n from orgs`).toEqual([{ n: 3 }])
   })
 
@@ -108,8 +113,8 @@ describe('signing out and back in', () => {
       'member@acme.test',
     )
 
-    expect(invited.orgId).toBe(fixture.acme.id)
-    expect(invited.memberId).toBe(fixture.acme.members.member)
+    expect(invited!.orgId).toBe(fixture.acme.id)
+    expect(invited!.memberId).toBe(fixture.acme.members.member)
   })
 
   test('gives a removed Member a new Org rather than their old one back', async () => {
@@ -122,7 +127,77 @@ describe('signing out and back in', () => {
     // included, so there is no membership here to return to. Handing them a
     // fresh Org is the right answer: they are a new customer, and the Org that
     // removed them keeps their history.
-    expect(removed.orgId).not.toBe(fixture.acme.id)
+    expect(removed!.orgId).not.toBe(fixture.acme.id)
+  })
+})
+
+const planOf = async (orgId: string) =>
+  sql<{ key: string; status: string; requested_seats: number | null }[]>`
+    select tier.key, subscription.status, subscription.requested_seats
+      from subscriptions subscription
+      join tiers tier on tier.id = subscription.tier_id
+     where subscription.org_id = ${orgId}
+  `
+
+describe('the plan a sign-up asks for (ticket 118)', () => {
+  const TIER_SEED = new URL(
+    '../../../supabase/migrations/20260922050000_tier_seed.sql',
+    import.meta.url,
+  )
+
+  beforeEach(async () => {
+    await sql.unsafe(readFileSync(TIER_SEED, 'utf8'))
+  })
+
+  test('is written as an inactive row on that Tier, with the Team size', async () => {
+    const org = await ensureOrgForSigner(randomUUID(), 'team@example.test', {
+      plan: { tierKey: 'team', seats: 4 },
+    })
+
+    expect(org?.created).toBe(true)
+    expect(await planOf(org!.orgId)).toEqual([
+      { key: 'team', status: 'inactive', requested_seats: 4 },
+    ])
+  })
+
+  test('is ignored on a later sign-in, so the ask cannot be rewritten', async () => {
+    const id = randomUUID()
+    const first = await ensureOrgForSigner(id, 'solo@example.test', {
+      plan: { tierKey: 'personal', seats: null },
+    })
+    await ensureOrgForSigner(id, 'solo@example.test', {
+      plan: { tierKey: 'team', seats: 9 },
+    })
+
+    expect(await planOf(first!.orgId)).toEqual([
+      { key: 'personal', status: 'inactive', requested_seats: null },
+    ])
+  })
+
+  test('a size the Tier refuses still signs them in, with no plan', async () => {
+    const org = await ensureOrgForSigner(randomUUID(), 'big@example.test', {
+      plan: { tierKey: 'team', seats: 50 },
+    })
+    expect(org?.created).toBe(true)
+    expect(await planOf(org!.orgId)).toEqual([])
+  })
+
+  test('an invitee gets no Org of their own to be locked out of', async () => {
+    // They are about to join the Org that invited them; an Org of their own,
+    // pending approval, would be the one the dashboard opens first.
+    const id = randomUUID()
+    expect(
+      await ensureOrgForSigner(id, 'invitee@example.test', {
+        createOrg: false,
+      }),
+    ).toBeNull()
+
+    expect(await sql`select email from users where id = ${id}`).toEqual([
+      { email: 'invitee@example.test' },
+    ])
+    expect(await sql`select 1 from members where user_id = ${id}`).toHaveLength(
+      0,
+    )
   })
 })
 

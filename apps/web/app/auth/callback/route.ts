@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
-import { safeNext } from '../../../lib/auth/next-path'
+import { invitationToken, safeNext } from '../../../lib/auth/next-path'
+import { parsePlan } from '../../../lib/auth/plan'
 import { z } from 'zod'
 
 import {
@@ -110,7 +111,13 @@ export async function GET(request: NextRequest) {
   // leaves somebody signed in with no Org and a 500 they can only repeat. A
   // refused sign-in they can read is the better end of that.
   try {
-    await ensureOrgForSigner(claims.sub, claims.email)
+    // Ticket 118: the plan they picked, for a sign-up. Ticket 119: none of
+    // their own for somebody on the way to an invitation, who would otherwise
+    // open the dashboard on an Org waiting for approval.
+    await ensureOrgForSigner(claims.sub, claims.email, {
+      plan: parsePlan(params),
+      createOrg: !invitationToken(next),
+    })
   } catch (cause) {
     // The visitor is told their Org could not be set up and nothing more, on
     // purpose: the reason is a database error, which names tables and roles.

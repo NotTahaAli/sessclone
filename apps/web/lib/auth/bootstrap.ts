@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { asViewer } from '../db'
+import { requestPlan, type SignupPlan } from '../subscriptions'
 
 // Ticket 27: what happens the first time somebody signs in.
 //
@@ -27,7 +28,27 @@ const orgNameFor = (email: string) => {
 /** Postgres' `unique_violation`. Here, `users_email_key` and nothing else. */
 const UNIQUE_VIOLATION = '23505'
 
-export type SignedInOrg = { orgId: string; memberId: string }
+export type SignedInOrg = {
+  orgId: string
+  memberId: string
+  /** True when this sign-in made the Org: a new signup (ticket 120 mails the
+   * operator about it). */
+  created: boolean
+}
+
+export type SignInOptions = {
+  /** The plan the sign-up asked for (ticket 118), written as an `inactive`
+   * subscription row when — and only when — this sign-in creates the Org. */
+  plan?: SignupPlan | null
+  /**
+   * False for a sign-in on its way to accept an invitation. An Org of their
+   * own would be pending approval (ticket 119) and, being older than the
+   * membership they are about to accept, the one the dashboard opens first —
+   * locking them out of the Org that invited them. If they never accept, the
+   * next ordinary sign-in creates one.
+   */
+  createOrg?: boolean
+}
 
 /**
  * Thrown when the signer's email already belongs to a different account.
@@ -55,7 +76,8 @@ export class EmailBelongsToAnotherAccount extends Error {
 export const ensureOrgForSigner = async (
   userId: string,
   email: string,
-): Promise<SignedInOrg> =>
+  { plan = null, createOrg = true }: SignInOptions = {},
+): Promise<SignedInOrg | null> =>
   asViewer(userId, async (tx) => {
     // `on conflict (id)` and not a bare `on conflict`. A collision on the id is
     // this person signing in again, which is the idempotent case. A collision
@@ -99,8 +121,10 @@ export const ensureOrgForSigner = async (
     `
 
     if (existing) {
-      return { orgId: existing.org_id, memberId: existing.id }
+      return { orgId: existing.org_id, memberId: existing.id, created: false }
     }
+
+    if (!createOrg) return null
 
     // The ids are generated here rather than read back with `returning`.
     // `returning` applies the table's *select* policy to the new row, and
@@ -122,5 +146,19 @@ export const ensureOrgForSigner = async (
       values (${memberId}, ${orgId}, ${userId}, 'owner')
     `
 
-    return { orgId, memberId }
+    // Ticket 118: the plan they asked for, as the row the operator confirms.
+    // Absent (an old link, a hand-typed callback URL) leaves no row, which
+    // the Admin panel lists as pending just the same (ticket 120).
+    // In a savepoint, and a refusal swallowed: a size the Tier does not allow
+    // is an ask the operator settles, not a sign-in that fails. The Org still
+    // exists and still waits; it simply waits with no plan on it.
+    if (plan) {
+      await tx
+        .savepoint((sp) => requestPlan(sp, { orgId, ...plan }))
+        .catch((cause: unknown) => {
+          console.error('sign-in: the requested plan was refused', cause)
+        })
+    }
+
+    return { orgId, memberId, created: true }
   })

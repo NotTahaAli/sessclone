@@ -2,6 +2,7 @@ import { beforeEach, expect, test } from 'vitest'
 
 import {
   listOrgs,
+  requestPlan,
   setSubscription,
   subscriptionHistory,
 } from '../lib/subscriptions'
@@ -283,4 +284,58 @@ test('a hand-made change to a provider’s row is recorded as manual', async () 
   )
   // Otherwise the history attributes a person's decision to Stripe.
   expect(event).toMatchObject({ status: 'past_due', provider: 'manual' })
+})
+
+// Ticket 118: sign-up asks for a plan, and the ask is an `inactive` row.
+
+const seedSizedTier = async (key: string, min: number, max: number) => {
+  const [tier] = await sql<{ id: string }[]>`
+    insert into tiers (key, name, seat_price_usd, min_seats, max_seats)
+    values (${key}, ${key}, 10, ${min}, ${max})
+    returning id
+  `
+  return tier!.id
+}
+
+test('only the Owner asks, only once, only inactive, only a size the Tier allows', async () => {
+  const tierId = await seedSizedTier('team', 2, 10)
+  const ask = (
+    role: Parameters<typeof asRole>[1],
+    seats: number | null = 5,
+    org = fixture.acme,
+  ) =>
+    asRole(org, role, (tx) =>
+      requestPlan(tx, { orgId: fixture.acme.id, tierKey: 'team', seats }),
+    )
+
+  // Billing is the one thing an Admin does not reach.
+  await expect(ask('admin')).rejects.toThrow(/row-level security/)
+  await expect(ask('member')).rejects.toThrow(/row-level security/)
+  // Another Org's Owner cannot ask on Acme's behalf.
+  await expect(ask('owner', 5, fixture.globex)).rejects.toThrow(
+    /row-level security/,
+  )
+  // Eleven is past the Team ceiling.
+  await expect(ask('owner', 11)).rejects.toThrow(/row-level security/)
+
+  // An ask is never an activation.
+  await expect(
+    asRole(fixture.acme, 'owner', (tx) =>
+      setSubscription(tx, {
+        orgId: fixture.acme.id,
+        tierId,
+        status: 'active',
+        note: null,
+      }),
+    ),
+  ).rejects.toThrow(/row-level security/)
+
+  expect(await ask('owner')).toBe(true)
+  // A second ask finds the first and changes nothing.
+  expect(await ask('owner', 3)).toBe(false)
+  const [row] = await sql<{ status: string; requested_seats: number }[]>`
+    select status, requested_seats from subscriptions
+     where org_id = ${fixture.acme.id}
+  `
+  expect(row).toEqual({ status: 'inactive', requested_seats: 5 })
 })
