@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { Suspense, type ReactNode } from 'react'
 
 import { AccountMenu } from './account'
@@ -19,7 +20,9 @@ import {
   navGroups,
 } from './navigation'
 import Loading from './loading'
+import { isLocked } from '../../lib/approval'
 import { currentOperator } from '../../lib/platform-admin'
+import { signOut } from '../sign-in/actions'
 import { currentViewer } from '../../lib/viewer'
 
 // Ticket 83: this layout prerenders a static shell.
@@ -98,6 +101,58 @@ function WithoutOrg() {
 }
 
 /**
+ * What a locked Org sees instead of the dashboard (ticket 119): one sentence
+ * and Sign out. Nothing else — no keys, no pages.
+ *
+ * It covers the frame rather than replacing it, because the frame is the
+ * prerendered shell (ticket 83) and cannot know whose Org this is. The
+ * navigation under it would lead nowhere else anyway: every route under this
+ * layout renders this same page for a locked Org.
+ */
+function Waiting({
+  cancelled,
+  orgName,
+  operator,
+}: {
+  cancelled: boolean
+  orgName: string
+  /** A platform admin whose own Org is locked — the first sign-in on a fresh
+   * deployment — gets the way to approve it. */
+  operator: boolean
+}) {
+  return (
+    <div className="bg-ground text-text fixed inset-0 z-50 overflow-y-auto">
+      <main className="mx-auto flex max-w-md flex-col gap-4 px-4 py-16">
+        <h1 className="text-heading-lg">
+          {cancelled ? 'Cancelled' : 'Waiting for approval'}
+        </h1>
+        <p className="text-text-secondary text-body">
+          {cancelled
+            ? `${orgName}'s subscription has been cancelled. Nothing is collected while it is. Whoever operates this deployment can turn it back on.`
+            : `${orgName} is waiting for whoever operates this deployment to approve it. Until then there is nothing to set up and nothing is collected. Sign in again once you hear it is approved.`}
+        </p>
+        {operator ? (
+          <Link
+            href="/admin/orgs"
+            className="text-accent-text text-body underline"
+          >
+            Open the Admin panel to approve it
+          </Link>
+        ) : null}
+        <form action={signOut}>
+          <button
+            type="submit"
+            className="border-control-border text-text hover:bg-surface-hover h-[var(--control-h)] w-full rounded-md border px-3 text-body"
+          >
+            Sign out
+          </button>
+        </form>
+      </main>
+    </div>
+  )
+}
+
+/**
  * What a non-active subscription says, in the reader's terms.
  *
  * Neutral tokens and not an alarm: nothing is broken and nothing has been
@@ -164,15 +219,26 @@ async function Content({ children }: { children: ReactNode }) {
   const viewer = await currentViewer()
   if (!viewer) return <WithoutOrg />
 
+  // Ticket 119: an Org waiting for approval, or cancelled, sees only this.
+  // The page is not rendered at all, so nothing it reads reaches the reader.
+  if (isLocked(viewer.subscriptionStatus)) {
+    return (
+      <Waiting
+        cancelled={viewer.subscriptionStatus === 'cancelled'}
+        orgName={viewer.orgName}
+        operator={(await currentOperator()) !== null}
+      />
+    )
+  }
+
   return (
     <>
       {/* Ticket 48: an Org whose subscription is not active is told so, on
           every page, rather than shown a dashboard that quietly means less
-          than it looks like it does. No subscription row is the same answer
-          as an inactive one — it is the state every Org starts in, and the
-          commonest reason a person is reading this notice. Collection keeps
-          working either way: refusing the Org's own history would be a worse
-          answer than saying what is true. */}
+          than it looks like it does. Since ticket 119 that is `past_due`
+          alone — `inactive`, no row and `cancelled` lock the Org above —
+          unless the deployment runs with `SIGNUP_APPROVAL=off`, where all
+          three are this notice again and collection keeps working. */}
       {viewer.subscriptionStatus === 'active' ? null : (
         <Inactive status={viewer.subscriptionStatus ?? 'inactive'} />
       )}

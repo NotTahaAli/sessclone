@@ -184,13 +184,22 @@ user profile from external provider`, because Supabase asks for the
 2. Signing in with no membership creates an Org and makes you its Owner —
    which is true of _everyone_ who signs in, not only the first person. On a
    deployment whose Supabase project accepts open sign-ups, every stranger who
-   signs in gets their own Org on your box. If that is not what you want,
-   restrict sign-ups in the Supabase project: an allow-list, or sign-ups
-   disabled and accounts invited.
-3. Issue a key under **Keys**.
-4. Install the Collector on a machine: `docs/install.md`, which is two
+   signs in gets their own Org on your box — locked until you approve it (step
+   3), but a row nonetheless. If that is not what you want, restrict sign-ups
+   in the Supabase project: an allow-list, or sign-ups disabled and accounts
+   invited.
+3. Your Org now shows **Waiting for approval**: every new Org is locked until
+   a platform admin approves it (ticket 119), and that includes the first one
+   on a self-hosted deployment. Make yourself the platform admin (the SQL in
+   [Rates](#rates-so-the-costs-are-not-zero) below), open **/admin → Orgs**,
+   and set your Org's Tier to `active`. Sign out and back in. A deployment
+   with no need for approval — one person, or sign-ups already restricted in
+   Supabase — can skip this with `SIGNUP_APPROVAL=off` (see
+   [configuration](configuration.md#sign-up-approval)).
+4. Issue a key under **Keys**.
+5. Install the Collector on a machine: `docs/install.md`, which is two
    commands, the key, and a restart of Claude Code.
-5. Run a Claude Code session. The Turn appears under **Costs** as soon as the
+6. Run a Claude Code session. The Turn appears under **Costs** as soon as the
    session's first response finishes.
 
 If nothing arrives, `docs/install.md` § "Checking it worked" has the list in

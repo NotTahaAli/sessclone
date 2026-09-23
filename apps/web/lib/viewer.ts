@@ -1,4 +1,5 @@
 import { cache } from 'react'
+import { isLocked } from './approval'
 import { asViewer } from './db'
 import { logoPath } from './org-logo'
 import type { SubscriptionStatus } from './tier'
@@ -105,7 +106,11 @@ export const currentViewer = cache(async (): Promise<Viewer | null> => {
                on subscription.org_id = member.org_id
         left join org_logos logo on logo.org_id = member.org_id
        where member.id in (select sessclone_own_member_ids())
-       order by member.created_at
+       -- Ticket 119: an Org that works before one that is locked, so a
+       -- person who joined an Org while holding an unapproved one of their
+       -- own (every invitee before ticket 118) lands in the one they use.
+       order by subscription.status in ('active', 'past_due') is true desc,
+                member.created_at
        limit 1
     `,
   )
@@ -127,6 +132,17 @@ export const currentViewer = cache(async (): Promise<Viewer | null> => {
       : null,
   }
 })
+
+/**
+ * Whether the signed-in viewer's Org is locked (ticket 119). What the
+ * dashboard's own API routes ask beside `signedInUser()`, so a locked Org's
+ * transcripts and costs are refused there exactly as its pages are by the
+ * layout. False for somebody in no Org: the policies already answer them.
+ */
+export const viewerLocked = async (): Promise<boolean> => {
+  const viewer = await currentViewer()
+  return viewer !== null && isLocked(viewer.subscriptionStatus)
+}
 
 /**
  * Whether this Role reaches Org settings.

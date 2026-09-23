@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 
-import { beforeEach, describe, expect, test } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import {
   createApiKey,
@@ -114,6 +114,30 @@ describe('creating a key', () => {
 
     expect(listed.map((row) => row.label)).toEqual(['desktop', 'laptop'])
     expect(listed.every((row) => row.revoked_at === null)).toBe(true)
+  })
+})
+
+describe('an Org waiting for approval (ticket 119)', () => {
+  test('cannot create a key until it is approved', async () => {
+    vi.stubEnv('SIGNUP_APPROVAL', undefined)
+    try {
+      await expect(
+        asUser(fixture.acme.users.member, (tx) => createApiKey(tx, 'laptop')),
+      ).rejects.toThrow(/no membership to issue a key for/)
+
+      const [tier] = await owner<{ id: string }[]>`
+        insert into tiers (key, name) values ('team', 'Team') returning id
+      `
+      await owner`
+        insert into subscriptions (org_id, tier_id, status)
+        values (${fixture.acme.id}, ${tier!.id}, 'active')
+      `
+      await expect(
+        asUser(fixture.acme.users.member, (tx) => createApiKey(tx, 'laptop')),
+      ).resolves.toMatch(/^sk_/)
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 })
 

@@ -121,6 +121,23 @@ test('the download is named after the Session, and an Agent Run says which', asy
   )
 })
 
+test('an Org waiting for approval downloads nothing, its own included', async () => {
+  // Ticket 119. The same guard sits on the two transcript routes beside this
+  // one; proven here, once.
+  const id = await seedArtifact({
+    memberId: fixture.acme.members.member,
+    orgId: fixture.acme.id,
+  })
+
+  vi.stubEnv('SIGNUP_APPROVAL', undefined)
+  try {
+    expect((await as('member', id)).status).toBe(403)
+  } finally {
+    vi.unstubAllEnvs()
+  }
+  expect((await as('member', id)).status).toBe(302)
+})
+
 test('a platform admin downloads nothing', async () => {
   const id = await seedArtifact({
     memberId: fixture.acme.members.member,

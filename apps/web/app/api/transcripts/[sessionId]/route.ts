@@ -7,6 +7,7 @@ import {
   ttl,
 } from '../../../../lib/storage'
 import { signedInUser } from '../../../../lib/supabase/server'
+import { viewerLocked } from '../../../../lib/viewer'
 import { transcriptFiles } from '../../../../lib/transcript-files'
 
 // Tickets 105-107: every stored file of one Session, each with a presigned GET
@@ -29,6 +30,10 @@ export async function GET(
 ) {
   const user = await signedInUser()
   if (!user) return new Response('sign in first', { status: 401 })
+  // Ticket 119: a locked Org is refused here as its pages are.
+  if (await viewerLocked()) {
+    return new Response('this Org is waiting for approval', { status: 403 })
+  }
 
   const sessionId = SessionId.safeParse((await params).sessionId)
   const member = Member.safeParse(

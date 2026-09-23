@@ -145,6 +145,26 @@ server is reported the same way, because the inviter's remedy is identical.
 first byte. The credentials live in `SMTP_URL` and are read server-side only —
 they carry no `NEXT_PUBLIC_` prefix and reach no page or log line.
 
+### Sign-up approval
+
+| Variable          | Required | Default | What it is                                                    |
+| ----------------- | -------- | ------- | ------------------------------------------------------------- |
+| `SIGNUP_APPROVAL` | no       | on      | `off` lets a new Org in without a platform admin approving it |
+
+On by default, self-hosted deployments included (ticket 119,
+`apps/web/lib/approval.ts`). An Org whose subscription is `inactive` — which is
+where every sign-up starts, on the plan it picked (ticket 118) — or which has
+no subscription row, or is `cancelled`, is locked: the dashboard shows only
+"Waiting for approval" (or "Cancelled") and Sign out, no key can be created,
+and ingest answers its existing keys with the same 401 as any unknown key.
+`past_due` is not locked; it keeps its banner and works. A platform admin
+approves an Org by setting it `active` under **/admin → Orgs**, where Orgs
+waiting for approval are listed first.
+
+Any value other than `off` (case-insensitive) leaves it on. With it off, every
+status behaves as before the lock: a notice on every page, collection working.
+Read per request, so a restart is enough to change it.
+
 ### Published pricing
 
 | Variable      | Required | Default | What it is                                                                                |

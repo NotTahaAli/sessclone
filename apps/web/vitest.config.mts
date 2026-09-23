@@ -40,6 +40,10 @@ export default defineConfig({
       APP_DATABASE_URL:
         process.env.APP_DATABASE_URL ??
         'postgres://sessclone_app:sessclone_app@127.0.0.1:5432/sessclone_test',
+      // Ticket 119's lock is on by default; the suites that are not about it
+      // run with it off, and `approval.test.ts`, `ingest.test.ts` and
+      // `api-keys.test.ts` switch it on where the lock is the subject.
+      SIGNUP_APPROVAL: 'off',
       INGEST_DATABASE_URL:
         process.env.INGEST_DATABASE_URL ??
         'postgres://sessclone:sessclone@127.0.0.1:5432/sessclone_test',
