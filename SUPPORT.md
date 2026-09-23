@@ -4,7 +4,7 @@
   The form asks for the versions and logs needed to reproduce it.
 - **A question**, or an idea you want to talk through first — start a
   [discussion](https://github.com/NotTahaAli/sessclone/discussions).
-- **The docs** — <https://sessclone.com/docs>, and the `docs/` folder in this
+- **The docs** — the `docs/` folder in this
   repository for installing, configuring and self-hosting.
 - **A hosted customer** with a billing or account problem — email
   **hello@sessclone.com**.

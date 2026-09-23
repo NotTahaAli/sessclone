@@ -575,7 +575,9 @@ test('no security definer function is executable by everyone', async () => {
        and routine.prosecdef
        and (routine.proacl is null
             or exists (select 1 from aclexplode(routine.proacl) grant_row
-                        where grant_row.grantee = 0
+                        where (grant_row.grantee = 0
+                               or pg_get_userbyid(grant_row.grantee)
+                                  in ('anon', 'authenticated'))
                           and grant_row.privilege_type = 'EXECUTE'))
      order by routine.proname
   `

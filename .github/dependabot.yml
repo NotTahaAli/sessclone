@@ -22,8 +22,8 @@ updates:
         patterns: ['*']
 
   # The Node image must match `.nvmrc` and `engines` in package.json, which
-  # Dependabot does not touch: a PR that bumps it needs those two (and
-  # ticket-graph.yml) edited to match before merge. Majors are done by hand.
+  # Dependabot does not touch: a PR that bumps it needs those two edited to
+  # match before merge. Majors are done by hand.
   - package-ecosystem: docker
     directory: /
     schedule:

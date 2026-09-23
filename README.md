@@ -13,7 +13,7 @@ per Device.
 [![Collector: MIT](https://img.shields.io/badge/collector-MIT-green.svg)](packages/plugin/LICENSE)
 
 [Website](https://sessclone.com) ·
-[Docs](https://sessclone.com/docs) ·
+[Docs](docs/) ·
 [Self-hosting](docs/self-hosting.md) ·
 [Contributing](CONTRIBUTING.md)
 
