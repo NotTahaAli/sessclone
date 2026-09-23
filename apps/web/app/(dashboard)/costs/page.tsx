@@ -87,10 +87,10 @@ export default async function Costs({
   // decide whether there is anything to draw at all. The reads are
   // independent, so they go together rather than one after the other.
   //
-  // The failures count is the view menu's badge, shown on every view — but on
-  // the failures view itself the row read already carries the full total from
-  // one statement, so counting again there would be a second count that could
-  // disagree with the list beside it under a concurrent insert.
+  // The failures count is the view menu's badge, shown on every view: failed
+  // Sessions in the period this viewer has not marked viewed. It is read on
+  // the failures view too, since the list's own total counts every failure,
+  // viewed or not, and is a different number.
   const [facts, days, ranked, counted, failures] = await asViewer(
     viewer.userId,
     (tx) =>
@@ -102,16 +102,26 @@ export default async function Costs({
         isDimension(view)
           ? breakdown(tx, viewer.orgId, viewer.orgTimezone, range, view)
           : null,
+        countFailures(
+          tx,
+          viewer.orgId,
+          viewer.memberId,
+          viewer.orgTimezone,
+          range,
+        ),
         view === 'failures'
-          ? null
-          : countFailures(tx, viewer.orgId, viewer.orgTimezone, range),
-        view === 'failures'
-          ? sessionFailures(tx, viewer.orgId, viewer.orgTimezone, range)
+          ? sessionFailures(
+              tx,
+              viewer.orgId,
+              viewer.memberId,
+              viewer.orgTimezone,
+              range,
+            )
           : null,
       ]),
   )
   const spend = days === null ? null : spendSeries(days, range)
-  const failuresCount = failures ? failures.total : (counted ?? 0)
+  const failuresCount = counted
 
   // The failures view (and its link from the waiting surface) is reachable
   // whenever a key exists, since a failure can arrive before the first Turn —
@@ -235,7 +245,9 @@ function ViewMenu({
           {view.key === 'failures' && failuresCount > 0 ? (
             <span
               className="text-text-muted font-mono text-caption"
-              aria-label={`${failuresCount} in this period`}
+              aria-label={`${failuresCount} failed ${
+                failuresCount === 1 ? 'Session' : 'Sessions'
+              } not yet viewed`}
             >
               {badge}
             </span>
@@ -276,7 +288,7 @@ function Body({
     return (
       <>
         <SectionBreak>Failed turns</SectionBreak>
-        <FailuresList failures={failures} timezone={timezone} />
+        <FailuresList failures={failures} timezone={timezone} params={params} />
       </>
     )
   }
@@ -406,8 +418,8 @@ function Waiting({
             className="underline"
           >
             {failuresCount === 1
-              ? '1 failure was recorded in this period'
-              : `${failuresCount} failures were recorded in this period`}
+              ? '1 Session failed in this period'
+              : `${failuresCount} Sessions failed in this period`}
           </Link>{' '}
           — a turn may be ending on an API error before any usage is written.
         </p>

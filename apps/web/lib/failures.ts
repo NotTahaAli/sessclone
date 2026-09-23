@@ -47,6 +47,11 @@ export type FailureRow = {
   device: string | null
   /** The Member's email, or null when it is not the viewer's to see. */
   member: string | null
+  /** The Session whose failure this is: whose, then which. */
+  memberId: string
+  /** Whether the viewer marked this Session's failures seen since this one
+   * fired. A viewed failure stays listed; it only stops being counted. */
+  viewed: boolean
 }
 
 export type Failures = {
@@ -66,6 +71,8 @@ type RawRow = {
   message: string | null
   device: string | null
   member: string | null
+  member_id: string
+  viewed: boolean
   total: string
 }
 
@@ -84,6 +91,7 @@ const bounds = (tx: TransactionSql, timezone: string, range: LocalRange) => ({
 export const sessionFailures = async (
   tx: TransactionSql,
   orgId: string,
+  viewerMemberId: string,
   timezone: string,
   range: LocalRange,
 ): Promise<Failures> => {
@@ -98,6 +106,8 @@ export const sessionFailures = async (
            event.detail->>'message' as message,
            coalesce(device.nickname, device.key) as device,
            coalesce(account.display_name, account.email) as member,
+           event.member_id::text as member_id,
+           ${viewedSince(tx, viewerMemberId)} as viewed,
            count(*) over () as total
       from session_events event
       left join devices device on device.id = event.device_id
@@ -123,6 +133,8 @@ export const sessionFailures = async (
       message: row.message,
       device: row.device,
       member: row.member,
+      memberId: row.member_id,
+      viewed: row.viewed,
     })),
     total,
     more: Math.max(0, total - FAILURES_LIMIT),
@@ -130,28 +142,86 @@ export const sessionFailures = async (
 }
 
 /**
- * How many failures the range holds, for the tab's count badge.
+ * Whether the viewer has seen this failure's Session since it fired: a probe
+ * of `failure_views`' primary key, viewer first. `failure_views_own_read`
+ * would hide anybody else's row anyway; the viewer is named so the probe is
+ * an index lookup rather than a filter.
+ */
+const viewedSince = (tx: TransactionSql, viewerMemberId: string) => tx`
+  exists (
+    select 1 from failure_views seen
+     where seen.viewer_member_id = ${viewerMemberId}
+       and seen.member_id = event.member_id
+       and seen.session_id = event.session_id
+       and seen.viewed_at >= event.occurred_at
+  )
+`
+
+/**
+ * How many failed Sessions in the range the viewer has not marked seen, for
+ * the Costs view pill's "N failed".
  *
- * Its own statement rather than a side effect of `sessionFailures`, because
- * the badge is shown on every Costs view — a reader on the spend chart still
- * sees "Failures 3" — and only the failures view itself reads the rows.
- * Index-backed by `session_events_failure_idx` (ticket 78's migration).
+ * Sessions, not failure events. It used to count events, so one Session in a
+ * rate-limit storm, or a Session and each of its Agent Runs failing on the
+ * same overload, read as several failures on a pill beside the view name.
+ * One statement: `session_events_failure_idx` bounds the range, and each
+ * candidate probes `failure_views`' primary key.
  */
 export const countFailures = async (
   tx: TransactionSql,
   orgId: string,
+  viewerMemberId: string,
   timezone: string,
   range: LocalRange,
 ): Promise<number> => {
   const { from, to } = bounds(tx, timezone, range)
 
   const [row] = await tx<{ count: string }[]>`
-    select count(*) as count
+    select count(distinct (event.member_id, event.session_id)) as count
       from session_events event
      where event.org_id = ${orgId}
        and event.kind = 'stop_failure'
        and event.occurred_at >= ${from}
        and event.occurred_at < ${to}
+       and not ${viewedSince(tx, viewerMemberId)}
   `
   return Number(row?.count ?? 0)
+}
+
+/**
+ * Marks failed Sessions seen by the viewer, now: one Session, or with no
+ * Session named every Session that failed in the range. One statement either
+ * way. `failure_views_own_insert` refuses a Session the viewer cannot read,
+ * and the `select` from `session_events` only finds ones they can.
+ */
+export const markFailuresViewed = async (
+  tx: TransactionSql,
+  mark: {
+    orgId: string
+    viewerMemberId: string
+    timezone: string
+    range: LocalRange
+    session?: { memberId: string; sessionId: string }
+  },
+): Promise<number> => {
+  const { from, to } = bounds(tx, mark.timezone, mark.range)
+  const result = await tx`
+    insert into failure_views (org_id, viewer_member_id, member_id, session_id)
+    select distinct ${mark.orgId}::uuid, ${mark.viewerMemberId}::uuid,
+           event.member_id, event.session_id
+      from session_events event
+     where event.org_id = ${mark.orgId}
+       and event.kind = 'stop_failure'
+       and event.occurred_at >= ${from}
+       and event.occurred_at < ${to}
+       ${
+         mark.session
+           ? tx`and event.member_id = ${mark.session.memberId}
+                and event.session_id = ${mark.session.sessionId}`
+           : tx``
+       }
+    on conflict (viewer_member_id, member_id, session_id)
+      do update set viewed_at = now()
+  `
+  return result.count
 }
