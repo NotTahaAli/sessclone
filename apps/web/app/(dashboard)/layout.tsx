@@ -13,7 +13,7 @@ import {
   SidebarLinks,
 } from './nav-links'
 import {
-  ADMIN_PANEL,
+  adminPanelEntry,
   BOTTOM_BAR,
   MORE,
   moreItems,
@@ -21,7 +21,9 @@ import {
 } from './navigation'
 import Loading from './loading'
 import { isLocked } from '../../lib/approval'
+import { asViewer } from '../../lib/db'
 import { currentOperator } from '../../lib/platform-admin'
+import { pendingOrgCount } from '../../lib/subscriptions'
 import { signOut } from '../sign-in/actions'
 import { currentViewer } from '../../lib/viewer'
 
@@ -269,12 +271,13 @@ function Pending({ className }: { className: string }) {
 async function AdminEntry() {
   const operator = await currentOperator()
   if (!operator) return null
-  return <SidebarLinks items={ADMIN_ONLY} />
+  // Ticket 120: how many Orgs are waiting for approval, beside the link.
+  const pending = await asViewer(operator.userId, pendingOrgCount)
+  return <SidebarLinks items={adminPanelEntry(pending)} />
 }
 
 /** Built once at module load rather than per render of the frame. */
 const GROUPS = navGroups()
-const ADMIN_ONLY = [ADMIN_PANEL]
 /**
  * What More stands in for, so the bar marks it when the reader is on one of
  * them. The admin entry is in this list unconditionally: the bar is part of

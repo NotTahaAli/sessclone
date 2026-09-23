@@ -104,6 +104,12 @@ const linksMarkup = (items: NavItem[], pathname: string | null) => {
               }`}
             >
               {item.label}
+              {item.badge ? (
+                <span className="border-rule text-text-secondary ml-auto rounded-full border px-2 text-caption">
+                  {item.badge}
+                  <span className="sr-only"> waiting</span>
+                </span>
+              ) : null}
             </PendingLink>
           </li>
         )

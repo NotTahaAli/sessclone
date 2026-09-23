@@ -1,7 +1,9 @@
 import { PageHeader } from '../page-header'
 import { PendingLink } from '../pending-link'
 import { moreItems } from '../navigation'
+import { asViewer } from '../../../lib/db'
 import { currentOperator } from '../../../lib/platform-admin'
+import { pendingOrgCount } from '../../../lib/subscriptions'
 
 // Ticket 85: what the phone's More entry opens.
 //
@@ -33,6 +35,10 @@ export default async function More() {
   // asks `sessclone_is_platform_admin()` — the same function the `/admin`
   // layout's own gate asks, so the entry and the refusal cannot disagree.
   const operator = await currentOperator()
+  // Ticket 120: the phone's way to the Admin panel carries the count too.
+  const pending = operator
+    ? await asViewer(operator.userId, pendingOrgCount)
+    : 0
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
@@ -44,7 +50,12 @@ export default async function More() {
               href={item.href}
               className="border-rule bg-surface hover:bg-surface-hover block rounded-md border p-4"
             >
-              <span className="text-heading block">{item.label}</span>
+              <span className="text-heading block">
+                {item.label}
+                {item.href === '/admin' && pending > 0
+                  ? ` · ${pending} waiting for approval`
+                  : ''}
+              </span>
               <span className="text-text-secondary mt-1 block text-body">
                 {ABOUT[item.href]}
               </span>

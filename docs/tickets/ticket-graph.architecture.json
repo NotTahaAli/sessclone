@@ -3,7 +3,7 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "sessclone v1 — ticket status",
-    "subtitle": "121 tickets · 104 done · 4 ready to start · 13 blocked",
+    "subtitle": "121 tickets · 105 done · 3 ready to start · 13 blocked",
     "output": "docs/tickets/ticket-graph.html",
     "quality_profile": "showcase"
   },
@@ -208,7 +208,7 @@
       "id": "approval",
       "type": "backend",
       "label": "Signup Approval (118-121)",
-      "sublabel": "2 done · 1 ready · 1 blocked",
+      "sublabel": "3 done · 1 blocked",
       "pos": [
         500,
         800
@@ -230,7 +230,7 @@
       "id": "overhaul_approval",
       "from": "overhaul",
       "to": "approval",
-      "variant": "emphasis"
+      "variant": "dashed"
     },
     {
       "id": "foundation_design",

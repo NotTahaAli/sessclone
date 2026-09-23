@@ -2,6 +2,7 @@ import { beforeEach, expect, test } from 'vitest'
 
 import {
   listOrgs,
+  pendingOrgCount,
   requestPlan,
   setSubscription,
   subscriptionHistory,
@@ -284,6 +285,36 @@ test('a hand-made change to a provider’s row is recorded as manual', async () 
   )
   // Otherwise the history attributes a person's decision to Stripe.
   expect(event).toMatchObject({ status: 'past_due', provider: 'manual' })
+})
+
+test('Orgs waiting for approval come first, and are counted', async () => {
+  // Ticket 120. Newest first would put Globex on top; Acme has been waiting.
+  const tierId = await seedTier('team')
+  await asOperator((tx) =>
+    setSubscription(tx, {
+      orgId: fixture.globex.id,
+      tierId,
+      status: 'active',
+      note: null,
+    }),
+  )
+  await sql`
+    insert into subscriptions (org_id, tier_id, status, requested_seats)
+    values (${fixture.acme.id}, ${tierId}, 'inactive', 4)
+  `
+
+  const { orgs } = await asOperator((tx) => listOrgs(tx))
+  expect(orgs.map((org) => [org.id, org.pending])).toEqual([
+    [fixture.acme.id, true],
+    [fixture.globex.id, false],
+  ])
+  // What the Org asked for, so the operator knows what to confirm.
+  expect(orgs[0]).toMatchObject({ tierKey: 'team', requestedSeats: 4 })
+
+  // No row at all is pending too: every Org from before ticket 118.
+  await sql`delete from subscriptions where org_id = ${fixture.acme.id}`
+  await sql`insert into orgs (name) values ('Initech')`
+  expect(await asOperator(pendingOrgCount)).toBe(2)
 })
 
 // Ticket 118: sign-up asks for a plan, and the ask is an `inactive` row.

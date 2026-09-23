@@ -128,7 +128,7 @@ the Supabase project's own SMTP settings, not here. The **invitation** email is
 different: an invitation is this app's own `/join/<token>` route, which Supabase
 never sees, so it is sent through the app's own SMTP, below.
 
-### Invitation email (SMTP)
+### Email (SMTP)
 
 | Variable    | Required | Default | What it is                                                                      |
 | ----------- | -------- | ------- | ------------------------------------------------------------------------------- |
@@ -140,6 +140,12 @@ someone emails them the join link; with either unset, no mail is attempted and
 the inviter is told to pass the copyable link on themselves — the same link the
 email would carry, never a second token. A send that fails for a configured
 server is reported the same way, because the inviter's remedy is identical.
+
+The same two variables send the platform admins a note each time somebody
+signs up and creates an Org waiting for approval (ticket 120,
+`apps/web/lib/signup-notice.ts`), with a link to that Org under **/admin →
+Orgs**. Unset, nothing is sent; the Admin panel lists waiting Orgs first and
+counts them on its navigation link either way.
 
 `smtp://` uses STARTTLS when the server offers it; `smtps://` is TLS from the
 first byte. The credentials live in `SMTP_URL` and are read server-side only —
