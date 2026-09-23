@@ -142,8 +142,11 @@ export const sessionFailures = async (
 }
 
 /**
- * Whether the viewer has seen this failure's Session since it fired: a probe
- * of `failure_views`' primary key, viewer first. `failure_views_own_read`
+ * Whether the viewer has seen this failure's Session since it arrived: a
+ * probe of `failure_views`' primary key, viewer first. Compared on
+ * `received_at`, which the server stamps, not `occurred_at`, which the client
+ * sends: a Collector that was offline delivers failures dated before a mark
+ * the viewer made without them, and those are still unseen. `failure_views_own_read`
  * would hide anybody else's row anyway; the viewer is named so the probe is
  * an index lookup rather than a filter.
  */
@@ -153,7 +156,7 @@ const viewedSince = (tx: TransactionSql, viewerMemberId: string) => tx`
      where seen.viewer_member_id = ${viewerMemberId}
        and seen.member_id = event.member_id
        and seen.session_id = event.session_id
-       and seen.viewed_at >= event.occurred_at
+       and seen.viewed_at >= event.received_at
   )
 `
 

@@ -383,22 +383,12 @@ test('mark all clears the period, and a later failure counts again', async () =>
   await markAs('member')
   expect(await countAs('member')).toBe(0)
 
-  // The same Session failing after it was seen is a new failure.
-  await seedFailure({
-    session_id: 'a',
-    occurred_at: new Date(Date.now() + 60_000),
-  })
-  const later = { from: september.from, to: '2030-01-01' }
-  const count = await asRole(fixture.acme, 'member', (tx) =>
-    countFailures(
-      tx,
-      fixture.acme.id,
-      fixture.acme.members.member,
-      'UTC',
-      later,
-    ),
-  )
-  expect(count).toBe(1)
+  // The same Session failing after it was seen is a new failure — judged by
+  // when the server received it, not the client's `occurred_at`: a Collector
+  // that was offline delivers a failure dated before the mark, and it is
+  // still one the viewer has not seen.
+  await seedFailure({ session_id: 'a', occurred_at: '2026-09-20T09:00:00Z' })
+  expect(await countAs('member')).toBe(1)
 })
 
 test('failure_views: own rows only, and only for a Session you can read', async () => {
