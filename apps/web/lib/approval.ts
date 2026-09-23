@@ -1,3 +1,5 @@
+import type { TransactionSql } from 'postgres'
+
 import type { SubscriptionStatus } from './tier'
 
 // Ticket 119: a new Org is locked until an operator approves it.
@@ -29,3 +31,32 @@ export const UNLOCKED_STATUSES = ['active', 'past_due'] as const
 export const isLocked = (status: SubscriptionStatus | null): boolean =>
   approvalRequired() &&
   !(UNLOCKED_STATUSES as readonly (string | null)[]).includes(status)
+
+/**
+ * Whether the Org that owns this Member row is locked (ticket 119): what a
+ * route serving one Member's rows asks, rather than whether the *viewer's*
+ * first Org is. Somebody in two Orgs would otherwise read a locked Org's
+ * transcripts because their other Org is approved.
+ *
+ * One query, run as the viewer. A Member row they cannot see answers false:
+ * the row read that follows is under the same visibility and finds nothing.
+ * A subscription they cannot see counts as none, so it fails closed. The
+ * statuses are `UNLOCKED_STATUSES`.
+ */
+export const memberOrgLocked = async (
+  tx: TransactionSql,
+  memberId: string,
+): Promise<boolean> => {
+  if (!approvalRequired()) return false
+  const [row] = await tx<{ locked: boolean }[]>`
+    select exists (
+      select 1 from members member
+       where member.id = ${memberId}
+         and not exists (
+           select 1 from subscriptions subscription
+            where subscription.org_id = member.org_id
+              and subscription.status in ('active', 'past_due'))
+    ) as locked
+  `
+  return row?.locked ?? false
+}

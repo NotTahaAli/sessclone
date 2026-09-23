@@ -205,3 +205,32 @@ test('a deployment that cannot sign says so rather than redirecting nowhere', as
   storage.signs = false
   expect((await as('member', id)).status).toBe(503)
 })
+
+test('the lock is the owning Org’s, not the viewer’s other Org’s', async () => {
+  // Ticket 119. Acme's Member also belongs to Globex, which nobody approved.
+  // Acme is active, so the viewer's first Org is unlocked — and a Globex
+  // transcript is still refused. The two transcript routes share the helper.
+  const tierId = await sql<{ id: string }[]>`
+    insert into tiers (key, name) values ('team', 'Team') returning id
+  `.then(([tier]) => tier!.id)
+  await sql`
+    insert into subscriptions (org_id, tier_id, status)
+    values (${fixture.acme.id}, ${tierId}, 'active')
+  `
+  const [membership] = await sql<{ id: string }[]>`
+    insert into members (org_id, user_id, role)
+    values (${fixture.globex.id}, ${fixture.acme.users.member}, 'member')
+    returning id
+  `
+  const id = await seedArtifact({
+    memberId: membership!.id,
+    orgId: fixture.globex.id,
+  })
+
+  vi.stubEnv('SIGNUP_APPROVAL', undefined)
+  try {
+    expect((await as('member', id)).status).toBe(403)
+  } finally {
+    vi.unstubAllEnvs()
+  }
+})
