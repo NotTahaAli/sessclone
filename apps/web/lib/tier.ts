@@ -1,6 +1,6 @@
 import type { TransactionSql } from 'postgres'
 
-import type { TierPricing } from './tiers'
+import { includesOf, type TierPricing } from './tiers'
 
 // Ticket 47: the Tier an Org is on, as the Org's Owner sees it.
 //
@@ -143,27 +143,44 @@ export const retentionCeiling = (tier: OrgTier): string =>
 export const isActive = (tier: OrgTier): boolean => tier.status === 'active'
 
 /**
- * Feature keys that gate code paths rather than describe the plan: which Tiers
- * a sign-up may ask for (`self_serve`) and the rate editor's gate
- * (`own_rates`, which the rates page itself surfaces). Listing them under
- * "Also on this Tier" reads as prose nobody wrote.
+ * The flags "Also on this Tier" may name, and what it calls them. A key not
+ * here is not listed: printing a raw key (`manager_scopes ✓`) is prose nobody
+ * wrote, and the internal gates — `self_serve`, which Tiers a sign-up may ask
+ * for, and `own_rates`, which the rates page surfaces itself — are not
+ * capabilities a reader shops for. `includes` is not a flag at all: it is the
+ * plan's own lines, listed as they are written.
  */
-const INTERNAL_FEATURES: ReadonlySet<string> = new Set([
-  'self_serve',
-  'own_rates',
-])
+const FLAG_LABELS: Readonly<Record<string, string>> = {
+  sso: 'Single sign-on',
+  manager_scopes: 'Manager scopes',
+}
+
+export type Capabilities = {
+  /** `features.includes`, one line each, as the operator wrote them. */
+  includes: string[]
+  /** Named flags that are on and not already said by an includes line. A
+   * value is null for a plain on/off flag, else the setting as text. */
+  flags: { label: string; value: string | null }[]
+}
 
 /**
- * The capabilities the Tier page lists: every feature that is on (anything but
- * `false` or null, so a numeric gate still shows) and not internal.
+ * What the Tier page lists under "Also on this Tier": the plan's includes
+ * lines, then each named flag that is on (anything but `false` or null, so a
+ * numeric setting still shows) — unless an includes line already says it,
+ * which Enterprise's "Single sign-on and an invoice" does for `sso`.
  */
 export const shownCapabilities = (
   features: Record<string, unknown>,
-): [string, unknown][] =>
-  Object.entries(features).filter(
-    ([key, value]) =>
-      !INTERNAL_FEATURES.has(key) &&
-      value !== false &&
-      value !== null &&
-      value !== undefined,
-  )
+): Capabilities => {
+  const includes = includesOf(features)
+  const said = includes.map((line) => line.toLowerCase())
+  const flags = Object.entries(features).flatMap(([key, value]) => {
+    const label = FLAG_LABELS[key]
+    if (!label || value === false || value === null || value === undefined) {
+      return []
+    }
+    if (said.some((line) => line.includes(label.toLowerCase()))) return []
+    return [{ label, value: value === true ? null : String(value) }]
+  })
+  return { includes, flags }
+}
