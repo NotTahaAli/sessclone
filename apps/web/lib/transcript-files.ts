@@ -2,10 +2,11 @@ import type { TransactionSql } from 'postgres'
 
 // Tickets 105-107: what the transcript viewer reads from the database.
 //
-// Nothing here names a Role. `log_artifacts_read` and `turns_read` are both
-// `sessclone_visible_member_ids()`, and the explicit `member_id in (...)` below
-// restates that set only so the planner can reach the `(member_id,
-// session_id, …)` unique indexes — the policy is still what decides.
+// Nothing here names a Role: `log_artifacts_read` and `turns_read` decide.
+// Every read is by Member *and* session id. Session ids are unique only per
+// Member, so a read by session id alone would merge two people's Sessions that
+// happen to share an id; and the pair is what the `(member_id, session_id, …)`
+// unique indexes lead on.
 
 export type ArtifactKind = 'transcript' | 'agent_meta' | 'workflow_journal'
 
@@ -22,6 +23,7 @@ export type TranscriptFileRow = {
 /** Every stored file of one Session the viewer may read, in one statement. */
 export const transcriptFiles = async (
   tx: TransactionSql,
+  memberId: string,
   sessionId: string,
 ): Promise<TranscriptFileRow[]> => {
   const rows = await tx<
@@ -36,8 +38,8 @@ export const transcriptFiles = async (
   >`
     select id, kind, agent_id, size_bytes, uploaded_at, storage_key
       from log_artifacts
-     where session_id = ${sessionId}
-       and member_id in (select sessclone_visible_member_ids())
+     where member_id = ${memberId}
+       and session_id = ${sessionId}
      order by agent_id nulls first, kind
   `
   return rows.map((row) => ({
@@ -76,6 +78,7 @@ export const costKey = (agentId: string | null, messageId: string) =>
  */
 export const sessionTurnCosts = async (
   tx: TransactionSql,
+  memberId: string,
   sessionId: string,
 ): Promise<Record<string, TurnCost>> => {
   const rows = await tx<
@@ -95,8 +98,8 @@ export const sessionTurnCosts = async (
            turn.cache_creation_input_tokens, cost.cost_usd
       from turns turn
       join turn_costs cost on cost.turn_id = turn.id
-     where turn.session_id = ${sessionId}
-       and turn.member_id in (select sessclone_visible_member_ids())
+     where turn.member_id = ${memberId}
+       and turn.session_id = ${sessionId}
   `
   return Object.fromEntries(
     rows.map((row) => [

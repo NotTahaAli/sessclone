@@ -27,10 +27,11 @@ export type FileList =
 
 export const listFiles = async (
   sessionId: string,
+  memberId: string,
   signal?: AbortSignal,
 ): Promise<FileList> => {
   const response = await fetch(
-    `/api/transcripts/${encodeURIComponent(sessionId)}`,
+    `/api/transcripts/${encodeURIComponent(sessionId)}?member=${encodeURIComponent(memberId)}`,
     { signal, cache: 'no-store' },
   )
   if (response.status === 404) return { status: 'missing' }
@@ -126,10 +127,11 @@ const Costs = z.record(z.string(), TurnCost)
 
 export const readCosts = async (
   sessionId: string,
+  memberId: string,
   signal?: AbortSignal,
 ): Promise<Record<string, TurnCost>> => {
   const response = await fetch(
-    `/api/transcripts/${encodeURIComponent(sessionId)}/costs`,
+    `/api/transcripts/${encodeURIComponent(sessionId)}/costs?member=${encodeURIComponent(memberId)}`,
     { cache: 'no-store', signal },
   )
   if (!response.ok) throw new Error('Costs did not load.')

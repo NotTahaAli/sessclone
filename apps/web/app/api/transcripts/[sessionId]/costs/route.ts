@@ -10,21 +10,26 @@ import { sessionTurnCosts } from '../../../../../lib/transcript-files'
 // the viewer cannot see is an empty object, which says no more than a 404.
 
 const SessionId = z.string().min(1).max(200)
+/** Session ids are unique per Member, so the Member is part of the name. */
+const Member = z.uuid()
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ sessionId: string }> },
 ) {
   const user = await signedInUser()
   if (!user) return new Response('sign in first', { status: 401 })
 
   const sessionId = SessionId.safeParse((await params).sessionId)
-  if (!sessionId.success) {
+  const member = Member.safeParse(
+    new URL(request.url).searchParams.get('member'),
+  )
+  if (!sessionId.success || !member.success) {
     return new Response('no such session', { status: 404 })
   }
 
   const costs = await asViewer(user.id, (tx) =>
-    sessionTurnCosts(tx, sessionId.data),
+    sessionTurnCosts(tx, member.data, sessionId.data),
   )
   return Response.json(costs, { headers: { 'cache-control': 'no-store' } })
 }

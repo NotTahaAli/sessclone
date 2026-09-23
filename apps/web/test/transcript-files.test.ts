@@ -30,9 +30,12 @@ beforeEach(async () => {
   session.userId = null
 })
 
-const artifact = async (agentId: string | null, kind = 'transcript') => {
+const artifact = async (
+  agentId: string | null,
+  kind = 'transcript',
+  memberId = fixture.acme.members.member,
+) => {
   const { id: orgId } = fixture.acme
-  const memberId = fixture.acme.members.member
   await sql`
     insert into log_artifacts ${sql({
       org_id: orgId,
@@ -53,9 +56,11 @@ const call = (
   route: typeof files,
   sessionId: string,
   userId: string | null,
+  member: string | null = fixture.acme.members.member,
 ) => {
   session.userId = userId
-  return route(new Request('https://sessclone.test/'), {
+  const query = member === null ? '' : `?member=${member}`
+  return route(new Request(`https://sessclone.test/${query}`), {
     params: Promise.resolve({ sessionId }),
   })
 }
@@ -131,4 +136,39 @@ test('costs key by agent and message, and unpriced is null not zero', async () =
 
   const outside = await call(costs, 's-1', fixture.globex.users.owner)
   expect(await outside.json()).toEqual({})
+})
+
+test('two Members with the same session id: each viewer reads only its own Member', async () => {
+  // Session ids are unique per Member, not per deployment.
+  const { member, owner } = fixture.acme.members
+  await artifact(null, 'transcript', member)
+  await artifact(null, 'transcript', owner)
+  const turn = (memberId: string, messageId: string) => ({
+    org_id: fixture.acme.id,
+    member_id: memberId,
+    session_id: 's-1',
+    message_id: messageId,
+    occurred_at: '2026-09-01T00:00:00Z',
+    input_tokens: 1,
+  })
+  await sql`insert into turns ${sql([turn(member, 'm-a'), turn(owner, 'm-b')])}`
+
+  const listed = await (
+    await call(files, 's-1', fixture.acme.users.owner, member)
+  ).json()
+  expect(listed.files).toHaveLength(1)
+  expect(listed.files[0].url).toContain(`/members/${member}/`)
+
+  const priced = await (
+    await call(costs, 's-1', fixture.acme.users.owner, member)
+  ).json()
+  expect(Object.keys(priced)).toEqual([':m-a'])
+
+  // The member is required, and must be a uuid.
+  expect(
+    (await call(files, 's-1', fixture.acme.users.owner, null)).status,
+  ).toBe(404)
+  expect((await call(costs, 's-1', fixture.acme.users.owner, 'x')).status).toBe(
+    404,
+  )
 })

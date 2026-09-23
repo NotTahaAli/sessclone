@@ -18,21 +18,26 @@ import { transcriptFiles } from '../../../../lib/transcript-files'
 // whether it exists or not, so the answer leaks nothing.
 
 const SessionId = z.string().min(1).max(200)
+/** Session ids are unique per Member, so the Member is part of the name. */
+const Member = z.uuid()
 
 const notFound = () => new Response('no such transcript', { status: 404 })
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ sessionId: string }> },
 ) {
   const user = await signedInUser()
   if (!user) return new Response('sign in first', { status: 401 })
 
   const sessionId = SessionId.safeParse((await params).sessionId)
-  if (!sessionId.success) return notFound()
+  const member = Member.safeParse(
+    new URL(request.url).searchParams.get('member'),
+  )
+  if (!sessionId.success || !member.success) return notFound()
 
   const rows = await asViewer(user.id, (tx) =>
-    transcriptFiles(tx, sessionId.data),
+    transcriptFiles(tx, member.data, sessionId.data),
   )
   if (!rows.some((row) => row.kind === 'transcript')) return notFound()
 

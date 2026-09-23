@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { notFound } from 'next/navigation'
 
 import { PageHeader } from '../../../page-header'
 import { currentViewer } from '../../../../../lib/viewer'
@@ -14,7 +15,7 @@ import { TranscriptViewer } from './viewer'
 //
 // This page carries no transcript bytes and asks the database for nothing
 // about the Session: the viewer fetches the file list from
-// `/api/transcripts/<id>`, whose answer `log_artifacts_read` decides — the
+// `/api/transcripts/<id>?member=<member>`, whose answer `log_artifacts_read` decides — the
 // same rule as Download — and reads the files from storage directly. What is
 // read here is the reader's own presets, so the default one applies on the
 // first paint rather than after a round trip.
@@ -42,24 +43,24 @@ export default async function TranscriptPage({
     params,
     searchParams,
   ])
+  // Session ids are unique per Member only, so the Member names the Session
+  // as much as its id does; without it this page cannot say whose it is.
+  if (!member || !UUID.test(member)) notFound()
   const sessionId = decodeURIComponent(raw)
   const presets = await listPresets().catch(() => null)
 
   return (
     <div className="flex flex-col gap-4">
-      {/* The member is only for the way back: the Session's own page needs
-          it to reach an index, this one does not. */}
-      {member && UUID.test(member) ? (
-        <Link
-          href={`/sessions/${encodeURIComponent(sessionId)}?member=${member}`}
-          className="text-text-secondary hover:text-text w-fit text-caption"
-        >
-          ‹ Session
-        </Link>
-      ) : null}
+      <Link
+        href={`/sessions/${encodeURIComponent(sessionId)}?member=${member}`}
+        className="text-text-secondary hover:text-text w-fit text-caption"
+      >
+        ‹ Session
+      </Link>
       <PageHeader title="Transcript" />
       <TranscriptViewer
         sessionId={sessionId}
+        memberId={member}
         timezone={viewer.orgTimezone}
         presets={presets?.ok ? presets.value : null}
         actions={ACTIONS}

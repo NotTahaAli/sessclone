@@ -62,6 +62,7 @@ const WIDTHS_KEY = 'sessclone:transcript-widths'
 type Load = {
   status: 'ready'
   sessionId: string
+  memberId: string
   files: StoredFile[]
   signal: AbortSignal
   // Per file, for this load only, so bounded by the Session's file count
@@ -81,12 +82,15 @@ const reduceMotion = () =>
 
 export function TranscriptViewer({
   sessionId,
+  memberId,
   timezone,
   presets,
   actions,
   settingsHref,
 }: {
   sessionId: string
+  /** Whose Session: ids are unique per Member only. */
+  memberId: string
   timezone: string
   /** The reader's saved presets; null when they could not be read. */
   presets: SavedPreset[] | null
@@ -116,12 +120,13 @@ export function TranscriptViewer({
     controller.current = current
     let next: typeof state
     try {
-      const list = await listFiles(sessionId, current.signal)
+      const list = await listFiles(sessionId, memberId, current.signal)
       next =
         list.status === 'ready'
           ? {
               status: 'ready',
               sessionId,
+              memberId,
               files: list.files,
               signal: current.signal,
               items: new Map(),
@@ -136,7 +141,7 @@ export function TranscriptViewer({
       }
     }
     if (!current.signal.aborted) setState(next)
-  }, [sessionId])
+  }, [sessionId, memberId])
 
   useEffect(() => {
     // State is set only after the list arrives, which is the external
@@ -166,12 +171,12 @@ export function TranscriptViewer({
   const signal = load?.signal
   const renew = useCallback(
     async (id: string) => {
-      const list = await listFiles(sessionId, signal)
+      const list = await listFiles(sessionId, memberId, signal)
       return list.status === 'ready'
         ? (list.files.find((file) => file.id === id) ?? null)
         : null
     },
-    [sessionId, signal],
+    [sessionId, memberId, signal],
   )
 
   // The Session's first timestamp, for "+4m into the session" in details.
@@ -239,7 +244,11 @@ export function TranscriptViewer({
       },
       costs: () => {
         if (!load) return Promise.reject(new Error('Not loaded yet.'))
-        load.costs.promise ??= readCosts(load.sessionId, load.signal)
+        load.costs.promise ??= readCosts(
+          load.sessionId,
+          load.memberId,
+          load.signal,
+        )
         return load.costs.promise
       },
       openAfter: (index) => columns[index + 1]?.key,
