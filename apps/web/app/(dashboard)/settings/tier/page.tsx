@@ -8,6 +8,7 @@ import {
   isActive,
   orgTier,
   retentionCeiling,
+  shownCapabilities,
   type OrgTier,
 } from '../../../../lib/tier'
 import { tierPrice, tierSeats } from '../../../../lib/tiers'
@@ -166,9 +167,7 @@ function Status({
  * deployment, and a filter for `=== true` would have dropped it silently.
  */
 function Capabilities({ features }: { features: Record<string, unknown> }) {
-  const on = Object.entries(features).filter(
-    ([, value]) => value !== false && value !== null && value !== undefined,
-  )
+  const on = shownCapabilities(features)
 
   if (on.length === 0) return null
 

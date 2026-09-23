@@ -141,3 +141,29 @@ export const retentionCeiling = (tier: OrgTier): string =>
  * cancelled subscription is on the Team Tier and entitled to nothing.
  */
 export const isActive = (tier: OrgTier): boolean => tier.status === 'active'
+
+/**
+ * Feature keys that gate code paths rather than describe the plan: which Tiers
+ * a sign-up may ask for (`self_serve`) and the rate editor's gate
+ * (`own_rates`, which the rates page itself surfaces). Listing them under
+ * "Also on this Tier" reads as prose nobody wrote.
+ */
+const INTERNAL_FEATURES: ReadonlySet<string> = new Set([
+  'self_serve',
+  'own_rates',
+])
+
+/**
+ * The capabilities the Tier page lists: every feature that is on (anything but
+ * `false` or null, so a numeric gate still shows) and not internal.
+ */
+export const shownCapabilities = (
+  features: Record<string, unknown>,
+): [string, unknown][] =>
+  Object.entries(features).filter(
+    ([key, value]) =>
+      !INTERNAL_FEATURES.has(key) &&
+      value !== false &&
+      value !== null &&
+      value !== undefined,
+  )
