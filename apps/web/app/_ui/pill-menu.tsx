@@ -67,7 +67,7 @@ export function PillMenu({
         role="menu"
         aria-label={menuLabel}
         style={place}
-        className="border-rule bg-ground text-text shadow-overlay fixed inset-auto m-0 w-64 max-w-[calc(100vw-16px)] rounded-lg border p-1"
+        className="border-rule bg-ground text-text shadow-overlay fixed inset-auto m-0 max-h-[min(70vh,480px)] w-64 max-w-[calc(100vw-16px)] overflow-y-auto rounded-lg border p-1"
       >
         {children}
       </div>

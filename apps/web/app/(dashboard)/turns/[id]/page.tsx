@@ -64,7 +64,7 @@ export default async function Turn({
       <p className="text-body">
         <Link
           href={`/sessions/${encodeURIComponent(row.sessionId)}?member=${facts.memberId}`}
-          className="text-accent-text underline"
+          className="underline"
         >
           The whole session
         </Link>

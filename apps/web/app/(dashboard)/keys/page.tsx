@@ -3,6 +3,7 @@ import { NewKeyForm } from './new-key-form'
 import { EmptyState } from '../empty-state'
 import { InstallCollector } from '../install-collector'
 import { PageHeader } from '../page-header'
+import { Row, SectionBreak } from '../../_ui/primitives'
 import {
   listApiKeys,
   listMemberships,
@@ -17,11 +18,13 @@ import { signedInUser } from '../../../lib/supabase/server'
 // enforced here — `api_keys_own` enforces it, and this page has no `where`
 // clause to get wrong.
 //
-// The stub header this page used to carry is gone: ticket 45's shell is above
-// it now, and the Org name, the Role and sign out live there. What ticket 45
-// added here instead is the install path, which the product IA requires be
-// re-enterable from Keys — for a second machine, and for an Owner who wants
+// What ticket 45 added here is the install path, which the product IA requires
+// be re-enterable from Keys — for a second machine, and for an Owner who wants
 // the commands again without a new key.
+//
+// Direction A (ticket 112): the create field first, then one row per key —
+// ✓ once it has reported, ○ before that or once revoked — with Revoke on the
+// right, then the install steps under a section break.
 
 // Ticket 51 gives the Org a timezone. Until then a date is shown in UTC and
 // said to be, rather than in whatever zone the server happens to run in.
@@ -35,20 +38,23 @@ export default async function Keys() {
   // narrowing for the type checker rather than a second message.
   if (!user) return null
 
-  // One round trip: two statements on the one transaction `asViewer` opens,
-  // rather than two connections' worth of work for one page.
+  // One round trip: two statements on the one transaction `asViewer` opens.
   const { memberships, keys } = await asViewer(user.id, async (tx) => ({
     memberships: await listMemberships(tx),
     keys: await listApiKeys(tx),
   }))
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader
-        title="Keys"
-        description="A key lets a Collector report this machine's usage. Give each machine its own, so losing one costs you that machine and no other."
-      />
+    <div className="flex max-w-3xl flex-col">
+      <PageHeader title="Keys" />
+      <p className="text-text-muted mt-3 text-caption">
+        A key lets a Collector report this machine&apos;s usage. Give each
+        machine its own, so losing one costs you that machine and no other.
+      </p>
 
+      <NewKeyForm memberships={memberships} appUrl={appUrl()} />
+
+      <SectionBreak>Your keys</SectionBreak>
       {keys.length === 0 ? (
         <EmptyState headline="No keys yet">
           You have no API key yet. The Collector needs one to report.
@@ -57,71 +63,53 @@ export default async function Keys() {
         <KeyList keys={keys} />
       )}
 
-      <NewKeyForm memberships={memberships} appUrl={appUrl()} />
-
-      <section className="border-rule border-t pt-6">
-        <h2 className="text-heading">Installing the Collector</h2>
-        <p className="text-text-secondary mt-1 text-body">
-          The same commands, whether this is your first machine or your fourth.
-          A key is shown once at creation and never again, so the step below has
-          a placeholder where yours goes — a key you have just created comes
-          with the command already filled in.
-        </p>
-        <InstallCollector appUrl={appUrl()} />
-      </section>
+      <SectionBreak>Install the Collector</SectionBreak>
+      <p className="text-text-muted text-caption">
+        The same commands, whether this is your first machine or your fourth. A
+        key is shown once at creation and never again, so the step below has a
+        placeholder where yours goes — a key you have just created comes with
+        the command already filled in.
+      </p>
+      <InstallCollector appUrl={appUrl()} />
     </div>
   )
 }
 
 function KeyList({ keys }: { keys: ApiKeyRow[] }) {
   return (
-    <table className="mt-6 w-full text-left text-sm">
-      <thead className="text-text-muted border-rule-strong border-b">
-        <tr>
-          <th scope="col" className="py-2 font-normal">
-            Label
-          </th>
-          <th scope="col" className="py-2 font-normal">
-            Key
-          </th>
-          <th scope="col" className="py-2 font-normal">
-            Org
-          </th>
-          <th scope="col" className="py-2 font-normal">
-            Last used
-          </th>
-          <th scope="col" className="py-2 font-normal">
-            <span className="sr-only">Revoke</span>
-          </th>
-        </tr>
-      </thead>
-      <tbody className="bg-surface">
-        {keys.map((key) => (
-          <tr key={key.id} className="border-rule border-b">
-            <td className="py-2">{key.label}</td>
-            <td className="text-text-muted py-2 font-mono">
-              {key.key_prefix}…
-            </td>
-            {/* Which Org this key's Turns land in — the question the create
-                form asks when there is more than one answer. */}
-            <td className="text-text-muted py-2">{key.org_name}</td>
-            {/* Written by ticket 34 on each accepted report. */}
-            <td className="text-text-muted py-2">
-              {when(key.last_used_at) ?? 'never used'}
-            </td>
-            <td className="py-2 text-right">
-              {key.revoked_at ? (
-                <span className="text-text-muted">
-                  revoked {when(key.revoked_at)}
-                </span>
-              ) : (
-                <RevokeButton id={key.id} label={key.label} />
-              )}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <ol>
+      {keys.map((key) => (
+        <li key={key.id} className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <Row
+              lead={key.last_used_at && !key.revoked_at ? 'ok' : 'idle'}
+              meta={key.revoked_at ? 'revoked' : undefined}
+              // Which Org this key's Turns land in — the question the create
+              // form asks when there is more than one answer — and when it was
+              // last used, which ticket 34 writes on each accepted report.
+              sub={
+                <>
+                  <span className="font-mono">{key.key_prefix}…</span> ·{' '}
+                  {key.org_name} ·{' '}
+                  {key.revoked_at
+                    ? `revoked ${when(key.revoked_at)}`
+                    : key.last_used_at
+                      ? `last used ${when(key.last_used_at)}`
+                      : 'never used'}
+                </>
+              }
+            >
+              <span className={key.revoked_at ? 'text-text-muted' : ''}>
+                {key.label}
+              </span>
+            </Row>
+          </div>
+          {key.revoked_at ? null : (
+            <RevokeButton id={key.id} label={key.label} />
+          )}
+        </li>
+      ))}
+    </ol>
   )
 }
 
@@ -131,7 +119,7 @@ function RevokeButton({ id, label }: { id: string; label: string }) {
       <input type="hidden" name="id" value={id} />
       <button
         type="submit"
-        className="border-control-border text-bad-text rounded border px-2 py-1"
+        className="text-text-muted hover:text-bad-text text-caption underline"
       >
         Revoke<span className="sr-only"> {label}</span>
       </button>

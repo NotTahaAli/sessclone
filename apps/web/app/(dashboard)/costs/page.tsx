@@ -1,18 +1,19 @@
+import Link from 'next/link'
+
+import { Cut } from './[dimension]/[id]/cut'
 import { FailuresList } from './failures-list'
 import { RangeControl } from './range-control'
 import { RankedList } from './ranked-list'
-import { SpendChart } from './spend-chart'
-import {
-  DEFAULT_VIEW,
-  isDimension,
-  resolveView,
-  viewHref,
-  VIEWS,
-  type View,
-} from './views'
+import { dayName, Sparkline, Summary } from './summary'
+import { isDimension, resolveView, VIEWS, type View } from './views'
 import { EmptyState } from '../empty-state'
+import { Finder, FinderColumn, FinderList } from '../finder'
+import { todayIn } from '../sessions/status'
 import { InstallCollector } from '../install-collector'
 import { PageHeader } from '../page-header'
+import { hrefWith, one, type Query } from '../query'
+import { MenuItem, PillMenu } from '../../_ui/pill-menu'
+import { Row, SectionBreak } from '../../_ui/primitives'
 import { appUrl } from '../../../lib/auth/app-url'
 import { asViewer } from '../../../lib/db'
 import {
@@ -30,10 +31,10 @@ import {
   sessionFailures,
   type Failures,
 } from '../../../lib/failures'
+import { compact, count, usd } from '../../../lib/money'
 import { resolveRange, type RangeParams } from '../../../lib/range'
 import { dailySpend, spendSeries, type SpendSeries } from '../../../lib/series'
 import { currentViewer } from '../../../lib/viewer'
-import Link from 'next/link'
 
 // Costs. Ticket 45 owns the frame and the states before there is anything to
 // draw, 52 the spend over time, 53 the period, and 54 to 56 the three
@@ -44,211 +45,19 @@ import Link from 'next/link'
 // cut rather than the question. Which rows each Role sees is the policy's
 // answer and not this page's (ADR 0001).
 //
-// The range is ticket 53's: read from the URL, defaulting to the current
-// calendar month in the Org's timezone, which
-// `docs/design/dashboard-wireframes.md` chose because it is the period a bill
-// is drawn on. It is resolved once here and passed down — the control renders
-// it, the read takes it, and the breakdowns in 54 to 56 will take the same
-// object rather than parsing the URL again.
-
-const money = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-  maximumFractionDigits: 2,
-})
-const compact = new Intl.NumberFormat('en-US', { notation: 'compact' })
-const whole = new Intl.NumberFormat('en-US')
-
-/**
- * Spend over time, and the four figures that say what the bars are made of.
- *
- * The unpriced count is a tile rather than a footnote: `turn_costs` leaves a
- * Turn's cost null when a quantity it consumed has no Rate, so the total is a
- * floor whenever that count is not zero, and a reader who cannot see it reads
- * the floor as the answer (ADR 0002).
- */
-function OverTime({ series }: { series: SpendSeries }) {
-  if (series.turns === 0) {
-    // Not the onboarding state: Turns exist, this window has none of them.
-    return (
-      <EmptyState headline="Nothing in this period">
-        Turns have arrived, but none of them fall between these dates. Pick a
-        wider period above.
-      </EmptyState>
-    )
-  }
-
-  return (
-    <div className="flex flex-col gap-6">
-      <Totals
-        costUsd={series.costUsd}
-        tokens={series.tokens}
-        turns={series.turns}
-        unpricedTurns={series.unpricedTurns}
-      />
-
-      <div className="border-rule bg-surface rounded-md border p-4">
-        <SpendChart series={series} />
-      </div>
-    </div>
-  )
-}
-
-/**
- * A breakdown, with the same four figures above it as the chart has.
- *
- * The tiles come from the same statement as the list, over every group rather
- * than the ones shown: the list is capped and a total summed from a capped
- * list drops the tail without saying so.
- */
-function Ranked({
-  cut,
-  dimension,
-  params,
-}: {
-  cut: Breakdown
-  dimension: Dimension
-  /** The period, so a row's link opens the Turns of the period it was ranked
-   * for (ticket 88). */
-  params: Record<string, string | string[] | undefined>
-}) {
-  return (
-    <div className="flex flex-col gap-6">
-      <Totals {...cut.totals} />
-      <div className="border-rule bg-surface rounded-md border p-4">
-        <RankedList
-          rows={cut.rows}
-          total={cut.totals.costUsd}
-          more={cut.more}
-          moreUnpriced={cut.moreUnpriced}
-          dimension={dimension}
-          params={params}
-        />
-      </div>
-    </div>
-  )
-}
-
-/** The four figures every Costs view carries, in the same order everywhere. */
-function Totals({
-  costUsd,
-  tokens,
-  turns,
-  unpricedTurns,
-}: {
-  costUsd: number | null
-  tokens: number
-  turns: number
-  unpricedTurns: number
-}) {
-  return (
-    <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      {/* A period with nothing priced is unknown, not free. */}
-      <Tile label="Cost" value={costUsd === null ? '—' : money.format(costUsd)}>
-        {costUsd === null
-          ? 'nothing priced yet'
-          : unpricedTurns > 0
-            ? 'priced Turns only'
-            : 'this period'}
-      </Tile>
-      <Tile label="Tokens" value={compact.format(tokens)}>
-        input, output and cache
-      </Tile>
-      <Tile label="Turns" value={whole.format(turns)}>
-        reported in this period
-      </Tile>
-      <Tile
-        label="Unpriced"
-        value={whole.format(unpricedTurns)}
-        quiet={unpricedTurns === 0}
-      >
-        {unpricedTurns === 0
-          ? 'every Turn has a Rate'
-          : 'real usage, cost unknown'}
-      </Tile>
-    </dl>
-  )
-}
-
-function Tile({
-  label,
-  value,
-  quiet,
-  children,
-}: {
-  label: string
-  value: string
-  quiet?: boolean
-  children: React.ReactNode
-}) {
-  return (
-    <div className="border-rule bg-surface rounded-md border p-4">
-      <dt className="text-label text-text-muted uppercase">{label}</dt>
-      <dd
-        className={`mt-1 font-mono text-figure-lg ${quiet ? 'text-text-muted' : ''}`}
-      >
-        {value}
-      </dd>
-      <dd className="text-text-muted mt-1 text-caption">{children}</dd>
-    </div>
-  )
-}
-
-/**
- * The four cuts, as links.
- *
- * A link rather than a control, for the same reason the period is: choosing a
- * view is a navigation, and a navigation is what a browser already does well.
- */
-function ViewTabs({
-  current,
-  params,
-  failuresCount,
-}: {
-  current: View
-  params: Record<string, string | string[] | undefined>
-  /** Drawn as a badge on the Failures tab when the period holds any. */
-  failuresCount: number
-}) {
-  return (
-    <nav aria-label="Costs views">
-      <ul className="border-rule flex gap-1 overflow-x-auto border-b">
-        {VIEWS.map((view) => {
-          const active = view.key === current
-          const badge = view.key === 'failures' && failuresCount > 0
-          return (
-            <li key={view.key}>
-              <Link
-                href={viewHref('/costs', view.key, params)}
-                aria-current={active ? 'page' : undefined}
-                className={`-mb-px flex h-9 items-center gap-1.5 border-b-2 px-3 text-body whitespace-nowrap ${
-                  active
-                    ? 'border-accent-border text-accent-text'
-                    : 'text-text-secondary border-transparent'
-                }`}
-              >
-                {view.label}
-                {badge ? (
-                  <span
-                    className="bg-bad-bg text-bad-text rounded-full px-1.5 font-mono text-micro"
-                    aria-label={`${failuresCount} in this period`}
-                  >
-                    {failuresCount > 99 ? '99+' : failuresCount}
-                  </span>
-                ) : null}
-              </Link>
-            </li>
-          )
-        })}
-      </ul>
-    </nav>
-  )
-}
+// Ticket 112 redraws it in Direction A: the period and the view are two pills
+// in the header instead of a tab row and a chip grid, the four tiles are one
+// summary line, and a breakdown row opens its Turns in a column on the right
+// on desktop (`?open=`), the list staying where it is. Every read is the one
+// the page made before.
 
 /** The one action an empty Costs offers, hoisted so it is one object. */
 const CREATE_A_KEY = { href: '/keys', label: 'Create a key' }
 
-type Params = RangeParams & { view?: string | string[] }
+type Params = RangeParams & {
+  view?: string | string[]
+  open?: string | string[]
+}
 
 export default async function Costs({
   searchParams,
@@ -272,9 +81,9 @@ export default async function Costs({
   // decide whether there is anything to draw at all. The reads are
   // independent, so they go together rather than one after the other.
   //
-  // The failures count is the tab's badge, shown on every view — but on the
-  // failures view itself the row read already carries the full total from one
-  // statement, so counting again there would be a second count that could
+  // The failures count is the view menu's badge, shown on every view — but on
+  // the failures view itself the row read already carries the full total from
+  // one statement, so counting again there would be a second count that could
   // disagree with the list beside it under a concurrent insert.
   const [facts, days, ranked, counted, failures] = await asViewer(
     viewer.userId,
@@ -305,37 +114,115 @@ export default async function Costs({
   const showFailures = view === 'failures' && state !== 'no-key'
   const showChrome = state === 'collecting' || showFailures
 
+  // The open row, when a breakdown is showing: its Turns go in the column.
+  // The catch-all on People has no id and opens nothing.
+  const open = one(params.open)
+  const column =
+    state === 'collecting' &&
+    isDimension(view) &&
+    open &&
+    !(open === 'none' && view === 'members')
+      ? { dimension: view, id: open }
+      : null
+
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col">
       <PageHeader
         title="Costs"
-        description={`What ${viewer.orgName} is spending, estimated from usage and published prices.`}
+        actions={
+          showChrome ? (
+            <>
+              <RangeControl path="/costs" resolved={resolved} query={params} />
+              <ViewMenu
+                current={view}
+                params={params}
+                failuresCount={failuresCount}
+              />
+            </>
+          ) : null
+        }
       />
-      {showChrome ? (
-        <>
-          <ViewTabs
-            current={view}
-            params={params}
+      <Finder column={column !== null}>
+        <FinderList column={column !== null}>
+          <Body
+            facts={facts}
+            view={view}
+            spend={spend}
+            ranked={ranked}
+            failures={failures}
             failuresCount={failuresCount}
+            timezone={viewer.orgTimezone}
+            params={params}
+            open={open}
           />
-          <RangeControl
-            path="/costs"
-            resolved={resolved}
-            view={view === DEFAULT_VIEW ? undefined : view}
-          />
-        </>
-      ) : null}
-      <Body
-        facts={facts}
-        view={view}
-        spend={spend}
-        ranked={ranked}
-        failures={failures}
-        failuresCount={failuresCount}
-        timezone={viewer.orgTimezone}
-        params={params}
-      />
+        </FinderList>
+        {column ? (
+          <FinderColumn>
+            <Cut
+              viewer={viewer}
+              dimension={column.dimension}
+              id={column.id}
+              resolved={resolved}
+              query={params}
+              closeHref={hrefWith('/costs', params, { open: undefined })}
+            />
+          </FinderColumn>
+        ) : null}
+      </Finder>
     </div>
+  )
+}
+
+/**
+ * The five cuts, as one header pill (ticket 112) in place of the tab row.
+ *
+ * Each is a link rather than a control, for the same reason the period is:
+ * choosing a view is a navigation. The open column belongs to one cut, so a
+ * switch closes it. The failures count stays on the entry, and on the pill
+ * while it is not the view being read.
+ */
+function ViewMenu({
+  current,
+  params,
+  failuresCount,
+}: {
+  current: View
+  params: Query
+  failuresCount: number
+}) {
+  const label = VIEWS.find((view) => view.key === current)?.label ?? ''
+  const badge = failuresCount > 99 ? '99+' : String(failuresCount)
+  return (
+    <PillMenu
+      label={label}
+      detail={
+        current !== 'failures' && failuresCount > 0
+          ? `${badge} failed`
+          : undefined
+      }
+      menuLabel="Costs views"
+    >
+      {VIEWS.map((view) => (
+        <MenuItem
+          key={view.key}
+          on={view.key === current}
+          href={hrefWith('/costs', params, {
+            view: view.key === 'time' ? undefined : view.key,
+            open: undefined,
+          })}
+        >
+          <span className="grow">{view.label}</span>
+          {view.key === 'failures' && failuresCount > 0 ? (
+            <span
+              className="text-text-muted font-mono text-caption"
+              aria-label={`${failuresCount} in this period`}
+            >
+              {badge}
+            </span>
+          ) : null}
+        </MenuItem>
+      ))}
+    </PillMenu>
   )
 }
 
@@ -348,6 +235,7 @@ function Body({
   failuresCount,
   timezone,
   params,
+  open,
 }: {
   facts: OnboardingFacts
   view: View
@@ -356,15 +244,21 @@ function Body({
   failures: Failures | null
   failuresCount: number
   timezone: string
-  /** The current query, so the link to the failures view keeps the period. */
-  params: Record<string, string | string[] | undefined>
+  /** The current query, so every link keeps the period. */
+  params: Query
+  open: string | undefined
 }) {
   // The failures view stands apart from the onboarding states: a failure can
   // arrive before the first Turn, so it renders whenever a key exists rather
   // than only once collecting has begun. With no key at all there can be no
   // failure, so that case falls through to the empty state below.
   if (view === 'failures' && failures && onboardingState(facts) !== 'no-key') {
-    return <FailuresList failures={failures} timezone={timezone} />
+    return (
+      <>
+        <SectionBreak>Failed turns</SectionBreak>
+        <FailuresList failures={failures} timezone={timezone} />
+      </>
+    )
   }
 
   switch (onboardingState(facts)) {
@@ -372,9 +266,9 @@ function Body({
       // One of the two is always present, decided by the view above: the read
       // the other view would need was never issued.
       return view === 'time' || !isDimension(view) || ranked === null ? (
-        <OverTime series={spend!} />
+        <OverTime series={spend!} timezone={timezone} />
       ) : (
-        <Ranked cut={ranked} dimension={view} params={params} />
+        <Ranked cut={ranked} dimension={view} params={params} open={open} />
       )
 
     case 'waiting':
@@ -402,6 +296,137 @@ function Body({
 }
 
 /**
+ * Spend over time: the summary with a bar a day beside it, then the models
+ * the money went to and the days that had any.
+ *
+ * The By model rows are the legend of ticket 52's stacked chart, as rows: the
+ * five largest models and Other, from the same series. The By day rows are
+ * what that chart's table carried — the numbers a phone reader and a screen
+ * reader get instead of a tooltip. Days with nothing in them are left out:
+ * the bars already show the gap.
+ */
+function OverTime({
+  series,
+  timezone,
+}: {
+  series: SpendSeries
+  timezone: string
+}) {
+  if (series.turns === 0) {
+    // Not the onboarding state: Turns exist, this window has none of them.
+    return (
+      <EmptyState headline="Nothing in this period">
+        Turns have arrived, but none of them fall between these dates. Pick a
+        wider period above.
+      </EmptyState>
+    )
+  }
+
+  const peak = Math.max(...series.series.map((entry) => entry.costUsd), 0)
+  const used = series.days.filter((day) => day.turns > 0).toReversed()
+
+  return (
+    <>
+      <Summary
+        costUsd={series.costUsd}
+        tokens={series.tokens}
+        turns={series.turns}
+        unpricedTurns={series.unpricedTurns}
+      >
+        <Sparkline days={series.days} today={todayIn(timezone)} />
+      </Summary>
+
+      {series.series.length > 0 ? (
+        <>
+          <SectionBreak>By model</SectionBreak>
+          <ol>
+            {series.series.map((entry) => (
+              <li key={entry.label}>
+                <Row
+                  lead="none"
+                  value={usd(entry.costUsd)}
+                  meter={peak > 0 ? entry.costUsd / peak : 0}
+                >
+                  <span className="font-mono">{entry.label}</span>
+                </Row>
+              </li>
+            ))}
+          </ol>
+        </>
+      ) : null}
+
+      <SectionBreak>By day</SectionBreak>
+      <ol>
+        {used.map((day) => (
+          <li key={day.date}>
+            <Row
+              lead="none"
+              name={dayName(day.date)}
+              // A day whose every Turn is unpriced is unknown, not zero.
+              value={day.unpricedTurns === day.turns ? '—' : usd(day.costUsd)}
+              sub={`${compact.format(day.tokens)} tokens · ${count.format(
+                day.turns,
+              )} ${day.turns === 1 ? 'turn' : 'turns'}${
+                day.unpricedTurns > 0
+                  ? ` · ${count.format(day.unpricedTurns)} unpriced`
+                  : ''
+              }`}
+            />
+          </li>
+        ))}
+      </ol>
+
+      <p className="text-text-muted mt-4 text-caption">
+        Cost is an estimate, derived from the usage reported and the published
+        prices. Days are the Org&apos;s own.
+      </p>
+    </>
+  )
+}
+
+/** What each breakdown's rows are, as the break above them says it. */
+const BY: Record<Dimension, string> = {
+  members: 'By person',
+  projects: 'By project',
+  devices: 'By device',
+}
+
+/**
+ * A breakdown, with the same summary above it as Over time has.
+ *
+ * The summary comes from the same statement as the list, over every group
+ * rather than the ones shown: the list is capped and a total summed from a
+ * capped list drops the tail without saying so.
+ */
+function Ranked({
+  cut,
+  dimension,
+  params,
+  open,
+}: {
+  cut: Breakdown
+  dimension: Dimension
+  params: Query
+  open: string | undefined
+}) {
+  return (
+    <>
+      <Summary {...cut.totals} />
+      <SectionBreak>{BY[dimension]}</SectionBreak>
+      <RankedList
+        rows={cut.rows}
+        total={cut.totals.costUsd}
+        more={cut.more}
+        moreUnpriced={cut.moreUnpriced}
+        dimension={dimension}
+        params={params}
+        open={open}
+      />
+    </>
+  )
+}
+
+/**
  * The most important screen in the product: a key exists and no Turn has
  * arrived.
  *
@@ -411,10 +436,6 @@ function Body({
  * downstream of the key rather than in it. From this surface those are
  * otherwise indistinguishable — a report with an unknown or revoked key writes
  * nothing (ticket 34), so it looks exactly like silence.
- *
- * Ticket 39 owns the polling and the list of causes that grows over time.
- * This is the shell's version: say which of the two states it is, and show the
- * install path again.
  */
 function Waiting({
   keyUsed,
@@ -425,36 +446,38 @@ function Waiting({
   /** Failures in the current period: where a stalled Collector is first
    * noticed, so the surface links to them when there are any (ticket 78). */
   failuresCount: number
-  /** The current query, so the link carries the period the count was read for
-   * — the same rule `viewHref` and `presetHref` keep everywhere else. A link
-   * that dropped the range would promise a count the destination then cuts a
-   * different period for. */
-  params: Record<string, string | string[] | undefined>
+  /** The current query, so the link carries the period the count was read
+   * for. */
+  params: Query
 }) {
   return (
-    <section>
-      <div className="border-rule bg-surface max-w-3xl rounded-md border p-6">
-        <h2 className="text-heading">Waiting for the first Turn</h2>
-        <p className="text-text-secondary mt-2 text-body">
-          {keyUsed
-            ? 'A Collector has reached this deployment with one of your keys, but no Turn has landed yet. The key is not the problem.'
-            : 'No Collector has reported with one of your keys yet. The Collector reports when a turn ends, so nothing arrives until one does.'}
+    <section className="max-w-3xl">
+      <SectionBreak>Status</SectionBreak>
+      <Row
+        lead="idle"
+        name="Waiting for the first Turn"
+        meta={keyUsed ? 'key used' : 'key never used'}
+      />
+      <p className="text-text-muted text-body">
+        {keyUsed
+          ? 'A Collector has reached this deployment with one of your keys, but no Turn has landed yet. The key is not the problem.'
+          : 'No Collector has reported with one of your keys yet. The Collector reports when a turn ends, so nothing arrives until one does.'}
+      </p>
+      {failuresCount > 0 ? (
+        <p className="mt-3 text-body">
+          <Link
+            href={hrefWith('/costs', params, { view: 'failures' })}
+            className="underline"
+          >
+            {failuresCount === 1
+              ? '1 failure was recorded in this period'
+              : `${failuresCount} failures were recorded in this period`}
+          </Link>{' '}
+          — a turn may be ending on an API error before any usage is written.
         </p>
-        {failuresCount > 0 ? (
-          <p className="mt-3 text-body">
-            <Link
-              href={viewHref('/costs', 'failures', params)}
-              className="text-accent-text"
-            >
-              {failuresCount === 1
-                ? '1 failure was recorded in this period'
-                : `${failuresCount} failures were recorded in this period`}
-            </Link>{' '}
-            — a turn may be ending on an API error before any usage is written.
-          </p>
-        ) : null}
-      </div>
+      ) : null}
 
+      <SectionBreak>Install the Collector</SectionBreak>
       <InstallCollector appUrl={appUrl()} />
     </section>
   )

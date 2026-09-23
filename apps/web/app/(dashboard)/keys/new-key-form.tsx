@@ -3,6 +3,13 @@
 import { useActionState, useCallback, useState } from 'react'
 
 import { createKey } from './actions'
+import {
+  Button,
+  buttonClass,
+  cardClass,
+  inputClass,
+  SectionBreak,
+} from '../../_ui/primitives'
 import type { Membership } from '../../../lib/api-keys'
 import { installCommand } from '../../../lib/install-command'
 
@@ -26,26 +33,28 @@ export function NewKeyForm({
   const choose = memberships.length > 1
 
   return (
-    <section className="border-rule mt-8 border-t pt-6">
-      <h2 className="text-text text-lg font-medium">Create a key</h2>
+    <section aria-labelledby="create-key">
+      <SectionBreak>
+        <span id="create-key">Create a key</span>
+      </SectionBreak>
 
-      <form action={formAction} className="mt-3 flex flex-wrap items-end gap-3">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="label" className="text-text-muted text-xs">
-            Label
-          </label>
-          <input
-            id="label"
-            name="label"
-            required
-            maxLength={80}
-            placeholder="work laptop"
-            className="border-control-border bg-surface text-text rounded border px-3 py-2"
-          />
-        </div>
+      {/* Direction A's field: one round input and the primary button beside
+          it, with the Org choice between them only when there is one. */}
+      <form action={formAction} className="flex flex-wrap gap-1.5 py-1">
+        <label htmlFor="label" className="sr-only">
+          Label
+        </label>
+        <input
+          id="label"
+          name="label"
+          required
+          maxLength={80}
+          placeholder="Label, like work laptop"
+          className={`${inputClass} min-w-40 flex-1`}
+        />
         {choose ? (
-          <div className="flex flex-col gap-1">
-            <label htmlFor="memberId" className="text-text-muted text-xs">
+          <>
+            <label htmlFor="memberId" className="sr-only">
               Org
             </label>
             <select
@@ -53,7 +62,7 @@ export function NewKeyForm({
               name="memberId"
               required
               defaultValue=""
-              className="border-control-border bg-surface text-text rounded border px-3 py-2"
+              className={inputClass}
             >
               <option value="" disabled>
                 Choose an org
@@ -64,19 +73,15 @@ export function NewKeyForm({
                 </option>
               ))}
             </select>
-          </div>
+          </>
         ) : null}
-        <button
-          type="submit"
-          disabled={pending}
-          className="border-accent-border bg-accent-fill text-accent-on-fill rounded border px-3 py-2"
-        >
+        <Button type="submit" variant="primary" disabled={pending}>
           {pending ? 'Creating…' : 'Create key'}
-        </button>
+        </Button>
       </form>
 
       {state && 'error' in state ? (
-        <p role="alert" className="text-bad-text mt-3 text-sm">
+        <p role="alert" className="text-bad-text mt-2 text-caption">
           {state.error}
         </p>
       ) : null}
@@ -114,10 +119,7 @@ function Revealed({ apiKey, appUrl }: { apiKey: string; appUrl: string }) {
   }, [command])
 
   return (
-    <div
-      role="status"
-      className="border-ok-border bg-ok-bg mt-4 rounded border p-4"
-    >
+    <div role="status" className={`${cardClass} mt-3`}>
       <p className="text-text text-sm font-medium">
         Copy this key now. It is not stored and cannot be shown again.
       </p>
@@ -126,14 +128,10 @@ function Revealed({ apiKey, appUrl }: { apiKey: string; appUrl: string }) {
         see the Cloud environment tab below.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-3">
-        <code className="border-rule bg-surface text-text rounded border px-3 py-2 font-mono text-sm break-all">
+        <code className="bg-surface-hover text-text rounded-md px-3 py-2 font-mono text-sm break-all">
           {apiKey}
         </code>
-        <button
-          type="button"
-          onClick={copy}
-          className="border-control-border text-text rounded border px-3 py-2"
-        >
+        <button type="button" onClick={copy} className={buttonClass()}>
           {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
@@ -159,14 +157,14 @@ function Revealed({ apiKey, appUrl }: { apiKey: string; appUrl: string }) {
           <code className="font-mono">/plugin install sessclone</code> inside
           Claude Code asks for the key at a prompt instead.
         </p>
-        <div className="border-rule bg-surface mt-2 flex items-center gap-2 rounded-md border p-2">
+        <div className="bg-surface-hover mt-2 flex items-center gap-2 rounded-md p-2">
           <code className="text-text grow overflow-x-auto px-1 font-mono text-sm whitespace-pre">
             {command}
           </code>
           <button
             type="button"
             onClick={copyCommand}
-            className="border-control-border text-text shrink-0 rounded border px-3 py-1 text-sm"
+            className={`${buttonClass()} shrink-0`}
           >
             {copiedCommand ? 'Copied' : 'Copy'}
             <span className="sr-only"> the install command</span>

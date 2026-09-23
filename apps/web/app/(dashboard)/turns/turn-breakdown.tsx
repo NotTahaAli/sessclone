@@ -19,10 +19,7 @@ export function TurnBreakdown({ detail }: { detail: TurnDetail }) {
   const { quantities } = detail
 
   return (
-    <section
-      aria-labelledby="breakdown"
-      className="border-rule bg-surface rounded-md border"
-    >
+    <section aria-labelledby="breakdown" className="mt-2">
       <h2 id="breakdown" className="sr-only">
         What this Turn consumed
       </h2>
@@ -35,7 +32,7 @@ export function TurnBreakdown({ detail }: { detail: TurnDetail }) {
         {quantities.map((quantity) => (
           <li
             key={quantity.key}
-            className="border-rule flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b p-4 last:border-b-0"
+            className="border-rule flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b py-2.5 last:border-b-0"
           >
             <span className="flex min-w-0 flex-col gap-0.5">
               <span className="text-body">{quantity.label}</span>
@@ -88,7 +85,7 @@ function Total({ detail }: { detail: TurnDetail }) {
   const { row, facts } = detail
 
   return (
-    <div className="border-rule bg-ground flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t p-4">
+    <div className="border-rule-strong flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t py-3">
       <span className="flex flex-col gap-0.5">
         <span className="text-body">Estimated cost</span>
         <span className="text-text-muted text-caption">
@@ -140,7 +137,7 @@ export function TurnFacts({ detail }: { detail: TurnDetail }) {
   ]
 
   return (
-    <dl className="border-rule bg-surface grid grid-cols-1 gap-x-6 gap-y-3 rounded-md border p-4 sm:grid-cols-2">
+    <dl className="grid grid-cols-1 gap-x-6 gap-y-3 py-2 sm:grid-cols-2">
       {entries.map(([label, value]) => (
         <div key={label} className="flex flex-col gap-0.5">
           <dt className="text-label text-text-muted uppercase">{label}</dt>

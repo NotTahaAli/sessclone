@@ -1,9 +1,15 @@
 import Link from 'next/link'
+import { Fragment } from 'react'
 
+import { sessionDetailView, UUID } from './[sessionId]/detail'
 import { SessionFilters } from './filters'
+import { dayLabel, localDate, sessionGlyph, todayIn } from './status'
 import { RangeControl } from '../costs/range-control'
 import { EmptyState } from '../empty-state'
+import { Finder, FinderColumn, FinderList } from '../finder'
 import { PageHeader } from '../page-header'
+import { hrefWith, one, type Query } from '../query'
+import { Row, SectionBreak } from '../../_ui/primitives'
 import { asViewer } from '../../../lib/db'
 import { resolveRange, type RangeParams } from '../../../lib/range'
 import { compact, usd } from '../../../lib/money'
@@ -17,22 +23,19 @@ import { currentViewer } from '../../../lib/viewer'
 
 // Ticket 86: the Sessions of a period, and the way into one of them.
 //
-// It shares the date-range control with Costs (ticket 53) rather than growing
-// one of its own: the period lives in the URL, so a link to this list is a
-// link to a period, and the reader moving between Costs and Sessions is
-// asking two questions about one window.
+// It shares the period pill with Costs (ticket 53) rather than growing one of
+// its own: the period lives in the URL, so a link to this list is a link to a
+// period, and the reader moving between Costs and Sessions is asking two
+// questions about one window.
 //
 // The Role scoping is the policies' (ADR 0001). A Member sees their own
 // Sessions, a Manager their Scope's, an Owner or Admin the Org's — and this
-// page contains no `where member_id =` of its own, which is what keeps that
-// true when the Roles change.
-
-const clock = (timezone: string) =>
-  new Intl.DateTimeFormat('en-GB', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: timezone,
-  })
+// page contains no `where member_id =` of its own.
+//
+// Ticket 112 redraws it in Direction A: the filters are header pills, the
+// rows sit under day breaks with the ✱ ✓ ○ glyph, and a row opens its Session
+// in a column on the right on desktop (`?open=<member>:<session>`), the list
+// staying in place. The reads are the ones the page made before.
 
 const MINUTES = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
 
@@ -53,10 +56,8 @@ type Params = RangeParams & {
   q?: string | string[]
   failed?: string | string[]
   before?: string | string[]
+  open?: string | string[]
 }
-
-const one = (value: string | string[] | undefined) =>
-  Array.isArray(value) ? value[0] : value
 
 export default async function Sessions({
   searchParams,
@@ -107,145 +108,187 @@ export default async function Sessions({
     ]),
   )
 
-  const when = clock(viewer.orgTimezone)
+  // The open Session: `<member uuid>:<session id>`. A malformed value opens
+  // nothing rather than failing the list.
+  const open = one(params.open)
+  const colon = open?.indexOf(':') ?? -1
+  const openMember = open && colon > 0 ? open.slice(0, colon) : undefined
+  const openSession = open && colon > 0 ? open.slice(colon + 1) : undefined
+  const column =
+    openMember && openSession && UUID.test(openMember)
+      ? ((await sessionDetailView({
+          viewer,
+          member: openMember,
+          sessionId: openSession,
+          closeHref: hrefWith('/sessions', params, { open: undefined }),
+        })) ?? (
+          <p className="text-text-muted py-4 text-body">
+            That session is not one you can read, or it does not exist.
+          </p>
+        ))
+      : null
+
   const last = page.sessions.at(-1)
+  const today = todayIn(viewer.orgTimezone)
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col">
       <PageHeader
         title="Sessions"
-        description={`Every session ${viewer.orgName} ran in this period, newest first.`}
+        actions={
+          <>
+            <SessionFilters
+              projects={options.projects}
+              people={options.people}
+              project={project}
+              member={member}
+              state={state}
+              search={search}
+              failed={failed}
+              params={params}
+            />
+            <RangeControl path="/sessions" resolved={resolved} query={params} />
+          </>
+        }
       />
 
-      <RangeControl path="/sessions" resolved={resolved} />
-
-      <SessionFilters
-        projects={options.projects}
-        people={options.people}
-        project={project}
-        member={member}
-        state={state}
-        search={search}
-        failed={failed}
-        params={params}
-      />
-
-      {page.sessions.length === 0 ? (
-        <EmptyState
-          headline={
-            state === 'archived'
-              ? 'No archived sessions in this period'
-              : 'No sessions in this period'
-          }
-        >
-          Nothing matched these dates and filters. Widen the period above, or
-          clear a filter.
-        </EmptyState>
-      ) : (
-        <ol className="flex flex-col gap-3">
-          {page.sessions.map((session) => (
-            <li key={`${session.memberId}:${session.sessionId}`}>
-              <Link
-                href={`/sessions/${encodeURIComponent(session.sessionId)}?member=${session.memberId}`}
-                className="border-rule bg-surface hover:bg-surface-hover block rounded-md border p-4"
-              >
-                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                  {/* Ticket 90: the name given to this Session, else the
-                      name given to its Project, else the Project's key. A
-                      name is not monospaced — it is prose, and a key is
-                      not. */}
-                  <span
-                    className={
-                      (session.label ?? session.projectName)
-                        ? 'text-body break-all'
-                        : session.projectKey
-                          ? 'font-mono text-body break-all'
-                          : 'text-body italic'
-                    }
+      <Finder column={column !== null}>
+        <FinderList column={column !== null}>
+          {page.sessions.length === 0 ? (
+            <EmptyState
+              headline={
+                state === 'archived'
+                  ? 'No archived sessions in this period'
+                  : 'No sessions in this period'
+              }
+            >
+              Nothing matched these dates and filters. Widen the period above,
+              or clear a filter.
+            </EmptyState>
+          ) : (
+            <>
+              <ol>
+                {page.sessions.map((session, index) => {
+                  const day = localDate(session.lastTurnAt, viewer.orgTimezone)
+                  const previous = page.sessions[index - 1]
+                  const breaks =
+                    !previous ||
+                    localDate(previous.lastTurnAt, viewer.orgTimezone) !== day
+                  const key = `${session.memberId}:${session.sessionId}`
+                  return (
+                    <Fragment key={key}>
+                      {breaks ? (
+                        <li>
+                          <SectionBreak as="h3">
+                            {dayLabel(day, today)}
+                          </SectionBreak>
+                        </li>
+                      ) : null}
+                      <li>
+                        <SessionLine
+                          session={session}
+                          glyph={sessionGlyph(session)}
+                          href={hrefWith('/sessions', params, { open: key })}
+                          selected={open === key}
+                        />
+                      </li>
+                    </Fragment>
+                  )
+                })}
+              </ol>
+              {page.more && last ? (
+                <p className="mt-3 text-body">
+                  <Link
+                    href={`/sessions?${nextPage(params, last)}`}
+                    className="text-text-muted hover:text-text"
                   >
-                    {session.label ??
-                      session.projectName ??
-                      session.projectKey ??
-                      'Outside a repository'}
-                  </span>
-                  <span className="font-mono text-body">
-                    {usd(session.costUsd)}
-                  </span>
-                </div>
-
-                <p className="text-text-muted mt-1 text-caption break-all">
-                  {when.format(new Date(session.startedAt))}
-                  {' → '}
-                  {/* A Session with no end marker says so rather than showing
-                      a blank or the last Turn's time dressed up as an ending.
-                      `SessionEnd` fires ~180ms after SIGTERM and not at all
-                      under SIGKILL (ticket 05), so this is a common state and
-                      an honest one. */}
-                  {session.endedAt ? (
-                    <>
-                      {when.format(new Date(session.endedAt))}
-                      {lasted(session) ? ` · ${lasted(session)}` : ''}
-                    </>
-                  ) : session.cloud ? (
-                    // A cloud container never runs `SessionEnd`, archived
-                    // or reclaimed (Taha, 2026-09-22), so the last Turn is
-                    // the most that is known and is said as exactly that.
-                    <>
-                      last Turn {when.format(new Date(session.lastTurnAt))} ·
-                      cloud, no end reported
-                    </>
-                  ) : (
-                    <span className="text-warn-text">no end recorded</span>
-                  )}
+                    Older sessions ›
+                  </Link>
                 </p>
-
-                <p className="text-text-muted mt-1 text-caption break-all">
-                  {session.turns} {session.turns === 1 ? 'Turn' : 'Turns'}
-                  {session.agentRuns > 0
-                    ? ` · ${session.agentRuns} ${
-                        session.agentRuns === 1 ? 'subagent' : 'subagents'
-                      }`
-                    : ''}
-                  {' · '}
-                  {compact.format(session.tokens)} tokens
-                  {session.unpricedTurns > 0
-                    ? ` · ${session.unpricedTurns} unpriced`
-                    : ''}
-                </p>
-
-                <p className="text-text-muted mt-1 text-caption break-all">
-                  {session.memberName ??
-                    session.memberEmail ??
-                    'Outside your view'}
-                  {session.deviceLabel ? ` · ${session.deviceLabel}` : ''}
-                  {/* The Project when the row's headline was the Session's
-                      own name, so a named Session still says where it ran. */}
-                  {session.label
-                    ? ` · ${session.projectName ?? session.projectKey ?? 'outside a repository'}`
-                    : ''}
-                </p>
-              </Link>
-            </li>
-          ))}
-        </ol>
-      )}
-
-      {page.more && last ? (
-        <p>
-          <Link
-            href={`/sessions?${nextPage(params, last)}`}
-            className="text-accent-text underline"
-          >
-            Older sessions
-          </Link>
-        </p>
-      ) : null}
+              ) : null}
+            </>
+          )}
+        </FinderList>
+        {column === null ? null : <FinderColumn>{column}</FinderColumn>}
+      </Finder>
     </div>
   )
 }
 
+/**
+ * One Session: its glyph, its name, how long it ran on the right, and who,
+ * where and what it cost underneath.
+ */
+function SessionLine({
+  session,
+  glyph,
+  href,
+  selected,
+}: {
+  session: SessionRow
+  glyph: 'live' | 'ok' | 'idle'
+  href: string
+  selected: boolean
+}) {
+  // Ticket 90: the name given to this Session, else the name given to its
+  // Project, else the Project's key. A name is prose; a key is mono.
+  const named = session.label ?? session.projectName
+  return (
+    <Row
+      href={href}
+      selected={selected}
+      lead={glyph}
+      // A Session with no end marker says so rather than showing a blank or
+      // the last Turn's time dressed up as an ending (ticket 05); a cloud
+      // container never reports one at all (ticket 95).
+      meta={
+        glyph === 'live'
+          ? 'running'
+          : session.endedAt
+            ? (lasted(session) ?? 'ended')
+            : session.cloud
+              ? 'cloud, no end'
+              : 'no end recorded'
+      }
+      sub={
+        <>
+          {session.memberName ?? session.memberEmail ?? 'Outside your view'}
+          {session.deviceLabel ? ` · ${session.deviceLabel}` : ''}
+          {/* The Project when the row's name was the Session's own, so a
+              named Session still says where it ran. */}
+          {session.label
+            ? ` · ${session.projectName ?? session.projectKey ?? 'outside a repository'}`
+            : ''}
+          {' · '}
+          {session.turns} {session.turns === 1 ? 'Turn' : 'Turns'}
+          {session.agentRuns > 0
+            ? ` · ${session.agentRuns} ${
+                session.agentRuns === 1 ? 'subagent' : 'subagents'
+              }`
+            : ''}
+          {' · '}
+          {compact.format(session.tokens)} tokens
+          {session.unpricedTurns > 0
+            ? ` · ${session.unpricedTurns} unpriced`
+            : ''}
+          {' · '}
+          <span className="text-text font-mono">{usd(session.costUsd)}</span>
+        </>
+      }
+    >
+      <span
+        className={
+          named ? '' : session.projectKey ? 'font-mono' : 'text-text-muted'
+        }
+      >
+        {named ?? session.projectKey ?? 'Outside a repository'}
+      </span>
+    </Row>
+  )
+}
+
 /** The same query plus the cursor: the period and the filters must survive. */
-const nextPage = (params: Params, last: SessionRow) => {
+const nextPage = (params: Query, last: SessionRow) => {
   const search = new URLSearchParams()
   for (const key of [
     'range',

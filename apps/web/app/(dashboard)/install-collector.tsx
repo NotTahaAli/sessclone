@@ -46,10 +46,10 @@ export function InstallCollector({ appUrl }: { appUrl: string }) {
 
 function OnAMachine({ appUrl }: { appUrl: string }) {
   return (
-    <ol className="mt-6 flex flex-col gap-6">
+    <ol className="mt-4 flex flex-col gap-5">
       <li>
-        <h3 className="text-heading">1. Add the marketplace</h3>
-        <p className="text-text-secondary mt-1 text-body">
+        <h3 className="text-body font-medium">1. Add the marketplace</h3>
+        <p className="text-text-muted mt-0.5 text-body">
           In a terminal on the machine whose usage you want collected.
         </p>
         <div className="mt-2">
@@ -58,8 +58,8 @@ function OnAMachine({ appUrl }: { appUrl: string }) {
       </li>
 
       <li>
-        <h3 className="text-heading">2. Install it with your key</h3>
-        <p className="text-text-secondary mt-1 text-body">
+        <h3 className="text-body font-medium">2. Install it with your key</h3>
+        <p className="text-text-muted mt-0.5 text-body">
           One command, carrying this deployment&apos;s URL and your key. Replace{' '}
           <code className="font-mono">{PLACEHOLDER}</code> with the key you
           created under Keys — it is shown once at creation, so if you no longer
@@ -71,7 +71,7 @@ function OnAMachine({ appUrl }: { appUrl: string }) {
             label="the install command"
           />
         </div>
-        <p className="text-text-secondary mt-2 text-body">
+        <p className="text-text-muted mt-2 text-body">
           A command you type is kept in your shell&apos;s history, and this one
           has your key in it. To keep it out, run{' '}
           <code className="font-mono">/plugin install sessclone</code> inside
@@ -84,8 +84,8 @@ function OnAMachine({ appUrl }: { appUrl: string }) {
       </li>
 
       <li>
-        <h3 className="text-heading">3. Restart Claude Code</h3>
-        <p className="text-text-secondary mt-1 text-body">
+        <h3 className="text-body font-medium">3. Restart Claude Code</h3>
+        <p className="text-text-muted mt-0.5 text-body">
           Hooks only take effect after a restart. Turns from before the restart
           are not lost: the first sweep after it backfills them, so there is no
           need to re-run the install when an existing session reports nothing.
@@ -106,10 +106,10 @@ function InACloudEnvironment({ appUrl }: { appUrl: string }) {
   // scheme must not take the page down: the raw value is the fallback.
   const host = URL.parse(appUrl)?.hostname ?? appUrl
   return (
-    <ol className="mt-6 flex flex-col gap-6">
+    <ol className="mt-4 flex flex-col gap-5">
       <li>
-        <h3 className="text-heading">1. Add the setup script</h3>
-        <p className="text-text-secondary mt-1 text-body">
+        <h3 className="text-body font-medium">1. Add the setup script</h3>
+        <p className="text-text-muted mt-0.5 text-body">
           Open the environment for editing in Claude Code on the web and paste
           this as its setup script. The key in it is a placeholder: leave it
           exactly as it is.
@@ -123,8 +123,8 @@ function InACloudEnvironment({ appUrl }: { appUrl: string }) {
       </li>
 
       <li>
-        <h3 className="text-heading">2. Add an API credential</h3>
-        <p className="text-text-secondary mt-1 text-body">
+        <h3 className="text-body font-medium">2. Add an API credential</h3>
+        <p className="text-text-muted mt-0.5 text-body">
           In the same dialog, under API credentials, select Add credential.
         </p>
         <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-body">
@@ -141,7 +141,7 @@ function InACloudEnvironment({ appUrl }: { appUrl: string }) {
           <dt className="text-text-secondary">Value</dt>
           <dd>your key from Keys</dd>
         </dl>
-        <p className="text-text-secondary mt-2 text-body">
+        <p className="text-text-muted mt-2 text-body">
           The proxy puts your key on every request to {host} after it leaves the
           container, so the key is never in the script or the session. Claude
           offers API credentials on Pro and Max plans.
@@ -149,8 +149,8 @@ function InACloudEnvironment({ appUrl }: { appUrl: string }) {
       </li>
 
       <li>
-        <h3 className="text-heading">3. Start a new session</h3>
-        <p className="text-text-secondary mt-1 text-body">
+        <h3 className="text-body font-medium">3. Start a new session</h3>
+        <p className="text-text-muted mt-0.5 text-body">
           The setup script runs when a session starts, so the one already open
           reports nothing. Cloud sessions never report an end: Sessions shows
           their last Turn instead.

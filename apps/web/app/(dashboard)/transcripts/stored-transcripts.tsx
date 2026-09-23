@@ -1,16 +1,18 @@
 import { deleteProject, deleteSession } from './artifact-actions'
+import { Row, SectionBreak } from '../../_ui/primitives'
 import type { StoredProject, StoredSession } from '../../../lib/artifacts'
 
-// Ticket 73's surface. ADR 0005 keeps it apart from the archival switch above
-// on purpose: stopping collection and destroying what is held are different
-// intentions and must not share a click. So this is its own section, with its
-// own heading, below the switch rather than inside it.
+// Ticket 73's surface. ADR 0005 keeps it apart from the archival switch on
+// purpose: stopping collection and destroying what is held are different
+// intentions and must not share a click.
 //
-// Both buttons are inside a `details` rather than firing on first press. A
-// deletion cannot be undone, and a one-press destructive control sitting in a
-// settings page is a mis-tap away from a year of transcripts. The disclosure
-// is native HTML, so the confirmation costs no client JavaScript and works
-// with it turned off — as every other control on this page does.
+// Both deletes are inside a `details` rather than firing on first press. A
+// deletion cannot be undone, and a one-press destructive control is a mis-tap
+// away from a year of transcripts. The disclosure is native HTML, so the
+// confirmation costs no client JavaScript and works with it turned off.
+//
+// Direction A (ticket 112): each Project is a section break with its figures,
+// and each stored session a row under it — no box per Project.
 
 const BYTES = ['bytes', 'KB', 'MB', 'GB', 'TB']
 
@@ -30,8 +32,7 @@ const size = (bytes: number) => {
  *
  * The date alone was not enough (Taha, 2026-09-22): several sessions on one
  * repository land on the same day, and a column of identical dates cannot say
- * which of them is the one somebody just asked about. The Org's zone rather
- * than the server's, so this agrees with every other time in the product.
+ * which of them is the one somebody just asked about.
  */
 const when = (timezone: string) =>
   new Intl.DateTimeFormat('en-GB', {
@@ -51,13 +52,14 @@ const EMPTY: StoredSession[] = []
 const groupKey = (memberId: string, projectId: string | null) =>
   `${memberId}:${projectId ?? 'none'}`
 
+const LINK = 'text-text-muted hover:text-text underline'
+
 export function StoredTranscripts({
   projects,
   sessions,
   more,
   orgNames,
   audience = 'own',
-  heading = true,
   timezone,
 }: {
   projects: StoredProject[]
@@ -72,12 +74,6 @@ export function StoredTranscripts({
    * button an Admin can see and never use is a button that lies.
    */
   audience?: 'own' | 'team'
-  /**
-   * Whether this renders its own heading (ticket 87). On `/transcripts` the
-   * page writes the heading and the sentence under it, so a second pair here
-   * would read as a second list of the same rows.
-   */
-  heading?: boolean
   /** The Org's timezone, so an upload time reads in the same zone as every
    * other figure on the dashboard. */
   timezone: string
@@ -95,58 +91,31 @@ export function StoredTranscripts({
   }
 
   return (
-    <section
-      aria-labelledby={own && heading ? 'stored' : undefined}
-      aria-label={own && heading ? undefined : 'Stored transcripts'}
-      className={own && heading ? 'mt-8' : ''}
-    >
-      {/* On a team listing the page's own title says this already, and a
-          second heading with a third wording of it reads as a second list.
-          Ticket 87 made the same true of the viewer's own listing, which now
-          sits under a heading the page writes. */}
-      {own && heading ? (
-        <>
-          <h2 id="stored" className="text-heading-lg">
-            Stored transcripts
-          </h2>
-          <p className="text-text-secondary mt-2 text-sm">
-            What has already been uploaded. Deleting one destroys the transcript
-            itself, not the session&apos;s usage or cost — those are always
-            reported. This cannot be undone.
-          </p>
-        </>
-      ) : null}
-
+    <section aria-label="Stored transcripts">
       {projects.length === 0 ? (
-        <p className="border-rule text-text-muted mt-4 rounded border border-dashed p-6 text-sm">
+        <p className="text-text-muted py-3 text-body">
           {own
             ? 'Nothing stored. Transcripts appear here once archival is on and a session has finished.'
             : 'Nothing stored. A transcript appears here once a Member turns archival on and one of their sessions has finished.'}
         </p>
       ) : (
-        <ul className="mt-4 flex flex-col gap-4">
-          {projects.map((project) => (
-            <li
-              key={groupKey(project.memberId, project.projectId)}
-              className="border-rule rounded border p-4"
-            >
-              <Group
-                project={project}
-                own={own}
-                orgName={orgNames.get(project.memberId)}
-                stamp={stamp}
-                sessions={
-                  byGroup.get(groupKey(project.memberId, project.projectId)) ??
-                  EMPTY
-                }
-              />
-            </li>
-          ))}
-        </ul>
+        projects.map((project) => (
+          <Group
+            key={groupKey(project.memberId, project.projectId)}
+            project={project}
+            own={own}
+            orgName={orgNames.get(project.memberId)}
+            stamp={stamp}
+            sessions={
+              byGroup.get(groupKey(project.memberId, project.projectId)) ??
+              EMPTY
+            }
+          />
+        ))
       )}
 
       {more ? (
-        <p className="text-text-muted mt-4 text-sm">
+        <p className="text-text-muted mt-4 text-caption">
           {own
             ? 'Only your most recent sessions are listed. Deleting a whole project covers every session in it, listed or not.'
             : 'Only the most recent sessions are listed. The counts above each project cover every session in it, listed or not.'}
@@ -172,32 +141,23 @@ function Group({
   const name = project.projectKey ?? 'Sessions outside a repository'
 
   return (
-    <>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p
-            className={
-              project.projectKey
-                ? 'font-mono text-sm break-all'
-                : 'text-sm italic'
-            }
-          >
-            {name}
-          </p>
-          <p className="text-text-muted mt-1 text-sm">
-            {own ? '' : `${project.memberEmail ?? 'A Member'} · `}
-            {project.sessions} session{project.sessions === 1 ? '' : 's'} ·{' '}
-            {size(project.bytes)} · last upload {stamp.format(project.newest)}
-            {orgName ? ` · ${orgName}` : ''}
-          </p>
-        </div>
-
+    <div>
+      <SectionBreak as="h3">
+        <span className={project.projectKey ? 'font-mono' : ''}>{name}</span>
+      </SectionBreak>
+      <p className="text-text-muted flex flex-wrap items-baseline justify-between gap-x-3 text-caption">
+        <span>
+          {own ? '' : `${project.memberEmail ?? 'A Member'} · `}
+          {project.sessions} session{project.sessions === 1 ? '' : 's'} ·{' '}
+          {size(project.bytes)} · last upload {stamp.format(project.newest)}
+          {orgName ? ` · ${orgName}` : ''}
+        </span>
         {own ? (
           <Confirm
             summary="Delete all"
-            // Named rather than counted in the button: the count is above it,
-            // and a button that says what it destroys is what a person reads
-            // before pressing.
+            // Named rather than counted in the button: the count is beside
+            // it, and a button that says what it destroys is what a person
+            // reads before pressing.
             question={`Delete all ${project.sessions} transcript${
               project.sessions === 1 ? '' : 's'
             } stored for ${name}? This cannot be undone.`}
@@ -207,58 +167,48 @@ function Group({
             projectId={project.projectId ?? 'none'}
           />
         ) : null}
-      </div>
+      </p>
 
       {sessions.length === 0 ? null : (
-        <ul className="mt-3">
+        <ol className="mt-1">
           {sessions.map((session) => (
-            <li
-              key={session.id}
-              className="border-rule flex flex-wrap items-center justify-between gap-3 border-t py-2"
-            >
-              <div className="min-w-0">
-                <p className="font-mono text-sm break-all">
+            <li key={session.id}>
+              <Row
+                lead="none"
+                meta={size(session.bytes)}
+                // The last message rather than the upload (Taha,
+                // 2026-09-22): a laptop that was closed uploads hours after
+                // the work everybody remembers. Where no Turn is readable
+                // there is nothing to say but when it arrived.
+                sub={
+                  session.lastTurnAt
+                    ? `last message ${stamp.format(session.lastTurnAt)}`
+                    : `uploaded ${stamp.format(session.uploadedAt)}`
+                }
+              >
+                <span className="font-mono">
                   {session.sessionId}
                   {session.agentId ? ` · subagent ${session.agentId}` : ''}
-                </p>
-                {/* The last message rather than the upload (Taha,
-                    2026-09-22). A transcript is uploaded when the session
-                    ends, which is a fact about the Collector: a laptop that
-                    was closed uploads hours after the work everybody
-                    remembers. Where no Turn of the session is readable there
-                    is nothing to say but when it arrived, so it says that
-                    instead of dressing one time up as the other. */}
-                <p className="text-text-muted text-sm">
-                  {size(session.bytes)} ·{' '}
-                  {session.lastTurnAt
-                    ? `last message ${stamp.format(session.lastTurnAt)}`
-                    : `uploaded ${stamp.format(session.uploadedAt)}`}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                {/* Ticket 60. A plain link, because a download is a GET: it
-                    can be bookmarked, retried and handed to `curl`, and the
-                    route redirects to storage so the bytes never come through
-                    the application. */}
-                {/* A new tab, because every failure of the route answers with
-                    a plain message rather than a page: an expired session in a
-                    long-open tab, a transcript the adjacent Delete already
-                    removed, or storage that is not configured would otherwise
-                    replace this page with bare text. On success the
-                    attachment disposition means the tab opens and closes. */}
+                </span>
+              </Row>
+              <div className="-mt-1 flex flex-wrap items-start gap-3 pb-1.5 pl-[22px] text-caption">
                 {session.agentId ? null : (
                   <a
                     href={`/sessions/${encodeURIComponent(session.sessionId)}/transcript?member=${session.memberId}`}
-                    className="text-accent-text text-sm underline"
+                    className="underline"
                   >
                     View
                   </a>
                 )}
+                {/* Ticket 60. A plain link, because a download is a GET, and
+                    the route redirects to storage so the bytes never come
+                    through the application. A new tab, because every failure
+                    of the route answers with plain text rather than a page. */}
                 <a
                   href={`/api/logs/download/${session.id}`}
                   target="_blank"
                   rel="noopener"
-                  className="hover:text-accent-text text-sm underline"
+                  className={LINK}
                   aria-label={`Download the transcript of session ${session.sessionId}`}
                 >
                   Download
@@ -275,9 +225,9 @@ function Group({
               </div>
             </li>
           ))}
-        </ul>
+        </ol>
       )}
-    </>
+    </div>
   )
 }
 
@@ -305,12 +255,12 @@ function Confirm({
 }) {
   return (
     <details className="min-w-0">
-      <summary className="border-control-border text-text inline-block cursor-pointer rounded border px-3 py-1 text-sm whitespace-nowrap">
+      <summary className={`${LINK} cursor-pointer list-none`}>
         {summary}
         <span className="sr-only"> {label}</span>
       </summary>
 
-      <form action={action} className="mt-2 max-w-xs">
+      <form action={action} className="mt-1.5 max-w-xs">
         {memberId ? (
           <input type="hidden" name="memberId" value={memberId} />
         ) : null}
@@ -320,10 +270,10 @@ function Confirm({
         {artifactId ? (
           <input type="hidden" name="artifactId" value={artifactId} />
         ) : null}
-        <p className="text-text-secondary text-sm">{question}</p>
+        <p className="text-text-secondary text-caption">{question}</p>
         <button
           type="submit"
-          className="border-bad-border text-bad-text mt-2 rounded border px-3 py-1 text-sm"
+          className="border-bad-border text-bad-text mt-1.5 inline-flex h-[var(--pill-h)] items-center rounded-full border px-3 text-[13px]"
         >
           Delete permanently
           <span className="sr-only"> — {label}</span>

@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import type { ReactNode } from 'react'
 
 // PageHeader, Direction A (ticket 111): the page's title at 20px with its
@@ -9,10 +10,14 @@ export function PageHeader({
   title,
   description,
   actions,
+  back,
   children,
 }: {
   title?: string
   description?: string
+  /** Where the phone's ‹ goes (ticket 113): a settings page's way back to
+   * the index, which desktop shows in the column beside it instead. */
+  back?: string
   /** Pills and buttons on the title's line: `PillMenu`, `Pill`, `Button`. */
   actions?: ReactNode
   /** The heading's content when it is more than a string — since tickets 90
@@ -23,7 +28,23 @@ export function PageHeader({
   return (
     <header className="border-rule border-b pb-3.5">
       <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-        <h1 className="text-heading-lg grow">{children ?? title}</h1>
+        {back ? (
+          <Link
+            href={back}
+            aria-label="Back"
+            className="text-text-muted -mr-1 text-heading-lg leading-none lg:hidden"
+          >
+            ‹
+          </Link>
+        ) : null}
+        {/* A page with a way back sits in the settings column on desktop,
+            under the "Settings" title, so it takes the column's heading
+            size there rather than a second 20px title. */}
+        <h1
+          className={`grow ${back ? 'text-heading-lg lg:text-heading' : 'text-heading-lg'}`}
+        >
+          {children ?? title}
+        </h1>
         {actions}
       </div>
       {description ? (

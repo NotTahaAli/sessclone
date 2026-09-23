@@ -49,11 +49,13 @@ export function SetupTabs({ children }: { children: ReactNode }) {
   )
 
   return (
-    <div className="mt-6 max-w-3xl">
+    <div className="mt-3 max-w-3xl">
+      {/* Drawn as Direction A's segmented pill (ticket 112) rather than a
+          tab row; still a tablist with arrow keys underneath. */}
       <div
         role="tablist"
         aria-label="Where to install"
-        className="border-rule flex gap-4 border-b"
+        className="border-rule inline-flex rounded-full border p-0.5 text-caption"
         onKeyDown={arrow}
       >
         {TABS.map((label, index) => (
@@ -67,10 +69,8 @@ export function SetupTabs({ children }: { children: ReactNode }) {
             aria-controls={`${id}-panel-${index}`}
             tabIndex={active === index ? 0 : -1}
             onClick={choose}
-            className={`text-body -mb-px border-b-2 py-2 ${
-              active === index
-                ? 'border-accent-border text-text'
-                : 'text-text-secondary border-transparent'
+            className={`rounded-full px-3 py-1 ${
+              active === index ? 'bg-text text-ground' : 'text-text-muted'
             }`}
           >
             {label}

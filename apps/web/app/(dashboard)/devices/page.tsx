@@ -4,6 +4,7 @@ import { rename } from './actions'
 import { InlineName } from '../inline-name'
 import { EmptyState } from '../empty-state'
 import { PageHeader } from '../page-header'
+import { Row, SectionBreak } from '../../_ui/primitives'
 import { asViewer } from '../../../lib/db'
 import { listOwnDevices, type Device } from '../../../lib/devices'
 import { currentViewer } from '../../../lib/viewer'
@@ -15,6 +16,9 @@ import { currentViewer } from '../../../lib/viewer'
 // Costs breakdown by Device (ticket 56), where the question is where the money
 // went. Here the question is "is my laptop still reporting", and a list mixing
 // in machines nobody can rename would answer neither.
+//
+// Direction A (ticket 112): one row per machine, the name with its pencil on
+// the left, when it last reported on the right, the key and its counts under.
 
 const whole = new Intl.NumberFormat('en-US')
 
@@ -36,7 +40,7 @@ export default async function Page() {
   })
 
   return (
-    <div className="flex max-w-3xl flex-col gap-6">
+    <div className="flex max-w-3xl flex-col">
       <PageHeader title="Devices" />
 
       {devices.length === 0 ? (
@@ -46,19 +50,20 @@ export default async function Page() {
         </EmptyState>
       ) : (
         <>
-          <p className="text-text-secondary text-sm">
+          <p className="text-text-muted mt-3 text-caption">
             Every machine that has reported under your account. The name is
             yours to change and is what the Costs breakdown shows; the key
             underneath is how a machine identifies itself and never changes, so
             renaming keeps its history.
           </p>
-          <ul className="flex flex-col gap-4">
+          <SectionBreak>Last reported</SectionBreak>
+          <ol>
             {devices.map((device) => (
-              <DeviceCard key={device.id} device={device} when={when} />
+              <DeviceRow key={device.id} device={device} when={when} />
             ))}
-          </ul>
+          </ol>
           {more ? (
-            <p className="text-text-muted text-caption">
+            <p className="text-text-muted mt-3 text-caption">
               Only your {devices.length} most recently seen machines are shown.
             </p>
           ) : null}
@@ -68,7 +73,7 @@ export default async function Page() {
   )
 }
 
-function DeviceCard({
+function DeviceRow({
   device,
   when,
 }: {
@@ -76,10 +81,25 @@ function DeviceCard({
   when: Intl.DateTimeFormat
 }) {
   return (
-    <li className="border-rule bg-surface rounded-md border p-4">
+    <li>
       {/* Ticket 90's second look: the pencil sits beside the name rather
           than a labelled form under every machine on the page. */}
-      <h2 className="text-heading break-words">
+      <Row
+        lead="none"
+        meta={when.format(device.lastSeenAt)}
+        // The key only under a nickname: with none, the name is already the
+        // key, and printing it twice reads as two facts about one machine.
+        sub={
+          <>
+            {device.nickname === null ? null : (
+              <span className="font-mono">{device.key} · </span>
+            )}
+            first seen {when.format(device.firstSeenAt)} ·{' '}
+            {whole.format(device.turns)} {device.turns === 1 ? 'turn' : 'turns'}{' '}
+            in the last 30 days
+          </>
+        }
+      >
         <InlineName
           action={rename}
           hidden={`deviceId=${device.id}`}
@@ -89,19 +109,7 @@ function DeviceCard({
           placeholder="Work laptop"
           mono
         />
-      </h2>
-      {/* Only under a nickname: with none, the heading is already the key, and
-          printing it twice reads as two facts about one machine. */}
-      {device.nickname === null ? null : (
-        <p className="text-text-muted mt-1 font-mono text-caption break-all">
-          {device.key}
-        </p>
-      )}
-      <p className="text-text-secondary mt-2 text-sm">
-        Last reported {when.format(device.lastSeenAt)} · first seen{' '}
-        {when.format(device.firstSeenAt)} · {whole.format(device.turns)}{' '}
-        {device.turns === 1 ? 'turn' : 'turns'} in the last 30 days
-      </p>
+      </Row>
     </li>
   )
 }

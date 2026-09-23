@@ -97,42 +97,62 @@ const ROW =
  * The list row: a leading mark, a name that truncates, a right-aligned mono
  * value, then an optional meter and sub line under the name.
  *
- * `lead` defaults to the › chevron; pass a `StatusGlyph`, an avatar, or
- * `null` for an empty column that keeps names aligned. With `href` the row is
- * a link and takes the hover fill; `selected` is the row a side column is
- * showing, and is the only filled row on a surface.
+ * The lead defaults to the › chevron. `lead` swaps it for a status glyph, or
+ * `none` for an empty column that keeps names aligned; `mark` puts a short
+ * text in its place (an initial, a tone mark). With `href` the row is a link
+ * and takes the hover fill; `selected` is the row a side column is showing,
+ * and is the only filled row on a surface.
+ *
+ * The name is `name` when it is a string and `children` when it is more
+ * (a pencil, a muted or mono span). Everything a caller passes is data or
+ * children, never an element in a prop: `react-perf/jsx-no-jsx-as-prop`.
+ * A control beside a row (Revoke, Withdraw) sits outside it, in the list item.
  */
 export function Row({
   name,
+  children,
   value,
   meta,
   sub,
   meter,
   meterCurrent,
   lead,
+  mark,
+  markClass = 'text-text-muted',
   href,
   selected,
 }: {
-  name: ReactNode
+  name?: string
+  children?: ReactNode
   /** A figure: mono 13px in the text colour. */
-  value?: ReactNode
+  value?: string
   /** Metadata in the value's place: mono 12px, muted. Ignored when `value` is
    * given. */
-  meta?: ReactNode
+  meta?: string
   sub?: ReactNode
   /** 0 to 1, drawn as a `Meter` under the name. */
   meter?: number
   meterCurrent?: boolean
-  lead?: ReactNode
+  lead?: 'live' | 'ok' | 'idle' | 'none'
+  mark?: string
+  markClass?: string
   href?: string
   selected?: boolean
 }) {
   const body = (
     <>
       <span className="self-center leading-none">
-        {lead === undefined ? <Chevron /> : lead}
+        {mark !== undefined ? (
+          <span aria-hidden="true" className={markClass}>
+            {mark}
+          </span>
+        ) : lead === undefined ? (
+          <Chevron />
+        ) : lead === 'none' ? null : (
+          <StatusGlyph state={lead} />
+        )}
       </span>
-      <span className="truncate">{name}</span>
+      <span className="truncate">{name ?? children}</span>
       {value !== undefined ? (
         <span className="font-mono text-[13px] tabular-nums">{value}</span>
       ) : meta !== undefined ? (
@@ -447,6 +467,7 @@ export function Field({
   hint,
   htmlFor,
   indent,
+  mono,
   children,
 }: {
   label: ReactNode
@@ -454,6 +475,8 @@ export function Field({
   htmlFor?: string
   /** A nested line, such as one Project under an Org-wide switch. */
   indent?: boolean
+  /** A label that is a key rather than prose: mono, truncated, whole on hover. */
+  mono?: boolean
   children: ReactNode
 }) {
   const Label = htmlFor ? 'label' : 'span'
@@ -461,7 +484,8 @@ export function Field({
     <div className="border-rule grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b py-[11px] last:border-b-0">
       <Label
         htmlFor={htmlFor}
-        className={`text-body ${indent ? 'pl-3.5' : ''}`}
+        title={mono && typeof label === 'string' ? label : undefined}
+        className={`${mono ? 'block truncate font-mono text-[13px]' : 'text-body'} ${indent ? 'pl-3.5' : ''}`}
       >
         {label}
       </Label>

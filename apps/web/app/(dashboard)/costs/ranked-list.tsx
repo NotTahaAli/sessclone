@@ -1,23 +1,22 @@
-import Link from 'next/link'
-
+import { Row } from '../../_ui/primitives'
+import { hrefWith, type Query } from '../query'
 import type { BreakdownRow, Dimension } from '../../../lib/breakdown'
+import { compact, count, usd } from '../../../lib/money'
 
-// The ranked list that tickets 54, 55 and 56 each show: horizontal bars,
-// sorted, with the share as a number beside them.
+// The ranked list that tickets 54, 55 and 56 each show, as Direction A's rows
+// (ticket 112): the name, the cost as the right-aligned mono figure, a meter
+// under the name, and tokens, turns and the share on the line below.
 //
 // `docs/design/dashboard-wireframes.md` picked the shape and said why — a pie
 // cannot be read past four slices and cannot be sorted — and it is one
 // component for the three views because the question is the same one asked of
-// a different column. The bar carries the ranking; the number carries the
-// share, because a bar read off a screenshot is not a figure anybody can quote.
+// a different column. The meter carries the ranking; the share is a number,
+// because a bar read off a screenshot is not a figure anybody can quote.
+//
+// A row opens its Turns: in a column beside the list on desktop, in the
+// list's place on a phone (`finder.tsx`). The row that is open is the one
+// filled row on the page.
 
-const money = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-  maximumFractionDigits: 2,
-})
-const tokens = new Intl.NumberFormat('en-US', { notation: 'compact' })
-const whole = new Intl.NumberFormat('en-US')
 // One decimal: whole percentages on five rows visibly sum to 101%, and a
 // reader checking the arithmetic on a page about money is the reader this
 // page is for.
@@ -49,17 +48,20 @@ export function RankedList({
   dimension,
   total,
   params,
+  open,
   more = 0,
   moreUnpriced = 0,
 }: {
   rows: BreakdownRow[]
   dimension: Dimension
   /** The current query, so a row's link keeps the period it was ranked for. */
-  params: Record<string, string | string[] | undefined>
+  params: Query
+  /** The id of the row whose column is open, `none` for the unnamed group. */
+  open?: string
   /**
-   * The period's cost across every group, which is the figure in the Cost tile
-   * above. The shares are of that rather than of the rows shown, or past the
-   * cap a share times the headline total would be the wrong number of dollars.
+   * The period's cost across every group, which is the Spent figure above.
+   * The shares are of that rather than of the rows shown, or past the cap a
+   * share times the headline total would be the wrong number of dollars.
    */
   total: number | null
   /** Groups the read left out, so the list says so rather than looking whole. */
@@ -68,72 +70,67 @@ export function RankedList({
   moreUnpriced?: number
 }) {
   if (rows.length === 0) {
-    return (
-      <p className="border-rule text-text-muted rounded border border-dashed p-6 text-sm">
-        {EMPTY[dimension]}
-      </p>
-    )
+    return <p className="text-text-muted py-3 text-body">{EMPTY[dimension]}</p>
   }
 
-  // The bar is a share of the largest row rather than of the total: at twenty
-  // rows every bar would otherwise be a sliver, and the comparison the reader
-  // is making is with the row above.
-  // The bar is a share of the largest row shown; the percentage is a share of
-  // the period. The two answer different questions and only one of them has to
-  // agree with the tile above.
+  // The meter is a share of the largest row shown; the percentage is a share
+  // of the period. The two answer different questions and only one of them
+  // has to agree with the figure above.
   const peak = Math.max(...rows.map((row) => row.costUsd ?? 0))
-  const period = periodOf(params)
 
   return (
     <ol className="flex flex-col">
-      {rows.map((row) => (
-        <li
-          key={row.id ?? row.label}
-          className="border-rule flex flex-col gap-1 border-b py-3"
-        >
-          <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-            <Name row={row} dimension={dimension} period={period}>
-              {middleTruncate(row.label)}
-              {row.note ? (
-                <span className="text-text-muted"> — {row.note}</span>
-              ) : null}
-            </Name>
-            {/* A row with nothing priced shows a dash, never $0.00: the
-                money is not zero, it is unknown, and the caption below says
-                how many Turns are waiting on a rate. */}
-            <span className="flex items-baseline gap-3 font-mono text-sm">
-              <span>
-                {row.costUsd === null ? '—' : money.format(row.costUsd)}
+      {rows.map((row) => {
+        // The catch-all on People is the one row with no id — its Turns
+        // belong to Members outside the viewer's view — so it opens nothing.
+        const openable = row.id !== null || dimension !== 'members'
+        const key = row.id ?? 'none'
+        return (
+          <li key={key}>
+            <Row
+              lead={openable ? undefined : 'none'}
+              href={
+                openable
+                  ? hrefWith('/costs', params, { view: dimension, open: key })
+                  : undefined
+              }
+              selected={openable && open === key}
+              // A dash, never $0.00, for a row with nothing priced: the money
+              // is not zero, it is unknown.
+              value={usd(row.costUsd)}
+              meter={peak > 0 ? (row.costUsd ?? 0) / peak : 0}
+              sub={
+                <>
+                  {compact.format(row.tokens)} tokens ·{' '}
+                  {count.format(row.turns)} {row.turns === 1 ? 'turn' : 'turns'}
+                  {row.unpricedTurns > 0
+                    ? ` · ${count.format(row.unpricedTurns)} unpriced`
+                    : ''}
+                  {row.costUsd !== null && total !== null && total > 0
+                    ? ` · ${share.format(row.costUsd / total)}`
+                    : ''}
+                </>
+              }
+            >
+              <span
+                title={row.label}
+                className={dimension === 'members' ? '' : 'font-mono'}
+              >
+                {middleTruncate(row.label)}
+                {row.note ? (
+                  <span className="text-text-muted"> — {row.note}</span>
+                ) : null}
               </span>
-              <span className="text-text-muted text-caption">
-                {row.costUsd !== null && total !== null && total > 0
-                  ? share.format(row.costUsd / total)
-                  : '—'}
-              </span>
-            </span>
-          </div>
-
-          {/* The bar itself. A `div` at a percentage width, not an SVG: one
-              rectangle per row does not need a coordinate system. */}
-          <div className="bg-surface-hover h-2 w-full rounded-sm">
-            <Bar fraction={peak > 0 ? (row.costUsd ?? 0) / peak : 0} />
-          </div>
-
-          <p className="text-text-muted text-caption">
-            {tokens.format(row.tokens)} tokens · {whole.format(row.turns)}{' '}
-            {row.turns === 1 ? 'turn' : 'turns'}
-            {row.unpricedTurns > 0
-              ? ` · ${whole.format(row.unpricedTurns)} unpriced`
-              : ''}
-          </p>
-        </li>
-      ))}
+            </Row>
+          </li>
+        )
+      })}
       {more > 0 ? (
         <li className="text-text-muted py-3 text-caption">
-          {whole.format(more)} more, below the {whole.format(rows.length)}{' '}
+          {count.format(more)} more, below the {count.format(rows.length)}{' '}
           largest
           {moreUnpriced > 0
-            ? `, ${whole.format(moreUnpriced)} of them with nothing priced`
+            ? `, ${count.format(moreUnpriced)} of them with nothing priced`
             : ''}
           . The totals above count all of them.
         </li>
@@ -141,82 +138,3 @@ export function RankedList({
     </ol>
   )
 }
-
-/**
- * The row's label, as a link to its Turns when there is a group to ask for.
- *
- * The catch-all on People is the one row with no id — its Turns belong to
- * Members outside the viewer's view, so there is nothing to open — and it
- * renders as plain text. A link that led to an empty page would be worse than
- * no link, since the reader would read the emptiness as a bug.
- */
-function Name({
-  row,
-  dimension,
-  period,
-  children,
-}: {
-  row: BreakdownRow
-  dimension: Dimension
-  period: string
-  children: React.ReactNode
-}) {
-  const openable = row.id !== null || dimension !== 'members'
-
-  if (!openable) {
-    return (
-      <span className="font-mono text-sm break-all" title={row.label}>
-        {children}
-      </span>
-    )
-  }
-
-  return (
-    <Link
-      href={`/costs/${dimension}/${row.id ?? 'none'}${period}`}
-      className="hover:text-accent-text font-mono text-sm break-all underline"
-      title={row.label}
-    >
-      {children}
-    </Link>
-  )
-}
-
-/** The period from the current query, as a search string or an empty one. */
-const periodOf = (params: Record<string, string | string[] | undefined>) => {
-  const search = new URLSearchParams()
-  for (const key of ['range', 'from', 'to'] as const) {
-    const value = params[key]
-    const one = Array.isArray(value) ? value[0] : value
-    if (one) search.set(key, one)
-  }
-  const query = search.toString()
-  return query ? `?${query}` : ''
-}
-
-/**
- * One bar, drawn at a twentieth of its width at a time.
- *
- * A width computed per row would be an inline style object, which this repo's
- * lint rule refuses for a good reason — a new object every render. Rounding to
- * a step lets the class be one of a fixed set the stylesheet already contains,
- * and at 5% steps nobody can see the difference on a 200px bar.
- */
-function Bar({ fraction }: { fraction: number }) {
-  // A floor of one step so a small row is still visible, but only for a row
-  // that spent something: nothing priced, or nothing spent, draws no bar
-  // rather than a sliver that reads as a small amount.
-  const step = fraction > 0 ? Math.max(1, Math.round(fraction * 20)) : 0
-  return (
-    <div
-      className="bg-accent-fill h-2 rounded-sm"
-      data-width={step}
-      style={WIDTHS[step]}
-    />
-  )
-}
-
-/** Twenty-one widths, built once at module load rather than per render. */
-const WIDTHS: Record<number, { width: string }> = Object.fromEntries(
-  Array.from({ length: 21 }, (_, step) => [step, { width: `${step * 5}%` }]),
-)

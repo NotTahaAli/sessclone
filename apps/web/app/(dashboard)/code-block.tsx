@@ -35,14 +35,14 @@ export function CodeBlock({
   }, [command])
 
   return (
-    <div className="border-rule bg-surface flex items-center gap-2 rounded-md border p-2">
+    <div className="border-rule bg-surface flex items-center gap-2 rounded-lg border py-1.5 pr-1.5 pl-2">
       <code className="text-text grow overflow-x-auto px-1 text-caption whitespace-pre">
         {command}
       </code>
       <button
         type="button"
         onClick={copy}
-        className="border-control-border text-text hover:bg-surface-hover h-[var(--control-h)] shrink-0 rounded-md border px-3 text-caption"
+        className="border-rule text-text hover:bg-surface-hover h-[var(--pill-h)] shrink-0 rounded-full border px-3 text-caption"
       >
         {/* Text as well as colour: the design system says the confirmation is
             both, so a monochrome display still reports it. */}
