@@ -141,6 +141,19 @@ test('a Member who has opted in gets a URL for their own Session', async () => {
   )
   expect(body.url).toContain(body.storageKey)
   expect(body.expiresIn).toBeGreaterThan(0)
+  expect(body.kind).toBe('transcript')
+})
+
+test('the answer echoes the kind it was issued for, so a Collector can trust it with a sidecar', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession({ agentId: 'agent-7' })
+
+  const [, body] = await answer(
+    await ask({ agentId: 'agent-7', kind: 'agent_meta' }),
+  )
+
+  expect(body.kind).toBe('agent_meta')
+  expect(body.storageKey).toContain('/agents/agent-7.meta.json')
 })
 
 test('an Agent Run is its own object under the Session', async () => {

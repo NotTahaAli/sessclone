@@ -52,10 +52,15 @@ const stubFetch = (answers) => {
         : 'put'
     const answer = answers[key]
     if (answer === 'throw') throw new Error('unreachable')
+    // A body may be a function of the request's, as a server echoing it is.
+    const body =
+      typeof answer.body === 'function'
+        ? answer.body(JSON.parse(init.body))
+        : answer.body
     return {
       ok: answer.ok ?? true,
       status: answer.status ?? 200,
-      json: async () => answer.body ?? null,
+      json: async () => body ?? null,
     }
   })
   return calls
@@ -478,7 +483,12 @@ test('a Session’s sidecars are asked about under their own kind, with the righ
 
   const calls = stubFetch({
     presign: {
-      body: { url: 'https://storage.test/o?signed', storageKey: 'k' },
+      // A server that knows kinds echoes the one it presigned for.
+      body: ({ kind }) => ({
+        url: 'https://storage.test/o?signed',
+        storageKey: 'k',
+        kind,
+      }),
     },
     put: { ok: true },
     confirm: { body: { stored: true, sizeBytes: 1 } },
@@ -520,6 +530,44 @@ test('a Session’s sidecars are asked about under their own kind, with the righ
     'application/x-ndjson',
     'application/x-ndjson',
   ])
+})
+
+test('a server that does not echo the kind gets no sidecars, only transcripts', async () => {
+  // An older deployment strips `kind`, and would file a `.meta.json` as the
+  // run's transcript. Its presign answer carries no `kind`, so the sidecar is
+  // skipped before its bytes move.
+  const config = configuration()
+  const dir = mkdtempSync(join(tmpdir(), 'sessclone-archive-config-'))
+  const project = join(dir, 'projects', 'home-dev-api')
+  const runs = join(project, 'session-a', 'subagents')
+  const workflow = join(runs, 'workflows', 'wf_9')
+  await mkdir(workflow, { recursive: true })
+  await writeFile(join(project, 'session-a.jsonl'), '{"main":1}\n')
+  await writeFile(join(runs, 'agent-7.jsonl'), '{"run":1}\n')
+  await writeFile(join(runs, 'agent-7.meta.json'), '{"spawnDepth":1}')
+  await writeFile(join(workflow, 'journal.jsonl'), '{"type":"started"}\n')
+
+  const calls = stubFetch({
+    presign: {
+      body: { url: 'https://storage.test/o?signed', storageKey: 'k' },
+    },
+    put: { ok: true },
+    confirm: { body: { stored: true, sizeBytes: 1 } },
+  })
+
+  const { archived } = await archiveSession({
+    configuration: config,
+    transcriptPath: join(project, 'session-a.jsonl'),
+    sessionId: 'session-a',
+    environment: { CLAUDE_CONFIG_DIR: dir },
+  })
+
+  expect(archived).toBe(2)
+  const confirmed = calls
+    .filter((call) => path(call) === '/api/logs/confirm')
+    .map((call) => JSON.parse(call.init.body).kind)
+  expect(confirmed).toEqual(['transcript', 'transcript'])
+  expect(calls.filter((call) => call.method === 'PUT')).toHaveLength(2)
 })
 
 /** @param {string} a @param {string} b */

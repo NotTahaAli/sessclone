@@ -140,6 +140,9 @@ export async function POST(request: Request) {
     url,
     storageKey: decision.storageKey,
     expiresIn: ttl(),
+    // Echoed so a Collector can tell this deployment knows kinds: an older
+    // one strips it and would file a sidecar as a transcript.
+    kind,
   } satisfies PresignResponse)
 }
 

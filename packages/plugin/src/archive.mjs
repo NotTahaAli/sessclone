@@ -303,6 +303,13 @@ export const archiveTranscript = async ({
   if (!presign.body?.url || !presign.body?.storageKey) {
     return { archived: false, refused: 'unavailable' }
   }
+  // A deployment older than ticket 104 strips `kind` and would file a sidecar
+  // as the run's transcript, overwriting it. Newer ones echo the kind they
+  // presigned for, so a sidecar goes only where the answer says so; otherwise
+  // it is skipped, unsettled, and asked about again once the server upgrades.
+  if (kind !== 'transcript' && presign.body.kind !== kind) {
+    return { archived: false, refused: 'kind_unsupported' }
+  }
 
   try {
     const answer = await fetch(presign.body.url, {

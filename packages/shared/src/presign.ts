@@ -133,6 +133,12 @@ export type PresignResponse =
       storageKey: string
       /** Seconds. A presigned URL is a bearer credential; it expires. */
       expiresIn: number
+      /**
+       * The kind this URL was issued for (ticket 104). A deployment older
+       * than kinds strips the field from the request and omits it here, and a
+       * Collector sends a sidecar only when this echoes the kind it asked for.
+       */
+      kind: ArtifactKind
     }
   | { refused: PresignRefusal; detail: string }
   | { error: string; detail?: string }
