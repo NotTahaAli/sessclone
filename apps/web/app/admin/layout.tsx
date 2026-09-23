@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 
 import { ADMIN_DESTINATIONS } from './navigation'
 import { LogoMark } from '../_ui/logo'
-import { PanelCredit } from '../(dashboard)/credit'
+import { LegalNotice, PanelCredit } from '../(dashboard)/credit'
 import { BottomBarLinks, SidebarLinks } from '../(dashboard)/nav-links'
 import { currentOperator } from '../../lib/platform-admin'
 
@@ -114,6 +114,8 @@ export default async function AdminLayout({
       >
         <BottomBarLinks items={ADMIN_DESTINATIONS} />
       </nav>
+
+      <LegalNotice />
     </div>
   )
 }

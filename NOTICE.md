@@ -27,11 +27,15 @@ The README's licence section points here too.
 > sessclone attribution and its link to the project's repository — in any
 > conveyed or network-deployed copy of this software or any work based on it.
 
-The notice being preserved is
-[`PanelCredit`](<apps/web/app/(dashboard)/credit.tsx>), on every signed-in page of the panel.
-It carries all four things section 0 requires of Appropriate Legal Notices —
-copyright notice, no warranty, conveyable under this licence, and how to read
-it — plus the author attribution.
+The notice being preserved is in
+[`credit.tsx`](<apps/web/app/(dashboard)/credit.tsx>). Every signed-in page of
+the panel shows `PanelCredit`, one line — "Powered by SessClone · AGPL-3.0 ·
+Legal" — with the SessClone attribution linked to the repository and AGPL-3.0
+linked to the licence. Legal opens `LegalNotice`, which carries all four things
+section 0 requires of Appropriate Legal Notices — copyright notice, no
+warranty, conveyable under this licence, and how to read it — plus the author
+attribution. On the desktop sidebar the Legal button sits in the account block
+just above the credit line rather than in it.
 
 That shape is the point rather than decoration. Section 7(b) permits a term
 requiring preservation of "specified reasonable legal notices or author

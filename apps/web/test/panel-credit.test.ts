@@ -63,18 +63,46 @@ const pages = (dir: URL, prefix = ''): string[] =>
   })
 
 describe('the panel credit', () => {
-  test('carries every notice section 0 asks for', () => {
-    const source = readFileSync(new URL(`${SHELL}/credit.tsx`, APP), 'utf8')
-    const credit = source.slice(source.indexOf('export function PanelCredit'))
+  const source = readFileSync(new URL(`${SHELL}/credit.tsx`, APP), 'utf8')
+  const between = (from: string, to: string) =>
+    source.slice(source.indexOf(from), source.indexOf(to))
+
+  test('the notice carries every item section 0 asks for', () => {
+    const notice = source.slice(source.indexOf('export function LegalNotice'))
 
     // AGPL-3.0 section 0: a copyright notice, no warranty, that licensees may
     // convey the work under this licence, and how to view it. Plus the
     // attribution the section 7(b) term names.
-    expect(credit).toContain('Copyright ©')
-    expect(credit).toContain('No warranty')
-    expect(credit).toContain('convey this work')
-    expect(credit).toContain('LICENSE_URL')
+    expect(notice).toContain('Copyright ©')
+    expect(notice).toContain('no warranty')
+    expect(notice).toContain('convey this work')
+    expect(notice).toContain('LICENSE_URL')
+    expect(notice).toContain('NOTICE_URL')
+    expect(notice).toContain('SessClone')
+  })
+
+  test('the credit line names SessClone and the licence, and opens the notice', () => {
+    // 2026-09-23: one line, "Powered by SessClone · AGPL-3.0 · Legal", whose
+    // Legal button is the prominently visible feature section 0 asks for.
+    const credit = between(
+      'export function PanelCredit',
+      'export function LegalButton',
+    )
     expect(credit).toContain('SessClone')
+    expect(credit).toContain('AGPL-3.0')
+    expect(credit).toContain('<LegalButton />')
+
+    const button = between('export function LegalButton', '/**\n * The full')
+    expect(button).toContain('popoverTarget={LEGAL_NOTICE_ID}')
+  })
+
+  test('the account block carries Legal where the sidebar credit leaves it out', () => {
+    const account = readFileSync(new URL(`${SHELL}/account.tsx`, APP), 'utf8')
+    const layout = readFileSync(new URL(`${SHELL}/layout.tsx`, APP), 'utf8')
+
+    expect(account).toContain('<LegalButton />')
+    expect(layout).toContain('<PanelCredit legal={false} />')
+    expect(layout).toContain('<AccountBlock')
   })
 
   test.each(SHELLS)(
@@ -87,14 +115,20 @@ describe('the panel credit', () => {
       // carries it at phone width, where there is no sidebar to carry
       // anything. One of the two is visible at a time, and neither width is
       // without it.
-      expect(layout.match(/<PanelCredit \/>/g)).toHaveLength(2)
+      expect(layout.match(/<PanelCredit( legal=\{false\})? \/>/g)).toHaveLength(
+        2,
+      )
+      // And the notice those Legal buttons open, exactly once: an id twice on
+      // one page opens whichever the browser finds first.
+      expect(layout.match(/<LegalNotice \/>/g)).toHaveLength(1)
     },
   )
 
   test('the invitation page carries the notices itself, being outside the shell', () => {
-    const source = readFileSync(new URL('join/[token]/page.tsx', APP), 'utf8')
+    const join = readFileSync(new URL('join/[token]/page.tsx', APP), 'utf8')
 
-    expect(source).toContain('PanelCredit')
+    expect(join).toContain('PanelCredit')
+    expect(join).toContain('<LegalNotice />')
   })
 
   test('is on every signed-in page, because every one of them is in the shell', () => {

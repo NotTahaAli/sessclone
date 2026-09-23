@@ -1,3 +1,4 @@
+import { AccountBlock } from '../account'
 import { PageHeader } from '../page-header'
 import { PendingLink } from '../pending-link'
 import { GROUP_HEADING, NavGlyph } from '../nav-glyph'
@@ -5,6 +6,7 @@ import { moreGroups } from '../navigation'
 import { asViewer } from '../../../lib/db'
 import { currentOperator } from '../../../lib/platform-admin'
 import { pendingOrgCount } from '../../../lib/subscriptions'
+import { sessionViewer } from '../../../lib/viewer'
 
 // Ticket 85: what the phone's More entry opens.
 //
@@ -39,7 +41,10 @@ export default async function More() {
   // The flag rather than a Role: no Role reaches the operator's area, and this
   // asks `sessclone_is_platform_admin()` — the same function the `/admin`
   // layout's own gate asks, so the entry and the refusal cannot disagree.
-  const operator = await currentOperator()
+  const [operator, viewer] = await Promise.all([
+    currentOperator(),
+    sessionViewer(),
+  ])
   // Ticket 120: the phone's way to the Admin panel carries the count too.
   const pending = operator
     ? await asViewer(operator.userId, pendingOrgCount)
@@ -48,6 +53,13 @@ export default async function More() {
   return (
     <div className="flex max-w-3xl flex-col">
       <PageHeader title="More" />
+      {/* 2026-09-23: on a phone the account lives here, at the top; the
+          desktop sidebar carries the same block at its foot. */}
+      {viewer ? (
+        <div className="border-rule border-b py-4 lg:hidden">
+          <AccountBlock viewer={viewer} />
+        </div>
+      ) : null}
       {/* Direction A (ticket 112): plain rows with chevrons, one per
           destination, what it is for on the line under. */}
       {/* Under the sidebar's own group headings (2026-09-23), so a phone

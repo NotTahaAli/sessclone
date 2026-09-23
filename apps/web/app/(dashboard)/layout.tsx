@@ -1,11 +1,13 @@
 import { Suspense, type ReactNode } from 'react'
 
-import { AccountMenu } from './account'
+import Link from 'next/link'
+
+import { AccountBlock, Avatar } from './account'
 import { AppearanceSync } from './appearance-sync'
 import { LogoMark } from '../_ui/logo'
 import { Waiting } from './waiting'
 import { OrgMark } from '../org-mark'
-import { PanelCredit } from './credit'
+import { LegalNotice, PanelCredit } from './credit'
 import {
   BottomBarLinks,
   BottomBarLinksPending,
@@ -157,10 +159,29 @@ async function OrgName({ className }: { className: string }) {
   )
 }
 
-/** The account control, which knows the Role and the address it signs out. */
+/** The account block, which knows the Role and the address it signs out. */
 async function Account() {
   const viewer = await sessionViewer()
-  return viewer ? <AccountMenu viewer={viewer} /> : null
+  return viewer ? <AccountBlock viewer={viewer} /> : null
+}
+
+/**
+ * The phone header's avatar: a way to the More page, where the account block
+ * is at the top (2026-09-23). A link rather than a menu, so there is nothing
+ * to open and nothing to clip.
+ */
+async function HeaderAccount() {
+  const viewer = await sessionViewer()
+  if (!viewer) return null
+  return (
+    <Link
+      href={MORE.href}
+      aria-label="Your account"
+      className="hover:bg-surface-hover flex size-[var(--control-h)] items-center justify-center rounded-md"
+    >
+      <Avatar name={viewer.displayName ?? viewer.email} />
+    </Link>
+  )
 }
 
 /**
@@ -298,7 +319,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           <Suspense fallback={null}>
             <Account />
           </Suspense>
-          <PanelCredit />
+          {/* The account block above carries the Legal button here. */}
+          <PanelCredit legal={false} />
         </div>
       </aside>
 
@@ -312,7 +334,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           </Suspense>
         </p>
         <Suspense fallback={null}>
-          <Account />
+          <HeaderAccount />
         </Suspense>
       </header>
 
@@ -346,6 +368,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           <BottomBarLinks items={BOTTOM_BAR} behind={BEHIND_MORE} />
         </Suspense>
       </nav>
+
+      {/* The notices every Legal button opens: once per page, closed. */}
+      <LegalNotice />
     </div>
   )
 }
