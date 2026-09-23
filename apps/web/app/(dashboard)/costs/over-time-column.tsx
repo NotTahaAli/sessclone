@@ -1,36 +1,29 @@
-import Link from 'next/link'
-
+import { SessionRows } from './session-rows'
 import { dayName } from './summary'
+import { sessionCount, TokenTable } from './token-table'
 import type { TimeColumn } from './views'
 import { ColumnHead } from '../finder'
 import { hrefWith, type Query } from '../query'
-import { Row, SectionBreak } from '../../_ui/primitives'
 import { asViewer } from '../../../lib/db'
-import { compact, count, usd } from '../../../lib/money'
-import {
-  addDays,
-  modelBreakdown,
-  UNKNOWN_MODEL,
-  type ModelBreakdown,
-} from '../../../lib/series'
+import { addDays, UNKNOWN_MODEL, type LocalRange } from '../../../lib/series'
 import type { ResolvedRange } from '../../../lib/range'
 import {
   sessionCursorOf,
   sessionList,
   type SessionRow,
 } from '../../../lib/sessions'
+import { tokenBreakdown, type TokenBreakdown } from '../../../lib/tokens'
 import type { Viewer } from '../../../lib/viewer'
 
-// What an Over time row opens (Taha, 2026-09-23): a day's Sessions, or one
-// model's tokens by class. The Finder column on desktop and the list's place
-// on a phone, as a breakdown row's Turns are (`[dimension]/[id]/cut.tsx`).
+// What an Over time row opens (Taha, 2026-09-23): a day, or one model. The
+// Finder column on desktop and the list's place on a phone, as a breakdown
+// row's cut is (`[dimension]/[id]/cut.tsx`).
 //
-// Both are reads the product already makes. A day is `sessionList` over one
-// calendar day in the Org's timezone — the Sessions page's own statement,
-// paged by the same cursor — and a model is `modelBreakdown`, which prices
-// through the same Rate resolution a single Turn's breakdown does. The Role
-// scoping is the policies' (ADR 0001), so a Member opening a day sees their
-// own Sessions in it.
+// Each column is two statements, both reads the product already makes: the
+// cut's tokens by class (`tokenBreakdown`, one aggregate) and its Sessions
+// (`sessionList`, the Sessions page's own statement, paged by its cursor).
+// The Role scoping is the policies' (ADR 0001), so a Member opening a day
+// sees their own Sessions in it.
 
 export async function TimeColumnView({
   viewer,
@@ -55,7 +48,8 @@ export async function TimeColumnView({
     <ModelColumn
       viewer={viewer}
       model={column.model}
-      resolved={resolved}
+      range={resolved.range}
+      query={query}
       closeHref={closeHref}
     />
   )
@@ -72,97 +66,68 @@ async function DayColumn({
   query: Query
   closeHref: string
 }) {
-  const page = await asViewer(viewer.userId, (tx) =>
-    sessionList(
-      tx,
-      viewer.orgId,
-      viewer.orgTimezone,
-      { from: date, to: addDays(date, 1) },
-      {},
-      { before: sessionCursorOf(query.before) },
-    ),
+  const range = { from: date, to: addDays(date, 1) }
+  const [tokens, page] = await asViewer(viewer.userId, (tx) =>
+    Promise.all([
+      tokenBreakdown(tx, viewer.orgId, viewer.orgTimezone, range, {
+        kind: 'all',
+      }),
+      sessionList(
+        tx,
+        viewer.orgId,
+        viewer.orgTimezone,
+        range,
+        {},
+        { before: sessionCursorOf(query.before) },
+      ),
+    ]),
   )
   return (
-    <DaySessions date={date} page={page} query={query} closeHref={closeHref} />
+    <DaySessions
+      date={date}
+      tokens={tokens}
+      page={page}
+      timezone={viewer.orgTimezone}
+      query={query}
+      closeHref={closeHref}
+    />
   )
 }
 
-/** A day's Sessions, drawn: apart from the read so a preview can stub it. */
+type Page = { sessions: SessionRow[]; more: boolean }
+
+/** A day's column, drawn: apart from the read so a preview can stub it. */
 export function DaySessions({
   date,
+  tokens,
   page,
+  timezone,
   query,
   closeHref,
 }: {
   date: string
-  page: { sessions: SessionRow[]; more: boolean }
+  tokens: TokenBreakdown
+  page: Page
+  timezone: string
   query: Query
   closeHref: string
 }) {
-  const last = page.sessions.at(-1)
-
   return (
     <div className="flex flex-col">
-      <ColumnHead closeHref={closeHref} sub="Sessions with a Turn on this day">
+      <ColumnHead
+        closeHref={closeHref}
+        sub={`${sessionCount(tokens.sessions)} with a Turn on this day`}
+      >
         {dayName(date)}
       </ColumnHead>
-      <SectionBreak>Sessions</SectionBreak>
-      {page.sessions.length === 0 ? (
-        <p className="text-text-muted py-3 text-body">
-          No Session you can see had a Turn on this day.
-        </p>
-      ) : (
-        <ol>
-          {page.sessions.map((session) => {
-            const named = session.label ?? session.projectName
-            return (
-              <li key={`${session.memberId}:${session.sessionId}`}>
-                <Row
-                  href={`/sessions/${encodeURIComponent(session.sessionId)}?member=${session.memberId}`}
-                  value={usd(session.costUsd)}
-                  sub={`${compact.format(session.tokens)} tokens · ${count.format(
-                    session.turns,
-                  )} ${session.turns === 1 ? 'Turn' : 'Turns'}${
-                    session.unpricedTurns > 0
-                      ? ` · ${count.format(session.unpricedTurns)} unpriced`
-                      : ''
-                  } · ${
-                    session.memberName ??
-                    session.memberEmail ??
-                    'Outside your view'
-                  }`}
-                >
-                  <span
-                    className={
-                      named
-                        ? ''
-                        : session.projectKey
-                          ? 'font-mono'
-                          : 'text-text-muted'
-                    }
-                  >
-                    {named ?? session.projectKey ?? 'Outside a repository'}
-                  </span>
-                </Row>
-              </li>
-            )
-          })}
-        </ol>
-      )}
-      {/* The same cursor the Sessions list pages by, so a boundary cannot
-          repeat or skip a Session. */}
-      {page.more && last ? (
-        <p className="mt-3 text-body">
-          <Link
-            href={hrefWith('/costs', query, {
-              before: `${last.lastTurnAt},${last.sessionId}`,
-            })}
-            className="text-text-muted hover:text-text"
-          >
-            More sessions ›
-          </Link>
-        </p>
-      ) : null}
+      <TokenTable totals={tokens} models={tokens.models} />
+      <SessionRows
+        page={page}
+        timezone={timezone}
+        empty="No Session you can see had a Turn on this day."
+        path="/costs"
+        query={query}
+      />
     </div>
   )
 }
@@ -170,81 +135,87 @@ export function DaySessions({
 async function ModelColumn({
   viewer,
   model,
-  resolved,
+  range,
+  query,
   closeHref,
 }: {
   viewer: Viewer
   model: string
-  resolved: ResolvedRange
+  range: LocalRange
+  query: Query
   closeHref: string
 }) {
-  const cut = await asViewer(viewer.userId, (tx) =>
-    modelBreakdown(
-      tx,
-      viewer.orgId,
-      viewer.orgTimezone,
-      resolved.range,
-      model === UNKNOWN_MODEL ? null : model,
-    ),
+  const named = model === UNKNOWN_MODEL ? null : model
+  const [tokens, page] = await asViewer(viewer.userId, (tx) =>
+    Promise.all([
+      tokenBreakdown(tx, viewer.orgId, viewer.orgTimezone, range, {
+        kind: 'model',
+        model: named,
+      }),
+      sessionList(
+        tx,
+        viewer.orgId,
+        viewer.orgTimezone,
+        range,
+        { model: named },
+        { before: sessionCursorOf(query.before) },
+      ),
+    ]),
   )
 
-  return <ModelTokens model={model} cut={cut} closeHref={closeHref} />
+  return (
+    <ModelTokens
+      model={model}
+      tokens={tokens}
+      page={page}
+      timezone={viewer.orgTimezone}
+      query={query}
+      closeHref={closeHref}
+    />
+  )
 }
 
-/** A model's tokens by class, drawn: apart from the read, as above. */
+/** A model's column, drawn: apart from the read, as above. */
 export function ModelTokens({
   model,
-  cut,
+  tokens,
+  page,
+  timezone,
+  query,
   closeHref,
 }: {
   model: string
-  cut: ModelBreakdown
+  tokens: TokenBreakdown
+  page: Page
+  timezone: string
+  query: Query
   closeHref: string
 }) {
   return (
     <div className="flex flex-col">
       <ColumnHead
         closeHref={closeHref}
-        sub={`${count.format(cut.turns)} ${cut.turns === 1 ? 'Turn' : 'Turns'} in this period`}
+        sub={`${sessionCount(tokens.sessions)} in this period`}
       >
         <span className={model === UNKNOWN_MODEL ? '' : 'font-mono'}>
           {model}
         </span>
       </ColumnHead>
-      <SectionBreak>Tokens</SectionBreak>
-      <ol>
-        {cut.classes.map((entry) => (
-          <li key={entry.key}>
-            <Row
-              lead="none"
-              name={entry.label}
-              // Unknown, never zero, when some of these tokens have no Rate.
-              value={entry.costUsd === null ? 'unpriced' : usd(entry.costUsd)}
-              sub={`${compact.format(entry.tokens)} tokens`}
-            />
-          </li>
-        ))}
-        <li className="border-rule mt-1 border-t">
-          <Row
-            lead="none"
-            value={usd(cut.costUsd)}
-            sub={`${compact.format(cut.tokens)} tokens${
-              cut.unpricedTurns > 0
-                ? ` · ${count.format(cut.unpricedTurns)} unpriced ${
-                    cut.unpricedTurns === 1 ? 'Turn' : 'Turns'
-                  } not in it`
-                : ''
-            }`}
-          >
-            <span className="font-semibold">Total</span>
-          </Row>
-        </li>
-      </ol>
+      {/* A model's own column has no split by model: it would be one row
+          repeating the table above it. */}
+      <TokenTable totals={tokens} />
       <p className="text-text-muted mt-3 text-caption">
         Cache write is the reported creation total, priced at its 5-minute and
         1-hour Rates. The total is what every Costs figure adds up, so it also
         counts web searches and fetches.
       </p>
+      <SessionRows
+        page={page}
+        timezone={timezone}
+        empty="No Session you can see used this model in this period."
+        path="/costs"
+        query={query}
+      />
     </div>
   )
 }

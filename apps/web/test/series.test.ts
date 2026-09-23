@@ -8,7 +8,6 @@ import {
   addDays,
   currentMonth,
   dailySpend,
-  modelBreakdown,
   spendSeries,
   type SpendRow,
 } from '../lib/series'
@@ -68,11 +67,37 @@ describe('the read', () => {
     })
 
     const rows = await asRole(fixture.acme, 'owner', (tx) =>
-      dailySpend(tx, fixture.acme.id, 'America/New_York', september),
+      dailySpend(tx, fixture.acme.id, 'America/New_York', september).then(
+        (spend) => spend.rows,
+      ),
     )
 
     expect(rows).toHaveLength(1)
     expect(rows[0]!.date).toBe('2026-09-20')
+  })
+
+  test('counts Sessions per day and for the range, not per model', async () => {
+    // One Session on two models and across midnight, and a second Session.
+    await seedTurn({ input_tokens: MILLION })
+    await seedTurn({ model: 'claude-opus-4-8', input_tokens: MILLION })
+    await seedTurn({
+      occurred_at: '2026-09-21T01:00:00Z',
+      input_tokens: MILLION,
+    })
+    await seedTurn({ session_id: 'session-2', input_tokens: MILLION })
+
+    const spend = await asRole(fixture.acme, 'owner', (tx) =>
+      dailySpend(tx, fixture.acme.id, 'UTC', september),
+    )
+
+    expect(spend.sessionsByDay).toEqual({ '2026-09-20': 2, '2026-09-21': 1 })
+    expect(spend.sessions).toBe(2)
+    expect(spend.rows).toHaveLength(3)
+    const series = spendSeries(spend.rows, september, spend)
+    expect(series.sessions).toBe(2)
+    expect(series.days.find((day) => day.date === '2026-09-20')!.sessions).toBe(
+      2,
+    )
   })
 
   test('counts an unpriced Turn without adding it to the cost', async () => {
@@ -80,7 +105,9 @@ describe('the read', () => {
     await seedTurn({ model: 'claude-unreleased-9', input_tokens: MILLION })
 
     const rows = await asRole(fixture.acme, 'owner', (tx) =>
-      dailySpend(tx, fixture.acme.id, 'UTC', september),
+      dailySpend(tx, fixture.acme.id, 'UTC', september).then(
+        (spend) => spend.rows,
+      ),
     )
 
     const unknown = rows.find((row) => row.model === 'claude-unreleased-9')
@@ -106,7 +133,9 @@ describe('the read', () => {
     })
 
     const rows = await asRole(fixture.acme, 'owner', (tx) =>
-      dailySpend(tx, fixture.acme.id, 'UTC', september),
+      dailySpend(tx, fixture.acme.id, 'UTC', september).then(
+        (spend) => spend.rows,
+      ),
     )
 
     expect(rows[0]!.tokens).toBe(400)
@@ -118,7 +147,9 @@ describe('the read', () => {
     await seedTurn({ occurred_at: '2026-10-01T00:00:00Z' })
 
     const rows = await asRole(fixture.acme, 'owner', (tx) =>
-      dailySpend(tx, fixture.acme.id, 'UTC', september),
+      dailySpend(tx, fixture.acme.id, 'UTC', september).then(
+        (spend) => spend.rows,
+      ),
     )
 
     expect(rows.map((row) => row.date)).toEqual(['2026-09-30'])
@@ -130,10 +161,14 @@ describe('the read', () => {
     await seedTurn({ member_id: fixture.acme.members.owner })
 
     const asOwner = await asRole(fixture.acme, 'owner', (tx) =>
-      dailySpend(tx, fixture.acme.id, 'UTC', september),
+      dailySpend(tx, fixture.acme.id, 'UTC', september).then(
+        (spend) => spend.rows,
+      ),
     )
     const asMember = await asRole(fixture.acme, 'member', (tx) =>
-      dailySpend(tx, fixture.acme.id, 'UTC', september),
+      dailySpend(tx, fixture.acme.id, 'UTC', september).then(
+        (spend) => spend.rows,
+      ),
     )
 
     expect(asOwner[0]!.turns).toBe(2)
@@ -144,7 +179,9 @@ describe('the read', () => {
     await seedTurn({ input_tokens: MILLION })
 
     const rows = await asRole(fixture.globex, 'owner', (tx) =>
-      dailySpend(tx, fixture.acme.id, 'UTC', september),
+      dailySpend(tx, fixture.acme.id, 'UTC', september).then(
+        (spend) => spend.rows,
+      ),
     )
 
     expect(rows).toEqual([])
@@ -213,68 +250,6 @@ const row = (over: Partial<SpendRow> = {}): SpendRow => ({
   turns: 1,
   unpricedTurns: 0,
   ...over,
-})
-
-describe('one model', () => {
-  const read = (model: string | null) =>
-    asRole(fixture.acme, 'owner', (tx) =>
-      modelBreakdown(tx, fixture.acme.id, 'UTC', september, model),
-    )
-
-  test('each class with its cost, cache write once, total from turn_costs', async () => {
-    await seedTurn({
-      input_tokens: MILLION,
-      output_tokens: MILLION,
-      cache_read_input_tokens: MILLION,
-      // The total and its split: three million written, not six.
-      cache_creation_input_tokens: 3 * MILLION,
-      cache_creation_5m_input_tokens: 2 * MILLION,
-      cache_creation_1h_input_tokens: MILLION,
-    })
-    // Another day, same model: priced on its own day, summed into one line.
-    await seedTurn({
-      occurred_at: '2026-09-02T08:00:00Z',
-      input_tokens: MILLION,
-    })
-    // Another model, not in this one's breakdown.
-    await seedTurn({ model: 'claude-opus-4-8', input_tokens: MILLION })
-
-    const cut = await read('claude-opus-4-6')
-
-    expect(
-      cut.classes.map(({ key, tokens, costUsd }) => [key, tokens, costUsd]),
-    ).toEqual([
-      ['input', 2 * MILLION, 10],
-      ['output', MILLION, 25],
-      ['cache_read', MILLION, 0.5],
-      ['cache_write', 3 * MILLION, 22.5],
-    ])
-    expect(cut.tokens).toBe(7 * MILLION)
-    expect(cut.costUsd).toBe(58)
-    expect(cut.turns).toBe(2)
-  })
-
-  test('a cache write total with no split is unpriced, not zero', async () => {
-    await seedTurn({
-      input_tokens: MILLION,
-      cache_creation_input_tokens: MILLION,
-    })
-
-    const cut = await read('claude-opus-4-6')
-
-    expect(cut.classes.find((c) => c.key === 'cache_write')!.costUsd).toBeNull()
-    expect(cut.classes.find((c) => c.key === 'input')!.costUsd).toBe(5)
-    expect(cut.unpricedTurns).toBe(1)
-  })
-
-  test('the Turns that reported no model are a model of their own', async () => {
-    await seedTurn({ model: null, input_tokens: MILLION })
-
-    const cut = await read(null)
-
-    expect(cut.turns).toBe(1)
-    expect(cut.classes[0]!.costUsd).toBeNull()
-  })
 })
 
 describe('the roll-up', () => {

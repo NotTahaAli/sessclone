@@ -1,4 +1,5 @@
 import { dayName, Sparkline, Summary } from './summary'
+import { sessionCount } from './token-table'
 import { EmptyState } from '../empty-state'
 import { hrefWith, type Query } from '../query'
 import { todayIn } from '../sessions/status'
@@ -47,7 +48,7 @@ export function OverTime({
       <Summary
         costUsd={series.costUsd}
         tokens={series.tokens}
-        turns={series.turns}
+        sessions={series.sessions}
         unpricedTurns={series.unpricedTurns}
       >
         <Sparkline
@@ -99,9 +100,9 @@ export function OverTime({
               name={dayName(day.date)}
               // A day whose every Turn is unpriced is unknown, not zero.
               value={day.unpricedTurns === day.turns ? '—' : usd(day.costUsd)}
-              sub={`${compact.format(day.tokens)} tokens · ${count.format(
-                day.turns,
-              )} ${day.turns === 1 ? 'turn' : 'turns'}${
+              sub={`${compact.format(day.tokens)} tokens · ${sessionCount(
+                day.sessions,
+              )}${
                 day.unpricedTurns > 0
                   ? ` · ${count.format(day.unpricedTurns)} unpriced`
                   : ''

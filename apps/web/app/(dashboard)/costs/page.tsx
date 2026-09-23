@@ -120,7 +120,7 @@ export default async function Costs({
           : null,
       ]),
   )
-  const spend = days === null ? null : spendSeries(days, range)
+  const spend = days === null ? null : spendSeries(days.rows, range, days)
   const failuresCount = counted
 
   // The failures view (and its link from the waiting surface) is reachable
@@ -359,7 +359,12 @@ function Ranked({
 }) {
   return (
     <>
-      <Summary {...cut.totals} />
+      <Summary
+        costUsd={cut.totals.costUsd}
+        tokens={cut.totals.tokens}
+        sessions={cut.totals.sessions}
+        unpricedTurns={cut.totals.unpricedTurns}
+      />
       <SectionBreak>{BY[dimension]}</SectionBreak>
       <RankedList
         rows={cut.rows}

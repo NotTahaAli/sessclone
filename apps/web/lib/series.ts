@@ -77,8 +77,11 @@ export type SpendRow = {
 }
 
 type RawRow = {
-  date: string
+  date: string | null
   model: string | null
+  /** 0 for a day-and-model cell, 1 for a day, 3 for the whole range. */
+  level: number
+  sessions: string
   cost_usd: string | null
   tokens: string
   turns: string
@@ -109,48 +112,79 @@ type RawRow = {
  * subsets of `cache_creation_input_tokens`, and thinking is a subset of
  * output, so adding either would count the same token twice.
  */
+export type DailySpend = {
+  rows: SpendRow[]
+  /** Distinct Sessions with a Turn on each day that had any. */
+  sessionsByDay: Record<string, number>
+  /** Distinct Sessions over the range: not the days' sum, since a Session
+   * that ran past midnight is one Session on two days. */
+  sessions: number
+}
+
 export const dailySpend = async (
   tx: TransactionSql,
   orgId: string,
   timezone: string,
   range: LocalRange,
-): Promise<SpendRow[]> => {
-  const rows = await tx<RawRow[]>`
-    select to_char(
-             (turn.occurred_at at time zone ${timezone})::date, 'YYYY-MM-DD'
-           ) as date,
-           turn.model,
-           sum(cost.cost_usd) as cost_usd,
-           sum(
-             turn.input_tokens + turn.output_tokens
-               + turn.cache_read_input_tokens
-               + turn.cache_creation_input_tokens
-           ) as tokens,
+): Promise<DailySpend> => {
+  // Grouping sets rather than a second statement: the day-and-model cells
+  // the chart needs, and a Session count per day and for the range, which
+  // cannot be added up from the cells — a Session on two models, or two
+  // days, is one Session.
+  const raw = await tx<RawRow[]>`
+    select to_char(picked.day, 'YYYY-MM-DD') as date,
+           picked.model,
+           grouping(picked.day, picked.model) as level,
+           count(distinct (picked.member_id, picked.session_id)) as sessions,
+           sum(picked.cost_usd) as cost_usd,
+           sum(picked.tokens) as tokens,
            count(*) as turns,
-           count(*) filter (where cost.unpriced) as unpriced_turns
-      from turn_costs cost
-      join turns turn on turn.id = cost.turn_id
-     where cost.org_id = ${orgId}
-       and turn.org_id = ${orgId}
-       and cost.occurred_at
-             >= (${range.from}::date)::timestamp at time zone ${timezone}
-       and cost.occurred_at
-             < (${range.to}::date)::timestamp at time zone ${timezone}
-       and turn.occurred_at
-             >= (${range.from}::date)::timestamp at time zone ${timezone}
-       and turn.occurred_at
-             < (${range.to}::date)::timestamp at time zone ${timezone}
-     group by 1, 2
+           count(*) filter (where picked.unpriced) as unpriced_turns
+      from (
+        select (turn.occurred_at at time zone ${timezone})::date as day,
+               turn.model,
+               turn.member_id,
+               turn.session_id,
+               cost.cost_usd,
+               cost.unpriced,
+               turn.input_tokens + turn.output_tokens
+                 + turn.cache_read_input_tokens
+                 + turn.cache_creation_input_tokens as tokens
+          from turn_costs cost
+          join turns turn on turn.id = cost.turn_id
+         where cost.org_id = ${orgId}
+           and turn.org_id = ${orgId}
+           and cost.occurred_at
+                 >= (${range.from}::date)::timestamp at time zone ${timezone}
+           and cost.occurred_at
+                 < (${range.to}::date)::timestamp at time zone ${timezone}
+           and turn.occurred_at
+                 >= (${range.from}::date)::timestamp at time zone ${timezone}
+           and turn.occurred_at
+                 < (${range.to}::date)::timestamp at time zone ${timezone}
+      ) picked
+     group by grouping sets ((picked.day, picked.model), (picked.day), ())
   `
 
-  return rows.map((row) => ({
-    date: row.date,
-    model: row.model,
-    costUsd: row.cost_usd === null ? null : Number(row.cost_usd),
-    tokens: Number(row.tokens),
-    turns: Number(row.turns),
-    unpricedTurns: Number(row.unpriced_turns),
-  }))
+  const sessionsByDay: Record<string, number> = {}
+  let sessions = 0
+  for (const row of raw) {
+    if (row.level === 1) sessionsByDay[row.date!] = Number(row.sessions)
+    if (row.level === 3) sessions = Number(row.sessions)
+  }
+
+  const rows = raw
+    .filter((row) => row.level === 0)
+    .map((row) => ({
+      date: row.date!,
+      model: row.model,
+      costUsd: row.cost_usd === null ? null : Number(row.cost_usd),
+      tokens: Number(row.tokens),
+      turns: Number(row.turns),
+      unpricedTurns: Number(row.unpriced_turns),
+    }))
+
+  return { rows, sessionsByDay, sessions }
 }
 
 /** A colour slot. Assigned by value, largest first; `other` always sorts last. */
@@ -167,6 +201,8 @@ export type Day = {
   costUsd: number
   tokens: number
   turns: number
+  /** Distinct Sessions with a Turn on this day. */
+  sessions: number
   unpricedTurns: number
 }
 
@@ -178,6 +214,7 @@ export type SpendSeries = {
   costUsd: number | null
   tokens: number
   turns: number
+  sessions: number
   unpricedTurns: number
 }
 
@@ -199,6 +236,10 @@ const SLOTS = 5
 export const spendSeries = (
   rows: SpendRow[],
   range: LocalRange,
+  sessions: Pick<DailySpend, 'sessionsByDay' | 'sessions'> = {
+    sessionsByDay: {},
+    sessions: 0,
+  },
 ): SpendSeries => {
   const byModel = new Map<string, number>()
   for (const row of rows) {
@@ -289,6 +330,7 @@ export const spendSeries = (
       costUsd,
       tokens,
       turns,
+      sessions: sessions.sessionsByDay[date] ?? 0,
       unpricedTurns,
     })
   }
@@ -307,183 +349,7 @@ export const spendSeries = (
       : rows.reduce((sum, row) => sum + (row.costUsd ?? 0), 0),
     tokens: rows.reduce((sum, row) => sum + row.tokens, 0),
     turns: rows.reduce((sum, row) => sum + row.turns, 0),
+    sessions: sessions.sessions,
     unpricedTurns: rows.reduce((sum, row) => sum + row.unpricedTurns, 0),
-  }
-}
-
-/** One token class of a model's period: how many, and what they cost. */
-export type ModelClass = {
-  key: 'input' | 'output' | 'cache_read' | 'cache_write'
-  label: string
-  tokens: number
-  /** Null when some of these tokens have no Rate: unknown, never zero. */
-  costUsd: number | null
-}
-
-export type ModelBreakdown = {
-  classes: ModelClass[]
-  tokens: number
-  /** `turn_costs`' own total, the figure the By model row shows. */
-  costUsd: number | null
-  turns: number
-  unpricedTurns: number
-}
-
-type RawModel = {
-  input: string | null
-  output: string | null
-  cache_read: string | null
-  cache_write: string | null
-  input_usd: string | null
-  output_usd: string | null
-  cache_read_usd: string | null
-  cache_write_usd: string | null
-  input_gap: boolean | null
-  output_gap: boolean | null
-  cache_read_gap: boolean | null
-  cache_write_gap: boolean | null
-  cost_usd: string | null
-  turns: string
-  unpriced_turns: string
-}
-
-/** A class's token count, from a `sum` that is null over no rows. */
-const tokenCount = (value: string | null | undefined) => Number(value ?? 0)
-const classCost = (
-  count: number,
-  value: string | null | undefined,
-  gap: boolean | null | undefined,
-) => (count === 0 ? 0 : gap ? null : Number(value ?? 0))
-
-const classLine = (
-  key: ModelClass['key'],
-  label: string,
-  count: string | null | undefined,
-  usd: string | null | undefined,
-  gap: boolean | null | undefined,
-): ModelClass => ({
-  key,
-  label,
-  tokens: tokenCount(count),
-  costUsd: classCost(tokenCount(count), usd, gap),
-})
-
-/**
- * One model's tokens over a range, by class, each with its cost.
- *
- * One statement and one scan. The Turns are grouped by the two things a Rate
- * depends on — the day in the Org's timezone and the modifiers' multiplier —
- * so `sessclone_resolve_rate`, the definition of record for which Rate
- * applies, runs once per class per group (a month is a few dozen groups)
- * rather than once per Turn. The scan is `dailySpend`'s: both quals on both
- * sides, so it lands on `turns_org_occurred_at_idx`.
- *
- * Cache write is one class, the reported creation total, never the 5m and 1h
- * splits beside it: those are subsets of the total, and listing all three
- * counts the same token twice. Its cost is each split at its own Rate; a
- * total with no split has no Rate, so it reads as unpriced, as on a Turn.
- *
- * The total is `turn_costs`' sum, as every other Costs figure is, rather than
- * a sum of the lines: a Turn with one unpriced class is left out of the view's
- * total whole, and web requests are in it and in no token class.
- */
-export const modelBreakdown = async (
-  tx: TransactionSql,
-  orgId: string,
-  timezone: string,
-  range: LocalRange,
-  model: string | null,
-): Promise<ModelBreakdown> => {
-  const from = tx`(${range.from}::date)::timestamp at time zone ${timezone}`
-  const to = tx`(${range.to}::date)::timestamp at time zone ${timezone}`
-
-  const [row] = await tx<RawModel[]>`
-    with cell as (
-      select (turn.occurred_at at time zone ${timezone})::date as on_date,
-             sessclone_price_multiplier(
-               turn.model, turn.speed, turn.inference_geo, turn.service_tier
-             ) as multiplier,
-             sum(turn.input_tokens) as input,
-             sum(turn.output_tokens) as output,
-             sum(turn.cache_read_input_tokens) as cache_read,
-             sum(turn.cache_creation_input_tokens) as cache_write,
-             sum(turn.cache_creation_5m_input_tokens) as cache_5m,
-             sum(turn.cache_creation_1h_input_tokens) as cache_1h,
-             sum(cost.cost_usd) as cost_usd,
-             count(*) as turns,
-             count(*) filter (where cost.unpriced) as unpriced_turns
-        from turn_costs cost
-        join turns turn on turn.id = cost.turn_id
-       where cost.org_id = ${orgId}
-         and turn.org_id = ${orgId}
-         and cost.occurred_at >= ${from} and cost.occurred_at < ${to}
-         and turn.occurred_at >= ${from} and turn.occurred_at < ${to}
-         and turn.model is not distinct from ${model}
-       group by 1, 2
-    ),
-    priced as (
-      select cell.*,
-             sessclone_resolve_rate(${orgId}::uuid, ${model}::text, 'input', on_date) as input_rate,
-             sessclone_resolve_rate(${orgId}::uuid, ${model}::text, 'output', on_date) as output_rate,
-             sessclone_resolve_rate(${orgId}::uuid, ${model}::text, 'cache_read', on_date) as cache_read_rate,
-             sessclone_resolve_rate(${orgId}::uuid, ${model}::text, 'cache_write_5m', on_date) as cache_5m_rate,
-             sessclone_resolve_rate(${orgId}::uuid, ${model}::text, 'cache_write_1h', on_date) as cache_1h_rate
-        from cell
-    )
-    select sum(input) as input,
-           sum(output) as output,
-           sum(cache_read) as cache_read,
-           sum(cache_write) as cache_write,
-           sum(input * input_rate * multiplier / 1000000) as input_usd,
-           sum(output * output_rate * multiplier / 1000000) as output_usd,
-           sum(cache_read * cache_read_rate * multiplier / 1000000)
-             as cache_read_usd,
-           sum(coalesce(cache_5m * cache_5m_rate * multiplier / 1000000, 0)
-               + coalesce(cache_1h * cache_1h_rate * multiplier / 1000000, 0))
-             as cache_write_usd,
-           bool_or(input > 0 and input_rate is null) as input_gap,
-           bool_or(output > 0 and output_rate is null) as output_gap,
-           bool_or(cache_read > 0 and cache_read_rate is null) as cache_read_gap,
-           bool_or(cache_write > cache_5m + cache_1h
-                   or (cache_5m > 0 and cache_5m_rate is null)
-                   or (cache_1h > 0 and cache_1h_rate is null))
-             as cache_write_gap,
-           sum(cost_usd) as cost_usd,
-           coalesce(sum(turns), 0) as turns,
-           coalesce(sum(unpriced_turns), 0) as unpriced_turns
-      from priced
-  `
-
-  const classes = [
-    classLine('input', 'Input', row?.input, row?.input_usd, row?.input_gap),
-    classLine(
-      'output',
-      'Output',
-      row?.output,
-      row?.output_usd,
-      row?.output_gap,
-    ),
-    classLine(
-      'cache_read',
-      'Cache read',
-      row?.cache_read,
-      row?.cache_read_usd,
-      row?.cache_read_gap,
-    ),
-    classLine(
-      'cache_write',
-      'Cache write',
-      row?.cache_write,
-      row?.cache_write_usd,
-      row?.cache_write_gap,
-    ),
-  ]
-
-  return {
-    classes,
-    tokens: classes.reduce((sum, entry) => sum + entry.tokens, 0),
-    costUsd: row?.cost_usd == null ? null : Number(row.cost_usd),
-    turns: Number(row?.turns ?? 0),
-    unpricedTurns: Number(row?.unpriced_turns ?? 0),
   }
 }

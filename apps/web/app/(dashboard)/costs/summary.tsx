@@ -19,6 +19,7 @@ import { compact, count, usd } from '../../../lib/money'
 export function Summary({
   costUsd,
   tokens,
+  sessions,
   turns,
   unpricedTurns,
   label = 'Spent',
@@ -26,7 +27,11 @@ export function Summary({
 }: {
   costUsd: number | null
   tokens: number
-  turns: number
+  /** How many Sessions; every Costs figure counts these. */
+  sessions?: number
+  /** How many Turns, in place of Sessions: a Session's own summary, where
+   * "1 session" would say nothing. */
+  turns?: number
   unpricedTurns: number
   label?: string
   /** The sparkline, beside the figure when the list is wide and under it
@@ -50,9 +55,15 @@ export function Summary({
             </span>
             <span>
               <b className="text-text font-mono font-medium">
-                {count.format(turns)}
+                {count.format(turns ?? sessions ?? 0)}
               </b>{' '}
-              {turns === 1 ? 'turn' : 'turns'}
+              {turns === undefined
+                ? sessions === 1
+                  ? 'session'
+                  : 'sessions'
+                : turns === 1
+                  ? 'turn'
+                  : 'turns'}
             </span>
             <span>
               <b className="text-text font-mono font-medium">

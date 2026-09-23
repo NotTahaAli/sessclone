@@ -234,6 +234,26 @@ test('the list filters by Project and by person', async () => {
   ).toEqual(['someone-else'])
 })
 
+test("a model filter narrows a Session to that model's share of it", async () => {
+  // A Costs model column (2026-09-23) lists the Sessions that used the model,
+  // with the model's part of each: a Session on two models is in both
+  // columns, with a different cost in each. `null` is the Turns with no model.
+  await seedTurn({ session_id: 'both', model: 'claude-opus-4-6' })
+  await seedTurn({ session_id: 'both', model: 'claude-sonnet-4-5' })
+  await seedTurn({ session_id: 'nameless', model: null })
+
+  const opus = await list('owner', { model: 'claude-opus-4-6' })
+  expect(opus.sessions.map((s) => [s.sessionId, s.turns])).toEqual([
+    ['both', 1],
+  ])
+  // $5 per MTok in, a million in.
+  expect(opus.sessions[0]!.costUsd).toBeCloseTo(5, 10)
+
+  expect(
+    (await list('owner', { model: null })).sessions.map((s) => s.sessionId),
+  ).toEqual(['nameless'])
+})
+
 test('the cursor pages without repeating or skipping a Session', async () => {
   for (let index = 0; index < 5; index += 1) {
     // oxlint-disable-next-line no-await-in-loop -- seeded in time order.

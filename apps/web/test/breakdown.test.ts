@@ -137,6 +137,21 @@ describe('per Member (54)', () => {
 
     expect(rows[0]).toMatchObject({ costUsd: 5, turns: 2, unpricedTurns: 1 })
   })
+
+  test('a row counts its Sessions, not its Turns', async () => {
+    // 2026-09-23: Costs reads "N sessions" on every row; a Session of many
+    // Turns is one.
+    await seedTurn({ session_id: 'one' })
+    await seedTurn({ session_id: 'one' })
+    await seedTurn({ session_id: 'two' })
+
+    const { rows, totals } = await asRole(fixture.acme, 'owner', (tx) =>
+      breakdown(tx, fixture.acme.id, 'UTC', september, 'members'),
+    )
+
+    expect(rows[0]).toMatchObject({ turns: 3, sessions: 2 })
+    expect(totals.sessions).toBe(2)
+  })
 })
 
 describe('per Project (55)', () => {
