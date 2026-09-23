@@ -10,9 +10,9 @@
 
 **Blocked by:** 111.
 
-**Status:** todo
+**Status:** done
 
-- [ ] Costs: summary, sparkline, by project / person / model, project column
-- [ ] Sessions: day breaks, status glyphs, session column
-- [ ] Transcripts, Keys, Devices, More
-- [ ] Screenshots per page
+- [x] Costs: summary, sparkline, by project / person / model, project column
+- [x] Sessions: day breaks, status glyphs, session column
+- [x] Transcripts, Keys, Devices, More
+- [x] Screenshots per page

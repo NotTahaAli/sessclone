@@ -10,8 +10,8 @@
 
 **Blocked by:** 111.
 
-**Status:** todo
+**Status:** done
 
-- [ ] You, Org, Members, Tier, Transcripts settings
-- [ ] Custom accent swatch
-- [ ] Screenshots
+- [x] You, Org, Members, Tier, Transcripts settings (Transcripts left settings in ticket 87: `/settings/transcripts` redirects to `/transcripts`, restyled under 112, so it is not a row in the index)
+- [x] Custom accent swatch
+- [x] Screenshots
