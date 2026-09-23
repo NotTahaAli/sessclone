@@ -92,7 +92,7 @@ test('the marketing page is left alone either way', async () => {
 test('pages and files read before an account are public', async () => {
   // Signed out throughout: none of these may redirect to the sign-in page, or
   // crawlers index `/sign-in` and share cards come up blank.
-  for (const path of [
+  const paths = [
     '/pricing',
     '/privacy',
     '/terms',
@@ -110,16 +110,17 @@ test('pages and files read before an account are public', async () => {
     '/twitter-image-abc123',
     '/manifest.webmanifest',
     '/llms.txt',
-  ]) {
-    expect({ path, status: (await at(path)).status }).toEqual({
-      path,
-      status: 200,
-    })
-  }
+  ]
+  const statuses = await Promise.all(
+    paths.map(async (path) => ({ path, status: (await at(path)).status })),
+  )
+  expect(statuses).toEqual(paths.map((path) => ({ path, status: 200 })))
 })
 
 test('a lookalike of a public file is not public', async () => {
-  for (const path of ['/robots.txt.bak', '/icons/costs', '/llms.txt/x']) {
-    expect((await at(path)).status).toBe(307)
-  }
+  const paths = ['/robots.txt.bak', '/icons/costs', '/llms.txt/x']
+  const statuses = await Promise.all(
+    paths.map(async (path) => (await at(path)).status),
+  )
+  expect(statuses).toEqual([307, 307, 307])
 })
