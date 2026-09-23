@@ -444,3 +444,33 @@ test('an Owner’s ask cannot carry an agreed price', async () => {
   await expect(ask(null, 0)).rejects.toThrow(/row-level security/)
   expect((await ask(null, null)).count).toBe(1)
 })
+
+test('a price-only change is a change, and the history keeps the price', async () => {
+  const tierId = await seedTier('enterprise')
+  const set = (priceBaseCents: number | null, note: string) =>
+    asOperator((tx) =>
+      setSubscription(tx, {
+        orgId: fixture.acme.id,
+        tierId,
+        status: 'active',
+        note,
+        priceBaseCents,
+        priceSeatCents: null,
+      }),
+    )
+
+  await set(null, 'activated')
+  expect(await set(50_000, 'agreed on the call')).toEqual({
+    saved: true,
+    recorded: true,
+  })
+
+  const events = await sql<{ note: string; base: number | null }[]>`
+    select note, price_base_cents as base from subscription_events
+     where org_id = ${fixture.acme.id} order by id
+  `
+  expect(events).toEqual([
+    { note: 'activated', base: null },
+    { note: 'agreed on the call', base: 50_000 },
+  ])
+})

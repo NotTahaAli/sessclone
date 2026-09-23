@@ -314,8 +314,8 @@ export const requestPlan = async (
  * so the history says plainly which rows a person wrote by hand, including a
  * hand-made change to a row some provider created.
  *
- * `recorded` is false when the write changed neither Tier nor status:
- * `sessclone_write_subscription_event` returns early on that, so a note typed
+ * `recorded` is false when the write changed neither Tier, status nor agreed
+ * price: `sessclone_write_subscription_event` returns early on that, so a note typed
  * beside it goes nowhere and the page must not claim it was written down.
  */
 export const setSubscription = async (
@@ -330,8 +330,16 @@ export const setSubscription = async (
     priceSeatCents?: number | null
   },
 ): Promise<{ saved: boolean; recorded: boolean }> => {
-  const [before] = await tx<{ tier_id: string; status: string }[]>`
-    select tier_id, status from subscriptions
+  const [before] = await tx<
+    {
+      tier_id: string
+      status: string
+      price_base_cents: number | null
+      price_seat_cents: number | null
+    }[]
+  >`
+    select tier_id, status, price_base_cents, price_seat_cents
+      from subscriptions
      where org_id = ${subscription.orgId}
   `
 
@@ -366,6 +374,8 @@ export const setSubscription = async (
       rows.length > 0 &&
       (!before ||
         before.tier_id !== subscription.tierId ||
-        before.status !== subscription.status),
+        before.status !== subscription.status ||
+        before.price_base_cents !== (subscription.priceBaseCents ?? null) ||
+        before.price_seat_cents !== (subscription.priceSeatCents ?? null)),
   }
 }
