@@ -7,7 +7,7 @@ import { AppearanceSync } from './appearance-sync'
 import { LogoMark } from '../_ui/logo'
 import { Waiting } from './waiting'
 import { OrgMark } from '../org-mark'
-import { LegalNotice, PanelCredit } from './credit'
+import { PanelCredit } from './credit'
 import {
   BottomBarLinks,
   BottomBarLinksPending,
@@ -368,9 +368,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           <BottomBarLinks items={BOTTOM_BAR} behind={BEHIND_MORE} />
         </Suspense>
       </nav>
-
-      {/* The notices every Legal button opens: once per page, closed. */}
-      <LegalNotice />
     </div>
   )
 }

@@ -96,8 +96,8 @@ export function LegalButton() {
 }
 
 /**
- * The full Appropriate Legal Notices. Rendered once by each frame that renders
- * `PanelCredit`, closed until a Legal button opens it; the browser gives it
+ * The full Appropriate Legal Notices. Rendered once, by the root layout, so
+ * every page with a Legal button has it; closed until one opens it; the browser gives it
  * the top layer, Escape and light dismiss.
  */
 export function LegalNotice() {

@@ -62,6 +62,14 @@ const pages = (dir: URL, prefix = ''): string[] =>
     return entry.name === 'page.tsx' ? [`${prefix}${entry.name}`] : []
   })
 
+/** Every file under `dir`, as a path relative to it. */
+const filesUnder = (dir: URL, prefix = ''): string[] =>
+  readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+    entry.isDirectory()
+      ? filesUnder(new URL(`${entry.name}/`, dir), `${prefix}${entry.name}/`)
+      : [`${prefix}${entry.name}`],
+  )
+
 describe('the panel credit', () => {
   const source = readFileSync(new URL(`${SHELL}/credit.tsx`, APP), 'utf8')
   const between = (from: string, to: string) =>
@@ -118,17 +126,32 @@ describe('the panel credit', () => {
       expect(layout.match(/<PanelCredit( legal=\{false\})? \/>/g)).toHaveLength(
         2,
       )
-      // And the notice those Legal buttons open, exactly once: an id twice on
-      // one page opens whichever the browser finds first.
-      expect(layout.match(/<LegalNotice \/>/g)).toHaveLength(1)
     },
   )
 
-  test('the invitation page carries the notices itself, being outside the shell', () => {
+  test('the invitation page carries the credit itself, being outside the shell', () => {
     const join = readFileSync(new URL('join/[token]/page.tsx', APP), 'utf8')
 
-    expect(join).toContain('PanelCredit')
-    expect(join).toContain('<LegalNotice />')
+    expect(join).toContain('<PanelCredit />')
+  })
+
+  // 2026-09-23 review: sign-in rendered `PanelCredit` and no `LegalNotice`, so
+  // its Legal button opened nothing. The notice is the root layout's now —
+  // on every page by construction, and once: an id twice on one page opens
+  // whichever the browser finds first, and a notice inside a frame's
+  // phone-only column would be `display: none` at desktop width.
+  test('every page has the notice its Legal buttons open, exactly once', () => {
+    const root = readFileSync(new URL('layout.tsx', APP), 'utf8')
+    expect(root.match(/<LegalNotice \/>/g)).toHaveLength(1)
+
+    expect(
+      filesUnder(APP).filter(
+        (file) =>
+          file.endsWith('.tsx') &&
+          file !== 'layout.tsx' &&
+          readFileSync(new URL(file, APP), 'utf8').includes('<LegalNotice'),
+      ),
+    ).toEqual([])
   })
 
   test('is on every signed-in page, because every one of them is in the shell', () => {

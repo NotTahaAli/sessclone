@@ -1,7 +1,7 @@
 import Link from 'next/link'
 
 import { AcceptForm } from './accept-form'
-import { LegalNotice, PanelCredit } from '../../(dashboard)/credit'
+import { PanelCredit } from '../../(dashboard)/credit'
 import { sessionUser } from '../../../lib/supabase/server'
 
 // Cache Components (ticket 80) prerenders a static shell for every route. The
@@ -87,7 +87,6 @@ function Shell({
       <div className="mt-12">
         <PanelCredit />
       </div>
-      <LegalNotice />
     </main>
   )
 }
