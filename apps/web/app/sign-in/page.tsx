@@ -213,6 +213,11 @@ export default function SignIn({ searchParams }: { searchParams: Query }) {
           <ReturnTo searchParams={searchParams} />
         </Suspense>
 
+        {/* First, so the choice is made before either button is pressed. */}
+        <Suspense fallback={null}>
+          <PlanChoice searchParams={searchParams} />
+        </Suspense>
+
         <button
           type="submit"
           formAction={signInWithGitHub}
@@ -242,10 +247,6 @@ export default function SignIn({ searchParams }: { searchParams: Query }) {
             Email me a link
           </button>
         </div>
-
-        <Suspense fallback={null}>
-          <PlanChoice searchParams={searchParams} />
-        </Suspense>
       </form>
 
       <p className="text-text-muted mt-6 text-caption">
