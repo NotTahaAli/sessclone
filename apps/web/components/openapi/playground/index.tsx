@@ -69,6 +69,7 @@ import {
 } from 'fumadocs-openapi/playground';
 import { useOnChange } from 'fumadocs-core/utils/use-on-change';
 import { Spinner } from '../../ui/spinner';
+import { forgetAuth } from './forget-auth';
 
 export interface FormValues extends Record<string, unknown> {
   path: Record<string, unknown>;
@@ -243,7 +244,18 @@ export default function PlaygroundClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- ignore other parts
   }, [defaultValues]);
 
+  // Ours: the library has just written the key to `localStorage` in its own
+  // listener; drop it once that dispatch is over, whatever the listener order.
+  useListener({
+    stf,
+    onUpdate() {
+      queueMicrotask(() => forgetAuth(window.localStorage, auth.fields));
+    },
+  });
+
   useEffect(() => {
+    // Ours: a key an older build stored is dropped rather than restored.
+    forgetAuth(window.localStorage, auth.fields);
     const reset = auth.init();
     triggerExampleUpdate();
     stfSync.current = true;
