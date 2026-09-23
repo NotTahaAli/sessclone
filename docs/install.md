@@ -163,6 +163,10 @@ The **Failures** view on Costs answers a different question: it lists turns
 that ended on a Claude API error — a rate limit, an overload, a billing
 problem. It is filled in by the same Collector, so it is empty while the
 Collector is not reporting, and is not where a broken install shows up.
+The count beside the view is failed **Sessions** you have not looked at yet,
+not failure events: a rate-limit storm in one Session counts once. **Mark
+viewed** on a row, or **Mark all viewed**, clears it for you alone. A viewed
+failure stays on the list, and a new failure in that Session counts again.
 
 Whether a well-formed key is _live_ is not answerable from a machine: a report
 with an unknown or revoked key writes nothing and is answered the same way as

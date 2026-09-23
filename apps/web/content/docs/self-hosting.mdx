@@ -167,6 +167,13 @@ getting user profile from external provider`.
    or sign-ups already restricted in Supabase — can skip this with
    `SIGNUP_APPROVAL=off` (see [Sign-up
    approval](/docs/configuration#sign-up-approval)).
+
+   An Enterprise Org, or any Org on a negotiated deal, can carry an **agreed
+   price** on the same page: a monthly base and a per-seat amount, in dollars,
+   either or both. The Org's **Settings → Tier** page then shows it (for
+   example "$500 + $8/seat/month") instead of the Tier's own price. Leave both
+   empty to go back to the Tier's price.
+
 4. Issue a key under **Keys**.
 5. [Install the Collector](/docs/install) on a machine: two commands, the key,
    and a restart of Claude Code.
