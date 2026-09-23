@@ -131,6 +131,22 @@ reads byte ranges straight from storage in the browser, through presigned GET
 URLs, so allow `GET` with the `Range` request header from your dashboard's
 origin. Supabase Storage allows this by default (`access-control-allow-origin:
 *`, `range` among the allowed headers); on R2, AWS or MinIO add a CORS rule.
+On Cloudflare R2 that rule is, under the bucket's **Settings → CORS Policy**:
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://your-dashboard.example"],
+    "AllowedMethods": ["GET"],
+    "AllowedHeaders": ["range"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+R2's endpoint is `https://<account-id>.r2.cloudflarestorage.com`, the region
+stays `auto`, and the key pair comes from an R2 API token with **Object Read &
+Write** scoped to the one bucket.
 
 ## 4. Run it
 
