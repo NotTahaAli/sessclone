@@ -15,7 +15,10 @@ import { anonymous, asUser, seedFixture, type Fixture } from './harness'
 const updateTag = vi.hoisted(() => vi.fn())
 const revalidatePath = vi.hoisted(() => vi.fn())
 const signedInUser = vi.hoisted(() => vi.fn())
-vi.mock('../lib/supabase/server', () => ({ signedInUser }))
+vi.mock('../lib/supabase/server', () => ({
+  signedInUser,
+  sessionUser: signedInUser,
+}))
 vi.mock('next/cache', () => ({
   updateTag,
   revalidatePath,

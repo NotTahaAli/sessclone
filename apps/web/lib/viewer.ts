@@ -1,8 +1,9 @@
 import { cache } from 'react'
+import { approvalRequired, isLocked } from './approval'
 import { asViewer } from './db'
 import { logoPath } from './org-logo'
 import type { SubscriptionStatus } from './tier'
-import { signedInUser } from './supabase/server'
+import { sessionUser } from './supabase/server'
 
 // Ticket 45: the Org context the shell establishes, read once per request.
 //
@@ -83,8 +84,8 @@ type MembershipRow = {
  * `asViewer` transactions for one navigation. React deduplicates them for the
  * life of the request and no longer.
  */
-export const currentViewer = cache(async (): Promise<Viewer | null> => {
-  const user = await signedInUser()
+export const sessionViewer = cache(async (): Promise<Viewer | null> => {
+  const user = await sessionUser()
   if (!user) return null
 
   const [membership] = await asViewer(
@@ -105,7 +106,11 @@ export const currentViewer = cache(async (): Promise<Viewer | null> => {
                on subscription.org_id = member.org_id
         left join org_logos logo on logo.org_id = member.org_id
        where member.id in (select sessclone_own_member_ids())
-       order by member.created_at
+       -- Ticket 119: an Org that works before one that is locked, so a
+       -- person who joined an Org while holding an unapproved one of their
+       -- own (every invitee before ticket 118) lands in the one they use.
+       order by subscription.status in ('active', 'past_due') is true desc,
+                member.created_at
        limit 1
     `,
   )
@@ -127,6 +132,30 @@ export const currentViewer = cache(async (): Promise<Viewer | null> => {
       : null,
   }
 })
+
+/**
+ * The viewer, or `null` while their Org is locked (ticket 119) — what a page
+ * or a Server Action asks. `sessionViewer` is the same read without the lock,
+ * for the shell, which is what draws the waiting page. See `signedInUser` for
+ * why the lock is here rather than in each action.
+ */
+export const currentViewer = cache(async (): Promise<Viewer | null> => {
+  const viewer = await sessionViewer()
+  return viewer && isLocked(viewer.subscriptionStatus) ? null : viewer
+})
+
+/**
+ * Whether the signed-in viewer's Org is locked (ticket 119). What
+ * `signedInUser` asks, and what the dashboard's own API routes ask beside
+ * `sessionUser()` to answer a locked Org with a 403 rather than a 401. False
+ * for somebody in no Org: the policies already answer them. Switched off, it
+ * reads nothing.
+ */
+export const viewerLocked = async (): Promise<boolean> => {
+  if (!approvalRequired()) return false
+  const viewer = await sessionViewer()
+  return viewer !== null && isLocked(viewer.subscriptionStatus)
+}
 
 /**
  * Whether this Role reaches Org settings.

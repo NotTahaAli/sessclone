@@ -25,10 +25,11 @@ vi.mock('../lib/db', async () => {
   return { asViewer: harness.asUser }
 })
 
-vi.mock('../lib/supabase/server', () => ({
-  signedInUser: async () =>
-    session.userId === null ? null : { id: session.userId },
-}))
+vi.mock('../lib/supabase/server', () => {
+  const who = async () =>
+    session.userId === null ? null : { id: session.userId }
+  return { signedInUser: who, sessionUser: who }
+})
 
 vi.mock('../lib/storage', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/storage')>()),
@@ -119,6 +120,23 @@ test('the download is named after the Session, and an Agent Run says which', asy
   expect((await as('member', run)).headers.get('location')).toContain(
     `filename=${encodeURIComponent('session-1-agent-agent-7.jsonl')}`,
   )
+})
+
+test('an Org waiting for approval downloads nothing, its own included', async () => {
+  // Ticket 119. The same guard sits on the two transcript routes beside this
+  // one; proven here, once.
+  const id = await seedArtifact({
+    memberId: fixture.acme.members.member,
+    orgId: fixture.acme.id,
+  })
+
+  vi.stubEnv('SIGNUP_APPROVAL', undefined)
+  try {
+    expect((await as('member', id)).status).toBe(403)
+  } finally {
+    vi.unstubAllEnvs()
+  }
+  expect((await as('member', id)).status).toBe(302)
 })
 
 test('a platform admin downloads nothing', async () => {

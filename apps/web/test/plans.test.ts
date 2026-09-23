@@ -35,7 +35,11 @@ const tier = (key: string, over: Partial<MarketingTier>): MarketingTier => ({
 const selfHosted = tier('self_hosted', { basePriceUsd: 0, seatPriceUsd: 0 })
 const personal = tier('personal', { basePriceUsd: 5, minSeats: 1, maxSeats: 1 })
 const team = tier('team', { seatPriceUsd: 10, minSeats: 2, maxSeats: 10 })
-const enterprise = tier('enterprise', { minSeats: 11, sso: true })
+const enterprise = tier('enterprise', {
+  minSeats: 11,
+  sso: true,
+  ownRates: true,
+})
 const TIERS = [selfHosted, personal, team, enterprise]
 
 test('the recommended plan follows the team size, never Self-Hosted', () => {
@@ -89,19 +93,20 @@ test('labels', () => {
 const rates = (tiers: MarketingTier[]) =>
   comparison(tiers).find((row) => row.label === 'Per-model rates')!.cells
 
-test('the own-rates line comes from features.own_rates when it is set', () => {
-  // Absent: Enterprise carries it until ticket 121 writes the key.
+test('the own-rates line comes from features.own_rates', () => {
+  // As seeded: Enterprise carries the flag (ticket 121's migration).
   expect(rates(TIERS)).toEqual([
     'Yours',
     'Published',
     'Published',
     OWN_RATES_LINE,
   ])
-  // Present, the flag decides.
+  // The flag decides, whichever Tier carries it; absent reads as published.
   expect(
     rates([
       { ...team, ownRates: true },
       { ...enterprise, ownRates: false },
+      { ...enterprise, ownRates: null },
     ]),
-  ).toEqual([OWN_RATES_LINE, 'Published'])
+  ).toEqual([OWN_RATES_LINE, 'Published', 'Published'])
 })

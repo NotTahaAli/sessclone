@@ -55,9 +55,9 @@ monthly total; the others are dimmed with the reason (1 person only, up to 10
 seats, from 11 people). Self-Hosted — the Tier priced 0/0 — is always shown and
 never marked. Below, a comparison of every Tier, with the marked column
 shaded. The logic is `apps/web/lib/plans.ts`, and everything it prints comes
-from the row. The Enterprise per-model rates cell reads "Your own (e.g. an
-Anthropic discount)" when the Tier's `features.own_rates` is true (ticket
-121), and falls back to the `enterprise` key until that key is written.
+from the row. The per-model rates cell reads "Your own per-model rates (e.g.
+an Anthropic discount)" when the Tier's `features.own_rates` is true, which
+ticket 121's migration sets on Enterprise.
 
 The seed, for reference:
 

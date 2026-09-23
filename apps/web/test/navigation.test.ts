@@ -120,12 +120,14 @@ test('the settings index lists what each Role reaches and nothing more', () => {
     '/settings/you',
     '/settings/org',
     '/settings/org/members',
+    '/settings/org/rates',
     '/settings/tier',
   ])
   expect(hrefs('admin')).toEqual([
     '/settings/you',
     '/settings/org',
     '/settings/org/members',
+    '/settings/org/rates',
   ])
   expect(hrefs('manager')).toEqual(['/settings/you'])
   expect(hrefs('member')).toEqual(['/settings/you'])

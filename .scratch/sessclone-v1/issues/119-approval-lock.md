@@ -10,9 +10,9 @@
 
 **Blocked by:** 118.
 
-**Status:** todo
+**Status:** done
 
-- [ ] Lock in the dashboard layout and the key routes
-- [ ] Ingest refuses locked Orgs
-- [ ] Env switch documented in self-hosting
-- [ ] Tests at the cheapest level
+- [x] Lock in the dashboard layout and the key routes
+- [x] Ingest refuses locked Orgs
+- [x] Env switch documented in self-hosting
+- [x] Tests at the cheapest level

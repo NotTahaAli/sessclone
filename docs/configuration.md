@@ -128,7 +128,7 @@ the Supabase project's own SMTP settings, not here. The **invitation** email is
 different: an invitation is this app's own `/join/<token>` route, which Supabase
 never sees, so it is sent through the app's own SMTP, below.
 
-### Invitation email (SMTP)
+### Email (SMTP)
 
 | Variable    | Required | Default | What it is                                                                      |
 | ----------- | -------- | ------- | ------------------------------------------------------------------------------- |
@@ -141,9 +141,35 @@ the inviter is told to pass the copyable link on themselves — the same link th
 email would carry, never a second token. A send that fails for a configured
 server is reported the same way, because the inviter's remedy is identical.
 
+The same two variables send the platform admins a note each time somebody
+signs up and creates an Org waiting for approval (ticket 120,
+`apps/web/lib/signup-notice.ts`), with a link to that Org under **/admin →
+Orgs**. Unset, nothing is sent; the Admin panel lists waiting Orgs first and
+counts them on its navigation link either way.
+
 `smtp://` uses STARTTLS when the server offers it; `smtps://` is TLS from the
 first byte. The credentials live in `SMTP_URL` and are read server-side only —
 they carry no `NEXT_PUBLIC_` prefix and reach no page or log line.
+
+### Sign-up approval
+
+| Variable          | Required | Default | What it is                                                    |
+| ----------------- | -------- | ------- | ------------------------------------------------------------- |
+| `SIGNUP_APPROVAL` | no       | on      | `off` lets a new Org in without a platform admin approving it |
+
+On by default, self-hosted deployments included (ticket 119,
+`apps/web/lib/approval.ts`). An Org whose subscription is `inactive` — which is
+where every sign-up starts, on the plan it picked (ticket 118) — or which has
+no subscription row, or is `cancelled`, is locked: the dashboard shows only
+"Waiting for approval" (or "Cancelled") and Sign out, no key can be created,
+and ingest answers its existing keys with the same 401 as any unknown key.
+`past_due` is not locked; it keeps its banner and works. A platform admin
+approves an Org by setting it `active` under **/admin → Orgs**, where Orgs
+waiting for approval are listed first.
+
+Any value other than `off` (case-insensitive) leaves it on. With it off, every
+status behaves as before the lock: a notice on every page, collection working.
+Read per request, so a restart is enough to change it.
 
 ### Published pricing
 

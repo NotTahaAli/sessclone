@@ -9,8 +9,8 @@
 
 **Blocked by:** 111.
 
-**Status:** todo
+**Status:** done
 
-- [ ] Migration with its policy, tested as the unprivileged role
-- [ ] Org rates page
-- [ ] Pricing copy updated
+- [x] Migration with its policy, tested as the unprivileged role
+- [x] Org rates page
+- [x] Pricing copy updated

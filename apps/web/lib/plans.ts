@@ -86,7 +86,8 @@ export const historyShort = (days: number | null) => {
 }
 
 /** The line ticket 115 gives Enterprise's per-model rates. */
-export const OWN_RATES_LINE = 'Your own (e.g. an Anthropic discount)'
+export const OWN_RATES_LINE =
+  'Your own per-model rates (e.g. an Anthropic discount)'
 
 type Cell = string | boolean
 
@@ -118,11 +119,9 @@ export const comparison = (
   ]
 }
 
-// ponytail: until ticket 121's migration writes `features.own_rates`, the key
-// is absent and Enterprise is the Tier that line belongs to. Drop the fallback
-// once every deployment's rows carry the key.
-const ownRates = (tier: MarketingTier) =>
-  tier.ownRates ?? tier.key === 'enterprise'
+// Ticket 121's migration writes `features.own_rates` on Enterprise, so the
+// flag alone decides; an absent key reads as published rates.
+const ownRates = (tier: MarketingTier) => tier.ownRates === true
 
 /** The lines a plan lists: its prose, then the two columns it reads. */
 export const planLines = (tier: MarketingTier, retention: string) => [

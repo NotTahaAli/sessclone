@@ -2,6 +2,8 @@ import { createHash, randomBytes } from 'node:crypto'
 
 import type postgres from 'postgres'
 
+import { approvalRequired } from './approval'
+
 // Ticket 28's key material and the four statements that touch `api_keys`.
 //
 // The statements live here rather than in `app/keys/actions.ts` for one
@@ -124,6 +126,12 @@ export const createApiKey = async (
       from members
      where id = ${member}
        and id in (select sessclone_own_member_ids())
+       -- Ticket 119: no key for an Org waiting for approval or cancelled.
+       -- The statuses are UNLOCKED_STATUSES in lib/approval.ts.
+       and (${!approvalRequired()}
+            or exists (select 1 from subscriptions subscription
+                        where subscription.org_id = members.org_id
+                          and subscription.status in ('active', 'past_due')))
     returning id
   `
 

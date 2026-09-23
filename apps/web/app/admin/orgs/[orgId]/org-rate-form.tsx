@@ -26,6 +26,7 @@ export function AddOrgRateForm({
   orgId,
   today,
   models,
+  action = addOrgRateAction,
 }: {
   orgId: string
   /** Resolved on the server, so the form does not render one date and hydrate
@@ -35,8 +36,11 @@ export function AddOrgRateForm({
    * saved: an override naming a model nothing reports prices nothing, and
    * looks exactly like one that works. */
   models: string[]
+  /** The Org's own settings page (ticket 121) posts to its own action, gated
+   * on the Org rather than on the platform flag. */
+  action?: typeof addOrgRateAction
 }) {
-  const [state, formAction, pending] = useActionState(addOrgRateAction, null)
+  const [state, formAction, pending] = useActionState(action, null)
 
   return (
     <>
@@ -120,13 +124,15 @@ export function DeleteOrgRate({
   orgId,
   rateId,
   said,
+  action = deleteOrgRateAction,
 }: {
   orgId: string
   rateId: string
   /** What is being deleted, for the confirmation and the screen reader. */
   said: string
+  action?: typeof deleteOrgRateAction
 }) {
-  const [state, formAction, pending] = useActionState(deleteOrgRateAction, null)
+  const [state, formAction, pending] = useActionState(action, null)
 
   // Native `confirm`, which is one line and works on a phone. Deleting an
   // override moves this Org back to the published price for every Turn it

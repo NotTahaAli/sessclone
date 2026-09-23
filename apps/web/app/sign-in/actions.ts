@@ -8,6 +8,7 @@ import { APPEARANCE_COOKIE } from '../../lib/appearance'
 
 import { appUrl } from '../../lib/auth/app-url'
 import { safeNext } from '../../lib/auth/next-path'
+import { parsePlan, planQuery } from '../../lib/auth/plan'
 import { supabaseServer } from '../../lib/supabase/server'
 
 // The two ways in, and the way out. Both ways in are passwordless: there is no
@@ -33,7 +34,13 @@ const Email = z.email().max(320)
  */
 const destination = (formData: FormData) => {
   const next = safeNext(formData.get('next'))
-  return next ? `?next=${encodeURIComponent(next)}` : ''
+  // Ticket 118: the plan a new sign-up asked for rides along too. Ignored by
+  // the callback for anybody who already has an Org.
+  const query = [
+    next ? `next=${encodeURIComponent(next)}` : '',
+    planQuery(parsePlan(formData)),
+  ].filter(Boolean)
+  return query.length ? `?${query.join('&')}` : ''
 }
 
 /** Sends the visitor to GitHub. Returns only by redirecting. */

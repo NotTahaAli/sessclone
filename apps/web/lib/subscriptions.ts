@@ -41,6 +41,10 @@ export type AdminOrg = {
   tierName: string | null
   status: SubscriptionStatus | null
   currentPeriodEnd: Date | null
+  /** The Team size a sign-up asked for (ticket 118), or null. */
+  requestedSeats: number | null
+  /** Waiting for approval (ticket 120): `inactive`, or no row at all. */
+  pending: boolean
 }
 
 type OrgRow = {
@@ -54,10 +58,31 @@ type OrgRow = {
   tier_name: string | null
   status: SubscriptionStatus | null
   current_period_end: Date | null
+  requested_seats: number | null
 }
 
+/** Ticket 120's "pending": never approved, as far as the row can say. */
+const isPending = (status: SubscriptionStatus | null) =>
+  status === null || status === 'inactive'
+
+const toAdminOrg = (row: OrgRow): AdminOrg => ({
+  id: row.id,
+  name: row.name,
+  operatorName: row.operator_name,
+  createdAt: row.created_at,
+  seats: Number(row.seats),
+  tierId: row.tier_id,
+  tierKey: row.tier_key,
+  tierName: row.tier_name,
+  status: row.status,
+  currentPeriodEnd: row.current_period_end,
+  requestedSeats: row.requested_seats,
+  pending: isPending(row.status),
+})
+
 /**
- * Every Org in the deployment, newest first, with what it is on.
+ * Every Org in the deployment, waiting-for-approval first and then newest
+ * first, with what it is on.
  *
  * One statement, not one per Org: the Seat count is a lateral aggregate and
  * the Tier a left join, because a page that lists Orgs and then asks about
@@ -87,7 +112,8 @@ export const listOrgs = async (
            tier.key as tier_key,
            tier.name as tier_name,
            subscription.status,
-           subscription.current_period_end
+           subscription.current_period_end,
+           subscription.requested_seats
       from orgs org
       left join org_operator_names operator on operator.org_id = org.id
       left join subscriptions subscription on subscription.org_id = org.id
@@ -102,23 +128,15 @@ export const listOrgs = async (
                  or operator.name ilike ${`%${name}%`}`
          : tx``
      }
-     order by org.created_at desc
+     -- Ticket 120: Orgs waiting for approval (inactive, or no row) first,
+     -- so the ones to act on never fall off the end of a capped list.
+     order by coalesce(subscription.status = 'inactive', true) desc,
+              org.created_at desc
      limit ${limit + 1}
   `
 
   return {
-    orgs: rows.slice(0, limit).map((row) => ({
-      id: row.id,
-      name: row.name,
-      operatorName: row.operator_name,
-      createdAt: row.created_at,
-      seats: Number(row.seats),
-      tierId: row.tier_id,
-      tierKey: row.tier_key,
-      tierName: row.tier_name,
-      status: row.status,
-      currentPeriodEnd: row.current_period_end,
-    })),
+    orgs: rows.slice(0, limit).map(toAdminOrg),
     more: rows.length > limit,
   }
 }
@@ -144,7 +162,8 @@ export const adminOrg = async (
            tier.key as tier_key,
            tier.name as tier_name,
            subscription.status,
-           subscription.current_period_end
+           subscription.current_period_end,
+           subscription.requested_seats
       from orgs org
       left join org_operator_names operator on operator.org_id = org.id
       left join subscriptions subscription on subscription.org_id = org.id
@@ -156,20 +175,21 @@ export const adminOrg = async (
      where org.id = ${orgId}
   `
 
-  if (!row) return null
+  return row ? toAdminOrg(row) : null
+}
 
-  return {
-    id: row.id,
-    name: row.name,
-    operatorName: row.operator_name,
-    createdAt: row.created_at,
-    seats: Number(row.seats),
-    tierId: row.tier_id,
-    tierKey: row.tier_key,
-    tierName: row.tier_name,
-    status: row.status,
-    currentPeriodEnd: row.current_period_end,
-  }
+/**
+ * How many Orgs are waiting for approval (ticket 120), for the count on the
+ * Admin panel link. Under `orgs_read`, so only an operator is told about Orgs
+ * other than their own — and only an operator is shown the link.
+ */
+export const pendingOrgCount = async (tx: TransactionSql): Promise<number> => {
+  const [row] = await tx<{ count: string }[]>`
+    select count(*) from orgs org
+      left join subscriptions subscription on subscription.org_id = org.id
+     where subscription.status is null or subscription.status = 'inactive'
+  `
+  return Number(row!.count)
 }
 
 export type SubscriptionEvent = {
@@ -230,6 +250,35 @@ export const subscriptionHistory = async (
     provider: row.provider,
     occurredAt: row.occurred_at,
   }))
+}
+
+/** The plans a sign-up may ask for (ticket 118, Taha's pick). Tier keys are
+ * the stable names code uses when it has to name a Tier; Enterprise is
+ * "contact us" and Self-Hosted is not sold, so neither is offered. */
+export const SIGNUP_PLANS = ['personal', 'team'] as const
+export type SignupPlan = { tierKey: string; seats: number | null }
+
+/**
+ * Asks for a plan: an `inactive` row on that Tier, which is what the operator
+ * confirms (ticket 118). `subscriptions_request` is the rule — the Org's
+ * Owner, once, inactive, a size the Tier allows — and a refusal throws.
+ *
+ * Returns false when the Org already has a row: asking again changes nothing,
+ * which keeps sign-in idempotent. No `returning`, so the write never depends
+ * on the select policy seeing a row inserted in the same transaction.
+ */
+export const requestPlan = async (
+  tx: TransactionSql,
+  request: SignupPlan & { orgId: string },
+): Promise<boolean> => {
+  const result = await tx`
+    insert into subscriptions (org_id, tier_id, status, requested_seats)
+    select ${request.orgId}, tier.id, 'inactive', ${request.seats}
+      from tiers tier
+     where tier.key = ${request.tierKey}
+    on conflict (org_id) do nothing
+  `
+  return result.count > 0
 }
 
 /**

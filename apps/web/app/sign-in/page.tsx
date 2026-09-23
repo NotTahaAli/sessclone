@@ -4,6 +4,8 @@ import { sendMagicLink, signInWithGitHub } from './actions'
 import { readAnonymously } from '../../lib/db'
 import { invitationOrg } from '../../lib/invitations'
 import { logoPath } from '../../lib/org-logo'
+import { SIGNUP_PLANS } from '../../lib/subscriptions'
+import { marketingTiers, tierPrice } from '../../lib/tiers'
 import { OrgMark } from '../org-mark'
 import { LogoMark } from '../_ui/logo'
 import { invitationToken, safeNext } from '../../lib/auth/next-path'
@@ -92,6 +94,65 @@ async function InvitedBy({ searchParams }: { searchParams: Query }) {
   )
 }
 
+/**
+ * The plan a new sign-up asks for (ticket 118): Personal, or Team and its
+ * size. It is only an ask — the Org waits for the operator to approve it
+ * (ticket 119) — and it is ignored for anybody who already has an Org.
+ *
+ * Absent on the way to an invitation, where the visitor is joining somebody
+ * else's Org rather than starting one. The Tiers are the cached rows the
+ * pricing page reads, so a size the operator changed is the size offered.
+ */
+async function PlanChoice({ searchParams }: { searchParams: Query }) {
+  if (invitationToken(safeNext((await searchParams).next))) return null
+
+  const tiers = (await marketingTiers()).filter((tier) =>
+    (SIGNUP_PLANS as readonly string[]).includes(tier.key),
+  )
+  if (tiers.length === 0) return null
+  const team = tiers.find((tier) => tier.key === 'team')
+
+  return (
+    <fieldset className="border-rule bg-surface mt-6 flex flex-col gap-2 rounded-md border p-4">
+      <legend className="text-text-secondary px-1 text-caption">
+        New here? Choose a plan
+      </legend>
+      {tiers.map((tier, index) => (
+        <label key={tier.key} className="flex items-center gap-2 text-body">
+          <input
+            type="radio"
+            name="plan"
+            value={tier.key}
+            defaultChecked={index === 0}
+          />
+          {tier.name}
+          <span className="text-text-muted text-caption">
+            {[tierPrice(tier).amount, tierPrice(tier).unit]
+              .filter(Boolean)
+              .join(' ')}
+          </span>
+        </label>
+      ))}
+      {team ? (
+        <label className="text-text-secondary flex items-center gap-2 text-caption">
+          Team size
+          <input
+            name="seats"
+            type="number"
+            min={team.minSeats ?? 1}
+            max={team.maxSeats ?? undefined}
+            defaultValue={team.minSeats ?? 2}
+            className="border-control-border text-text h-[var(--control-h)] w-20 rounded border px-2 text-body"
+          />
+        </label>
+      ) : null}
+      <p className="text-text-muted text-caption">
+        An administrator approves new organisations before they can be used.
+      </p>
+    </fieldset>
+  )
+}
+
 /** What a failed round trip left in the query string, if anything. */
 async function Notices({ searchParams }: { searchParams: Query }) {
   const { error, sent, code } = await searchParams
@@ -147,48 +208,52 @@ export default function SignIn({ searchParams }: { searchParams: Query }) {
       {/* The same failure, when Supabase reported it in the fragment. */}
       <ProviderError />
 
-      <form action={signInWithGitHub} className="mt-6">
+      {/* One form and two ways to submit it, so the plan below travels with
+          either (ticket 118). GitHub skips validation: it needs no address. */}
+      <form action={sendMagicLink}>
         <Suspense fallback={null}>
           <ReturnTo searchParams={searchParams} />
         </Suspense>
+
+        {/* First, so the choice is made before either button is pressed. */}
+        <Suspense fallback={null}>
+          <PlanChoice searchParams={searchParams} />
+        </Suspense>
+
         <button
           type="submit"
-          className={`${BUTTON} bg-accent-fill text-accent-on-fill`}
+          formAction={signInWithGitHub}
+          formNoValidate
+          className={`${BUTTON} bg-accent-fill text-accent-on-fill mt-6`}
         >
           Continue with GitHub
         </button>
-      </form>
 
-      <form
-        action={sendMagicLink}
-        className="border-rule bg-surface mt-6 flex flex-col gap-2 rounded-md border p-4"
-      >
-        <Suspense fallback={null}>
-          <ReturnTo searchParams={searchParams} />
-        </Suspense>
-        <label htmlFor="email" className="text-text-secondary text-caption">
-          Or get a sign-in link by email
-        </label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          required
-          placeholder="you@example.com"
-          className="border-control-border text-text h-[var(--control-h)] w-full rounded border px-3 text-body"
-        />
-        <button
-          type="submit"
-          className={`${BUTTON} border-control-border text-text border`}
-        >
-          Email me a link
-        </button>
+        <div className="border-rule bg-surface mt-6 flex flex-col gap-2 rounded-md border p-4">
+          <label htmlFor="email" className="text-text-secondary text-caption">
+            Or get a sign-in link by email
+          </label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            required
+            placeholder="you@example.com"
+            className="border-control-border text-text h-[var(--control-h)] w-full rounded border px-3 text-body"
+          />
+          <button
+            type="submit"
+            className={`${BUTTON} border-control-border text-text border`}
+          >
+            Email me a link
+          </button>
+        </div>
       </form>
 
       <p className="text-text-muted mt-6 text-caption">
         There is no password to set or forget. Signing in for the first time
-        creates an organisation with you as its owner.
+        creates an organisation with you as its owner, on the plan you chose.
       </p>
 
       <div className="mt-12">

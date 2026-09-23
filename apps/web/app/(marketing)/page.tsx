@@ -34,29 +34,27 @@ const EXAMPLE = [
   { state: 'live', where: 'CI · 4 turns, running', cost: '$0.31' },
 ] as const
 
-const DONE = <StatusGlyph state="ok" />
-
 const HOW = [
   {
-    lead: DONE,
+    lead: 'ok',
     name: 'On the machine',
     meta: 'plugin',
     sub: 'A hook reads each finished Turn. Nothing is proxied.',
   },
   {
-    lead: DONE,
+    lead: 'ok',
     name: 'On the wire',
     meta: '~300 B/turn',
     sub: 'Pushes from its cursor, never the whole session.',
   },
   {
     // The live glyph: the ledger is where a Turn is still being priced.
-    lead: <StatusGlyph state="live" />,
+    lead: 'live',
     name: 'In the ledger',
     meta: 'priced',
     sub: 'Dated rates. An unknown one reads as unpriced, never $0.',
   },
-]
+] as const
 
 const FAQ = [
   {

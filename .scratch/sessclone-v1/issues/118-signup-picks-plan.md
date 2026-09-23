@@ -6,7 +6,7 @@
 
 - Sign-up asks for the plan (and Team size). It writes an `inactive` subscription row on that Tier, so the admin sees what to confirm.
 
-**Status:** todo
+**Status:** done
 
-- [ ] Plan choice at sign-up, stored on the subscription row
-- [ ] Route and policy tests
+- [x] Plan choice at sign-up, stored on the subscription row
+- [x] Route and policy tests

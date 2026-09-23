@@ -13,10 +13,11 @@ vi.mock('../lib/db', async () => {
   const harness = await import('./harness')
   return { asViewer: harness.asUser }
 })
-vi.mock('../lib/supabase/server', () => ({
-  signedInUser: async () =>
-    session.userId === null ? null : { id: session.userId },
-}))
+vi.mock('../lib/supabase/server', () => {
+  const who = async () =>
+    session.userId === null ? null : { id: session.userId }
+  return { signedInUser: who, sessionUser: who }
+})
 vi.mock('../lib/storage', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/storage')>()),
   storageConfigured: () => true,

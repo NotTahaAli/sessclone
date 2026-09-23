@@ -5,7 +5,7 @@ import { z } from 'zod'
 
 import { asViewer } from '../../../lib/db'
 import { acceptFailure, acceptInvitation } from '../../../lib/invitations'
-import { signedInUser } from '../../../lib/supabase/server'
+import { sessionUser } from '../../../lib/supabase/server'
 
 // Accepting is a write, so it is a POST and never the render of a GET.
 //
@@ -20,7 +20,7 @@ export const acceptAction = async (
   _previous: unknown,
   formData: FormData,
 ): Promise<{ error: string } | null> => {
-  const user = await signedInUser()
+  const user = await sessionUser()
   if (!user) return { error: 'Sign in to accept this invitation.' }
 
   const token = Token.safeParse(formData.get('token'))

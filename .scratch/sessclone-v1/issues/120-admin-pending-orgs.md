@@ -9,7 +9,7 @@
 
 **Blocked by:** 118.
 
-**Status:** todo
+**Status:** done
 
-- [ ] Pending first + nav count
-- [ ] Email behind SMTP config
+- [x] Pending first + nav count
+- [x] Email behind SMTP config

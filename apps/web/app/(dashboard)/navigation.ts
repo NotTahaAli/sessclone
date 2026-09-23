@@ -23,7 +23,13 @@ import { reachesOrgSettings, reachesTier, type Role } from '../../lib/viewer'
 // `platformAdmin` is a separate argument from `role` here and why the flag is
 // read from the database (`lib/platform-admin.ts`) rather than from a claim.
 
-export type NavItem = { href: string; label: string }
+export type NavItem = {
+  href: string
+  label: string
+  /** A count beside the label, such as Orgs waiting for approval (ticket
+   * 120). Absent or zero draws nothing. */
+  badge?: number
+}
 export type NavGroup = { label: string; items: NavItem[] }
 
 /** What the product is for: the three a person opens the dashboard to read. */
@@ -46,6 +52,12 @@ export const SETTINGS: NavItem = { href: '/settings', label: 'Settings' }
  * listed here only because Taha asked for a way in that is not a typed path.
  */
 export const ADMIN_PANEL: NavItem = { href: '/admin', label: 'Admin panel' }
+
+/** The Admin panel entry with the count of Orgs waiting for approval beside
+ * it (ticket 120). */
+export const adminPanelEntry = (pending: number): NavItem[] => [
+  { ...ADMIN_PANEL, badge: pending },
+]
 
 /**
  * The phone's fifth entry. Six items do not fit a bottom bar, so it carries
@@ -123,7 +135,7 @@ export type SettingsItem = NavItem & { about: string }
 
 /**
  * The settings index column (ticket 113): the two destinations above, plus
- * the two pages that live inside Org settings — Members, and Tier for the
+ * the pages that live inside Org settings — Members, Rates, and Tier for the
  * Owner — so each is one tap from the index rather than a link at the foot of
  * the Org page. Same rule as above: absent, never present and refused.
  */
@@ -138,6 +150,13 @@ export const settingsIndex = (role: Role): SettingsItem[] => {
             href: '/settings/org/members',
             label: 'Members',
             about: 'Invitations, Roles, who each Manager sees',
+          },
+          // Ticket 121: listed for every Owner and Admin; the page says so
+          // when the plan does not include writing them.
+          {
+            href: '/settings/org/rates',
+            label: 'Rates',
+            about: 'Per-model rates where they differ from published prices',
           },
         ]
       : []),

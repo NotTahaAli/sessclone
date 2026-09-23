@@ -3,6 +3,7 @@ import { Suspense, type ReactNode } from 'react'
 import { AccountMenu } from './account'
 import { AppearanceSync } from './appearance-sync'
 import { LogoMark } from '../_ui/logo'
+import { Waiting } from './waiting'
 import { OrgMark } from '../org-mark'
 import { PanelCredit } from './credit'
 import {
@@ -13,15 +14,18 @@ import {
   SidebarLinks,
 } from './nav-links'
 import {
-  ADMIN_PANEL,
+  adminPanelEntry,
   BOTTOM_BAR,
   MORE,
   moreItems,
   navGroups,
 } from './navigation'
 import Loading from './loading'
+import { isLocked } from '../../lib/approval'
+import { asViewer } from '../../lib/db'
 import { currentOperator } from '../../lib/platform-admin'
-import { currentViewer } from '../../lib/viewer'
+import { pendingOrgCount } from '../../lib/subscriptions'
+import { sessionViewer } from '../../lib/viewer'
 
 // Ticket 83: this layout prerenders a static shell.
 //
@@ -131,7 +135,7 @@ function Inactive({
 
 /** The Org name, which every figure under here belongs to. */
 async function OrgName({ className }: { className: string }) {
-  const viewer = await currentViewer()
+  const viewer = await sessionViewer()
   if (!viewer) return <span className={className}>No Org</span>
 
   // Ticket 77: an uploaded logo sits beside the name, never instead of it,
@@ -155,7 +159,7 @@ async function OrgName({ className }: { className: string }) {
 
 /** The account control, which knows the Role and the address it signs out. */
 async function Account() {
-  const viewer = await currentViewer()
+  const viewer = await sessionViewer()
   return viewer ? <AccountMenu viewer={viewer} /> : null
 }
 
@@ -167,18 +171,29 @@ async function Account() {
  * frame around it is what prerenders.
  */
 async function Content({ children }: { children: ReactNode }) {
-  const viewer = await currentViewer()
+  const viewer = await sessionViewer()
   if (!viewer) return <WithoutOrg />
+
+  // Ticket 119: an Org waiting for approval, or cancelled, sees only this.
+  // The page is not rendered at all, so nothing it reads reaches the reader.
+  if (isLocked(viewer.subscriptionStatus)) {
+    return (
+      <Waiting
+        cancelled={viewer.subscriptionStatus === 'cancelled'}
+        orgName={viewer.orgName}
+        operator={(await currentOperator()) !== null}
+      />
+    )
+  }
 
   return (
     <>
       {/* Ticket 48: an Org whose subscription is not active is told so, on
           every page, rather than shown a dashboard that quietly means less
-          than it looks like it does. No subscription row is the same answer
-          as an inactive one — it is the state every Org starts in, and the
-          commonest reason a person is reading this notice. Collection keeps
-          working either way: refusing the Org's own history would be a worse
-          answer than saying what is true. */}
+          than it looks like it does. Since ticket 119 that is `past_due`
+          alone — `inactive`, no row and `cancelled` lock the Org above —
+          unless the deployment runs with `SIGNUP_APPROVAL=off`, where all
+          three are this notice again and collection keeps working. */}
       {viewer.subscriptionStatus === 'active' ? null : (
         <Inactive status={viewer.subscriptionStatus ?? 'inactive'} />
       )}
@@ -209,7 +224,9 @@ function Pending({ className }: { className: string }) {
 async function AdminEntry() {
   const operator = await currentOperator()
   if (!operator) return null
-  return <SidebarLinks items={ADMIN_ONLY} />
+  // Ticket 120: how many Orgs are waiting for approval, beside the link.
+  const pending = await asViewer(operator.userId, pendingOrgCount)
+  return <SidebarLinks items={adminPanelEntry(pending)} />
 }
 
 /** The brand line at both widths: the sessclone mark, then the Org's name in
@@ -219,7 +236,6 @@ const BRAND =
 
 /** Built once at module load rather than per render of the frame. */
 const GROUPS = navGroups()
-const ADMIN_ONLY = [ADMIN_PANEL]
 /**
  * What More stands in for, so the bar marks it when the reader is on one of
  * them. The admin entry is in this list unconditionally: the bar is part of
