@@ -1,6 +1,8 @@
 import { notFound } from 'next/navigation'
 
 import { ActivateForm } from './activate-form'
+import { setOperatorName } from './actions'
+import { InlineName } from '../../../(dashboard)/inline-name'
 import { AddOrgRateForm, DeleteOrgRate } from './org-rate-form'
 import { PageHeader } from '../../../(dashboard)/page-header'
 import { asOperator } from '../../../../lib/platform-admin'
@@ -64,11 +66,30 @@ export default async function Page({
   return (
     <div className="flex max-w-3xl flex-col gap-8">
       <PageHeader
-        title={org.name}
-        description={`${org.seats} ${org.seats === 1 ? 'seat' : 'seats'} in use · ${
+        title={org.operatorName ?? org.name}
+        description={`${org.operatorName ? `Calls itself ${org.name} · ` : ''}${org.seats} ${org.seats === 1 ? 'seat' : 'seats'} in use · ${
           org.tierName ? `${org.tierName}, ${org.status}` : 'no Tier yet'
         }`}
       />
+
+      {/* Ticket 102. Its own table and policy, so the Org never reads it. */}
+      <section>
+        <h2 className="text-heading">Admin name</h2>
+        <p className="text-text-secondary mt-1 text-caption">
+          What platform administrators call this Org. Its own people never see
+          it. Save an empty box to go back to the Org&apos;s own name.
+        </p>
+        <p className="mt-3 text-body">
+          <InlineName
+            action={setOperatorName}
+            hidden={`orgId=${org.id}`}
+            current={org.operatorName}
+            fallback={org.name}
+            label="Admin name for this Org"
+            placeholder="Acme, pilot"
+          />
+        </p>
+      </section>
 
       <section>
         <h2 className="text-heading">Subscription</h2>
@@ -169,7 +190,7 @@ export default async function Page({
                     .toISOString()
                     .slice(0, 16)
                     .replace('T', ' ')}{' '}
-                  UTC · {event.actorEmail ?? event.provider}
+                  UTC · {event.actorName ?? event.provider}
                 </p>
                 {event.note ? (
                   <p className="text-text-secondary mt-1 text-caption">

@@ -67,7 +67,7 @@ test('an operator activates an Org, and the event says who and why', async () =>
   const [operator] = await sql<{ email: string }[]>`
     select email from users where id = ${fixture.platformAdmin.userId}
   `
-  expect(event!.actorEmail).toBe(operator!.email)
+  expect(event!.actorName).toBe(operator!.email)
 })
 
 test('deactivation writes its own event, and the history keeps both', async () => {

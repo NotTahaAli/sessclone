@@ -123,14 +123,14 @@ const PHASES = [
     // friendly names for a Project, a Session and a person, and the archiving,
     // hiding and searching that make a month of Sessions navigable.
     range: [85, 94],
-    also: [95],
+    also: [95, 100, 101, 102],
   },
   {
     id: 'viewer',
     label: 'Transcripts',
     type: 'frontend',
     pos: [960, 800],
-    range: [100, 105],
+    range: [103, 108],
   },
 ]
 

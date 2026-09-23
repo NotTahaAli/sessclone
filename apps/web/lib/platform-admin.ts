@@ -19,7 +19,12 @@ import { signedInUser } from './supabase/server'
 // this check would still be refused every row it tried to read, and a policy
 // that changed would change what the navigation offers in the same commit.
 
-export type Operator = { userId: string; email: string }
+export type Operator = {
+  userId: string
+  email: string
+  /** Their display name (ticket 91), which the admin frame leads with. */
+  name: string | null
+}
 
 /**
  * The signed-in platform administrator, or `null` for everybody else —
@@ -37,10 +42,15 @@ export const currentOperator = cache(async (): Promise<Operator | null> => {
   const [row] = await asViewer(
     user.id,
     (tx) =>
-      tx<{ admin: boolean }[]>`select sessclone_is_platform_admin() as admin`,
+      tx<{ admin: boolean; name: string | null }[]>`
+        select sessclone_is_platform_admin() as admin,
+               (select display_name from users where id = ${user.id}) as name
+      `,
   )
 
-  return row?.admin ? { userId: user.id, email: user.email } : null
+  return row?.admin
+    ? { userId: user.id, email: user.email, name: row.name }
+    : null
 })
 
 /**

@@ -120,7 +120,7 @@ export default async function Members() {
               <PersonControls
                 memberId={member.memberId}
                 role={member.role}
-                email={member.email}
+                who={member.name ?? member.email}
                 removed={member.removed}
               />
             </li>
@@ -187,7 +187,9 @@ function Scope({
 
   return (
     <div className="border-rule mt-6 rounded border p-4">
-      <h3 className="text-heading break-all">{manager.email}</h3>
+      <h3 className="text-heading break-all">
+        {manager.name ?? manager.email}
+      </h3>
       <p className="text-text-secondary mt-1 text-sm">
         {assigned === 0
           ? 'Sees nothing. Assign somebody below.'
@@ -237,8 +239,8 @@ function Scope({
                   {included ? 'Remove' : 'Add'}
                   <span className="sr-only">
                     {included
-                      ? ` ${member.email} from ${manager.email}'s Scope`
-                      : ` ${member.email} to ${manager.email}'s Scope`}
+                      ? ` ${member.name ?? member.email} from ${manager.name ?? manager.email}'s Scope`
+                      : ` ${member.name ?? member.email} to ${manager.name ?? manager.email}'s Scope`}
                   </span>
                 </button>
               </form>

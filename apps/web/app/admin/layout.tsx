@@ -72,7 +72,7 @@ export default async function AdminLayout({
             className="text-text-muted truncate text-caption"
             title={operator.email}
           >
-            {operator.email}
+            {operator.name ?? operator.email}
           </p>
           <PanelCredit />
         </div>
@@ -85,8 +85,11 @@ export default async function AdminLayout({
           </span>
           <span className="text-heading block truncate">Platform</span>
         </p>
-        <span className="text-text-muted truncate text-caption">
-          {operator.email}
+        <span
+          className="text-text-muted truncate text-caption"
+          title={operator.email}
+        >
+          {operator.name ?? operator.email}
         </span>
       </header>
 

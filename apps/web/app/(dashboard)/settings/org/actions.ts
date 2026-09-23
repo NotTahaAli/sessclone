@@ -4,6 +4,8 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 
 import { asViewer } from '../../../../lib/db'
+import { NAME_LIMIT, renameOrg } from '../../../../lib/names'
+import type { NameState } from '../../inline-name'
 import { setOrgRetention, setOrgTimezone } from '../../../../lib/org'
 import { signedInUser } from '../../../../lib/supabase/server'
 
@@ -134,3 +136,41 @@ const isValueRefused = (error: unknown) =>
   'code' in error &&
   typeof error.code === 'string' &&
   REFUSALS.has(error.code)
+
+/**
+ * Renames the Org (ticket 101).
+ *
+ * `orgs_write` is Owner or Admin, so a Manager posting this writes nothing,
+ * and the empty result is how the sentence below tells them so. An Org always
+ * has a name: an empty box is refused here rather than cleared.
+ */
+export const setOrgName = async (
+  _previous: NameState,
+  formData: FormData,
+): Promise<NameState> => {
+  const user = await signedInUser()
+  if (!user) return { error: 'Sign in again to rename the Org.' }
+
+  const orgId = z.uuid().safeParse(formData.get('orgId'))
+  const name = z
+    .string()
+    .trim()
+    .min(1)
+    .max(NAME_LIMIT)
+    .safeParse(formData.get('name'))
+  if (!orgId.success) return { error: 'That request was missing the Org.' }
+  if (!name.success) {
+    return { error: `An Org needs a name of 1 to ${NAME_LIMIT} characters.` }
+  }
+
+  const written = await asViewer(user.id, (tx) =>
+    renameOrg(tx, orgId.data, name.data),
+  )
+  if (!written) {
+    return { error: 'You do not have permission to rename this Org.' }
+  }
+
+  // The name is in the shell on every page, not only this one.
+  revalidatePath('/', 'layout')
+  return { saved: name.data }
+}

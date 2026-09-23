@@ -5,6 +5,8 @@ import { z } from 'zod'
 
 import { asOperator, currentOperator } from '../../../../lib/platform-admin'
 import { setSubscription } from '../../../../lib/subscriptions'
+import { NAME_LIMIT, setOrgOperatorName } from '../../../../lib/names'
+import type { NameState } from '../../../(dashboard)/inline-name'
 
 // Ticket 48's one write. A Server Action is a POST endpoint whether or not a
 // form was rendered for the caller, so every field is parsed before it reaches
@@ -64,4 +66,37 @@ export const activateAction = async (
   // beside an unchanged subscription is not written down — and the form says
   // that rather than pointing at a history it did not add to.
   return { saved: result.recorded ? 'recorded' : 'unchanged' }
+}
+
+/**
+ * Ticket 102: what platform administrators call this Org, never shown to it.
+ *
+ * `org_operator_names_admin` refuses anybody else independently of the check
+ * below. An empty box clears the name, and the Org's own name shows again.
+ */
+export const setOperatorName = async (
+  _previous: NameState,
+  formData: FormData,
+): Promise<NameState> => {
+  if (!(await currentOperator())) {
+    return { error: 'Only a platform administrator may name an Org here.' }
+  }
+
+  const orgId = z.uuid().safeParse(formData.get('orgId'))
+  const name = z.string().trim().max(NAME_LIMIT).safeParse(formData.get('name'))
+  if (!orgId.success) return { error: 'That request was missing the Org.' }
+  if (!name.success) {
+    return { error: `A name is ${NAME_LIMIT} characters or fewer.` }
+  }
+
+  const value = name.data === '' ? null : name.data
+  try {
+    await asOperator((tx) => setOrgOperatorName(tx, orgId.data, value))
+  } catch {
+    return { error: 'That name could not be saved.' }
+  }
+
+  revalidatePath('/admin/orgs')
+  revalidatePath(`/admin/orgs/${orgId.data}`)
+  return { saved: value }
 }

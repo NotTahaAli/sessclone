@@ -24,6 +24,10 @@ export type Role = 'owner' | 'admin' | 'manager' | 'member'
 export type Viewer = {
   userId: string
   email: string
+  /** What they call themselves (ticket 91), or null. Read here because the
+   * account menu is on every page and was the last place printing the
+   * address alone (ticket 100). */
+  displayName: string | null
   memberId: string
   orgId: string
   orgName: string
@@ -54,6 +58,7 @@ export type Viewer = {
 }
 
 type MembershipRow = {
+  display_name: string | null
   member_id: string
   org_id: string
   org_name: string
@@ -86,6 +91,7 @@ export const currentViewer = cache(async (): Promise<Viewer | null> => {
     user.id,
     (tx) => tx<MembershipRow[]>`
       select member.id as member_id,
+             account.display_name,
              member.org_id,
              org.name as org_name,
              org.timezone as org_timezone,
@@ -94,6 +100,7 @@ export const currentViewer = cache(async (): Promise<Viewer | null> => {
              logo.updated_at as logo_updated_at
         from members member
         join orgs org on org.id = member.org_id
+        join users account on account.id = member.user_id
         left join subscriptions subscription
                on subscription.org_id = member.org_id
         left join org_logos logo on logo.org_id = member.org_id
@@ -108,6 +115,7 @@ export const currentViewer = cache(async (): Promise<Viewer | null> => {
   return {
     userId: user.id,
     email: user.email,
+    displayName: membership.display_name,
     memberId: membership.member_id,
     orgId: membership.org_id,
     orgName: membership.org_name,
