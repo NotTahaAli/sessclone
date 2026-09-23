@@ -424,3 +424,23 @@ test('an agreed price is the operator’s to set; the Owner reads it and cannot 
   `
   expect(row).toEqual({ base: 50_000, seat: 800 })
 })
+
+test('an Owner’s ask cannot carry an agreed price', async () => {
+  const tierId = await seedSizedTier('team', 2, 10)
+  // Everything else is a valid ask; only the price is the Owner's to not set.
+  const ask = (base: number | null, seat: number | null) =>
+    asRole(
+      fixture.acme,
+      'owner',
+      (tx) => tx`
+        insert into subscriptions
+          (org_id, tier_id, status, requested_seats,
+           price_base_cents, price_seat_cents)
+        values (${fixture.acme.id}, ${tierId}, 'inactive', 5, ${base}, ${seat})
+      `,
+    )
+
+  await expect(ask(0, null)).rejects.toThrow(/row-level security/)
+  await expect(ask(null, 0)).rejects.toThrow(/row-level security/)
+  expect((await ask(null, null)).count).toBe(1)
+})
