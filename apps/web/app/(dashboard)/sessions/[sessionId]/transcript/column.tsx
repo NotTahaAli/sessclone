@@ -28,9 +28,15 @@ import {
   rangesToStart,
   splitEarlier,
 } from './columns'
-import { ColumnContext, TaskStatusContext, useViewer } from './context'
+import {
+  ColumnContext,
+  ItemsContext,
+  TaskStatusContext,
+  useViewer,
+} from './context'
 import { concat, readBytes, type StoredFile } from './data'
 import { Badge, RowView, rowKey } from './rows'
+import { groupSteps } from './steps'
 import { taskStatuses } from './tasks'
 
 // Tickets 105 and 108: what goes inside one column. The Session's own column
@@ -41,7 +47,7 @@ import { taskStatuses } from './tasks'
 /** Rows of loaded Items, filtered by the preset. Re-run over everything loaded. */
 function Rows({ items, preset }: { items: Item[]; preset: Preset }) {
   const rows = useMemo(
-    () => visibleRows(buildTimeline(items), preset).rows,
+    () => groupSteps(visibleRows(buildTimeline(items), preset).rows),
     [items, preset],
   )
   const statuses = useMemo(() => taskStatuses(items), [items])
@@ -53,13 +59,15 @@ function Rows({ items, preset }: { items: Item[]; preset: Preset }) {
     )
   }
   return (
-    <TaskStatusContext.Provider value={statuses}>
-      <ol className="flex flex-col py-2">
-        {rows.map((row, index) => (
-          <RowView key={rowKey(row, index)} row={row} />
-        ))}
-      </ol>
-    </TaskStatusContext.Provider>
+    <ItemsContext.Provider value={items}>
+      <TaskStatusContext.Provider value={statuses}>
+        <ol className="mx-auto flex max-w-3xl flex-col py-3">
+          {rows.map((row, index) => (
+            <RowView key={rowKey(row, index)} row={row} />
+          ))}
+        </ol>
+      </TaskStatusContext.Provider>
+    </ItemsContext.Provider>
   )
 }
 
@@ -78,13 +86,11 @@ export function MainColumn({
   preset,
   renew,
   signal,
-  sessionId,
 }: {
   file: StoredFile
   preset: Preset
   renew: (id: string) => Promise<StoredFile | null>
   signal: AbortSignal
-  sessionId: string
 }) {
   const [loaded, setLoaded] = useState<Loaded>({
     items: [],
@@ -225,18 +231,6 @@ export function MainColumn({
   const more = loaded.from > 0
   return (
     <>
-      <ColumnHeader title="Session" detail={sessionId}>
-        {more ? (
-          <button
-            type="button"
-            onClick={toStart}
-            disabled={busy}
-            className="border-control-border hover:bg-surface-hover shrink-0 rounded-md border px-2 py-1 text-caption whitespace-nowrap"
-          >
-            Jump to start
-          </button>
-        ) : null}
-      </ColumnHeader>
       <div
         ref={scroller}
         onScroll={onScroll}
@@ -245,10 +239,18 @@ export function MainColumn({
         {error ? (
           <Failure message={error} retry={earlier} />
         ) : more ? (
-          <p className="text-text-muted p-3 text-center text-caption">
+          <p className="text-text-muted flex flex-wrap items-center justify-center gap-x-3 p-3 text-caption">
             {busy
               ? 'Loading earlier messages…'
               : 'Scroll up for earlier messages.'}
+            <button
+              type="button"
+              onClick={toStart}
+              disabled={busy}
+              className="text-accent-text underline disabled:opacity-50"
+            >
+              Jump to start
+            </button>
           </p>
         ) : null}
         {loaded.items.length === 0 && busy ? (

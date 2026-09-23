@@ -12,6 +12,8 @@ import {
   type ReactNode,
 } from 'react'
 
+import Link from 'next/link'
+
 import {
   NORMAL,
   parseJournal,
@@ -45,6 +47,7 @@ import {
 } from './data'
 import { FilterBar, type PresetActions } from './filter-bar'
 import { clockFormat } from './format'
+import { Sheet } from './sheet'
 
 // Tickets 105-108: the transcript viewer. Finder-style columns: the Session on
 // the left, and each subagent or workflow opened from a block to the right of
@@ -87,6 +90,7 @@ export function TranscriptViewer({
   presets,
   actions,
   settingsHref,
+  backHref,
 }: {
   sessionId: string
   /** Whose Session: ids are unique per Member only. */
@@ -98,6 +102,8 @@ export function TranscriptViewer({
   actions: PresetActions | null
   /** Where a Member turns archival on. */
   settingsHref: string
+  /** The Session this transcript belongs to. */
+  backHref: string
 }) {
   const [generation, setGeneration] = useState(0)
   const controller = useRef<AbortController | null>(null)
@@ -111,6 +117,9 @@ export function TranscriptViewer({
   })
   const [columns, setColumns] = useState<Column[]>(MAIN)
   const [sessionStart, setSessionStart] = useState<string | null>(null)
+  const [options, setOptions] = useState(false)
+  const openOptions = useCallback(() => setOptions(true), [])
+  const closeOptions = useCallback(() => setOptions(false), [])
 
   // The file list, once per Reload. Each load's controller aborts every read
   // made under it when the next Reload or an unmount replaces it.
@@ -383,14 +392,42 @@ export function TranscriptViewer({
   return (
     <ViewerContext.Provider value={viewer}>
       <div className="flex flex-col gap-3">
-        <FilterBar
-          preset={preset}
-          onChange={setPreset}
-          saved={saved}
-          onSaved={setSaved}
-          actions={actions}
-          reload={reload}
-        />
+        {/* The page's only chrome (Taha, 2026-09-23): the chat starts right
+            under it, and everything else is behind the options button. */}
+        <div className="flex items-center gap-2">
+          <Link
+            href={backHref}
+            aria-label="Back to the Session"
+            className="text-text-secondary hover:bg-surface-hover hover:text-text grid size-9 shrink-0 place-items-center rounded-md text-heading"
+          >
+            ‹
+          </Link>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-heading truncate">Transcript</h1>
+            <p className="text-text-muted truncate font-mono text-micro">
+              {sessionId}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={openOptions}
+            aria-label="View options"
+            title="View options"
+            className="text-text-secondary hover:bg-surface-hover hover:text-text grid size-9 shrink-0 place-items-center rounded-md text-heading"
+          >
+            ⋯
+          </button>
+        </div>
+        <Sheet open={options} onClose={closeOptions} title="View options">
+          <FilterBar
+            preset={preset}
+            onChange={setPreset}
+            saved={saved}
+            onSaved={setSaved}
+            actions={actions}
+            reload={reload}
+          />
+        </Sheet>
 
         {columns.length > 1 ? (
           <nav aria-label="Open columns" className="lg:hidden">
@@ -414,9 +451,9 @@ export function TranscriptViewer({
           // room for, so each column scrolls inside the viewport.
           className={`border-rule flex ${
             columns.length > 1
-              ? 'h-[calc(100dvh-25rem)]'
-              : 'h-[calc(100dvh-23rem)]'
-          } min-h-[20rem] snap-x snap-mandatory gap-2 overflow-x-auto overscroll-x-contain lg:h-[calc(100dvh-15rem)] lg:snap-none lg:gap-0 lg:rounded-md lg:border`}
+              ? 'h-[calc(100dvh-18.5rem)]'
+              : 'h-[calc(100dvh-16rem)]'
+          } min-h-[20rem] snap-x snap-mandatory gap-2 overflow-x-auto overscroll-x-contain lg:h-[calc(100dvh-8rem)] lg:snap-none lg:gap-0 lg:rounded-md lg:border`}
         >
           {columns.map((column, index) => (
             <ColumnFrame
@@ -436,7 +473,6 @@ export function TranscriptViewer({
                   preset={preset}
                   renew={renew}
                   signal={load.signal}
-                  sessionId={sessionId}
                 />
               ) : column.kind === 'agent' ? (
                 <AgentColumn agentId={column.agentId} preset={preset} />
