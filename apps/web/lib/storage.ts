@@ -6,6 +6,7 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import type { ArtifactKind } from '@sessclone/shared'
 
 // ADR 0003: the bytes never pass through this application. The Collector PUTs
 // straight to storage with a URL issued here, which is why this module knows
@@ -103,6 +104,9 @@ const segment = (raw: string) => {
  *
  * ```
  * orgs/<org>/members/<member>/projects/<project key>/<session>.jsonl
+ *   …/<session>/agents/<agent>.jsonl             an Agent Run
+ *   …/<session>/agents/<agent>.meta.json         its sidecar (ticket 104)
+ *   …/<session>/workflows/<run>.journal.jsonl    a workflow's journal
  * ```
  *
  * Every segment a Collector influences — the Project key, which carries
@@ -117,10 +121,19 @@ export const artifactKey = (artifact: {
   projectKey: string | null
   sessionId: string
   agentId: string | null
+  /** Ticket 104: a sidecar sits beside the transcript it describes. */
+  kind?: ArtifactKind
 }) => {
-  const name = artifact.agentId
-    ? `${segment(artifact.sessionId)}/agents/${segment(artifact.agentId)}.jsonl`
-    : `${segment(artifact.sessionId)}.jsonl`
+  const session = segment(artifact.sessionId)
+  const agent = artifact.agentId && segment(artifact.agentId)
+  const name =
+    artifact.kind === 'workflow_journal'
+      ? `${session}/workflows/${agent ?? 'unnamed'}.journal.jsonl`
+      : artifact.kind === 'agent_meta'
+        ? `${session}/agents/${agent ?? 'unnamed'}.meta.json`
+        : agent
+          ? `${session}/agents/${agent}.jsonl`
+          : `${session}.jsonl`
 
   // A Session outside any repository still has a transcript, and it needs a
   // segment of its own rather than an empty one — two slashes in a row is a
@@ -194,14 +207,18 @@ export const ttl = () => {
  * may refuse for length. `filename*` carries the non-ASCII form per RFC 6266,
  * since the quoted `filename` is only reliably read as ASCII.
  */
-export const presignDownload = async (key: string, filename: string) => {
+export const presignDownload = async (
+  key: string,
+  filename: string,
+  contentType = 'application/x-ndjson',
+) => {
   const clean = filename.replaceAll(/["\\\p{C}]/gu, '').slice(0, 200)
   return getSignedUrl(
     storage(),
     new GetObjectCommand({
       Bucket: required('STORAGE_BUCKET'),
       Key: key,
-      ResponseContentType: 'application/x-ndjson',
+      ResponseContentType: contentType,
       ResponseContentDisposition:
         `attachment; filename="${clean}"; ` +
         `filename*=UTF-8''${encodeURIComponent(clean)}`,

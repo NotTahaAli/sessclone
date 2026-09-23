@@ -386,7 +386,29 @@ describe('a Log Artifact', () => {
         ${fixture.acme.id}, ${fixture.acme.members.member}, 'session-1',
         'Acme/member/session-1.v2.jsonl', ${'b'.repeat(64)}, 2048
       )
-    `).rejects.toThrow(/log_artifacts_member_id_session_id_agent_id_key/)
+    `).rejects.toThrow(/log_artifacts_identity_key/)
+  })
+
+  test('keeps a sidecar beside its transcript, and knows only three kinds', async () => {
+    // Ticket 104: one row per (Session, Agent Run, kind), so a run's
+    // `.meta.json` is not refused as a second copy of its transcript.
+    await artifact(fixture.acme, 'member', 'session-1')
+    await sql`
+      insert into log_artifacts
+        (org_id, member_id, session_id, kind, storage_key, sha256, size_bytes)
+      values (
+        ${fixture.acme.id}, ${fixture.acme.members.member}, 'session-1',
+        'workflow_journal', 'Acme/member/session-1.journal', ${'b'.repeat(64)}, 2
+      )
+    `
+    await expect(sql`
+      insert into log_artifacts
+        (org_id, member_id, session_id, kind, storage_key, sha256, size_bytes)
+      values (
+        ${fixture.acme.id}, ${fixture.acme.members.member}, 'session-2',
+        'notes', 'Acme/member/session-2.notes', ${'b'.repeat(64)}, 2
+      )
+    `).rejects.toThrow(/log_artifacts_kind_check/)
   })
 
   test('cannot name an object another row already names', async () => {

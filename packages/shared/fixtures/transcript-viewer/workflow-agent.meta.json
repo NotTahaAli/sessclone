@@ -1,0 +1,6 @@
+{
+  "agentType": "workflow-subagent",
+  "description": "probe-a",
+  "workflowPhase": "Probe",
+  "spawnDepth": 1
+}

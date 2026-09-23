@@ -79,7 +79,7 @@ export async function POST(request: Request) {
     )
   }
 
-  const { sessionId, sha256 } = parsed.data
+  const { sessionId, sha256, kind } = parsed.data
   const agentId = parsed.data.agentId ?? null
 
   let decision
@@ -89,6 +89,7 @@ export async function POST(request: Request) {
       memberId: caller.memberId,
       sessionId,
       agentId,
+      kind,
       sha256,
     })
   } catch (error) {
@@ -139,6 +140,9 @@ export async function POST(request: Request) {
     url,
     storageKey: decision.storageKey,
     expiresIn: ttl(),
+    // Echoed so a Collector can tell this deployment knows kinds: an older
+    // one strips it and would file a sidecar as a transcript.
+    kind,
   } satisfies PresignResponse)
 }
 

@@ -151,7 +151,9 @@ export const storedProjects = async (
            artifact.project_id,
            -- Ticket 90: the Org's name for the Project, or its key.
            coalesce(project.nickname, project.key) as project_key,
-           count(*) as sessions,
+           -- Transcripts, not the sidecars beside them (ticket 104) — which
+           -- do count towards the bytes stored.
+           count(*) filter (where artifact.kind = 'transcript') as sessions,
            coalesce(sum(artifact.size_bytes), 0) as bytes,
            max(artifact.uploaded_at) as newest
       from log_artifacts artifact
@@ -167,6 +169,7 @@ export const storedProjects = async (
           : tx``
       }
      where artifact.member_id in (${memberIds(tx, audience)})
+       and artifact.kind = 'transcript'
        ${
          // One group, for the page that opens it: the summary it shows is the
          // same aggregate, and asking for it by name is one row instead of
@@ -237,6 +240,8 @@ export const storedSessions = async (
            and project_id is not distinct from ${group.projectId}`
          : tx`member_id in (${memberIds(tx, audience)})`
      }
+       -- A sidecar is not a transcript to list (ticket 104).
+       and kind = 'transcript'
        ${
          before
            ? tx`and (uploaded_at, id) < (${before.uploadedAt}, ${before.id})`
@@ -339,16 +344,33 @@ const lastTurns = async (
 export const downloadableArtifact = async (
   tx: TransactionSql,
   id: string,
-): Promise<{ storageKey: string; filename: string } | null> => {
-  const [row] = await tx<{ storage_key: string; name: string }[]>`
-    select storage_key,
+): Promise<{
+  storageKey: string
+  filename: string
+  contentType: string
+} | null> => {
+  const [row] = await tx<{ storage_key: string; name: string; kind: string }[]>`
+    select storage_key, kind,
            case when agent_id is null then session_id
+                when kind = 'workflow_journal'
+                  then session_id || '-workflow-' || agent_id
                 else session_id || '-agent-' || agent_id
            end as name
       from log_artifacts where id = ${id}
   `
   if (!row) return null
-  return { storageKey: row.storage_key, filename: `${row.name}.jsonl` }
+  // A sidecar (ticket 104) downloads as what it is.
+  const [extension, contentType] =
+    row.kind === 'agent_meta'
+      ? ['.meta.json', 'application/json']
+      : row.kind === 'workflow_journal'
+        ? ['.journal.jsonl', 'application/x-ndjson']
+        : ['.jsonl', 'application/x-ndjson']
+  return {
+    storageKey: row.storage_key,
+    filename: `${row.name}${extension}`,
+    contentType,
+  }
 }
 
 /**
@@ -370,11 +392,25 @@ export const deleteStoredSession = async (
   tx: TransactionSql,
   artifactId: string,
 ): Promise<boolean> => {
+  // The transcript and its sidecars in one statement (ticket 104): an Agent
+  // Run's `.meta.json`, and for the Session's own transcript its workflows'
+  // journals. A sidecar's id names no transcript and deletes nothing.
   const rows = await tx<{ storage_key: string }[]>`
-    delete from log_artifacts
-     where id = ${artifactId}
-       and member_id in (select sessclone_own_member_ids())
-    returning storage_key
+    with transcript as (
+      select member_id, session_id, agent_id from log_artifacts
+       where id = ${artifactId}
+         and kind = 'transcript'
+         and member_id in (select sessclone_own_member_ids())
+    )
+    delete from log_artifacts artifact
+     using transcript
+     where artifact.member_id = transcript.member_id
+       and artifact.session_id = transcript.session_id
+       and (artifact.kind in ('transcript', 'agent_meta')
+              and artifact.agent_id is not distinct from transcript.agent_id
+            or artifact.kind = 'workflow_journal'
+              and transcript.agent_id is null)
+    returning artifact.storage_key
   `
   if (rows.length === 0) return false
 
@@ -405,12 +441,12 @@ export const deleteStoredProject = async (
   memberId: string,
   projectId: string | null,
 ): Promise<number> => {
-  const rows = await tx<{ storage_key: string }[]>`
+  const rows = await tx<{ storage_key: string; kind: string }[]>`
     delete from log_artifacts
      where member_id = ${memberId}
        and member_id in (select sessclone_own_member_ids())
        and project_id is not distinct from ${projectId}
-    returning storage_key
+    returning storage_key, kind
   `
   if (rows.length === 0) return 0
 
@@ -419,5 +455,6 @@ export const deleteStoredProject = async (
   // is a key nobody checked.
   await deleteObjects(rows.map((row) => row.storage_key))
 
-  return rows.length
+  // Transcripts, which is what the page counts; their sidecars went too.
+  return rows.filter((row) => row.kind === 'transcript').length
 }

@@ -155,6 +155,7 @@ export default async function Session({
         transcripts={transcripts}
         archival={archival}
         agentRuns={agentRuns.length}
+        view={`/sessions/${encodeURIComponent(session.sessionId)}/transcript?member=${member}`}
       />
 
       {agentRuns.length > 0 ? <AgentRuns runs={agentRuns} when={when} /> : null}
@@ -448,10 +449,13 @@ function Transcripts({
   transcripts,
   archival,
   agentRuns,
+  view,
 }: {
   transcripts: StoredTranscript[]
   archival: 'off' | 'excluded' | 'on' | null
   agentRuns: number
+  /** Tickets 105-108: the transcript viewer, for the Session's own file. */
+  view: string
 }) {
   return (
     <section aria-labelledby="transcript" className="flex flex-col gap-3">
@@ -497,6 +501,14 @@ function Transcripts({
                   never come through the application (ticket 60). A new tab,
                   because every failure of that route answers with plain text
                   rather than a page. */}
+              {transcript.agentId ? null : (
+                <Link
+                  href={view}
+                  className="text-accent-text text-body underline"
+                >
+                  View transcript
+                </Link>
+              )}
               <a
                 href={`/api/logs/download/${transcript.id}`}
                 target="_blank"

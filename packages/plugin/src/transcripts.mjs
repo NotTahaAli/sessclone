@@ -8,6 +8,7 @@
 //       subagents/agent-<agentId>.jsonl                        an Agent Run
 //       subagents/agent-<agentId>.meta.json                     its sidecar
 //       subagents/workflows/<runId>/agent-<agentId>.jsonl      a workflow's run
+//       subagents/workflows/<runId>/journal.jsonl              its journal
 //
 // `subagents/` is walked rather than listed, because a workflow's runs sit a
 // level deeper under their run id (spec §Hooks, verified live) and finding 06
@@ -26,7 +27,7 @@
 
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 
 /**
  * Where Claude Code keeps its transcripts, per finding 06: `CLAUDE_CONFIG_DIR`
@@ -57,7 +58,8 @@ const list = async (directory) => {
 const RUN_DEPTH = 3
 
 /**
- * Every `.jsonl` under `directory`, to `depth` levels. Missing is empty.
+ * Every `.jsonl` and `.meta.json` under `directory`, to `depth` levels.
+ * Missing is empty.
  *
  * @param {string} directory
  * @param {number} depth
@@ -71,10 +73,38 @@ const walk = async (directory, depth) => {
     entries.map(async (entry) => {
       const path = join(directory, entry.name)
       if (entry.isDirectory()) return walk(path, depth - 1)
-      return entry.isFile() && entry.name.endsWith('.jsonl') ? [path] : []
+      return entry.isFile() &&
+        (entry.name.endsWith('.jsonl') || entry.name.endsWith('.meta.json'))
+        ? [path]
+        : []
     }),
   )
   return found.flat()
+}
+
+/**
+ * Ticket 104: what a file under `subagents/` is when it is not a transcript,
+ * read from its name alone — or null for a transcript.
+ *
+ * `agent-<id>.meta.json` is an Agent Run's sidecar, keyed by the run's id.
+ * `workflows/<runId>/journal.jsonl` is a workflow's journal, keyed by its run
+ * id: `.jsonl` like a transcript, but its lines are the workflow's own record
+ * of what it started and what came back, not a conversation.
+ *
+ * @param {string} path
+ * @returns {{ kind: 'agent_meta' | 'workflow_journal', agentId: string } | null}
+ */
+export const sidecarOf = (path) => {
+  const name = basename(path)
+  const meta = /^agent-(.+)\.meta\.json$/.exec(name)
+  if (meta) return { kind: 'agent_meta', agentId: meta[1] }
+  if (
+    name === 'journal.jsonl' &&
+    basename(dirname(dirname(path))) === 'workflows'
+  ) {
+    return { kind: 'workflow_journal', agentId: basename(dirname(path)) }
+  }
+  return null
 }
 
 /** A listing with file types, or nothing: an absent directory is not an error. */
@@ -114,7 +144,6 @@ const spawnDepthOf = async (transcript) => {
   }
 }
 
-/**
 /**
  * How many transcripts are `stat`ed at once.
  *
@@ -216,7 +245,20 @@ export const allSessions = async (environment) => {
  * @param {Record<string, string | undefined>} input.environment
  * @returns {Promise<{ path: string, agentRun: boolean, spawnDepth: number | null }[]>}
  */
-export const sessionTranscripts = async ({
+export const sessionTranscripts = async (input) =>
+  (await sessionFiles(input)).transcripts
+
+/**
+ * Every file belonging to `sessionId`, in one walk: the transcripts
+ * {@link sessionTranscripts} returns, and the sidecars beside them (ticket
+ * 101) — each run's `.meta.json` and each workflow's `journal.jsonl`.
+ *
+ * @param {object} input
+ * @param {string | undefined} input.transcriptPath From the hook event.
+ * @param {string} input.sessionId
+ * @param {Record<string, string | undefined>} input.environment
+ */
+export const sessionFiles = async ({
   transcriptPath,
   sessionId,
   environment,
@@ -233,6 +275,8 @@ export const sessionTranscripts = async ({
 
   /** Keyed by path: one Session can be reached through two of the above. */
   const found = new Map()
+  /** @type {Map<string, { path: string, kind: 'agent_meta' | 'workflow_journal', agentId: string }>} */
+  const sidecars = new Map()
 
   const perDirectory = await Promise.all(
     [...directories].map(async (directory) => {
@@ -244,7 +288,13 @@ export const sessionTranscripts = async ({
       }
 
       const runs = join(directory, sessionId, 'subagents')
-      const transcripts = await walk(runs, RUN_DEPTH)
+      const files = await walk(runs, RUN_DEPTH)
+      const transcripts = []
+      for (const path of files) {
+        const sidecar = sidecarOf(path)
+        if (sidecar) sidecars.set(path, { path, ...sidecar })
+        else if (path.endsWith('.jsonl')) transcripts.push(path)
+      }
       here.push(
         ...(await Promise.all(
           transcripts.map(async (path) => ({
@@ -271,5 +321,5 @@ export const sessionTranscripts = async ({
     })
   }
 
-  return [...found.values()]
+  return { transcripts: [...found.values()], sidecars: [...sidecars.values()] }
 }

@@ -5,7 +5,11 @@ import { dirname, join } from 'node:path'
 
 import { expect, test } from 'vitest'
 
-import { configDirectory, sessionTranscripts } from './transcripts.mjs'
+import {
+  configDirectory,
+  sessionFiles,
+  sessionTranscripts,
+} from './transcripts.mjs'
 import { buildPayloads } from './report.mjs'
 
 // Tickets 35 and 36, against the layout the corpus was captured from:
@@ -300,3 +304,55 @@ test('a workflow’s runs are found a level deeper, under their run id', async (
   // The sidecar is beside the transcript wherever the transcript is.
   expect(deeper?.spawnDepth).toBe(2)
 })
+
+test('each run’s sidecar and each workflow’s journal are found as sidecars, not transcripts', async () => {
+  // Ticket 104: the sidecars are archived too, under their own kind — and a
+  // workflow's `journal.jsonl` is not an Agent Run's transcript, whatever its
+  // extension says.
+  const { config, main, project } = await layout({
+    runs: [
+      {
+        name: 'agent-run.jsonl',
+        agentId: 'a4a571530bd42856c',
+        meta: { spawnDepth: 1 },
+      },
+    ],
+  })
+  const nested = join(project, SESSION, 'subagents', 'workflows', 'wf_01')
+  mkdirSync(nested, { recursive: true })
+  writeFileSync(
+    join(nested, 'agent-a38fc2c136a5f46a3.jsonl'),
+    await fixture('workflow-agent-run.jsonl'),
+  )
+  writeFileSync(join(nested, 'agent-a38fc2c136a5f46a3.meta.json'), '{}')
+  writeFileSync(join(nested, 'journal.jsonl'), '{"type":"started"}\n')
+
+  const input = {
+    transcriptPath: main,
+    sessionId: SESSION,
+    environment: { CLAUDE_CONFIG_DIR: config },
+  }
+  const { transcripts, sidecars } = await sessionFiles(input)
+
+  expect(transcripts.map((file) => file.path).toSorted(byText)).toEqual(
+    [
+      main,
+      join(project, SESSION, 'subagents', 'agent-a4a571530bd42856c.jsonl'),
+      join(nested, 'agent-a38fc2c136a5f46a3.jsonl'),
+    ].toSorted(),
+  )
+  expect(
+    sidecars.map(({ kind, agentId }) => `${kind}:${agentId}`).toSorted(),
+  ).toEqual([
+    'agent_meta:a38fc2c136a5f46a3',
+    'agent_meta:a4a571530bd42856c',
+    'workflow_journal:wf_01',
+  ])
+  // The same list the reporter reads, which must not ingest a journal.
+  expect(await sessionTranscripts(input)).toEqual(transcripts)
+})
+
+/** @param {string} a @param {string} b */
+function byText(a, b) {
+  return a.localeCompare(b)
+}

@@ -94,6 +94,12 @@ check the two agree:
 DATABASE_URL="$OWNER_URL" node apps/web/scripts/schema-drift.mjs
 ```
 
+A few migrations must run **after** the deploy instead, because the code still
+live beforehand depends on what they remove. Their header says so, and they
+are the exception: hold them back from the batch above, deploy, then apply
+them. `20260923140000_artifact_kind_drop_old_key.sql` is one — run before the
+deploy, it fails every archival upload until the new code is live.
+
 It names every migration the checkout has and the database does not, and
 exits non-zero when there are any. It reads
 `supabase_migrations.schema_migrations`, which only the Supabase CLI and the
@@ -119,6 +125,12 @@ It writes and deletes one object under `storage-compat/`, prints a line per
 check and stops at the first failure with a non-zero exit, so the line above
 the exit is the thing to fix. Run it before you tell anybody
 archival is on.
+
+The bucket must also answer CORS for the dashboard: the transcript viewer
+reads byte ranges straight from storage in the browser, through presigned GET
+URLs, so allow `GET` with the `Range` request header from your dashboard's
+origin. Supabase Storage allows this by default (`access-control-allow-origin:
+*`, `range` among the allowed headers); on R2, AWS or MinIO add a CORS rule.
 
 ## 4. Run it
 

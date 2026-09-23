@@ -93,6 +93,44 @@ beforeEach(async () => {
   bucket.configured = true
 })
 
+test('an expired transcript takes its sidecars with it, however new they are', async () => {
+  // Ticket 104: a run's `.meta.json` and a workflow's journal are written
+  // later than the transcript they describe, and must not outlive it.
+  await sql`update orgs set retention_days = 30 where id = ${fixture.acme.id}`
+  const main = await seedArtifact({ age: 31 })
+  const sessionId = `session-${nth}`
+  const sidecar = async (agentId: string | null, kind: string) => {
+    const key = `${main}.${kind}.${agentId}`
+    await sql`
+      insert into log_artifacts ${sql({
+        org_id: fixture.acme.id,
+        member_id: fixture.acme.members.member,
+        session_id: sessionId,
+        agent_id: agentId,
+        kind,
+        storage_key: key,
+        sha256: 'a'.repeat(64),
+        size_bytes: 10,
+      })}
+    `
+    return key
+  }
+  const run = await sidecar('agent-7', 'transcript')
+  const journal = await sidecar('wf_1', 'workflow_journal')
+  const meta = await sidecar('agent-7', 'agent_meta')
+
+  const swept = await sweepRetention(sql)
+
+  // The Agent Run's transcript is new and stays, and so does its sidecar; the
+  // main transcript's journal goes with it.
+  expect(swept).toEqual({ removed: 2, more: false })
+  expect(bucket.deleted.toSorted()).toEqual([main, journal].toSorted())
+  const left = await sql<{ storage_key: string }[]>`
+    select storage_key from log_artifacts order by storage_key
+  `
+  expect(left.map((row) => row.storage_key)).toEqual([run, meta].toSorted())
+})
+
 test('an Org starts with a window it did not have to choose', async () => {
   // "Keep forever" is not a decision anybody made, and a deployment that kept
   // every transcript by omission is the failure ADR 0005 is about.

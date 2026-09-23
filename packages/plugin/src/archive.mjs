@@ -43,7 +43,7 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 
 import { NO_DEADLINE, expired, requestSignal } from './deadline.mjs'
-import { sessionTranscripts } from './transcripts.mjs'
+import { sessionFiles } from './transcripts.mjs'
 
 /**
  * How long one archival request may take.
@@ -232,6 +232,8 @@ const ask = async ({ configuration, path, body, deadline = NO_DEADLINE }) => {
  * @param {string} input.transcriptPath
  * @param {string} input.sessionId
  * @param {string | null} [input.agentId]
+ * @param {'transcript' | 'agent_meta' | 'workflow_journal'} [input.kind]
+ *   What the file is (ticket 104); a sidecar rides exactly this path.
  * @param {number} [input.deadline]
  * @param {number} [input.uploadTimeoutMs] The PUT's own limit.
  * @returns {Promise<{ archived: boolean, refused?: string, sizeBytes?: number }>}
@@ -241,6 +243,7 @@ export const archiveTranscript = async ({
   transcriptPath,
   sessionId,
   agentId = agentIdOf(transcriptPath),
+  kind = 'transcript',
   deadline = NO_DEADLINE,
   uploadTimeoutMs = UPLOAD_TIMEOUT_MS,
 }) => {
@@ -286,7 +289,7 @@ export const archiveTranscript = async ({
   const presign = await ask({
     configuration,
     path: '/api/logs/presign',
-    body: { sessionId, agentId, sha256 },
+    body: { sessionId, agentId, kind, sha256 },
     deadline,
   })
 
@@ -300,12 +303,20 @@ export const archiveTranscript = async ({
   if (!presign.body?.url || !presign.body?.storageKey) {
     return { archived: false, refused: 'unavailable' }
   }
+  // A deployment older than ticket 104 strips `kind` and would file a sidecar
+  // as the run's transcript, overwriting it. Newer ones echo the kind they
+  // presigned for, so a sidecar goes only where the answer says so; otherwise
+  // it is skipped, unsettled, and asked about again once the server upgrades.
+  if (kind !== 'transcript' && presign.body.kind !== kind) {
+    return { archived: false, refused: 'kind_unsupported' }
+  }
 
   try {
     const answer = await fetch(presign.body.url, {
       method: 'PUT',
       headers: {
-        'content-type': 'application/x-ndjson',
+        'content-type':
+          kind === 'agent_meta' ? 'application/json' : 'application/x-ndjson',
         // Exactly the range that was hashed. A stream that yielded more or
         // fewer bytes than this fails the request after sending them, which is
         // what a transcript being appended to by a live session would do.
@@ -329,7 +340,13 @@ export const archiveTranscript = async ({
     // The key the bytes actually went to, echoed so the deployment can refuse
     // a Session that moved Project since the presign rather than record one
     // object under another's hash.
-    body: { sessionId, agentId, sha256, storageKey: presign.body.storageKey },
+    body: {
+      sessionId,
+      agentId,
+      kind,
+      sha256,
+      storageKey: presign.body.storageKey,
+    },
     deadline,
   })
   if (!confirm.ok || !confirm.body?.stored) {
@@ -375,24 +392,35 @@ export const archiveSession = async ({
   deadline = NO_DEADLINE,
   uploadTimeoutMs,
 }) => {
-  const transcripts = await sessionTranscripts({
+  const { transcripts, sidecars } = await sessionFiles({
     transcriptPath,
     sessionId,
     environment,
   })
 
+  // The transcripts first, then their sidecars (ticket 104): a deadline that
+  // runs out part-way should cost a run's metadata before a transcript.
+  const work = [
+    ...transcripts.map(({ path, agentRun }) => ({
+      path,
+      // The id comes from the filename, and an Agent Run whose filename does
+      // not carry one is skipped rather than archived: `agentId: null` would
+      // file it under the *Session's* own key and replace the Session's
+      // transcript with it, and the two would then overwrite each other on
+      // every pass.
+      agentId: agentIdOf(path),
+      agentRun,
+      kind: 'transcript',
+    })),
+    ...sidecars.map((sidecar) => ({ ...sidecar, agentRun: true })),
+  ]
+
   let archived = 0
-  /** What happened per transcript, for a caller with somewhere to show it. */
+  /** What happened per file, for a caller with somewhere to show it. */
   const refusals = []
 
-  for (const { path, agentRun } of transcripts) {
+  for (const { path, agentId, agentRun, kind } of work) {
     if (expired(deadline)) break
-
-    // The id comes from the filename, and an Agent Run whose filename does not
-    // carry one is skipped rather than archived: `agentId: null` would file it
-    // under the *Session's* own key and replace the Session's transcript with
-    // it, and the two would then overwrite each other on every pass.
-    const agentId = agentIdOf(path)
     if (agentRun && agentId === null) continue
 
     // eslint-disable-next-line no-await-in-loop -- one upload at a time, on purpose
@@ -401,6 +429,7 @@ export const archiveSession = async ({
       transcriptPath: path,
       sessionId,
       agentId,
+      kind,
       deadline,
       uploadTimeoutMs,
     })

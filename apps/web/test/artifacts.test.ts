@@ -60,6 +60,7 @@ const artifact = async ({
   sessionId = 'session-1',
   agentId = null,
   bytes = 1024,
+  kind = 'transcript',
 }: {
   memberId?: string
   projectId?: string | null
@@ -67,17 +68,18 @@ const artifact = async ({
   sessionId?: string
   agentId?: string | null
   bytes?: number
+  kind?: 'transcript' | 'agent_meta' | 'workflow_journal'
 } = {}) => {
   const member = memberId || fixture.acme.members.member
   const key = `orgs/${fixture.acme.id}/members/${member}/projects/${encodeURIComponent(
     projectKey ?? 'none',
-  )}/${sessionId}${agentId ? `/agents/${agentId}` : ''}.jsonl`
+  )}/${sessionId}${agentId ? `/agents/${agentId}` : ''}.${kind}`
 
   const [row] = await sql<{ id: string }[]>`
     insert into log_artifacts (org_id, member_id, project_id, session_id,
-                               agent_id, storage_key, sha256, size_bytes)
+                               agent_id, kind, storage_key, sha256, size_bytes)
     values (${fixture.acme.id}, ${member}, ${projectId}, ${sessionId},
-            ${agentId}, ${key}, ${'a'.repeat(64)}, ${bytes})
+            ${agentId}, ${kind}, ${key}, ${'a'.repeat(64)}, ${bytes})
     returning id
   `
   return { id: row!.id, key }
@@ -630,4 +632,67 @@ test('a transcript whose Turns never arrived reports null, not the upload', asyn
   const { sessions } = await asMember(storedSessions)
 
   expect(sessions[0]!.lastTurnAt).toBeNull()
+})
+
+test('sidecars are not listed as transcripts, and go with the transcript they belong to', async () => {
+  // Ticket 104. The main transcript takes its workflows' journals with it; an
+  // Agent Run's takes its own `.meta.json` and nobody else's.
+  const projectId = await project('github.com/acme/api')
+  const main = await artifact({ projectId })
+  const run = await artifact({ projectId, agentId: 'agent-7' })
+  const runMeta = await artifact({
+    projectId,
+    agentId: 'agent-7',
+    kind: 'agent_meta',
+  })
+  const otherMeta = await artifact({
+    projectId,
+    agentId: 'agent-8',
+    kind: 'agent_meta',
+  })
+  const journal = await artifact({
+    projectId,
+    agentId: 'wf_1',
+    kind: 'workflow_journal',
+  })
+  // Another Session's journal, which must survive.
+  const elsewhere = await artifact({
+    projectId,
+    sessionId: 'session-2',
+    agentId: 'wf_1',
+    kind: 'workflow_journal',
+  })
+
+  const { sessions } = await asMember(storedSessions)
+  expect(sessions.map((session) => session.id).toSorted()).toEqual(
+    [main.id, run.id].toSorted(),
+  )
+  const { projects } = await asMember(storedProjects)
+  expect(projects.map((row) => row.sessions)).toEqual([2])
+
+  expect(await asMember((tx) => deleteStoredSession(tx, run.id))).toBe(true)
+  expect(deleted.toSorted()).toEqual([run.key, runMeta.key].toSorted())
+
+  deleted.length = 0
+  expect(await asMember((tx) => deleteStoredSession(tx, main.id))).toBe(true)
+  expect(deleted.toSorted()).toEqual([main.key, journal.key].toSorted())
+
+  const left = await sql<{ id: string }[]>`select id from log_artifacts`
+  expect(left.map((row) => row.id).toSorted()).toEqual(
+    [otherMeta.id, elsewhere.id].toSorted(),
+  )
+
+  // A sidecar is not a transcript to destroy on its own by id.
+  expect(await asMember((tx) => deleteStoredSession(tx, otherMeta.id))).toBe(
+    false,
+  )
+
+  // A whole Project counts its transcripts, and takes the sidecars too.
+  deleted.length = 0
+  expect(
+    await asMember((tx) =>
+      deleteStoredProject(tx, fixture.acme.members.member, projectId),
+    ),
+  ).toBe(0)
+  expect(deleted).toHaveLength(2)
 })

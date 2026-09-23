@@ -164,6 +164,29 @@ test('an Agent Run is a file under its Session, and still a valid key', async ()
   expect(key.endsWith('/session-1/agents/agent-1.jsonl')).toBe(true)
 })
 
+test('a run’s sidecar and a workflow’s journal each have a key of their own', async () => {
+  // Ticket 104: beside the transcript they describe, never on top of it.
+  const { artifactKey } = await import('../lib/storage')
+  const at = {
+    orgId: 'org',
+    memberId: 'member',
+    projectKey: 'p',
+    sessionId: 'session-1',
+  }
+
+  expect(artifactKey({ ...at, agentId: 'agent-1', kind: 'agent_meta' })).toBe(
+    'orgs/org/members/member/projects/p/session-1/agents/agent-1.meta.json',
+  )
+  expect(
+    artifactKey({ ...at, agentId: 'wf_3/../x', kind: 'workflow_journal' }),
+  ).toBe(
+    'orgs/org/members/member/projects/p/session-1/workflows/wf_3-..-x.journal.jsonl',
+  )
+  expect(artifactKey({ ...at, agentId: 'agent-1', kind: 'transcript' })).toBe(
+    'orgs/org/members/member/projects/p/session-1/agents/agent-1.jsonl',
+  )
+})
+
 test('nothing a Collector sends escapes its own segment', async () => {
   const { artifactKey } = await import('../lib/storage')
 

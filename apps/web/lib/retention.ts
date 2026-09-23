@@ -99,9 +99,16 @@ export const sweepRetention = async (
     // one). A per-Org `cross join lateral` was tried and is worse — 220ms on
     // the same backlog, because it fetches `limit` rows per Org and sorts the
     // union of them single-threaded.
-    const rows = await tx<{ storage_key: string }[]>`
-      with cutoffs as (${CUTOFFS(tx)}), doomed as (
-        select artifact.id
+    //
+    // An expired transcript takes its sidecars with it (ticket 104) whatever
+    // their own age — a run's `.meta.json` and a workflow's journal are
+    // written after the transcript they describe and must not outlive it.
+    // Found by the identity key's leading `(member_id, session_id)`, in the
+    // same statement.
+    const rows = await tx<{ storage_key: string; expired: boolean }[]>`
+      with cutoffs as (${CUTOFFS(tx)}), expired as (
+        select artifact.id, artifact.member_id, artifact.session_id,
+               artifact.agent_id, artifact.kind
           from log_artifacts artifact
           join cutoffs on cutoffs.org_id = artifact.org_id
          where artifact.created_at
@@ -109,11 +116,25 @@ export const sweepRetention = async (
          -- Oldest first, so a backlog drains in the order things expired.
          order by artifact.created_at
          limit ${limit}
+      ), doomed as (
+        select id from expired
+        union
+        select sidecar.id
+          from expired transcript
+          join log_artifacts sidecar
+            on sidecar.member_id = transcript.member_id
+           and sidecar.session_id = transcript.session_id
+         where transcript.kind = 'transcript'
+           and (sidecar.kind = 'agent_meta'
+                  and sidecar.agent_id = transcript.agent_id
+                or sidecar.kind = 'workflow_journal'
+                  and transcript.agent_id is null)
       )
       delete from log_artifacts
        where id in (select id from doomed)
-      returning storage_key
+      returning storage_key, id in (select id from expired) as expired
     `
+    const expired = rows.filter((row) => row.expired).length
 
     // The objects nothing names any more (`storage_orphans`), taken in the
     // same batch: they are already paid for in one round trip, and they are
@@ -145,7 +166,7 @@ export const sweepRetention = async (
     // extra call that removes nothing, which is the cheap way to be wrong.
     return {
       removed: rows.length,
-      more: rows.length === limit || orphans.length === limit,
+      more: expired === limit || orphans.length === limit,
     }
   })
 

@@ -246,6 +246,14 @@ function Group({
                     removed, or storage that is not configured would otherwise
                     replace this page with bare text. On success the
                     attachment disposition means the tab opens and closes. */}
+                {session.agentId ? null : (
+                  <a
+                    href={`/sessions/${encodeURIComponent(session.sessionId)}/transcript?member=${session.memberId}`}
+                    className="text-accent-text text-sm underline"
+                  >
+                    View
+                  </a>
+                )}
                 <a
                   href={`/api/logs/download/${session.id}`}
                   target="_blank"

@@ -1,0 +1,9 @@
+{
+  "agentType": "Explore",
+  "description": "Explore repo",
+  "toolUseId": "toolu_agent",
+  "spawnDepth": 1,
+  "requestShape": "background",
+  "requestNonInteractive": true,
+  "model": "sonnet"
+}
