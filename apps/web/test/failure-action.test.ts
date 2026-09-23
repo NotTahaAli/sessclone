@@ -57,8 +57,20 @@ test('marks the one Session as the signed-in viewer, and refuses half a Session'
   await markFailuresViewedAction(form({ sessionId: 'failed-1' }))
   expect(await marks()).toEqual([])
 
+  // A mark says when its page was read; one without, or with a time that is
+  // no date, is refused unwritten.
+  const session = {
+    memberId: fixture.acme.members.member,
+    sessionId: 'failed-1',
+  }
+  await markFailuresViewedAction(form(session))
   await markFailuresViewedAction(
-    form({ memberId: fixture.acme.members.member, sessionId: 'failed-1' }),
+    form({ ...session, seenAt: '2026-13-45T00:00:00Z' }),
+  )
+  expect(await marks()).toEqual([])
+
+  await markFailuresViewedAction(
+    form({ ...session, seenAt: new Date(Date.now() + 60_000).toISOString() }),
   )
   expect(await marks()).toEqual([
     { viewer: fixture.acme.members.owner, session_id: 'failed-1' },

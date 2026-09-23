@@ -192,10 +192,17 @@ export const countFailures = async (
 }
 
 /**
- * Marks failed Sessions seen by the viewer, now: one Session, or with no
- * Session named every Session that failed in the range. One statement either
- * way. `failure_views_own_insert` refuses a Session the viewer cannot read,
- * and the `select` from `session_events` only finds ones they can.
+ * Marks failed Sessions seen by the viewer as of `seenAt`, when the page they
+ * clicked on was read: one Session, or with no Session named every Session
+ * that failed in the range. One statement either way.
+ *
+ * Not `now()`: a failure received between the page read and the click was
+ * never on screen, so it stays unviewed. `seenAt` is the client's word, so
+ * it is clamped to `now()`, and a mark never moves back — a stale form
+ * posted after a newer one leaves the newer time.
+ *
+ * `failure_views_own_insert` refuses a Session the viewer cannot read, and
+ * the `select` from `session_events` only finds ones they can.
  */
 export const markFailuresViewed = async (
   tx: TransactionSql,
@@ -205,13 +212,17 @@ export const markFailuresViewed = async (
     timezone: string
     range: LocalRange
     session?: { memberId: string; sessionId: string }
+    /** When the page the mark was made from was read. */
+    seenAt: Date
   },
 ): Promise<number> => {
   const { from, to } = bounds(tx, mark.timezone, mark.range)
   const result = await tx`
-    insert into failure_views (org_id, viewer_member_id, member_id, session_id)
+    insert into failure_views
+      (org_id, viewer_member_id, member_id, session_id, viewed_at)
     select distinct ${mark.orgId}::uuid, ${mark.viewerMemberId}::uuid,
-           event.member_id, event.session_id
+           event.member_id, event.session_id,
+           least(${mark.seenAt}::timestamptz, now())
       from session_events event
      where event.org_id = ${mark.orgId}
        and event.kind = 'stop_failure'
@@ -224,7 +235,8 @@ export const markFailuresViewed = async (
            : tx``
        }
     on conflict (viewer_member_id, member_id, session_id)
-      do update set viewed_at = now()
+      do update set viewed_at =
+        greatest(failure_views.viewed_at, excluded.viewed_at)
   `
   return result.count
 }

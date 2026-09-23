@@ -34,6 +34,7 @@ const shortId = (id: string, limit = 20) =>
 export function FailuresList({
   failures,
   unviewed,
+  seenAt,
   timezone,
   params,
 }: {
@@ -41,6 +42,8 @@ export function FailuresList({
   /** Failed Sessions in the period the viewer has not marked seen — the
    * pill's count, which reaches past the capped rows. */
   unviewed: number
+  /** When the page's reads began: a mark covers only what they showed. */
+  seenAt: string
   /** The Org's timezone, so a time reads in the same zone the range is cut in. */
   timezone: string
   /** The current query: the period a mark applies to rides in the form. */
@@ -69,7 +72,7 @@ export function FailuresList({
           action={markFailuresViewedAction}
           className="-mt-1 mb-1 flex justify-end"
         >
-          <Period params={params} />
+          <Period params={params} seenAt={seenAt} />
           <button
             type="submit"
             className="text-text-muted hover:text-text text-caption underline underline-offset-2"
@@ -84,6 +87,7 @@ export function FailuresList({
             key={row.id}
             row={row}
             params={params}
+            seenAt={seenAt}
             when={when.format(new Date(row.occurredAt))}
           />
         ))}
@@ -99,11 +103,13 @@ export function FailuresList({
   )
 }
 
-/** The period the page shows, as hidden fields, so a mark covers the same
- * Sessions the reader is looking at. */
-function Period({ params }: { params: Query }) {
+/** The period the page shows, and when it was read, as hidden fields, so a
+ * mark covers the same Sessions the reader is looking at and not a failure
+ * received after. */
+function Period({ params, seenAt }: { params: Query; seenAt: string }) {
   return (
     <>
+      <input type="hidden" name="seenAt" value={seenAt} />
       {(['range', 'from', 'to'] as const).map((key) => {
         const value = one(params[key])
         return value ? (
@@ -118,10 +124,12 @@ function Failure({
   row,
   when,
   params,
+  seenAt,
 }: {
   row: FailureRow
   when: string
   params: Query
+  seenAt: string
 }) {
   const advice = adviceFor(row.errorType)
 
@@ -189,7 +197,7 @@ function Failure({
           <p className="text-text-muted text-caption">✓ Viewed</p>
         ) : (
           <form action={markFailuresViewedAction}>
-            <Period params={params} />
+            <Period params={params} seenAt={seenAt} />
             <input type="hidden" name="memberId" value={row.memberId} />
             <input type="hidden" name="sessionId" value={row.sessionId} />
             <button

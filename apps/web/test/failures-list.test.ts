@@ -29,6 +29,7 @@ const render = (rows: FailureRow[], unviewed: number) =>
     createElement(FailuresList, {
       failures: { rows, total: rows.length + 60, more: 60 },
       unviewed,
+      seenAt: '2026-09-23T12:00:00.000Z',
       timezone: 'UTC',
       params: {},
     }),
@@ -40,4 +41,13 @@ const render = (rows: FailureRow[], unviewed: number) =>
 test('"Mark all viewed" follows the unviewed count, not the capped rows', () => {
   expect(render([row(true)], 3)).toContain('Mark all viewed')
   expect(render([row(false)], 0)).not.toContain('Mark all viewed')
+})
+
+// 2026-09-23 review: a mark covers what the page showed, so both forms post
+// when the page was read, not leave the server to use the click's time.
+test('both mark forms carry the time the page was read', () => {
+  const html = render([row(false)], 1)
+  expect(
+    html.match(/name="seenAt" value="2026-09-23T12:00:00.000Z"/g),
+  ).toHaveLength(2)
 })

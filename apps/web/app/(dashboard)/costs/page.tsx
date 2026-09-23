@@ -91,6 +91,10 @@ export default async function Costs({
   // Sessions in the period this viewer has not marked viewed. It is read on
   // the failures view too, since the list's own total counts every failure,
   // viewed or not, and is a different number.
+  //
+  // `seenAt` is taken before the reads, so a "Mark viewed" posted from this
+  // page never covers a failure received after what it showed.
+  const seenAt = new Date().toISOString()
   const [facts, days, ranked, counted, failures] = await asViewer(
     viewer.userId,
     (tx) =>
@@ -171,6 +175,7 @@ export default async function Costs({
             ranked={ranked}
             failures={failures}
             failuresCount={failuresCount}
+            seenAt={seenAt}
             timezone={viewer.orgTimezone}
             params={params}
             open={open}
@@ -265,6 +270,7 @@ function Body({
   ranked,
   failures,
   failuresCount,
+  seenAt,
   timezone,
   params,
   open,
@@ -275,6 +281,8 @@ function Body({
   ranked: Breakdown | null
   failures: Failures | null
   failuresCount: number
+  /** When this page's reads began, for a mark made from it. */
+  seenAt: string
   timezone: string
   /** The current query, so every link keeps the period. */
   params: Query
@@ -291,6 +299,7 @@ function Body({
         <FailuresList
           failures={failures}
           unviewed={failuresCount}
+          seenAt={seenAt}
           timezone={timezone}
           params={params}
         />

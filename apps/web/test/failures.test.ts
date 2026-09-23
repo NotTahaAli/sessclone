@@ -304,6 +304,9 @@ test('the list is capped and reports how many more there are', async () => {
 const markAs = (
   role: 'owner' | 'member',
   session?: { memberId: string; sessionId: string },
+  // Clamped to the database's now(): a JS Date is whole milliseconds, so
+  // `new Date()` can land a hair before a row just received.
+  seenAt = new Date(Date.now() + 60_000),
 ) =>
   asRole(fixture.acme, role, (tx) =>
     markFailuresViewed(tx, {
@@ -312,6 +315,7 @@ const markAs = (
       timezone: 'UTC',
       range: september,
       session,
+      seenAt,
     }),
   )
 
@@ -388,6 +392,32 @@ test('mark all clears the period, and a later failure counts again', async () =>
   // that was offline delivers a failure dated before the mark, and it is
   // still one the viewer has not seen.
   await seedFailure({ session_id: 'a', occurred_at: '2026-09-20T09:00:00Z' })
+  expect(await countAs('member')).toBe(1)
+})
+
+test('a mark covers what the page showed, not what arrived before the click', async () => {
+  await seedFailure({
+    session_id: 'shown',
+    received_at: new Date(Date.now() - 120_000),
+  })
+  const pageRead = new Date(Date.now() - 60_000)
+  // Received after the page was read, before the click: never on screen.
+  await seedFailure({ session_id: 'arrived' })
+
+  await markAs('member', undefined, pageRead)
+  expect(await countAs('member')).toBe(1)
+
+  // A stale form posted later never moves an existing mark back.
+  await markAs('member')
+  await markAs('member', undefined, pageRead)
+  expect(await countAs('member')).toBe(0)
+
+  // A page time from the future is clamped to now: a later failure counts.
+  await markAs('member', undefined, new Date(Date.now() + 86_400_000))
+  await seedFailure({
+    session_id: 'shown',
+    occurred_at: '2026-09-20T09:00:00Z',
+  })
   expect(await countAs('member')).toBe(1)
 })
 

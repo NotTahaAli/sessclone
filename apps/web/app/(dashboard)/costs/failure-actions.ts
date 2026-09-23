@@ -23,6 +23,10 @@ const Form = z.object({
   // Both or neither: neither is "mark all".
   memberId: z.uuid().optional(),
   sessionId: z.string().trim().min(1).max(200).optional(),
+  // When the page was read: the mark covers what was on screen, not a failure
+  // received since. `markFailuresViewed` clamps it to now(). The regex passes
+  // a month 13; the coerce refuses the Invalid Date it makes.
+  seenAt: z.iso.datetime().pipe(z.coerce.date()),
 })
 
 const field = (data: FormData, key: string) => {
@@ -42,9 +46,10 @@ export const markFailuresViewedAction = async (
     to: field(formData, 'to'),
     memberId: field(formData, 'memberId'),
     sessionId: field(formData, 'sessionId'),
+    seenAt: field(formData, 'seenAt'),
   })
   if (!parsed.success) return
-  const { memberId, sessionId, ...period } = parsed.data
+  const { memberId, sessionId, seenAt, ...period } = parsed.data
   if ((memberId === undefined) !== (sessionId === undefined)) return
 
   await asViewer(viewer.userId, (tx) =>
@@ -54,6 +59,7 @@ export const markFailuresViewedAction = async (
       timezone: viewer.orgTimezone,
       range: resolveRange(period, viewer.orgTimezone).range,
       session: memberId && sessionId ? { memberId, sessionId } : undefined,
+      seenAt,
     }),
   )
 
