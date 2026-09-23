@@ -40,7 +40,7 @@ const errorResponse = (description: string) => ({
 export const ingestOpenAPI = () => ({
   openapi: '3.1.0',
   info: {
-    title: 'sessclone ingest',
+    title: 'SessClone ingest',
     version: '1',
     description:
       'The endpoint the Collector reports Turns to. Self-hosted: the base URL is your own deployment.',

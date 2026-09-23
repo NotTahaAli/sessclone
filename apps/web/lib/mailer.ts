@@ -80,9 +80,9 @@ export const renderInvite = ({
   logoUrl,
 }: InviteEmail) => ({
   to,
-  subject: `You are invited to ${orgName} on sessclone`,
+  subject: `You are invited to ${orgName} on SessClone`,
   text: [
-    `${invitedByEmail} invited you to join ${orgName} on sessclone.`,
+    `${invitedByEmail} invited you to join ${orgName} on SessClone.`,
     '',
     `Accept the invitation: ${link}`,
     '',
@@ -96,7 +96,7 @@ export const renderInvite = ({
     logoUrl
       ? `<p><img src="${escapeHtml(logoUrl)}" alt="" width="24" height="24" style="vertical-align:middle;border-radius:2px"></p>`
       : '',
-    `<p>${escapeHtml(invitedByEmail)} invited you to join <strong>${escapeHtml(orgName)}</strong> on sessclone.</p>`,
+    `<p>${escapeHtml(invitedByEmail)} invited you to join <strong>${escapeHtml(orgName)}</strong> on SessClone.</p>`,
     `<p><a href="${escapeHtml(link)}">Accept the invitation</a></p>`,
     `<p>The link works once and expires. If you did not expect it, ignore this email.</p>`,
   ]
@@ -158,7 +158,7 @@ export const renderSignupNotice = ({
     : 'no plan chosen'
   return {
     to,
-    subject: `${orgName} is waiting for approval on sessclone`,
+    subject: `${orgName} is waiting for approval on SessClone`,
     text: [
       `${ownerEmail} signed up and created ${orgName} (${plan}).`,
       '',

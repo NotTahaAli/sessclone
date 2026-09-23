@@ -217,7 +217,7 @@ function PlanRow({
         <div className="mt-2.5 flex flex-wrap gap-2">
           {contact ? (
             <a
-              href={`mailto:${CONTACT_EMAIL}?subject=sessclone%20${encodeURIComponent(plan.name)}`}
+              href={`mailto:${CONTACT_EMAIL}?subject=SessClone%20${encodeURIComponent(plan.name)}`}
               className={buttonClass('primary')}
             >
               Talk to us

@@ -37,6 +37,7 @@ import { safeNext } from './lib/auth/next-path'
 // the invitation survives the round trip. Redirecting from here would drop it.
 // `/docs` is ticket 116's: the install and self-hosting guides are read before
 // anybody has an account. (`/api/search`, the docs search, is under `/api`.)
+// `/privacy` and `/terms` are the legal pages the marketing footer links to.
 const PUBLIC_PATHS = [
   '/',
   '/pricing',
@@ -45,6 +46,8 @@ const PUBLIC_PATHS = [
   '/api',
   '/join',
   '/docs',
+  '/privacy',
+  '/terms',
 ]
 
 // The files crawlers, browsers and link previews fetch with no cookie: the

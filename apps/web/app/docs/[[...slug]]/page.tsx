@@ -34,7 +34,7 @@ export async function generateMetadata({ params }: Props) {
   const page = source.getPage((await params).slug)
   if (!page) notFound()
   return {
-    title: `${page.data.title} · sessclone docs`,
+    title: `${page.data.title} · SessClone docs`,
     description: page.data.description,
   }
 }

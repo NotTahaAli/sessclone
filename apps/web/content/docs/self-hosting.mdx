@@ -3,7 +3,7 @@ title: Self-hosting
 description: From a clone to the first collected Turn, on your own Postgres, bucket and Supabase project.
 ---
 
-Everything sessclone needs is yours to supply: a Postgres cluster, an
+Everything SessClone needs is yours to supply: a Postgres cluster, an
 S3-compatible bucket, and a Supabase project for sign-in. Nothing is hard-coded
 and nothing phones home. Self-hosting is free at any size.
 
@@ -94,7 +94,7 @@ back, deploy, then apply them.
 
 ## 3. Check your bucket actually works
 
-"S3-compatible" covers a wide range, and sessclone uses a narrow part of the
+"S3-compatible" covers a wide range, and SessClone uses a narrow part of the
 API: a presigned PUT with no checksum in the signature, `HeadObject`, a
 presigned GET carrying `response-content-disposition`, and `DeleteObjects`. One
 script answers whether yours does all of it:
@@ -208,7 +208,7 @@ first sweep.
 
 ## What the licence asks of you
 
-sessclone is AGPL-3.0-only with one additional term, and `NOTICE.md` in the
+SessClone is AGPL-3.0-only with one additional term, and `NOTICE.md` in the
 repository states both. For a deployment:
 
 - **Offering source to your users.** AGPL section 13 applies when you modify

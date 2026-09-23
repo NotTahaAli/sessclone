@@ -23,7 +23,7 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
         >
           <Link
             href="/"
-            aria-label="sessclone home"
+            aria-label="SessClone home"
             className="flex items-center"
           >
             <Lockup />
@@ -49,7 +49,7 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
         <div
           className={`${FRAME} text-text-muted flex flex-col gap-2 py-6 text-caption sm:flex-row sm:items-center sm:justify-between`}
         >
-          <p>sessclone · Claude Code usage and cost, for a whole team.</p>
+          <p>SessClone · Claude Code usage and cost, for a whole team.</p>
           <div className="flex flex-wrap gap-x-4">
             <Link href="/pricing" className={LINK}>
               Pricing
@@ -60,6 +60,12 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
             <a href={REPOSITORY} className={LINK}>
               GitHub
             </a>
+            <Link href="/privacy" className={LINK}>
+              Privacy
+            </Link>
+            <Link href="/terms" className={LINK}>
+              Terms
+            </Link>
             <a href={`mailto:${CONTACT_EMAIL}`} className={LINK}>
               {CONTACT_EMAIL}
             </a>

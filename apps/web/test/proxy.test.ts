@@ -94,6 +94,8 @@ test('pages and files read before an account are public', async () => {
   // crawlers index `/sign-in` and share cards come up blank.
   for (const path of [
     '/pricing',
+    '/privacy',
+    '/terms',
     '/docs',
     '/docs/self-hosting',
     '/api/search?q=install',

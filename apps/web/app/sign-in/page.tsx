@@ -202,7 +202,7 @@ export default function SignIn({ searchParams }: { searchParams: Query }) {
   return (
     <main className="mx-auto flex max-w-md flex-col px-4 py-16">
       <LogoMark size={28} className="text-text mb-4" />
-      <h1 className="text-heading-lg">Sign in to sessclone</h1>
+      <h1 className="text-heading-lg">Sign in to SessClone</h1>
 
       <Suspense fallback={null}>
         <InvitedBy searchParams={searchParams} />

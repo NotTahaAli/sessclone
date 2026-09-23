@@ -13,7 +13,7 @@ import {
 // Every price, seat range and line is read from the `tiers` table on this
 // render; nothing here restates one.
 export const metadata = {
-  title: 'Pricing — sessclone',
+  title: 'Pricing — SessClone',
   description:
     'Pay per person, not per machine. Self-hosting is free at any size.',
 }

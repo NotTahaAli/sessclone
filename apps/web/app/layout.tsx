@@ -31,7 +31,7 @@ const mono = Geist_Mono({
 })
 
 export const metadata = {
-  title: 'sessclone',
+  title: 'SessClone',
   description: 'Claude Code usage and cost, for a whole team.',
 }
 

@@ -75,7 +75,7 @@ const FAQ = [
   {
     question: 'Can we run it ourselves?',
     answer:
-      'Yes, free, at any size: your database, your storage, your network. It is AGPL-3.0, so keep the panel’s licence notice and sessclone credit visible, and if you run a modified copy for other people, offer those users its source.',
+      'Yes, free, at any size: your database, your storage, your network. It is AGPL-3.0, so keep the panel’s licence notice and SessClone credit visible, and if you run a modified copy for other people, offer those users its source.',
   },
 ]
 
@@ -94,7 +94,7 @@ export default async function Landing() {
           </h1>
           <p className="text-text-muted mt-3 mb-4 max-w-[30em] text-[14.5px] lg:mt-4 lg:mb-6 lg:text-[17px]">
             Laptops, cloud sessions and CI each report their own usage.
-            sessclone collects every Turn into one ledger your whole Org can
+            SessClone collects every Turn into one ledger your whole Org can
             read, priced and per person.
           </p>
           <div className="mb-4 flex flex-wrap gap-2">

@@ -74,7 +74,7 @@ describe('the panel credit', () => {
     expect(credit).toContain('No warranty')
     expect(credit).toContain('convey this work')
     expect(credit).toContain('LICENSE_URL')
-    expect(credit).toContain('sessclone')
+    expect(credit).toContain('SessClone')
   })
 
   test.each(SHELLS)(

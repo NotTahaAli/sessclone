@@ -44,9 +44,9 @@ export function PanelCredit() {
       <p>
         Powered by{' '}
         <a href={REPOSITORY} className="hover:text-accent-text underline">
-          sessclone
+          SessClone
         </a>{' '}
-        · Copyright © 2026 sessclone contributors
+        · Copyright © 2026 SessClone contributors
       </p>
       <p>
         No warranty, to the extent permitted by law. You may convey this work
