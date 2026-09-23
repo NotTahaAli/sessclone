@@ -125,6 +125,13 @@ const PHASES = [
     range: [85, 94],
     also: [95],
   },
+  {
+    id: 'viewer',
+    label: 'Transcripts',
+    type: 'frontend',
+    pos: [960, 800],
+    range: [100, 105],
+  },
 ]
 
 const phaseOf = (n) =>
