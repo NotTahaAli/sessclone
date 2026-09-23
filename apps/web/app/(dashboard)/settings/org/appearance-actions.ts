@@ -15,7 +15,8 @@ import { signedInUser } from '../../../../lib/supabase/server'
 // No cookie is written here, for a reason worth stating: this changes what
 // *everybody* in the Org sees, and their cookies are on their own browsers.
 // `AppearanceSync` in the dashboard shell notices the disagreement on each
-// Member's next full load and corrects it there.
+// Member's next full load and corrects it there; the Owner who saved sees it
+// at once, through the shell's re-render and `AppearanceLive`.
 
 export type OrgAppearanceResult = { error: string } | { saved: string } | null
 

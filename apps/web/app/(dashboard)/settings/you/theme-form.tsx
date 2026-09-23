@@ -11,8 +11,8 @@ import type { Theme } from '../../../../lib/appearance'
 //
 // Three real submit buttons in one form rather than a radio group and a save
 // button: the choice is the action, and a person changing their theme should
-// not have to confirm it. The page reloads with the new `data-theme` written
-// by the server-set cookie, so the control's own state is never the source of
+// not have to confirm it. The shell re-renders with the new value and
+// `AppearanceLive` writes `data-theme` from it, so the control's own state is never the source of
 // truth — the document is.
 
 const OPTIONS: { value: Theme; label: string; about: string }[] = [

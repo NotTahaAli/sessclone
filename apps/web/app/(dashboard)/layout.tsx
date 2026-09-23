@@ -289,10 +289,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         </Suspense>
       </header>
 
-      {/* Renders nothing unless the cookie carrying the theme has fallen
-          behind the database — which happens when somebody else changed the
-          Org's colour. Inside a boundary of its own so it never delays the
-          frame or the page. */}
+      {/* Keeps the painted theme and accent on the database's: repaints an
+          open page after a save, and corrects a cookie that has fallen behind
+          (somebody else changed the Org's colour). Inside a boundary of its
+          own so it never delays the frame or the page. */}
       <Suspense fallback={null}>
         <AppearanceSync />
       </Suspense>

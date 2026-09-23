@@ -3,6 +3,7 @@ import {
   APPEARANCE_COOKIE_MAX_AGE,
   APPEARANCE_PATTERN,
 } from '../lib/appearance'
+import { ACCENT_PROPERTIES } from './apply-appearance'
 
 // Ticket 77, last criterion: "Theme applies on first paint with no flash,
 // including for a signed-out visitor on the marketing site."
@@ -32,22 +33,11 @@ import {
 //    already a `var()` in the stylesheet; this fills in the same seven
 //    properties the design system's own example writes inline.
 
-/** The tokens, in the order `encodeAppearance` writes them. */
-const PROPERTIES = [
-  '--accent-fill',
-  '--accent-on-fill',
-  '--accent-border',
-  '--accent-text-light',
-  '--accent-text-dark',
-  '--accent-subtle-light',
-  '--accent-subtle-dark',
-]
-
 // One statement per property rather than a loop over a names array, because
 // the names are then the only data the script carries.
 const APPLY = `var p=v.split(":"),c=p[1].split(","),r=document.documentElement;
 if(p[0]==="system")r.removeAttribute("data-theme");else r.setAttribute("data-theme",p[0]);
-${PROPERTIES.map(
+${ACCENT_PROPERTIES.map(
   (property, index) => `r.style.setProperty("${property}","#"+c[${index}]);`,
 ).join('')}`
 
