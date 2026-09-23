@@ -34,6 +34,13 @@ export type MarketingTier = {
   archivalAvailable: boolean
   /** What the card lists. Prose, in the reader's terms. */
   includes: string[]
+  /** `features.manager_scopes`, `features.sso` and `features.own_rates`:
+   * the gates the pricing comparison marks (ticket 115). `ownRates` is null
+   * when the key is absent, which is not the same as `false` (ticket 121 adds
+   * it). */
+  managerScopes: boolean
+  sso: boolean
+  ownRates: boolean | null
   sortOrder: number
 }
 
@@ -70,6 +77,9 @@ export const readMarketingTiers = async (
     retentionMaxDays: row.retention_max_days,
     archivalAvailable: row.archival_available,
     includes: includesOf(row.features),
+    managerScopes: flagOf(row.features, 'manager_scopes') === true,
+    sso: flagOf(row.features, 'sso') === true,
+    ownRates: flagOf(row.features, 'own_rates'),
     sortOrder: row.sort_order,
   }))
 }
@@ -83,6 +93,16 @@ const includesOf = (features: unknown) => {
   return Array.isArray(value)
     ? value.filter((line): line is string => typeof line === 'string')
     : []
+}
+
+/** A boolean key of `features`, or null when it is absent or not a boolean:
+ * the column is operator-editable jsonb. */
+const flagOf = (features: unknown, key: string): boolean | null => {
+  const value =
+    features && typeof features === 'object'
+      ? Object.getOwnPropertyDescriptor(features, key)?.value
+      : undefined
+  return typeof value === 'boolean' ? value : null
 }
 
 type TierRow = {
