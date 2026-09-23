@@ -6,6 +6,7 @@ import {
   isActive,
   orgTier,
   retentionCeiling,
+  agreedPrice,
   shownCapabilities,
 } from '../lib/tier'
 import { tierPrice, tierSeats } from '../lib/tiers'
@@ -211,4 +212,14 @@ test('internal, unknown and off flags are not listed', () => {
     includes: [],
     flags: [{ label: 'Single sign-on', value: 'saml' }],
   })
+})
+
+test('an agreed price reads as base plus per seat, or whichever is set', () => {
+  const agreed = (base: number | null, seat: number | null) =>
+    agreedPrice({ priceBaseCents: base, priceSeatCents: seat })
+  expect(agreed(50_000, 800)).toBe('$500 + $8/seat/month')
+  expect(agreed(200_000, null)).toBe('$2,000/month')
+  expect(agreed(null, 1_250)).toBe('$12.50/seat/month')
+  expect(agreed(0, 800)).toBe('$0 + $8/seat/month')
+  expect(agreed(null, null)).toBeNull()
 })

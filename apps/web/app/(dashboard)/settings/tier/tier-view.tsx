@@ -1,5 +1,6 @@
 import { Field, SectionBreak } from '../../../_ui/primitives'
 import {
+  agreedPrice,
   isActive,
   retentionCeiling,
   shownCapabilities,
@@ -11,6 +12,7 @@ import { tierPrice, tierSeats } from '../../../../lib/tiers'
 
 export function Tier({ tier }: { tier: OrgTier }) {
   const price = tierPrice(tier)
+  const agreed = agreedPrice(tier)
   const active = isActive(tier)
 
   return (
@@ -19,8 +21,11 @@ export function Tier({ tier }: { tier: OrgTier }) {
       <Field label="Tier" hint={tier.description ?? undefined}>
         {tier.name}
       </Field>
-      <Field label="Price">
-        {price.unit ? `${price.amount} ${price.unit}` : price.amount}
+      {/* The price agreed with this Org wins over the Tier's published one
+          (or Enterprise's "Contact"), on any Tier. */}
+      <Field label="Price" hint={agreed ? 'Agreed for your Org' : undefined}>
+        {agreed ??
+          (price.unit ? `${price.amount} ${price.unit}` : price.amount)}
       </Field>
       {/* Status beside the Tier, never behind it. An Org on the Team Tier
           with a cancelled subscription is on the Team Tier and entitled to

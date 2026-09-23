@@ -3,7 +3,7 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "sessclone v1 — ticket status",
-    "subtitle": "123 tickets · 115 done · 2 ready to start · 6 blocked",
+    "subtitle": "124 tickets · 116 done · 2 ready to start · 6 blocked",
     "output": "docs/tickets/ticket-graph.html",
     "quality_profile": "showcase"
   },
@@ -222,7 +222,7 @@
       "id": "review",
       "type": "frontend",
       "label": "Review Fixes (122-127)",
-      "sublabel": "2 done",
+      "sublabel": "3 done",
       "pos": [
         730,
         1000

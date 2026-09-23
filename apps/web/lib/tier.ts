@@ -36,6 +36,10 @@ export type OrgTier = TierPricing & {
    */
   seatCeiling: number | null
   currentPeriodEnd: Date | null
+  /** The price agreed with this Org, monthly, in US cents, or null for none
+   * (a Platform Admin sets it on the admin Org page). */
+  priceBaseCents: number | null
+  priceSeatCents: number | null
 }
 
 type TierRow = {
@@ -54,6 +58,8 @@ type TierRow = {
   seats_used: string
   seat_ceiling: number | null
   current_period_end: Date | null
+  price_base_cents: number | null
+  price_seat_cents: number | null
 }
 
 /**
@@ -93,6 +99,8 @@ export const orgTier = async (
            tier.archival_available,
            tier.features,
            subscription.current_period_end,
+           subscription.price_base_cents,
+           subscription.price_seat_cents,
            (select count(*) from members
              where members.org_id = subscription.org_id
                and members.removed_at is null) as seats_used,
@@ -125,6 +133,8 @@ export const orgTier = async (
     seatsUsed: Number(row.seats_used),
     seatCeiling: row.seat_ceiling,
     currentPeriodEnd: row.current_period_end,
+    priceBaseCents: row.price_base_cents,
+    priceSeatCents: row.price_seat_cents,
   }
 }
 
@@ -183,4 +193,27 @@ export const shownCapabilities = (
     return [{ label, value: value === true ? null : String(value) }]
   })
   return { includes, flags }
+}
+
+const dollars = (cents: number) =>
+  new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
+  }).format(cents / 100)
+
+/**
+ * The price agreed with this Org, as the Tier page says it, or null when
+ * none is set and the Tier's own price applies. Any Tier: an agreed price
+ * is labelled for Enterprise, but one set on another Tier still wins.
+ */
+export const agreedPrice = (tier: {
+  priceBaseCents: number | null
+  priceSeatCents: number | null
+}): string | null => {
+  const { priceBaseCents: base, priceSeatCents: seat } = tier
+  if (base === null && seat === null) return null
+  if (seat === null) return `${dollars(base!)}/month`
+  if (base === null) return `${dollars(seat)}/seat/month`
+  return `${dollars(base)} + ${dollars(seat)}/seat/month`
 }

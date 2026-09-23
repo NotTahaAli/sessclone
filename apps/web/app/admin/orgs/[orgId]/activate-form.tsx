@@ -15,6 +15,10 @@ const STATUSES: { value: string; said: string }[] = [
   { value: 'cancelled', said: 'was active, has been stopped' },
 ]
 
+/** Cents as the dollars the operator typed: `50000` as `500`. */
+const dollarsOf = (cents: number | null) =>
+  cents === null ? '' : String(cents / 100)
+
 const FIELD = 'border-control-border text-text rounded border px-3 py-1 text-sm'
 
 export function ActivateForm({
@@ -22,6 +26,8 @@ export function ActivateForm({
   tiers,
   tierId,
   status,
+  priceBaseCents,
+  priceSeatCents,
 }: {
   orgId: string
   tiers: { id: string; name: string; available: boolean }[]
@@ -29,6 +35,9 @@ export function ActivateForm({
    * copy of the row. */
   tierId: string | null
   status: string | null
+  /** The agreed price, monthly US cents, or null. */
+  priceBaseCents: number | null
+  priceSeatCents: number | null
 }) {
   const [state, formAction, pending] = useActionState(activateAction, null)
 
@@ -67,6 +76,28 @@ export function ActivateForm({
               </option>
             ))}
           </select>
+        </label>
+        <label className="flex flex-col gap-1 text-caption">
+          Agreed base, $/month
+          <input
+            name="priceBase"
+            inputMode="decimal"
+            autoComplete="off"
+            placeholder="none"
+            defaultValue={dollarsOf(priceBaseCents)}
+            className={`${FIELD} w-32`}
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-caption">
+          Agreed $/seat/month
+          <input
+            name="priceSeat"
+            inputMode="decimal"
+            autoComplete="off"
+            placeholder="none"
+            defaultValue={dollarsOf(priceSeatCents)}
+            className={`${FIELD} w-32`}
+          />
         </label>
         <label className="flex grow flex-col gap-1 text-caption">
           Note

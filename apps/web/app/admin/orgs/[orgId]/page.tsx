@@ -103,6 +103,8 @@ export default async function Page({
             tiers={tiers}
             tierId={org.tierId}
             status={org.status}
+            priceBaseCents={org.priceBaseCents}
+            priceSeatCents={org.priceSeatCents}
           />
         </div>
       </section>

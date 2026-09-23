@@ -45,6 +45,9 @@ export type AdminOrg = {
   requestedSeats: number | null
   /** Waiting for approval (ticket 120): `inactive`, or no row at all. */
   pending: boolean
+  /** The price agreed with this Org, monthly US cents, or null for none. */
+  priceBaseCents: number | null
+  priceSeatCents: number | null
 }
 
 type OrgRow = {
@@ -59,6 +62,8 @@ type OrgRow = {
   status: SubscriptionStatus | null
   current_period_end: Date | null
   requested_seats: number | null
+  price_base_cents: number | null
+  price_seat_cents: number | null
 }
 
 /** Ticket 120's "pending": never approved, as far as the row can say. */
@@ -78,6 +83,8 @@ const toAdminOrg = (row: OrgRow): AdminOrg => ({
   currentPeriodEnd: row.current_period_end,
   requestedSeats: row.requested_seats,
   pending: isPending(row.status),
+  priceBaseCents: row.price_base_cents,
+  priceSeatCents: row.price_seat_cents,
 })
 
 /**
@@ -113,7 +120,9 @@ export const listOrgs = async (
            tier.name as tier_name,
            subscription.status,
            subscription.current_period_end,
-           subscription.requested_seats
+           subscription.requested_seats,
+           subscription.price_base_cents,
+           subscription.price_seat_cents
       from orgs org
       left join org_operator_names operator on operator.org_id = org.id
       left join subscriptions subscription on subscription.org_id = org.id
@@ -163,7 +172,9 @@ export const adminOrg = async (
            tier.name as tier_name,
            subscription.status,
            subscription.current_period_end,
-           subscription.requested_seats
+           subscription.requested_seats,
+           subscription.price_base_cents,
+           subscription.price_seat_cents
       from orgs org
       left join org_operator_names operator on operator.org_id = org.id
       left join subscriptions subscription on subscription.org_id = org.id
@@ -314,6 +325,9 @@ export const setSubscription = async (
     tierId: string
     status: SubscriptionStatus
     note: string | null
+    /** The price agreed with the Org, monthly US cents; null clears it. */
+    priceBaseCents?: number | null
+    priceSeatCents?: number | null
   },
 ): Promise<{ saved: boolean; recorded: boolean }> => {
   const [before] = await tx<{ tier_id: string; status: string }[]>`
@@ -327,13 +341,18 @@ export const setSubscription = async (
   `
 
   const rows = await tx`
-    insert into subscriptions (org_id, tier_id, status, provider)
+    insert into subscriptions
+      (org_id, tier_id, status, provider, price_base_cents, price_seat_cents)
     values (${subscription.orgId}, ${subscription.tierId},
-            ${subscription.status}, 'manual')
+            ${subscription.status}, 'manual',
+            ${subscription.priceBaseCents ?? null},
+            ${subscription.priceSeatCents ?? null})
     on conflict (org_id) do update
        set tier_id = excluded.tier_id,
            status = excluded.status,
            provider = excluded.provider,
+           price_base_cents = excluded.price_base_cents,
+           price_seat_cents = excluded.price_seat_cents,
            updated_at = now()
     returning id
   `

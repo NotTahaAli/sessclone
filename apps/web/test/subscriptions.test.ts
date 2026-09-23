@@ -387,3 +387,40 @@ test('an ask names a self-serve Tier, and states its size', async () => {
   await expect(ask('team', null)).rejects.toThrow(/row-level security/)
   expect(await ask('team', 2)).toBe(true)
 })
+
+test('an agreed price is the operator’s to set; the Owner reads it and cannot write it', async () => {
+  const tierId = await seedTier('enterprise')
+  await asOperator((tx) =>
+    setSubscription(tx, {
+      orgId: fixture.acme.id,
+      tierId,
+      status: 'active',
+      note: null,
+      priceBaseCents: 50_000,
+      priceSeatCents: 800,
+    }),
+  )
+
+  // Read as before: the Org's own row, through `subscriptions_read`.
+  const tier = await asRole(fixture.acme, 'owner', (tx) =>
+    orgTier(tx, fixture.acme.id),
+  )
+  expect(tier).toMatchObject({ priceBaseCents: 50_000, priceSeatCents: 800 })
+
+  // As `sessclone_app`, the Owner's update touches nothing: `subscriptions_write`
+  // is the platform flag and nothing else.
+  const updated = await asRole(
+    fixture.acme,
+    'owner',
+    (tx) => tx`
+      update subscriptions set price_base_cents = 0, price_seat_cents = 0
+       where org_id = ${fixture.acme.id}
+    `,
+  )
+  expect(updated.count).toBe(0)
+  const [row] = await sql<{ base: number; seat: number }[]>`
+    select price_base_cents as base, price_seat_cents as seat
+      from subscriptions where org_id = ${fixture.acme.id}
+  `
+  expect(row).toEqual({ base: 50_000, seat: 800 })
+})
