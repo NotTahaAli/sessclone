@@ -63,8 +63,8 @@ export default function Terms() {
       <h2>Ending</h2>
       <p>
         You can stop at any time, and email us to delete your account or Org. We
-        may end the service with notice to your email address, and you will have
-        time to export your data first.
+        may end the service with notice to your email address, and a period
+        before anything is deleted.
       </p>
 
       <h2>Changes</h2>

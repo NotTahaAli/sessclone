@@ -26,3 +26,7 @@ export const SITE_DESCRIPTION =
 /** The canonical link for a public page, always on `CANONICAL_ORIGIN`. */
 export const canonical = (path: string) =>
   `${CANONICAL_ORIGIN}${path === '/' ? '' : path}`
+
+/** The public marketing pages: the sitemap lists them, and Clarity runs only
+ * on them (`app/(marketing)/clarity.tsx`). */
+export const MARKETING_PATHS = ['/', '/pricing', '/privacy', '/terms'] as const

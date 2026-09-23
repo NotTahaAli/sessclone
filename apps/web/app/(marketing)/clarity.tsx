@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useSyncExternalStore } from 'react'
 
+import { MARKETING_PATHS } from '../../lib/site'
 import { buttonClass } from '../_ui/primitives'
 
 // Microsoft Clarity, on the marketing pages only (Taha, 2026-09-23): never
@@ -18,18 +19,18 @@ import { buttonClass } from '../_ui/primitives'
 
 const KEY = 'sessclone-analytics-consent'
 
-/** The marketing pages; leaving them is what `useClarity`'s cleanup checks. */
-const MARKETING = new Set(['/', '/pricing', '/privacy', '/terms'])
+const MARKETING = new Set<string>(MARKETING_PATHS)
 
 /**
- * Whether a visitor in this time zone gets asked. The time zone is all a
+ * Whether a visitor in this time zone gets asked: Europe, the EU's territories
+ * elsewhere, and any browser that hides its zone behind UTC. The time zone is all a
  * statically rendered page knows without a request header.
  * ponytail: time zone, not IP: a VPN or a travelling laptop guesses wrong.
  * It errs towards asking (all of Europe/, not only the EEA); move to the
  * host's country header if a real geo signal is ever needed.
  */
 export const asksConsent = (timeZone: string) =>
-  /^(?:Europe|Arctic)\/|^Atlantic\/(?:Reykjavik|Canary|Madeira|Azores)$|^Asia\/(?:Nicosia|Famagusta)$/.test(
+  /^(?:Europe|Arctic|Etc)\/|^(?:UTC|GMT|)$|^Atlantic\/(?:Reykjavik|Canary|Madeira|Azores)$|^Asia\/(?:Nicosia|Famagusta)$|^Africa\/Ceuta$|^America\/(?:Guadeloupe|Martinique|Cayenne|Marigot|St_Barthelemy)$|^Indian\/(?:Reunion|Mayotte)$/.test(
     timeZone,
   )
 
@@ -78,6 +79,15 @@ const answer = (value: 'granted' | 'denied') => {
 }
 const allow = () => answer('granted')
 const decline = () => answer('denied')
+// Withdrawing has to be as easy as agreeing (GDPR Art. 7(3)). Clarity's
+// documented erase call drops its cookies; the reload unloads the script.
+const withdraw = () => {
+  answer('denied')
+  if (window.clarity) {
+    window.clarity('consent', false)
+    window.location.reload()
+  }
+}
 
 // The official snippet, unrolled: queue calls until the tag arrives.
 const queue: Clarity = (...args) => {
@@ -139,5 +149,24 @@ export function ClarityAnalytics() {
         </button>
       </div>
     </div>
+  )
+}
+
+/** The Privacy page's switch: turn Clarity off, or back on, in this browser. */
+export function ClarityChoice() {
+  const state = useSyncExternalStore(subscribe, snapshot, serverSnapshot)
+  if (!ID || state === 'unknown') return null
+  const on = state === 'granted'
+  return (
+    <p className="flex flex-wrap items-center gap-3">
+      <span>Clarity is {on ? 'on' : 'off'} in this browser.</span>
+      <button
+        type="button"
+        className={buttonClass()}
+        onClick={on ? withdraw : allow}
+      >
+        {on ? 'Turn it off' : 'Turn it on'}
+      </button>
+    </p>
   )
 }

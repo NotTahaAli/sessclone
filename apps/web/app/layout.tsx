@@ -3,7 +3,6 @@ import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 
 import { AppearanceScript } from './appearance-script'
-import { CloudflareAnalytics } from './cloudflare-analytics'
 import { SITE_DESCRIPTION, siteUrl } from '../lib/site'
 
 // A stylesheet has nothing to assign, and this import is how Next finds it.
@@ -48,7 +47,6 @@ export const metadata: Metadata = {
     type: 'website',
     siteName: 'SessClone',
     locale: 'en_US',
-    description: SITE_DESCRIPTION,
   },
   twitter: { card: 'summary_large_image' },
 }
@@ -74,10 +72,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <head>
         <AppearanceScript />
       </head>
-      <body>
-        {children}
-        <CloudflareAnalytics />
-      </body>
+      <body>{children}</body>
     </html>
   )
 }

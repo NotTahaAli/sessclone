@@ -1,6 +1,7 @@
 import Link from 'next/link'
 
 import { canonical } from '../../../lib/site'
+import { ClarityChoice } from '../clarity'
 import { CONTACT_EMAIL, REPOSITORY } from '../constants'
 import { Legal } from '../legal'
 
@@ -41,9 +42,11 @@ export default function Privacy() {
         </li>
         <li>
           <strong>Usage the Collector reports.</strong> For each Claude Code
-          Turn: the model, token counts, timestamps, session and request ids,
-          the working directory, the git branch and the machine it ran on. No
-          prompt or response text.
+          Turn: the model, token counts, timestamps, session, request and
+          message ids, the Claude Code version, the working directory, the git
+          branch and remote, and the name of the machine it ran on. When a
+          request fails, the error Claude Code reported. No prompt or response
+          text.
         </li>
         <li>
           <strong>Transcripts, only if you turn them on.</strong> Archiving is
@@ -59,9 +62,10 @@ export default function Privacy() {
 
       <h2>Who can see it</h2>
       <p>
-        Members of your Org see the Org&apos;s usage. Owners and Admins see
-        every Member; a Manager sees the Members in their scope. Nobody outside
-        your Org can read it: the database enforces that on every query. The
+        A Member sees their own usage. Owners and Admins see every Member&apos;s
+        usage and archived transcripts, and can download them; a Manager sees
+        the same for the Members in their scope. Nobody outside your Org can
+        read any of it: the database enforces that on every query. The
         maintainer can reach the database to run the service and uses that only
         to operate, secure and support it.
       </p>
@@ -84,7 +88,7 @@ export default function Privacy() {
         </li>
         <li>
           Cloudflare provides DNS, email forwarding, cookieless page analytics
-          and, later, transcript storage.
+          on the marketing pages and the docs, and, later, transcript storage.
         </li>
         <li>GitHub, if you sign in with it.</li>
         <li>An email provider sends sign-in links and invitations.</li>
@@ -102,9 +106,11 @@ export default function Privacy() {
           <code>sessclone-appearance</code> remembers your theme and accent.
         </li>
         <li>
-          Clarity&apos;s cookies, on the marketing pages. In Europe we ask
-          first; if you say no, Clarity does not load. The answer is kept in
-          your browser&apos;s local storage; clear site data to be asked again.
+          Clarity&apos;s cookies, on the marketing pages. Where your browser
+          looks European, or hides its time zone, we ask first, and if you say
+          no Clarity does not load. The answer is kept in your browser&apos;s
+          local storage. You can change it here at any time:
+          <ClarityChoice />
         </li>
         <li>The transcript viewer remembers column widths in local storage.</li>
       </ul>
