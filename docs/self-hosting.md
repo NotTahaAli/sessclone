@@ -94,6 +94,12 @@ check the two agree:
 DATABASE_URL="$OWNER_URL" node apps/web/scripts/schema-drift.mjs
 ```
 
+A few migrations must run **after** the deploy instead, because the code still
+live beforehand depends on what they remove. Their header says so, and they
+are the exception: hold them back from the batch above, deploy, then apply
+them. `20260923140000_artifact_kind_drop_old_key.sql` is one — run before the
+deploy, it fails every archival upload until the new code is live.
+
 It names every migration the checkout has and the database does not, and
 exits non-zero when there are any. It reads
 `supabase_migrations.schema_migrations`, which only the Supabase CLI and the
