@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers'
 
 import { applyAppearanceSource } from '../appearance-script'
+import { AppearanceLive } from './appearance-live'
 import {
   APPEARANCE_COOKIE,
   encodeAppearance,
@@ -28,6 +29,12 @@ import { currentViewer } from '../../lib/viewer'
 // first frame with the old accent — a single flash, on the load after somebody
 // else changed something, rather than the wrong colour for a year.
 //
+// That script covers a full load only. A saved accent or theme reaches an open
+// page as a soft refresh — the Server Action revalidates and the shell
+// re-renders from the RSC payload — where a `<script>` React inserts never
+// runs, and where the save has already brought the cookie up to date. So
+// `AppearanceLive` always carries the value, and repaints when it changes.
+//
 // It renders inside the shell's existing Suspense boundary, so the frame still
 // prerenders: this reads the session, and nothing above it does.
 export async function AppearanceSync() {
@@ -38,13 +45,19 @@ export async function AppearanceSync() {
   const wanted = encodeAppearance(appearance)
   const carried = (await cookies()).get(APPEARANCE_COOKIE)?.value
 
-  if (carried === wanted) return null
+  const live = <AppearanceLive value={wanted} />
+  if (carried === wanted) return live
 
   // A new object per render, which the rule is right about in general and
   // wrong about here: this is a server component, so there is no second render
   // to memoise for, and the value it carries differs per request.
   // oxlint-disable-next-line react-perf/jsx-no-new-object-as-prop
   const html = { __html: applyAppearanceSource(wanted) }
-  // oxlint-disable-next-line no-danger
-  return <script dangerouslySetInnerHTML={html} />
+  return (
+    <>
+      {/* oxlint-disable-next-line no-danger */}
+      <script dangerouslySetInnerHTML={html} />
+      {live}
+    </>
+  )
 }
