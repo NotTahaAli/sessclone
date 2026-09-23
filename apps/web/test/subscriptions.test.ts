@@ -321,8 +321,8 @@ test('Orgs waiting for approval come first, and are counted', async () => {
 
 const seedSizedTier = async (key: string, min: number, max: number) => {
   const [tier] = await sql<{ id: string }[]>`
-    insert into tiers (key, name, seat_price_usd, min_seats, max_seats)
-    values (${key}, ${key}, 10, ${min}, ${max})
+    insert into tiers (key, name, seat_price_usd, min_seats, max_seats, features)
+    values (${key}, ${key}, 10, ${min}, ${max}, '{"self_serve": true}')
     returning id
   `
   return tier!.id
@@ -369,4 +369,21 @@ test('only the Owner asks, only once, only inactive, only a size the Tier allows
      where org_id = ${fixture.acme.id}
   `
   expect(row).toEqual({ status: 'inactive', requested_seats: 5 })
+})
+
+test('an ask names a self-serve Tier, and states its size', async () => {
+  await seedSizedTier('team', 2, 10)
+  // On sale, but "contact us": not something a sign-up can ask for.
+  await sql`
+    insert into tiers (key, name, min_seats, max_seats)
+    values ('enterprise', 'Enterprise', 11, null)
+  `
+  const ask = (tierKey: string, seats: number | null) =>
+    asRole(fixture.acme, 'owner', (tx) =>
+      requestPlan(tx, { orgId: fixture.acme.id, tierKey, seats }),
+    )
+
+  await expect(ask('enterprise', 12)).rejects.toThrow(/row-level security/)
+  await expect(ask('team', null)).rejects.toThrow(/row-level security/)
+  expect(await ask('team', 2)).toBe(true)
 })

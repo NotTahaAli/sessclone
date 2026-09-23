@@ -16,7 +16,7 @@ test('a Team plan carries its size, and survives the round trip', () => {
 test('Personal has no size to choose, whatever was posted', () => {
   expect(parsePlan(params('plan=personal&seats=40'))).toEqual({
     tierKey: 'personal',
-    seats: null,
+    seats: 1,
   })
 })
 

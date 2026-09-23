@@ -254,14 +254,20 @@ export const subscriptionHistory = async (
 
 /** The plans a sign-up may ask for (ticket 118, Taha's pick). Tier keys are
  * the stable names code uses when it has to name a Tier; Enterprise is
- * "contact us" and Self-Hosted is not sold, so neither is offered. */
+ * "contact us" and Self-Hosted is not sold, so neither is offered.
+ *
+ * The rule is `features.self_serve`, which `subscriptions_request` enforces;
+ * this list is the form's, kept by key because each plan's size is key
+ * specific (Personal is 1, Team is chosen). Reading it from the flag too
+ * would mean a size rule per Tier, which no Tier has yet. */
 export const SIGNUP_PLANS = ['personal', 'team'] as const
 export type SignupPlan = { tierKey: string; seats: number | null }
 
 /**
  * Asks for a plan: an `inactive` row on that Tier, which is what the operator
  * confirms (ticket 118). `subscriptions_request` is the rule — the Org's
- * Owner, once, inactive, a size the Tier allows — and a refusal throws.
+ * Owner, once, inactive, a self-serve Tier, a stated size the Tier allows —
+ * and a refusal throws.
  *
  * Returns false when the Org already has a row: asking again changes nothing,
  * which keeps sign-in idempotent. No `returning`, so the write never depends

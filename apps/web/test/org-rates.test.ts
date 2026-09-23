@@ -203,7 +203,7 @@ test('an override that has not started yet is scheduled, not superseded', async 
 // --- Ticket 121: an Enterprise Org sets its own rates ----------------------
 
 /** Puts an Org on a Tier with or without `features.own_rates`. */
-const onTier = async (orgId: string, ownRates: boolean) => {
+const onTier = async (orgId: string, ownRates: boolean, status = 'active') => {
   const [tier] = await sql<{ id: string }[]>`
     insert into tiers (key, name, features)
     values (${`tier-${orgId}`}, 'A tier', ${sql.json({ own_rates: ownRates })})
@@ -211,7 +211,7 @@ const onTier = async (orgId: string, ownRates: boolean) => {
   `
   await sql`
     insert into subscriptions (org_id, tier_id, status)
-    values (${orgId}, ${tier!.id}, 'active')
+    values (${orgId}, ${tier!.id}, ${status})
   `
 }
 
@@ -265,4 +265,13 @@ test('the flag is the Tier’s, and it opens only the Org’s own rates', async 
       deleteOrgRate(tx, fixture.acme.id, id),
     ),
   ).toBe(false)
+})
+
+test('an ask for a Tier with own rates is not the Tier', async () => {
+  // A sign-up's ask is an `inactive` row (ticket 118); only an approved plan
+  // opens what the Tier includes.
+  await onTier(fixture.acme.id, true, 'inactive')
+  await expect(ownRate(fixture.acme, 'owner')).rejects.toThrow(
+    /row-level security/,
+  )
 })

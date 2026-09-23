@@ -64,7 +64,7 @@ export default async function Page({
                     operator gets to it (ADR 0004). */}
                 {org.pending ? 'Waiting for approval · ' : ''}
                 {org.tierName ? `${org.tierName} · ${org.status}` : 'no Tier'}
-                {org.requestedSeats
+                {org.requestedSeats && org.requestedSeats > 1
                   ? ` · asked for ${org.requestedSeats} seats`
                   : ''}
               </p>

@@ -147,6 +147,11 @@ describe('the plan a sign-up asks for (ticket 118)', () => {
 
   beforeEach(async () => {
     await sql.unsafe(readFileSync(TIER_SEED, 'utf8'))
+    // What `…_signup_plan.sql` adds to the seed: the self-serve Tiers.
+    await sql`
+      update tiers set features = features || '{"self_serve": true}'
+       where key in ('personal', 'team')
+    `
     // Asked for only where an operator approves it (ticket 119).
     vi.stubEnv('SIGNUP_APPROVAL', 'on')
   })
@@ -180,14 +185,14 @@ describe('the plan a sign-up asks for (ticket 118)', () => {
   test('is ignored on a later sign-in, so the ask cannot be rewritten', async () => {
     const id = randomUUID()
     const first = await ensureOrgForSigner(id, 'solo@example.test', {
-      plan: { tierKey: 'personal', seats: null },
+      plan: { tierKey: 'personal', seats: 1 },
     })
     await ensureOrgForSigner(id, 'solo@example.test', {
       plan: { tierKey: 'team', seats: 9 },
     })
 
     expect(await planOf(first!.orgId)).toEqual([
-      { key: 'personal', status: 'inactive', requested_seats: null },
+      { key: 'personal', status: 'inactive', requested_seats: 1 },
     ])
   })
 

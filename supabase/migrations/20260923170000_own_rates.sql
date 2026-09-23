@@ -30,9 +30,11 @@ update tiers
 -- own Org only. Rates are Org settings rather than billing, so an Admin is in
 -- (`CONTEXT.md` excludes an Admin from billing alone). The Tier is read
 -- through `subscriptions_read` and `tiers_read`, both of which let a Member
--- see their own Org's plan; status is deliberately not consulted — a locked
--- Org (ticket 119) cannot reach the page, and its rates price nothing that
--- is billed.
+-- see their own Org's plan. Only while that plan is `active` or `past_due`
+-- (`UNLOCKED_STATUSES` in `apps/web/lib/approval.ts`): an Org's own ask for a
+-- Tier (ticket 118) is an `inactive` row, and an ask must not open what only
+-- an approved plan includes — with `SIGNUP_APPROVAL=off` nothing else would
+-- stop it.
 create policy org_rate_overrides_own on org_rate_overrides for all
   using (
     org_id in (select sessclone_admin_org_ids())
@@ -40,6 +42,7 @@ create policy org_rate_overrides_own on org_rate_overrides for all
       select 1 from subscriptions subscription
         join tiers tier on tier.id = subscription.tier_id
        where subscription.org_id = org_rate_overrides.org_id
+         and subscription.status in ('active', 'past_due')
          and tier.features @> '{"own_rates": true}'::jsonb
     )
   )
@@ -49,6 +52,7 @@ create policy org_rate_overrides_own on org_rate_overrides for all
       select 1 from subscriptions subscription
         join tiers tier on tier.id = subscription.tier_id
        where subscription.org_id = org_rate_overrides.org_id
+         and subscription.status in ('active', 'past_due')
          and tier.features @> '{"own_rates": true}'::jsonb
     )
   );

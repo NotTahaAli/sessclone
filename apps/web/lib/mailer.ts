@@ -154,7 +154,7 @@ export const renderSignupNotice = ({
   link,
 }: SignupNotice) => {
   const plan = tierName
-    ? `${tierName}${requestedSeats ? `, ${requestedSeats} seats` : ''}`
+    ? `${tierName}${requestedSeats && requestedSeats > 1 ? `, ${requestedSeats} seats` : ''}`
     : 'no plan chosen'
   return {
     to,

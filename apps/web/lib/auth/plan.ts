@@ -19,7 +19,8 @@ const Plan = z
   .transform(({ plan, seats }): SignupPlan => ({
     tierKey: plan,
     // Personal is one person by definition; only Team asks for a size.
-    seats: plan === 'team' ? (seats ?? null) : null,
+    // `subscriptions_request` wants the size stated either way.
+    seats: plan === 'team' ? (seats ?? null) : 1,
   }))
 
 type Source = { get: (name: string) => unknown }
