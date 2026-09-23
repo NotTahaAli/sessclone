@@ -3,6 +3,7 @@
 import { useActionState } from 'react'
 
 import { activateAction } from './actions'
+import { buttonClass, inputClass } from '../../../_ui/primitives'
 
 // Client-side for the refusal, as everywhere else: a write the policy refuses
 // touches nothing and raises nothing, and a status that snapped back with no
@@ -19,7 +20,8 @@ const STATUSES: { value: string; said: string }[] = [
 const dollarsOf = (cents: number | null) =>
   cents === null ? '' : String(cents / 100)
 
-const FIELD = 'border-control-border text-text rounded border px-3 py-1 text-sm'
+// Direction A's round field (2026-09-23 admin restyle).
+const FIELD = inputClass
 
 export function ActivateForm({
   orgId,
@@ -45,7 +47,7 @@ export function ActivateForm({
     <>
       <form action={formAction} className="flex flex-wrap items-end gap-3">
         <input type="hidden" name="orgId" value={orgId} />
-        <label className="flex flex-col gap-1 text-caption">
+        <label className="text-text-muted flex flex-col gap-1 text-caption">
           Tier
           <select
             name="tierId"
@@ -63,7 +65,7 @@ export function ActivateForm({
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-caption">
+        <label className="text-text-muted flex flex-col gap-1 text-caption">
           Status
           <select
             name="status"
@@ -77,7 +79,7 @@ export function ActivateForm({
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-caption">
+        <label className="text-text-muted flex flex-col gap-1 text-caption">
           Agreed base, $/month
           <input
             name="priceBase"
@@ -88,7 +90,7 @@ export function ActivateForm({
             className={`${FIELD} w-32`}
           />
         </label>
-        <label className="flex flex-col gap-1 text-caption">
+        <label className="text-text-muted flex flex-col gap-1 text-caption">
           Agreed $/seat/month
           <input
             name="priceSeat"
@@ -99,7 +101,7 @@ export function ActivateForm({
             className={`${FIELD} w-32`}
           />
         </label>
-        <label className="flex grow flex-col gap-1 text-caption">
+        <label className="text-text-muted flex grow flex-col gap-1 text-caption">
           Note
           <input
             name="note"
@@ -108,7 +110,11 @@ export function ActivateForm({
             className={FIELD}
           />
         </label>
-        <button type="submit" disabled={pending} className={FIELD}>
+        <button
+          type="submit"
+          disabled={pending}
+          className={buttonClass('primary')}
+        >
           {pending ? 'Saving…' : 'Save'}
         </button>
       </form>

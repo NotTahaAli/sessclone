@@ -3,6 +3,7 @@ import { DeleteRate } from './delete-rate'
 import { SyncPricing } from './sync-pricing'
 import { TextFilter } from '../text-filter'
 import { PageHeader } from '../../(dashboard)/page-header'
+import { Row, SectionBreak } from '../../_ui/primitives'
 import { asOperator } from '../../../lib/platform-admin'
 import { listRates, rateUnit, type Rate } from '../../../lib/rates'
 import { unknownModels } from '../../../lib/spend'
@@ -49,15 +50,16 @@ export default async function Page({
   const now = today()
 
   return (
-    <div className="flex max-w-3xl flex-col gap-8">
-      <PageHeader
-        title="Rates"
-        description="What this deployment charges a Turn against. A price change is a new row from a date, never an edit: yesterday still costs what it cost."
-      />
+    <div className="flex max-w-3xl flex-col">
+      <PageHeader title="Rates" />
+      <p className="text-text-muted mt-3 text-caption">
+        What this deployment charges a Turn against. A price change is a new row
+        from a date, never an edit: yesterday still costs what it cost.
+      </p>
 
       <section>
-        <h2 className="text-heading">Publish a price</h2>
-        <div className="mt-3">
+        <SectionBreak>Publish a price</SectionBreak>
+        <div className="mt-2">
           <AddRateForm
             today={now}
             unknown={unknown.models}
@@ -67,15 +69,15 @@ export default async function Page({
       </section>
 
       <section>
-        <h2 className="text-heading">Published pricing</h2>
-        <div className="mt-3">
+        <SectionBreak>Published pricing</SectionBreak>
+        <div className="mt-2">
           <SyncPricing />
         </div>
       </section>
 
       <section>
-        <h2 className="text-heading">Price list</h2>
-        <div className="mt-3">
+        <SectionBreak>Price list</SectionBreak>
+        <div className="mt-2">
           <TextFilter
             name="model"
             label="Filter by model"
@@ -98,8 +100,12 @@ export default async function Page({
                 is the same rows in an order nobody asks a question in. */}
             {byModel(rates).map(([name, group]) => (
               <section key={name ?? 'any'} className="mt-5">
-                <h3 className="font-mono text-body">{name ?? 'any model'}</h3>
-                <ul className="mt-2 flex flex-col gap-2">
+                <h3
+                  className={`text-caption ${name ? 'font-mono' : 'text-text-muted'}`}
+                >
+                  {name ?? 'Any model'}
+                </h3>
+                <ul className="mt-1">
                   {group.map((rate) => (
                     <RateRow key={rate.id} rate={rate} today={now} />
                   ))}
@@ -125,33 +131,25 @@ function RateRow({ rate, today: now }: { rate: Rate; today: string }) {
   } from ${rate.effectiveFrom}`
 
   return (
-    <li className="border-rule bg-surface flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 rounded-md border p-3">
-      <div>
-        <p className="text-body">{rate.class.replaceAll('_', ' ')}</p>
-        <p className="text-text-muted text-caption">
-          from {rate.effectiveFrom}
-          {rate.source ? ` · ${rate.source}` : ''}
-        </p>
-      </div>
-      <div className="text-left sm:text-right">
-        <p className="text-body">
-          {money.format(rate.priceUsd)}{' '}
-          <span className="text-text-muted text-caption">
-            {rateUnit(rate.class)}
-          </span>
-        </p>
-        {/* Superseded rather than deleted: it is still what last month cost.
-            "Latest" rather than "in force", because which Rate actually prices
-            a Turn is `sessclone_resolve_rate`'s answer — a row naming the
-            model beats a model-independent one, and an Org's negotiated
-            override beats both. */}
-        <p className="text-text-muted text-caption">
-          {rate.current
+    <li>
+      {/* Superseded rather than deleted: it is still what last month cost.
+          "Latest" rather than "in force", because which Rate actually prices
+          a Turn is `sessclone_resolve_rate`'s answer — a row naming the
+          model beats a model-independent one, and an Org's negotiated
+          override beats both. */}
+      <Row
+        lead="none"
+        name={rate.class.replaceAll('_', ' ')}
+        value={money.format(rate.priceUsd)}
+        sub={`${rateUnit(rate.class)} · from ${rate.effectiveFrom} · ${
+          rate.current
             ? 'latest for this model and class'
             : rate.effectiveFrom > now
               ? 'scheduled'
-              : 'superseded'}
-        </p>
+              : 'superseded'
+        }${rate.source ? ` · ${rate.source}` : ''}`}
+      />
+      <div className="-mt-1.5 pb-1 pl-[22px]">
         <DeleteRate rateId={rate.id} said={said} />
       </div>
     </li>

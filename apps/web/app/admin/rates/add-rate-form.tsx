@@ -4,6 +4,7 @@ import { useActionState, useCallback, useRef } from 'react'
 
 import { addRateAction } from './actions'
 import { RATE_CLASSES, rateUnit, type RateClass } from '../../../lib/rates'
+import { buttonClass, inputClass, pillClass } from '../../_ui/primitives'
 
 // Client-side for two reasons, both of which a Server Action alone cannot do:
 // the refusal is a sentence rather than an error boundary, and a model that
@@ -21,7 +22,8 @@ const LABELS: Record<RateClass, string> = {
   web_fetch_request: 'Web fetch',
 }
 
-const FIELD = 'border-control-border text-text rounded border px-3 py-1 text-sm'
+// Direction A's round field (2026-09-23 admin restyle).
+const FIELD = inputClass
 
 export function AddRateForm({
   today,
@@ -64,7 +66,7 @@ export function AddRateForm({
                 <button
                   type="button"
                   data-model={row.model ?? ''}
-                  className="border-control-border rounded border px-3 py-1 font-mono text-caption"
+                  className={`${pillClass} font-mono`}
                 >
                   {row.model ?? 'no model'}
                   <span className="text-text-muted font-sans">
@@ -84,7 +86,7 @@ export function AddRateForm({
       ) : null}
 
       <form action={formAction} className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1 text-caption">
+        <label className="text-text-muted flex flex-col gap-1 text-caption">
           Model
           <input
             ref={model}
@@ -94,7 +96,7 @@ export function AddRateForm({
             className={`${FIELD} font-mono`}
           />
         </label>
-        <label className="flex flex-col gap-1 text-caption">
+        <label className="text-text-muted flex flex-col gap-1 text-caption">
           Class
           <select name="class" defaultValue="input" className={FIELD}>
             {RATE_CLASSES.map((value) => (
@@ -104,7 +106,7 @@ export function AddRateForm({
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-caption">
+        <label className="text-text-muted flex flex-col gap-1 text-caption">
           Price (USD)
           <input
             name="priceUsd"
@@ -116,7 +118,7 @@ export function AddRateForm({
             className={FIELD}
           />
         </label>
-        <label className="flex flex-col gap-1 text-caption">
+        <label className="text-text-muted flex flex-col gap-1 text-caption">
           Effective from
           <input
             name="effectiveFrom"
@@ -126,7 +128,7 @@ export function AddRateForm({
             className={FIELD}
           />
         </label>
-        <label className="flex flex-col gap-1 text-caption">
+        <label className="text-text-muted flex flex-col gap-1 text-caption">
           Source
           <input
             name="source"
@@ -135,7 +137,11 @@ export function AddRateForm({
             className={FIELD}
           />
         </label>
-        <button type="submit" disabled={pending} className={FIELD}>
+        <button
+          type="submit"
+          disabled={pending}
+          className={buttonClass('primary')}
+        >
           {pending ? 'Publishing…' : 'Publish'}
         </button>
       </form>
