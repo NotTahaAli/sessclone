@@ -36,7 +36,7 @@ const VARIANTS = {
   },
   hero: {
     className: `${buttonClass('primary')} h-10 px-4 text-[14px]`,
-    signedOut: 'Start counting',
+    signedOut: 'Join the waitlist',
     signedIn: 'Open the dashboard',
   },
 } as const

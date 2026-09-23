@@ -51,6 +51,8 @@ type Query = Promise<{
   sent?: string
   code?: string
   next?: string
+  /** A plan preselected by the pricing page's "Join waitlist". */
+  plan?: string
 }>
 
 /**
@@ -105,26 +107,29 @@ async function InvitedBy({ searchParams }: { searchParams: Query }) {
  * pricing page reads, so a size the operator changed is the size offered.
  */
 async function PlanChoice({ searchParams }: { searchParams: Query }) {
-  if (invitationToken(safeNext((await searchParams).next))) return null
+  const { next, plan } = await searchParams
+  if (invitationToken(safeNext(next))) return null
 
   const tiers = (await marketingTiers()).filter((tier) =>
     (SIGNUP_PLANS as readonly string[]).includes(tier.key),
   )
   if (tiers.length === 0) return null
   const team = tiers.find((tier) => tier.key === 'team')
+  // Only a key on offer is honoured; anything else falls back to the first.
+  const chosen = tiers.some((tier) => tier.key === plan) ? plan : tiers[0]!.key
 
   return (
     <fieldset className="mt-6 flex flex-col gap-2">
       <legend className="text-text-muted mb-2 text-caption">
         New here? Choose a plan
       </legend>
-      {tiers.map((tier, index) => (
+      {tiers.map((tier) => (
         <label key={tier.key} className="flex items-center gap-2 text-body">
           <input
             type="radio"
             name="plan"
             value={tier.key}
-            defaultChecked={index === 0}
+            defaultChecked={tier.key === chosen}
           />
           {tier.name}
           <span className="text-text-muted text-caption">
@@ -148,7 +153,8 @@ async function PlanChoice({ searchParams }: { searchParams: Query }) {
         </label>
       ) : null}
       <p className="text-text-muted text-caption">
-        An administrator approves new organisations before they can be used.
+        Paid plans open by invitation from the waitlist: signing up puts your
+        organisation on it, and it opens once approved.
       </p>
     </fieldset>
   )

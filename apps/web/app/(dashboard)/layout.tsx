@@ -181,6 +181,7 @@ async function Content({ children }: { children: ReactNode }) {
       <Waiting
         cancelled={viewer.subscriptionStatus === 'cancelled'}
         orgName={viewer.orgName}
+        planName={viewer.planName}
         operator={(await currentOperator()) !== null}
       />
     )

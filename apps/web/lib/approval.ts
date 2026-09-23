@@ -6,7 +6,7 @@ import type { SubscriptionStatus } from './tier'
 // state every Org starts in, and every Org that was never activated before
 // this shipped) lock the Org, and so does `cancelled`. `past_due` does not:
 // it keeps the banner ticket 48 gave it, and everything keeps working. A
-// locked Org sees one page ("Waiting for approval" or "Cancelled") and Sign
+// locked Org sees one page ("You’re on the waitlist" or "Cancelled") and Sign
 // out; it cannot create a key, and ingest answers its keys with the same 401
 // as any bad key.
 //

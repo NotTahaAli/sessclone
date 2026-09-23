@@ -223,8 +223,13 @@ function PlanRow({
               Talk to us
             </a>
           ) : (
-            <Link href="/sign-in" className={buttonClass('primary')}>
-              Start with {plan.name}
+            // Until billing exists, sign-up is the waitlist: it records the
+            // plan as an inactive subscription for the operator to approve.
+            <Link
+              href={`/sign-in?plan=${encodeURIComponent(plan.key)}`}
+              className={buttonClass('primary')}
+            >
+              Join waitlist
             </Link>
           )}
           <a href={REPOSITORY} className={buttonClass()}>

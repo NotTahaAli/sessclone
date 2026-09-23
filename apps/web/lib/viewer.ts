@@ -47,6 +47,9 @@ export type Viewer = {
    * `asViewer` transaction is a second connection checkout per navigation.
    */
   subscriptionStatus: SubscriptionStatus | null
+  /** The subscription's Tier name — the plan asked for at sign-up while the
+   * Org waits on the waitlist — or null with no subscription row. */
+  planName: string | null
   role: Role
   /**
    * The Org's logo (ticket 77), already versioned, or null. Read here rather
@@ -65,6 +68,7 @@ type MembershipRow = {
   org_name: string
   org_timezone: string
   subscription_status: SubscriptionStatus | null
+  plan_name: string | null
   role: Role
   logo_updated_at: Date | null
 }
@@ -97,6 +101,7 @@ export const sessionViewer = cache(async (): Promise<Viewer | null> => {
              org.name as org_name,
              org.timezone as org_timezone,
              subscription.status as subscription_status,
+             tier.name as plan_name,
              member.role,
              logo.updated_at as logo_updated_at
         from members member
@@ -104,6 +109,7 @@ export const sessionViewer = cache(async (): Promise<Viewer | null> => {
         join users account on account.id = member.user_id
         left join subscriptions subscription
                on subscription.org_id = member.org_id
+        left join tiers tier on tier.id = subscription.tier_id
         left join org_logos logo on logo.org_id = member.org_id
        where member.id in (select sessclone_own_member_ids())
        -- Ticket 119: an Org that works before one that is locked, so a
@@ -126,6 +132,7 @@ export const sessionViewer = cache(async (): Promise<Viewer | null> => {
     orgName: membership.org_name,
     orgTimezone: membership.org_timezone,
     subscriptionStatus: membership.subscription_status,
+    planName: membership.plan_name,
     role: membership.role,
     orgLogo: membership.logo_updated_at
       ? logoPath(membership.org_id, membership.logo_updated_at)
