@@ -86,7 +86,8 @@ function Tier({ tier }: { tier: OrgTier }) {
       <Field
         label="Seats"
         hint={`${tierSeats(tier)}${
-          tier.maxSeats !== null && tier.seatsUsed >= tier.maxSeats
+          // Full only where the database would refuse the next Member.
+          tier.seatCeiling !== null && tier.seatsUsed >= tier.seatCeiling
             ? ', and every one is in use'
             : ''
         }${

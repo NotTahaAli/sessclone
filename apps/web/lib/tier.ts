@@ -29,6 +29,12 @@ export type OrgTier = TierPricing & {
    * counts Members who have not been removed rather than Devices.
    */
   seatsUsed: number
+  /**
+   * The ceiling the database enforces right now, from
+   * `sessclone_org_seat_ceiling` itself so the page and the trigger cannot
+   * disagree: null for an unapproved sign-up ask, `maxSeats` otherwise.
+   */
+  seatCeiling: number | null
   currentPeriodEnd: Date | null
 }
 
@@ -46,6 +52,7 @@ type TierRow = {
   archival_available: boolean
   features: Record<string, unknown>
   seats_used: string
+  seat_ceiling: number | null
   current_period_end: Date | null
 }
 
@@ -88,7 +95,8 @@ export const orgTier = async (
            subscription.current_period_end,
            (select count(*) from members
              where members.org_id = subscription.org_id
-               and members.removed_at is null) as seats_used
+               and members.removed_at is null) as seats_used,
+           sessclone_org_seat_ceiling(subscription.org_id) as seat_ceiling
       from subscriptions subscription
       join tiers tier on tier.id = subscription.tier_id
      where subscription.org_id = ${orgId}
@@ -115,6 +123,7 @@ export const orgTier = async (
     archivalAvailable: row.archival_available,
     features: row.features,
     seatsUsed: Number(row.seats_used),
+    seatCeiling: row.seat_ceiling,
     currentPeriodEnd: row.current_period_end,
   }
 }
