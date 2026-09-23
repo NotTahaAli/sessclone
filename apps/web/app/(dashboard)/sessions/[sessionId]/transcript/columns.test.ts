@@ -100,8 +100,9 @@ describe('rangesToStart', () => {
   })
 })
 
+const bytes = (text: string) => new TextEncoder().encode(text)
+
 describe('splitEarlier', () => {
-  const bytes = (text: string) => new TextEncoder().encode(text)
   it('drops a last line still being written instead of emitting it broken', () => {
     expect(splitEarlier(bytes('{"a":1}\n{"b":'), 0).lines).toEqual([
       { text: '{"a":1}', offset: 0 },
