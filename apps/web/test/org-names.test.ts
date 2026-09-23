@@ -75,7 +75,7 @@ test('a subscription event names its actor by display name', async () => {
     return subscriptionHistory(tx, fixture.acme.id)
   })
 
-  expect(history[0]?.actorEmail).toBe('Ops Taha')
+  expect(history[0]?.actorName).toBe('Ops Taha')
 })
 
 // --- Ticket 101: an Org renamed by its own ------------------------------

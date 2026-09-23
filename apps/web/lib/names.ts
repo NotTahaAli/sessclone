@@ -237,6 +237,9 @@ export const setOrgOperatorName = async (
   name: string | null,
 ): Promise<boolean> => {
   if (!name) {
+    // A name that was never there is still cleared, so an empty delete is
+    // success; a caller the policy refuses never reaches this (the action
+    // checks `currentOperator` first) and reads as success too.
     await tx`delete from org_operator_names where org_id = ${orgId}`
     return true
   }

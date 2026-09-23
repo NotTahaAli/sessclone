@@ -190,7 +190,7 @@ export default async function Page({
                     .toISOString()
                     .slice(0, 16)
                     .replace('T', ' ')}{' '}
-                  UTC · {event.actorEmail ?? event.provider}
+                  UTC · {event.actorName ?? event.provider}
                 </p>
                 {event.note ? (
                   <p className="text-text-secondary mt-1 text-caption">

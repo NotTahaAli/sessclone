@@ -177,7 +177,7 @@ export type SubscriptionEvent = {
   status: SubscriptionStatus
   tierName: string
   note: string | null
-  actorEmail: string | null
+  actorName: string | null
   provider: string
   occurredAt: Date
 }
@@ -201,7 +201,7 @@ export const subscriptionHistory = async (
       status: SubscriptionStatus
       tier_name: string
       note: string | null
-      actor_email: string | null
+      actor_name: string | null
       provider: string
       occurred_at: Date
     }[]
@@ -210,7 +210,7 @@ export const subscriptionHistory = async (
            event.status,
            tier.name as tier_name,
            event.note,
-           coalesce(actor.display_name, actor.email) as actor_email,
+           coalesce(actor.display_name, actor.email) as actor_name,
            event.provider,
            event.occurred_at
       from subscription_events event
@@ -226,7 +226,7 @@ export const subscriptionHistory = async (
     status: row.status,
     tierName: row.tier_name,
     note: row.note,
-    actorEmail: row.actor_email,
+    actorName: row.actor_name,
     provider: row.provider,
     occurredAt: row.occurred_at,
   }))
