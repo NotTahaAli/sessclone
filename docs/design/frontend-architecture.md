@@ -6,11 +6,17 @@ this adds to the workspace. The read path itself is ADR 0007, and the colours,
 components and chart palette are `docs/design/design-system.md`; this file is
 the rest of ticket 20.
 
-> **Almost none of this exists yet.** `apps/web` today is a layout, a page that
-> renders the word `sessclone`, and the probe route from ticket 02. There is no
-> Tailwind dependency, no `globals.css`, no Supabase client and no `proxy.ts`.
-> Every section below names what it adds and which ticket first needs it —
-> reading this file as a description of the tree will not go well.
+> **This was written before the build, as the plan for it (ticket 20).** Most
+> of it now describes the tree, with two exceptions worth knowing first:
+>
+> - **`recharts` was never added.** The spend chart is a server-rendered SVG
+>   (`apps/web/app/(dashboard)/costs/spend-chart.tsx`), with no charting
+>   library at all. The recharts sections below record the reasoning at the
+>   time and describe no code.
+> - **Not every dependency is in the catalog.** Seven are pinned exactly, but
+>   directly in `apps/web/package.json`: `@material/material-color-utilities`,
+>   `nodemailer`, `react-markdown`, `rehype-highlight`, `remark-gfm`,
+>   `smtp-server` and `@types/smtp-server`.
 
 Every library claim here was checked against the current documentation or the
 published package at the time of writing, and is cited where it is made. Every
@@ -84,6 +90,9 @@ worked around. Until then the answer to "should this be cached" is that it
 cannot be.
 
 ## Charting
+
+> Not built this way: see the note at the top. The chart shipped as a
+> server-rendered SVG and `recharts` is not a dependency.
 
 `recharts`, pinned at 3.10.1.
 
@@ -215,7 +224,7 @@ Five packages, in three groups, plus two files.
 
 ### Versions
 
-All five looked up from the registry on 2026-09-20 with `pnpm view <pkg>
+All four looked up (a fifth, `recharts`, was planned and never added) from the registry on 2026-09-20 with `pnpm view <pkg>
 version`, and checked with `pnpm view <pkg> deprecated`, which returned nothing
 for every one of them — **none is deprecated**. This environment is node
 v22.22.2 and pnpm 10.33.0.
@@ -224,14 +233,14 @@ v22.22.2 and pnpm 10.33.0.
 | ----------------------- | ------- | ---------- | ----------------------------------------------- |
 | `tailwindcss`           | 4.3.3   | no         | The design system's `@theme` block              |
 | `@tailwindcss/postcss`  | 4.3.3   | no         | The PostCSS plugin Tailwind 4 needs             |
-| `recharts`              | 3.10.1  | no         | Charts                                          |
 | `@supabase/supabase-js` | 2.116.0 | no         | The Supabase client                             |
 | `@supabase/ssr`         | 0.12.7  | no         | Cookie-based sessions across server and browser |
 
 **Versions are pinned in the catalog.** `pnpm-workspace.yaml` carries a
 `catalog:` block — "One place to pin every shared version. Looked up from the
-registry, never recalled" — and every package in `apps/web/package.json` is
-declared as `"catalog:"` rather than as a range. These five are added the same
+registry, never recalled" — and most packages in `apps/web/package.json` are
+declared as `"catalog:"` rather than as a range (the exceptions are listed at
+the top of this file). These four are added the same
 way: the exact version in the catalog, `catalog:` in the dependency list. A
 version written directly into a `package.json` in this workspace is a mistake
 to fix, not a shortcut.

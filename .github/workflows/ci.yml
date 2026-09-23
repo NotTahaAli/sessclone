@@ -1,9 +1,15 @@
 name: CI
 
-# Push only: every branch here is pushed before it becomes a pull request, so
-# adding `pull_request` would just run the same commit twice. Revisit if
-# contributions start arriving from forks.
-on: push
+# Push runs every branch in this repository. Pull requests run too, so a fork's
+# contribution gets CI, but each job skips a pull request whose head branch
+# lives here: that commit already ran on push, and running it twice buys
+# nothing.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
 
 # Three jobs rather than one, because one was three minutes of which the
 # database suite was seventy-six seconds and everything else waited its turn.
@@ -12,6 +18,7 @@ on: push
 # protection rule would be written against.
 jobs:
   lint:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -30,6 +37,7 @@ jobs:
       - run: pnpm vitest run --project plugin --project shared
 
   check:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
 
     # Route tests run against a real Postgres with the real migrations, so a
@@ -72,6 +80,7 @@ jobs:
           APP_DATABASE_URL: postgres://sessclone_app:sessclone_app@127.0.0.1:5432/sessclone_test
 
   build:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -84,7 +93,7 @@ jobs:
       # Next keeps its compilation cache here, and a cold build is most of
       # this job. Keyed by the lockfile and the sources so a hit is a hit;
       # restored from any earlier build of the same lockfile otherwise.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: apps/web/.next/cache
           key: next-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('apps/web/**/*.ts', 'apps/web/**/*.tsx') }}

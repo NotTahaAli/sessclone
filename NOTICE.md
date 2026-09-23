@@ -1,14 +1,23 @@
 # Licence and attribution
 
-sessclone is **AGPL-3.0-only** with one additional term under section 7(b) of
-that licence, stated below. [`LICENSE`](LICENSE) carries the licence text
-unmodified, under a short notice pointing here — which is what section 7
-requires of a project that adds a term:
+SessClone is licensed under the GNU Affero General Public License v3.0 only,
+whose unmodified text is in [`LICENSE`](LICENSE), **together with one
+additional term under section 7(b) of that licence**: the Appropriate Legal
+Notices displayed by the panel, and the sessclone attribution with them, must
+be preserved.
+
+That term is stated in full below, and it applies to the whole work except
+`packages/plugin`, which is MIT (see [Package licences](#package-licences)).
+This file is the notice indicating where to find it, as section 7 requires; it
+adds nothing to and removes nothing from the licence text in `LICENSE`, which
+is kept verbatim so that tools reading it recognise the AGPL:
 
 > If you add terms to a covered work in accord with this section, you must
 > place, in the relevant source files, a statement of the additional terms that
 > apply to those files, or a notice indicating where to find the applicable
 > terms.
+
+The README's licence section points here too.
 
 ## The additional term (AGPL-3.0 section 7(b))
 
@@ -19,7 +28,7 @@ requires of a project that adds a term:
 > conveyed or network-deployed copy of this software or any work based on it.
 
 The notice being preserved is
-[`PanelCredit`](apps/web/app/panel.tsx), on every signed-in page of the panel.
+[`PanelCredit`](<apps/web/app/(dashboard)/credit.tsx>), on every signed-in page of the panel.
 It carries all four things section 0 requires of Appropriate Legal Notices —
 copyright notice, no warranty, conveyable under this licence, and how to read
 it — plus the author attribution.

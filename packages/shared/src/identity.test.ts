@@ -133,7 +133,7 @@ describe('the Project key', () => {
   test('is the same on two machines that cloned the same repository', () => {
     const laptop = projectKey({
       remote: 'git@github.com:NotTahaAli/sessclone.git',
-      cwd: '/Users/taha/Projects/sessclone',
+      cwd: '/Users/someone/Projects/sessclone',
       hostname: 'mbp-2',
     })
     const server = projectKey({
@@ -262,7 +262,7 @@ describe('the Device key', () => {
       hostname: 'runsc-a1b2c3',
       environment: {
         CLAUDE_CODE_REMOTE: 'true',
-        CLAUDE_CODE_ACCOUNT_UUID: '6c6ec04b-15a2-4eba-915f-ae53ff0e1e8d',
+        CLAUDE_CODE_ACCOUNT_UUID: '0a1b2c3d-0000-4000-8000-000000000001',
         CLAUDE_CODE_REMOTE_ENVIRONMENT_TYPE: 'cloud_default',
         CLAUDE_CODE_CONTAINER_ID: 'container_01R8YBh8CSzaZaNqcKd6jB3k',
       },
@@ -271,13 +271,13 @@ describe('the Device key', () => {
       hostname: 'runsc-d4e5f6',
       environment: {
         CLAUDE_CODE_REMOTE: 'true',
-        CLAUDE_CODE_ACCOUNT_UUID: '6c6ec04b-15a2-4eba-915f-ae53ff0e1e8d',
+        CLAUDE_CODE_ACCOUNT_UUID: '0a1b2c3d-0000-4000-8000-000000000001',
         CLAUDE_CODE_REMOTE_ENVIRONMENT_TYPE: 'cloud_default',
         CLAUDE_CODE_CONTAINER_ID: 'container_01ZZZZZZZZZZZZZZZZZZZZZZZZ',
       },
     })
 
-    expect(first).toBe('cloud:6c6ec04b-15a2-4eba-915f-ae53ff0e1e8d')
+    expect(first).toBe('cloud:0a1b2c3d-0000-4000-8000-000000000001')
     expect(second).toBe(first)
   })
 
@@ -287,11 +287,11 @@ describe('the Device key', () => {
         hostname: 'runsc-a1b2c3',
         environment: {
           CLAUDE_CODE_REMOTE: 'true',
-          CLAUDE_CODE_ACCOUNT_UUID: '6c6ec04b-15a2-4eba-915f-ae53ff0e1e8d',
+          CLAUDE_CODE_ACCOUNT_UUID: '0a1b2c3d-0000-4000-8000-000000000001',
           CLAUDE_CODE_REMOTE_ENVIRONMENT_TYPE: 'cloud_custom',
         },
       }),
-    ).toBe('cloud:6c6ec04b-15a2-4eba-915f-ae53ff0e1e8d:cloud_custom')
+    ).toBe('cloud:0a1b2c3d-0000-4000-8000-000000000001:cloud_custom')
   })
 
   test('falls back to the machine when the cloud names no account', () => {
@@ -322,7 +322,7 @@ describe('the Device key', () => {
         environment: {
           SESSCLONE_DEVICE: 'ci-fleet-eu',
           CLAUDE_CODE_REMOTE: 'true',
-          CLAUDE_CODE_ACCOUNT_UUID: '6c6ec04b-15a2-4eba-915f-ae53ff0e1e8d',
+          CLAUDE_CODE_ACCOUNT_UUID: '0a1b2c3d-0000-4000-8000-000000000001',
         },
       }),
     ).toBe('ci-fleet-eu')
