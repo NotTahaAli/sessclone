@@ -238,14 +238,22 @@ export type ReportedSessionEnd = z.infer<typeof ReportedSessionEnd>
 export type TranscriptReport = z.infer<typeof TranscriptReport>
 export type IngestPayload = z.infer<typeof IngestPayload>
 
-/** What the Collector reads to advance its cursors. */
-export type IngestResponse = {
-  accepted: {
-    sessionId: string
-    agentId: string | null
-    /** Turns received, not rows inserted: a re-report is accepted and stores
-     * nothing, and the Collector's cursor must move either way. */
-    turns: number
-    cursor: ReportedCursor
-  }[]
-}
+/**
+ * What the Collector reads to advance its cursors. A schema rather than a bare
+ * type so the OpenAPI spec (`openapi.ts`, ticket 117) describes the 200 from
+ * the same definition the route builds it against.
+ */
+export const IngestResponse = z.object({
+  accepted: z.array(
+    z.object({
+      sessionId: z.string(),
+      agentId: z.string().nullable(),
+      /** Turns received, not rows inserted: a re-report is accepted and
+       * stores nothing, and the Collector's cursor must move either way. */
+      turns: counter,
+      cursor: ReportedCursor,
+    }),
+  ),
+})
+
+export type IngestResponse = z.infer<typeof IngestResponse>
