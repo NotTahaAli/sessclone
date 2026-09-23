@@ -401,8 +401,9 @@ function Waiting({
   params,
 }: {
   keyUsed: boolean
-  /** Failures in the current period: where a stalled Collector is first
-   * noticed, so the surface links to them when there are any (ticket 78). */
+  /** Failed Sessions in the current period the viewer has not marked
+   * viewed: where a stalled Collector is first noticed, so the surface links
+   * to them when there are any (ticket 78). */
   failuresCount: number
   /** The current query, so the link carries the period the count was read
    * for. */
@@ -428,8 +429,8 @@ function Waiting({
             className="underline"
           >
             {failuresCount === 1
-              ? '1 Session failed in this period'
-              : `${failuresCount} Sessions failed in this period`}
+              ? '1 failed Session not yet viewed'
+              : `${failuresCount} failed Sessions not yet viewed`}
           </Link>{' '}
           — a turn may be ending on an API error before any usage is written.
         </p>
