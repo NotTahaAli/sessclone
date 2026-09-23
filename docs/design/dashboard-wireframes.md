@@ -96,8 +96,9 @@ these three shapes with a different breakdown, which is the point.
 ## Two surfaces drawn ahead of their tickets
 
 Neither of these belongs to the design phase — ticket 78 owns the failures
-view and ticket 77 owns appearance — and both are blocked on build work. They
-are drawn here so that neither gets invented at implementation time.
+view and ticket 77 owns appearance — and both were blocked on build work when
+this was written; both tickets are now done. They were drawn here so that
+neither got invented at implementation time.
 
 ### Failures
 

@@ -93,7 +93,7 @@ a visitor who finds it buried assumes it is crippled.
 
 Three conditions appear on the card and in the FAQ:
 
-- The sessclone credit stays visible in the panel.
+- The SessClone credit stays visible in the panel.
 - Features built on top come back as a pull request.
 - No closed-source forks.
 

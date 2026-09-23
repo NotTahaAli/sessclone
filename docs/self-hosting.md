@@ -1,4 +1,4 @@
-# Self-hosting sessclone
+# Self-hosting SessClone
 
 Everything this product needs is yours to supply: a Postgres cluster, an
 S3-compatible bucket, and a Supabase project for sign-in. Nothing is
@@ -80,7 +80,7 @@ in filename order, and read the header of each one first — the retention
 warning below is an example of an upgrade that acts on data.
 
 Then point `DATABASE_URL` at `sessclone_app` and `INGEST_DATABASE_URL` at
-`sessclone`. `apps/web/app-role.test.ts` fails if the dashboard is ever
+`sessclone`. `apps/web/test/app-role.test.ts` fails if the dashboard is ever
 pointed at a privileged role.
 
 **An upgrade is two steps, and the order matters.** Nothing in the deploy
@@ -131,6 +131,22 @@ reads byte ranges straight from storage in the browser, through presigned GET
 URLs, so allow `GET` with the `Range` request header from your dashboard's
 origin. Supabase Storage allows this by default (`access-control-allow-origin:
 *`, `range` among the allowed headers); on R2, AWS or MinIO add a CORS rule.
+On Cloudflare R2 that rule is, under the bucket's **Settings → CORS Policy**:
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://your-dashboard.example"],
+    "AllowedMethods": ["GET"],
+    "AllowedHeaders": ["range"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+R2's endpoint is `https://<account-id>.r2.cloudflarestorage.com`, the region
+stays `auto`, and the key pair comes from an R2 API token with **Object Read &
+Write** scoped to the one bucket.
 
 ## 4. Run it
 
@@ -247,9 +263,21 @@ call and the warning that matters: on a deployment that has been collecting
 for a while, set the windows **before** the first sweep, because the column
 arrives defaulted to 90 days and the first sweep acts on it.
 
+Something has to call the sweep:
+
+- **On Vercel**, `apps/web/vercel.json` already schedules a daily
+  `GET /api/retention/sweep`. Vercel Cron sends
+  `Authorization: Bearer $CRON_SECRET`, so set `CRON_SECRET` in the Vercel
+  project to the same value as `RETENTION_SWEEP_SECRET`. With either unset the
+  cron call is refused and nothing is removed.
+- **Anywhere else**, schedule your own call — cron, a CI job, a platform's
+  scheduled task — to `POST` (or `GET`) `/api/retention/sweep` with
+  `Authorization: Bearer <RETENTION_SWEEP_SECRET>`, and call again while the
+  answer's `remaining` is above zero.
+
 ## What the licence asks of you
 
-sessclone is AGPL-3.0-only with one additional term under section 7(b), and
+SessClone is AGPL-3.0-only with one additional term under section 7(b), and
 `NOTICE.md` states both. In practice, for a deployment:
 
 - **Offering source to your users.** AGPL section 13 applies when you modify
@@ -257,7 +285,7 @@ sessclone is AGPL-3.0-only with one additional term under section 7(b), and
   arise; modified, your users may ask you for the source of your version.
 - **The panel notice stays.** The additional term preserves the notice at the
   bottom of the dashboard — copyright, no warranty, the statement that you may
-  convey this work under this licence, the link to it, and the sessclone
+  convey this work under this licence, the link to it, and the SessClone
   credit. Restyle it; do not remove it.
 - **Self-hosting is free at any size, and a private fork is permitted
   indefinitely.** Sending changes back as a pull request is something we hope

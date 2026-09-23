@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version-file: .nvmrc
       # The rendered HTML needs the archify skill, which lives outside this
       # repo, so CI verifies the committed spec instead. A stale spec means the
       # graph no longer matches the tickets.

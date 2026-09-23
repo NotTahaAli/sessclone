@@ -213,7 +213,7 @@ names only; the values are a real account's identifiers and are not recorded.
 | `CLAUDE_CODE_ACCOUNT_UUID`            | A uuid, stable across containers             | The Device key: `cloud:<account uuid>`           |
 | `CLAUDE_CODE_REMOTE_ENVIRONMENT_TYPE` | `cloud_default` here                         | The suffix, appended only when it is not default |
 | `CLAUDE_CODE_CONTAINER_ID`            | `container_<opaque id>`, new every container | **Nothing.** This is the field to avoid          |
-| `CLAUDE_CODE_ORGANIZATION_UUID`       | A uuid                                       | Not used; an Org here is a sessclone Org         |
+| `CLAUDE_CODE_ORGANIZATION_UUID`       | A uuid                                       | Not used; an Org here is a SessClone Org         |
 
 The container id is the trap the user story names: it is right there, it looks
 like a machine identity, and keying on it would give a Member a new Device

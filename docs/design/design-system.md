@@ -1,6 +1,6 @@
 # Design system
 
-The visual language every sessclone surface is built from: the dashboard, the
+The visual language every SessClone surface is built from: the dashboard, the
 marketing site and the invitation email. It fixes colour, type, space, radius
 and focus as tokens, names every component with its parts and its states, and
 sets the chart palette. It builds none of it.

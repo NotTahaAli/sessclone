@@ -9,3 +9,4 @@ packages/plugin/LICENSE
 packages/shared/openapi/
 # Fumadocs source added by `@fumadocs/cli add` (ticket 117); upstream style.
 apps/web/components/
+CODE_OF_CONDUCT.md

@@ -4,8 +4,8 @@ Whether a Claude Projects environment can be collected, and what a Collector
 running inside one can key a Device on.
 
 Observed from inside a live Projects thread session on 2026-09-20: Claude Code
-**2.1.278**, session `2683a83c-0815-5baf-b756-1caae8174c17`, environment
-`env_01U4gtc7uiN1ozc7LYtcPShe`, reported by the runtime as environment kind
+**2.1.278**, session `<session-id>`, environment
+`<environment-id>`, reported by the runtime as environment kind
 `anthropic_cloud`. Every claim below is from that container unless it says
 otherwise.
 
@@ -125,7 +125,7 @@ parent's `sessionId` beside its own `agentId`. So a conversation already maps
 to several files without any container reclaim, and **a Collector globbing
 `projects/*/*.jsonl` silently drops every one of them** — which is billed
 usage, not bookkeeping. Finding 06 recorded the same layout on macOS and
-Windows; this confirms it in Projects, and ticket 36 is where it is handled.
+Windows; this confirms it in Projects, and ticket 36 (since done) handled it.
 
 Their records interleave in wall-clock time: that subagent's first line
 predates its parent's last by about a second. A cursor is therefore per file,
@@ -138,7 +138,7 @@ this is the reason it has to stay that way.
 **A Projects session is not one repository.** Its `cwd` starts at `/home/user`,
 which is not a repository at all, and moves between repositories mid-session —
 the observed session reported three distinct `cwd` values across two repos. A
-Project-per-Session model would break on that. sessclone does not have one:
+Project-per-Session model would break on that. SessClone does not have one:
 finding 06 already says to read `cwd` off each entry, and ticket 30 keys
 Projects on the normalised git remote.
 

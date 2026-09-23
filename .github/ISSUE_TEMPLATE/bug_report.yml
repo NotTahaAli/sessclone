@@ -1,0 +1,80 @@
+name: Bug report
+description: Something in SessClone is broken.
+title: '[Bug]: '
+labels: [bug, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Security problems do not go here — see SECURITY.md.
+
+        **Transcripts contain source code and sometimes credentials.** Do not
+        paste one, and redact API keys (`SESSCLONE_API_KEY`, Supabase keys)
+        from anything below.
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      options:
+        - Hosted (sessclone.com)
+        - Self-hosted
+        - Collector plugin
+    validations:
+      required: true
+  - type: input
+    id: claude-code-version
+    attributes:
+      label: Claude Code version
+      description: '`claude --version`'
+    validations:
+      required: false
+  - type: input
+    id: node-version
+    attributes:
+      label: Node version
+      description: '`node -v`'
+    validations:
+      required: false
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Plugin version or commit
+      description: The Collector plugin's version, or the commit your self-hosted deployment runs.
+    validations:
+      required: false
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        The Collector's hooks fail silently by design. To see why one failed,
+        set `SESSCLONE_DEBUG=1` in the environment Claude Code runs in and
+        repeat the steps: each swallowed failure prints one
+        `sessclone: <hook> failed: <error>` line to stderr.
+
+        Redact API keys, tokens and any transcript content before pasting.
+      render: shell
+    validations:
+      required: false

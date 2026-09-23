@@ -74,12 +74,12 @@ operating system with the least evidence behind it.
 
 ## macOS
 
-Operator: Taha, 2026-09-22T09:30:26Z, on `host:muhammads-macbook-pro.local`.
+Operator: Taha, 2026-09-22T09:30:26Z, on `host:<laptop-hostname>.local`.
 
 ```
 Platform     darwin — Darwin 27.0.0
 Node         26.8.1 — ok
-Device key   host:muhammads-macbook-pro.local
+Device key   host:<laptop-hostname>.local
 URL          https://sessclone.vercel.app
 Key          starts "sk_", 46 characters
 Deployment   answered 200

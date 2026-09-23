@@ -50,7 +50,7 @@ what ticket 51's day boundary uses).
 | Environment                                | Unique Turns counted by hand | Dashboard |
 | ------------------------------------------ | ---------------------------- | --------- |
 | Claude Projects container, Session `fd21…` | 977                          | 950       |
-| macOS, `host:muhammads-macbook-pro.local`  | 15                           | 15        |
+| macOS, `host:<laptop-hostname>.local`      | 15                           | 15        |
 | Other containers, same Device key          | not countable (see below)    | 561       |
 | **Deployment, all time**                   | —                            | **6,833** |
 
@@ -117,11 +117,11 @@ The split divides a Session's Turns; it does not duplicate any.
 Three environments of the same Member reported inside one window on
 2026-09-22, between 10:00Z and 10:41Z:
 
-| Environment                  | Device key                                   | Session      | Turns in the window        |
-| ---------------------------- | -------------------------------------------- | ------------ | -------------------------- |
-| Claude Projects, container A | `cloud:6c6ec04b-15a2-4eba-915f-ae53ff0e1e8d` | `fd211903-…` | 67, 10:01:03Z to 10:28:25Z |
-| Claude Projects, container B | `cloud:6c6ec04b-15a2-4eba-915f-ae53ff0e1e8d` | `e61f7535-…` | 9, 10:00:12Z to 10:41:18Z  |
-| macOS                        | `host:muhammads-macbook-pro.local`           | `faa17eb1-…` | 1, at 10:22:19Z            |
+| Environment                  | Device key                     | Session      | Turns in the window        |
+| ---------------------------- | ------------------------------ | ------------ | -------------------------- |
+| Claude Projects, container A | `cloud:<account-uuid>`         | `fd211903-…` | 67, 10:01:03Z to 10:28:25Z |
+| Claude Projects, container B | `cloud:<account-uuid>`         | `e61f7535-…` | 9, 10:00:12Z to 10:41:18Z  |
+| macOS                        | `host:<laptop-hostname>.local` | `faa17eb1-…` | 1, at 10:22:19Z            |
 
 Three machines, **two** Device rows, because the two containers are one Device
 by design — the account outlives the container, so a `cloud:` key names the

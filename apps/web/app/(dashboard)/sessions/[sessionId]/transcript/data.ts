@@ -68,11 +68,18 @@ export const readBytes = async (
       signal,
       headers: range ? { Range: `bytes=${range.start}-${range.end}` } : {},
     })
-  let response = await get(file.url)
-  if (response.status === 403) {
+  // R2 answers an expired link's 403 without CORS headers, so the browser
+  // reports a network error rather than the status: treat that like a 403.
+  // An abort is the caller's own doing and is not retried.
+  let response = await get(file.url).catch((error: unknown) => {
+    if (error instanceof TypeError) return null
+    throw error
+  })
+  if (!response || response.status === 403) {
     const fresh = await renew()
     if (fresh) response = await get(fresh.url)
   }
+  if (!response) throw new Error('Storage could not be reached.')
   if (!response.ok) {
     throw new Error(
       response.status === 403

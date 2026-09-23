@@ -14,6 +14,6 @@
 -- A partial index on the failures alone, in the order the query asks for them,
 -- is therefore both small (it holds only the rows the view ever reads) and
 -- terminating (the limit stops the scan rather than a sort).
-create index session_events_failure_idx
+create index if not exists session_events_failure_idx
     on session_events (org_id, occurred_at desc, id desc)
     where kind = 'stop_failure';

@@ -1,6 +1,6 @@
 # supabase
 
-Migrations, RLS policies, and local stack config.
+Migrations and their RLS policies.
 
 Every migration is plain SQL, applied in filename order. They run against a
 plain Postgres as well as a Supabase project: nothing references the `auth`
@@ -8,12 +8,9 @@ schema, and `sessclone_user_id()` reads the same JWT claim settings that
 Supabase's own `auth.uid()` reads, so CI, a self-hoster's cluster and the
 hosted deployment all get the same rules.
 
-| Migration                           | What it creates                                                                                   |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `20260920120000_accounts.sql`       | `orgs`, `users`, `members`, `api_keys`, `member_scopes`, and the policy helpers                   |
-| `20260920120100_collection.sql`     | `devices`, `projects`, `turns`, `session_events`, archival exceptions                             |
-| `20260922090000_drop_probe.sql`     | Drops ticket 02's throwaway table on a deployment that already ran it                             |
-| `20260922150000_friendly_names.sql` | `projects.nickname`, `session_labels`, `users.display_name` — the friendly names (tickets 90, 91) |
+`migrations/` is the list: one file per change, named by the UTC timestamp
+that orders it. Two files never share a timestamp, since Supabase's migration
+ledger keys on it.
 
 **A table ships with its policies in the same migration** (ADR 0001). A
 migration that creates a table and leaves its policies to a later one has
@@ -33,7 +30,7 @@ table arrives without row-level security or without a policy. Neither says
 anything about a _deployment_: nothing in a deploy applies a migration, so
 `apps/web/scripts/schema-drift.mjs` is what tells a deployed database it is
 behind its code, and `docs/self-hosting.md` is where it is run. The full Role
-matrix is Seam C, and belongs to ticket 44.
+matrix is Seam C (ticket 44), tested in `apps/web/test/rls.test.ts`.
 
 ## Applying them locally
 

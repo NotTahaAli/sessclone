@@ -13,17 +13,11 @@ if the two ever disagree — a variable added to one and not the other, or a
 default written differently in each, is a test failure rather than a support
 ticket.
 
-> **Most of this is not wired up yet.** v1 is mid-build. Nine variables are
-> read by code today: `DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`,
-> `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `NEXT_PUBLIC_APP_URL` in `apps/web` since
-> ticket 27 wired sign-in, `INGEST_DATABASE_URL` in `apps/web/app/api/ingest/route.ts`
-> since ticket 31, and — since ticket 32 —
-> `SESSCLONE_API_KEY`, `SESSCLONE_URL`, `SESSCLONE_STATE_DIR` and
-> `SESSCLONE_DEVICE` in `packages/plugin/src/configuration.mjs`. Every other
-> row below is
-> a commitment this build is working towards, and each section names the ticket
-> that wires it. Setting one today does nothing — which is worth knowing before
-> wondering why a bucket stays empty.
+Every variable in the tables below is read by code today, except `CRON_SECRET`,
+which is read by Vercel's scheduler rather than by this application (see
+[Retention sweep](#retention-sweep)). **Required** means the code throws, or
+the feature refuses to run, without it; **Default** is what the code falls back
+to when it is unset.
 
 **Nothing here is a secret.** Every value below is an example or a default.
 Real credentials live in `.env`, which is gitignored, or in the deployment's
@@ -69,9 +63,11 @@ role for everything the dashboard reads, and the wrong one for ingest: ingest
 writes `turns` and `log_artifacts`, which carry no insert policy by design and
 which `sessclone_app` is granted no insert on at all. So ticket 31 gave ingest
 its own variable. `INGEST_DATABASE_URL` is the migrating, owning role — the one
-`DATABASE_URL` must not be — and `apps/web/app/api/ingest/route.ts` is the only
-code that reads it, which is what keeps a privileged connection to one named
-purpose instead of letting it leak into a page.
+`DATABASE_URL` must not be. It is read only by `ingestDb()` in
+`apps/web/lib/collector-auth.ts`, and only the API-key-authenticated Collector
+routes (`/api/ingest`, `/api/logs/presign`, `/api/logs/confirm`) and the
+secret-gated retention sweep call that, which is what keeps a privileged
+connection to named purposes instead of letting it leak into a page.
 
 **There is deliberately no fallback between them.** A missing
 `INGEST_DATABASE_URL` throws `INGEST_DATABASE_URL is not set` on the first
@@ -99,10 +95,14 @@ them.
 ### Supabase (auth and the browser client)
 
 The browser reads scoped rows directly, through the same policies the server
-uses. These three are that client's configuration, and ticket 27 wired them:
-`apps/web/lib/supabase/server.ts` and `apps/web/proxy.ts` read the first two.
-The service role key is still read by nothing, and ADR 0001 keeps it that way
-until an ingest path needs it.
+uses. These two are that client's configuration, read by
+`apps/web/lib/supabase/server.ts` and `apps/web/proxy.ts`.
+
+There is no `SUPABASE_SERVICE_ROLE_KEY`. No code reads one, so a deployment
+should not hold one: it bypasses every policy, and ingest already writes as the
+owning role through `INGEST_DATABASE_URL`. ADR 0001 confines a service role key
+to ingest paths that have already verified an API key by hash, should one ever
+need it.
 
 Sign-in is GitHub OAuth and a magic link, and no password is created or stored
 by either. Both are configured in the Supabase project: GitHub needs a client
@@ -110,18 +110,10 @@ id and secret under Authentication, and both need
 `<NEXT_PUBLIC_APP_URL>/auth/callback` in the project's list of allowed redirect
 URLs — that one route handles the OAuth code and the magic link's token alike.
 
-| Variable                        | Required | Default | What it is                                                                     |
-| ------------------------------- | -------- | ------- | ------------------------------------------------------------------------------ |
-| `NEXT_PUBLIC_SUPABASE_URL`      | yes      | —       | Project URL. `NEXT_PUBLIC_` because the browser needs it                       |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes      | —       | Anon key. Public by design; RLS is what protects the rows, not this key        |
-| `SUPABASE_SERVICE_ROLE_KEY`     | yes      | —       | **Bypasses every policy.** Server-only, ingest paths only — see the note below |
-
-`SUPABASE_SERVICE_ROLE_KEY` is the most dangerous value in this file. ADR 0001
-confines it to ingest paths that have already verified an API key by hash. It
-is never read in a page, a client component, or anything else the browser can
-reach, and never used to work around an inconvenient policy. It carries no
-`NEXT_PUBLIC_` prefix precisely so that a mistake is a build-time absence
-rather than a shipped credential.
+| Variable                        | Required | Default | What it is                                                              |
+| ------------------------------- | -------- | ------- | ----------------------------------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`      | yes      | —       | Project URL. `NEXT_PUBLIC_` because the browser needs it                |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes      | —       | Anon key. Public by design; RLS is what protects the rows, not this key |
 
 Sign-in email — the magic link — is sent by Supabase Auth and configured in
 the Supabase project's own SMTP settings, not here. The **invitation** email is
@@ -133,7 +125,7 @@ never sees, so it is sent through the app's own SMTP, below.
 | Variable    | Required | Default | What it is                                                                      |
 | ----------- | -------- | ------- | ------------------------------------------------------------------------------- |
 | `SMTP_URL`  | no       | —       | Connection URL, e.g. `smtp://user:pass@smtp.example.com:587` or `smtps://…:465` |
-| `SMTP_FROM` | no       | —       | From address on the invitation, e.g. `sessclone <no-reply@example.com>`         |
+| `SMTP_FROM` | no       | —       | From address on the invitation, e.g. `SessClone <no-reply@example.com>`         |
 
 Both or neither. With them set (ticket 82, `apps/web/lib/mailer.ts`), inviting
 someone emails them the join link; with either unset, no mail is attempted and
@@ -188,9 +180,9 @@ approves it.
 | --------------------- | -------- | ------- | ------------------------------------------------------------------------------------------ |
 | `NEXT_PUBLIC_APP_URL` | yes      | —       | Origin this deployment answers on, e.g. `https://sessclone.example.com`. No trailing slash |
 
-Wired by ticket 27 (`apps/web/lib/auth/app-url.ts`), and used again by tickets
-49 (invites) and 66 (install docs).
-Used to build the sign-in redirect, invite links and the install instructions a
+Read by `apps/web/lib/auth/app-url.ts`, which throws when it is unset, and by
+`apps/web/lib/appearance.ts`, which marks its cookie `Secure` when the URL is
+`https://`. Used to build the sign-in redirect, invite links and the install instructions a
 Member is shown, so a
 self-hoster's team is told to report to the self-hoster's deployment. It is not
 derived from request headers: a forwarded `Host` is attacker-controllable, and
@@ -209,9 +201,9 @@ reset link, and revoke one you think has been seen.
 ### Retention sweep
 
 Retention is a window per Org, in days, set by an Owner or an Admin under Org
-settings and capped by the Tier's ceiling. Nothing enforces it on a schedule,
-because this deployment has no scheduler and a self-hoster's is their own:
-`POST /api/retention/sweep` is the call that removes what is past the window —
+settings and capped by the Tier's ceiling. The application runs no scheduler
+of its own: `POST /api/retention/sweep` (or `GET`, for schedulers that only
+send GET) is the call that removes what is past the window —
 the `log_artifacts` rows and the stored objects together, oldest first, at most
 500 per call, and it answers how many remain so a backlog can be drained by
 calling again. It is idempotent: nothing is past its window twice, and deleting
@@ -220,9 +212,16 @@ an object that is already gone succeeds.
 **Turns are never touched by it.** The spend history is append-only and
 survives every transcript it describes.
 
-| Variable                 | Required | Default | What it is                                                                              |
-| ------------------------ | -------- | ------- | --------------------------------------------------------------------------------------- |
-| `RETENTION_SWEEP_SECRET` | no       | —       | Shared secret for `POST /api/retention/sweep`. Unset means the route refuses every call |
+| Variable                 | Required    | Default | What it is                                                                                |
+| ------------------------ | ----------- | ------- | ----------------------------------------------------------------------------------------- |
+| `RETENTION_SWEEP_SECRET` | no          | —       | Shared secret for `/api/retention/sweep`. Unset means the route refuses every call        |
+| `CRON_SECRET`            | Vercel only | —       | Read by Vercel Cron, not by the app. Set it to the same value as `RETENTION_SWEEP_SECRET` |
+
+**Who calls it.** On Vercel, `apps/web/vercel.json` schedules a daily
+`GET /api/retention/sweep`, and Vercel Cron sends
+`Authorization: Bearer $CRON_SECRET` with it — so the call is accepted only
+when `CRON_SECRET` equals `RETENTION_SWEEP_SECRET`. Anywhere else, schedule
+your own `POST` or `GET` with `Authorization: Bearer <RETENTION_SWEEP_SECRET>`.
 
 The window is measured from when a transcript was first stored, not from its
 last upload: a growing Session replaces its object and moves `uploaded_at`, so
@@ -262,18 +261,22 @@ anything a browser can reach.
 Log Artifacts go straight to storage through a presigned PUT; the application
 never carries the bytes (ADR 0003). Only the S3 API is used, so Supabase
 Storage, Cloudflare R2, AWS S3, Oracle Cloud Object Storage, and MinIO are all
-the same code path. Wired by ticket 58 (the presign route); nothing reads any
-of these today, and ticket 67 is where two providers get proven.
+the same code path (`apps/web/lib/storage.ts`).
 
-| Variable                      | Required | Default | What it is                                                                        |
-| ----------------------------- | -------- | ------- | --------------------------------------------------------------------------------- |
-| `STORAGE_ENDPOINT`            | yes      | —       | S3 API endpoint URL. The provider's S3 endpoint, not its dashboard                |
-| `STORAGE_REGION`              | no       | `auto`  | Region. `auto` suits R2 and Supabase; AWS needs the real one, e.g. `eu-west-2`    |
-| `STORAGE_BUCKET`              | yes      | —       | Bucket holding artifacts. Must **not** be public: reads are presigned per request |
-| `STORAGE_ACCESS_KEY_ID`       | yes      | —       | Access key id                                                                     |
-| `STORAGE_SECRET_ACCESS_KEY`   | yes      | —       | Secret access key                                                                 |
-| `STORAGE_FORCE_PATH_STYLE`    | no       | `true`  | Path-style addressing. Required by MinIO and Supabase; AWS accepts it             |
-| `STORAGE_PRESIGN_TTL_SECONDS` | no       | `300`   | Life of an issued URL. A presigned URL is a bearer credential — keep it short     |
+Storage is optional as a whole. With any of the four "for archival" variables
+unset, archival is off — presign refuses, the retention sweep answers 503 —
+and everything else works.
+
+| Variable                       | Required     | Default | What it is                                                                               |
+| ------------------------------ | ------------ | ------- | ---------------------------------------------------------------------------------------- |
+| `STORAGE_ENDPOINT`             | for archival | —       | S3 API endpoint URL. The provider's S3 endpoint, not its dashboard                       |
+| `STORAGE_REGION`               | no           | `auto`  | Region. `auto` suits R2 and Supabase; AWS needs the real one, e.g. `eu-west-2`           |
+| `STORAGE_BUCKET`               | for archival | —       | Bucket holding artifacts. Must **not** be public: reads are presigned per request        |
+| `STORAGE_ACCESS_KEY_ID`        | for archival | —       | Access key id                                                                            |
+| `STORAGE_SECRET_ACCESS_KEY`    | for archival | —       | Secret access key                                                                        |
+| `STORAGE_FORCE_PATH_STYLE`     | no           | `true`  | Path-style addressing. Required by MinIO and Supabase; AWS accepts it                    |
+| `STORAGE_PRESIGN_TTL_SECONDS`  | no           | `300`   | Life of an issued URL. A presigned URL is a bearer credential — keep it short            |
+| `STORAGE_COMPAT_CREATE_BUCKET` | no           | —       | `apps/web/scripts/storage-compat.mjs` only: `true` creates the bucket before checking it |
 
 ### Pricing cache
 
@@ -487,10 +490,18 @@ the default-path note below) and this gap stays closed.
 their own laptop, which is everyone. The fallback is a development
 convenience, and the table says "in practice" rather than "yes" because
 claiming the code enforces something it does not is how a contract stops being
-one. Ticket 66's marketplace manifest is where a hosted default for the URL
-would be set. A value that is not an `http` or `https` URL is refused with the
+one. A value that is not an `http` or `https` URL is refused with the
 rest, because a `fetch` against one fails per report with a message about a
 protocol rather than once with a message about a variable.
+
+**The plugin's own setup prompt is the other way in.**
+`packages/plugin/.claude-plugin/plugin.json` declares `url` and `api_key` as
+`userConfig`, so installing the plugin asks for both and keeps the key in the
+keychain. Claude Code hands those answers to the hooks as
+`CLAUDE_PLUGIN_OPTION_URL` and `CLAUDE_PLUGIN_OPTION_API_KEY`;
+`readConfiguration` prefers `SESSCLONE_URL` and `SESSCLONE_API_KEY` when both
+are set, and falls back to the plugin options otherwise. `docs/install.md` has
+both routes.
 
 **A bad key fails at setup, not at report time (ticket 32).**
 `packages/plugin/src/configuration.mjs` reads every variable in this table and
@@ -528,10 +539,9 @@ cursor and the queue with it (finding 06):
 | macOS    | `~/Library/Application Support/sessclone`                                |
 | Windows  | `%LOCALAPPDATA%\sessclone`, else `%USERPROFILE%\AppData\Local\sessclone` |
 
-Only the Linux row is observed on a real machine. macOS and Windows rest on
-Anthropic's documentation and on the installed CLI's own path resolution
-(finding 06), and ticket 06 stays open until someone runs this on both — so
-treat those two rows as the intended behaviour rather than the measured one.
+All three rows are observed on real machines (finding 06): Linux and macOS
+end to end, and on Windows the transcript layout was observed and the state
+directory confirmed writable by the operator.
 
 That 30-day sweep is also a deadline on archival: a transcript not collected
 within the window is gone, whatever this product does.

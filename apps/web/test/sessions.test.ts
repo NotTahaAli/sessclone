@@ -133,7 +133,7 @@ test('a Session on a cloud Device is marked, since cloud never reports an end', 
   // or reclaimed, so the page needs to know which missing ends are ordinary.
   const [device] = await sql<{ id: string }[]>`
     insert into devices (member_id, key)
-    values (${fixture.acme.members.member}, 'cloud:6c6ec04b-15a2-4eba-915f-ae53ff0e1e8d')
+    values (${fixture.acme.members.member}, 'cloud:0a1b2c3d-0000-4000-8000-000000000001')
     returning id
   `
   await seedTurn({ device_id: device!.id })
