@@ -24,7 +24,7 @@ import { isLocked } from '../../lib/approval'
 import { asViewer } from '../../lib/db'
 import { currentOperator } from '../../lib/platform-admin'
 import { pendingOrgCount } from '../../lib/subscriptions'
-import { currentViewer } from '../../lib/viewer'
+import { sessionViewer } from '../../lib/viewer'
 
 // Ticket 83: this layout prerenders a static shell.
 //
@@ -134,7 +134,7 @@ function Inactive({
 
 /** The Org name, which every figure under here belongs to. */
 async function OrgName({ className }: { className: string }) {
-  const viewer = await currentViewer()
+  const viewer = await sessionViewer()
   if (!viewer) return <span className={className}>No Org</span>
 
   // Ticket 77: the mark sits beside the name wherever the name is, which is
@@ -153,7 +153,7 @@ async function OrgName({ className }: { className: string }) {
 
 /** The account control, which knows the Role and the address it signs out. */
 async function Account() {
-  const viewer = await currentViewer()
+  const viewer = await sessionViewer()
   return viewer ? <AccountMenu viewer={viewer} /> : null
 }
 
@@ -165,7 +165,7 @@ async function Account() {
  * frame around it is what prerenders.
  */
 async function Content({ children }: { children: ReactNode }) {
-  const viewer = await currentViewer()
+  const viewer = await sessionViewer()
   if (!viewer) return <WithoutOrg />
 
   // Ticket 119: an Org waiting for approval, or cancelled, sees only this.

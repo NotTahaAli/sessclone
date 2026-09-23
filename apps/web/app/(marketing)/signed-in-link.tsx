@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { Suspense } from 'react'
 
-import { signedInUser } from '../../lib/supabase/server'
+import { sessionUser } from '../../lib/supabase/server'
 
 // A signed-in visitor on the marketing site was still being told to sign in
 // (Taha, 2026-09-22). The header button and the hero's own call to action both
@@ -65,7 +65,7 @@ export function SignedInLink({ variant }: { variant: Variant }) {
 }
 
 async function Resolved({ variant }: { variant: Variant }) {
-  const user = await signedInUser()
+  const user = await sessionUser()
   const { className, signedOut, signedIn } = VARIANTS[variant]
 
   return (

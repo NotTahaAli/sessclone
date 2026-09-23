@@ -16,7 +16,10 @@ import { seedFixture, type Fixture } from './harness'
 // and the real function.
 
 const signedInUser = vi.hoisted(() => vi.fn())
-vi.mock('../lib/supabase/server', () => ({ signedInUser }))
+vi.mock('../lib/supabase/server', () => ({
+  signedInUser,
+  sessionUser: signedInUser,
+}))
 
 let fixture: Fixture
 

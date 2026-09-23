@@ -2,7 +2,7 @@ import Link from 'next/link'
 
 import { AcceptForm } from './accept-form'
 import { PanelCredit } from '../../(dashboard)/credit'
-import { signedInUser } from '../../../lib/supabase/server'
+import { sessionUser } from '../../../lib/supabase/server'
 
 // Cache Components (ticket 80) prerenders a static shell for every route. The
 // dashboard earns a real one by streaming the viewer into a static frame
@@ -34,7 +34,7 @@ export default async function Join({
   params: Promise<{ token: string }>
 }) {
   const { token } = await params
-  const user = await signedInUser()
+  const user = await sessionUser()
 
   // Signed out: sign in first and come back here. The token stays in the URL
   // rather than moving into a cookie, so nothing about it is stored anywhere

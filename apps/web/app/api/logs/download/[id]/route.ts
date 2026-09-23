@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { asViewer } from '../../../../../lib/db'
 import { downloadableArtifact } from '../../../../../lib/artifacts'
 import { presignDownload, storageConfigured } from '../../../../../lib/storage'
-import { signedInUser } from '../../../../../lib/supabase/server'
+import { sessionUser } from '../../../../../lib/supabase/server'
 import { viewerLocked } from '../../../../../lib/viewer'
 
 // Ticket 60: downloading a whole Session transcript.
@@ -34,7 +34,7 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const user = await signedInUser()
+  const user = await sessionUser()
   // Not a redirect to sign-in: this URL is fetched as often as it is followed,
   // and a 401 is what a fetch can act on.
   if (!user) return new Response('sign in first', { status: 401 })

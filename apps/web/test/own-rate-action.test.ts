@@ -7,7 +7,10 @@ import { owner as sql, seedFixture, type Fixture } from './harness'
 // since anybody can POST to it whether or not the page rendered a form.
 
 const signedInUser = vi.hoisted(() => vi.fn())
-vi.mock('../lib/supabase/server', () => ({ signedInUser }))
+vi.mock('../lib/supabase/server', () => ({
+  signedInUser,
+  sessionUser: signedInUser,
+}))
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }))
 
 let fixture: Fixture

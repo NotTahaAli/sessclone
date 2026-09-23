@@ -1,9 +1,9 @@
 import { cache } from 'react'
-import { isLocked } from './approval'
+import { approvalRequired, isLocked } from './approval'
 import { asViewer } from './db'
 import { logoPath } from './org-logo'
 import type { SubscriptionStatus } from './tier'
-import { signedInUser } from './supabase/server'
+import { sessionUser } from './supabase/server'
 
 // Ticket 45: the Org context the shell establishes, read once per request.
 //
@@ -84,8 +84,8 @@ type MembershipRow = {
  * `asViewer` transactions for one navigation. React deduplicates them for the
  * life of the request and no longer.
  */
-export const currentViewer = cache(async (): Promise<Viewer | null> => {
-  const user = await signedInUser()
+export const sessionViewer = cache(async (): Promise<Viewer | null> => {
+  const user = await sessionUser()
   if (!user) return null
 
   const [membership] = await asViewer(
@@ -134,13 +134,26 @@ export const currentViewer = cache(async (): Promise<Viewer | null> => {
 })
 
 /**
- * Whether the signed-in viewer's Org is locked (ticket 119). What the
- * dashboard's own API routes ask beside `signedInUser()`, so a locked Org's
- * transcripts and costs are refused there exactly as its pages are by the
- * layout. False for somebody in no Org: the policies already answer them.
+ * The viewer, or `null` while their Org is locked (ticket 119) — what a page
+ * or a Server Action asks. `sessionViewer` is the same read without the lock,
+ * for the shell, which is what draws the waiting page. See `signedInUser` for
+ * why the lock is here rather than in each action.
+ */
+export const currentViewer = cache(async (): Promise<Viewer | null> => {
+  const viewer = await sessionViewer()
+  return viewer && isLocked(viewer.subscriptionStatus) ? null : viewer
+})
+
+/**
+ * Whether the signed-in viewer's Org is locked (ticket 119). What
+ * `signedInUser` asks, and what the dashboard's own API routes ask beside
+ * `sessionUser()` to answer a locked Org with a 403 rather than a 401. False
+ * for somebody in no Org: the policies already answer them. Switched off, it
+ * reads nothing.
  */
 export const viewerLocked = async (): Promise<boolean> => {
-  const viewer = await currentViewer()
+  if (!approvalRequired()) return false
+  const viewer = await sessionViewer()
   return viewer !== null && isLocked(viewer.subscriptionStatus)
 }
 

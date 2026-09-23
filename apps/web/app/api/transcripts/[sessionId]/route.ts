@@ -6,7 +6,7 @@ import {
   storageConfigured,
   ttl,
 } from '../../../../lib/storage'
-import { signedInUser } from '../../../../lib/supabase/server'
+import { sessionUser } from '../../../../lib/supabase/server'
 import { viewerLocked } from '../../../../lib/viewer'
 import { transcriptFiles } from '../../../../lib/transcript-files'
 
@@ -28,7 +28,7 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ sessionId: string }> },
 ) {
-  const user = await signedInUser()
+  const user = await sessionUser()
   if (!user) return new Response('sign in first', { status: 401 })
   // Ticket 119: a locked Org is refused here as its pages are.
   if (await viewerLocked()) {
