@@ -1,4 +1,4 @@
-import { CONTACT_EMAIL } from './constants'
+import { CONTACT_EMAIL, ISSUES } from './constants'
 
 /**
  * What stands where the plans go when the Tiers could not be read.
@@ -14,10 +14,21 @@ export function TiersUnavailable() {
     <p className="text-text-muted py-3 text-body">
       The plans are not loading right now. This page reads the prices live, and
       the read failed. Try again in a minute, or{' '}
-      <a className="text-text underline" href={`mailto:${CONTACT_EMAIL}`}>
-        email us
-      </a>{' '}
-      and we will tell you what a plan costs.
+      {CONTACT_EMAIL ? (
+        <>
+          <a className="text-text underline" href={`mailto:${CONTACT_EMAIL}`}>
+            email us
+          </a>{' '}
+          and we will tell you what a plan costs.
+        </>
+      ) : (
+        <>
+          <a className="text-text underline" href={ISSUES}>
+            ask on the project’s issues
+          </a>
+          .
+        </>
+      )}
     </p>
   )
 }

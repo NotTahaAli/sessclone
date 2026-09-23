@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useCallback, useState, type ChangeEvent, type ReactNode } from 'react'
 
-import { CONTACT_EMAIL, REPOSITORY } from '../constants'
+import { CONTACT_EMAIL, ISSUES, REPOSITORY } from '../constants'
 import {
   MAX_TEAM,
   peopleLabel,
@@ -218,7 +218,13 @@ function PlanRow({
         <div className="mt-2.5 flex flex-wrap gap-2">
           {contact ? (
             <a
-              href={`mailto:${CONTACT_EMAIL}?subject=SessClone%20${encodeURIComponent(plan.name)}`}
+              // With no contact address the ask goes to the project's
+              // issues rather than to an inbox this deployment does not own.
+              href={
+                CONTACT_EMAIL
+                  ? `mailto:${CONTACT_EMAIL}?subject=SessClone%20${encodeURIComponent(plan.name)}`
+                  : ISSUES
+              }
               className={buttonClass('primary')}
             >
               Talk to us
