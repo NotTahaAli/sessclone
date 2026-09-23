@@ -5,6 +5,7 @@ import {
   columnWidths,
   earlierRange,
   keepReading,
+  rangesToStart,
   readWidths,
   toggleColumn,
   workflowColumn,
@@ -84,5 +85,16 @@ describe('keepReading', () => {
   it('stops once the rows overflow, or at the start of the file', () => {
     expect(keepReading({ from: 10, items: 3, ...view })).toBe(false)
     expect(keepReading({ from: 0, items: 0, ...view })).toBe(false)
+  })
+})
+
+describe('rangesToStart', () => {
+  it('walks back to byte 0 a chunk per request', () => {
+    expect(rangesToStart(2500, 1000)).toEqual([
+      { start: 1500, end: 2499 },
+      { start: 500, end: 1499 },
+      { start: 0, end: 499 },
+    ])
+    expect(rangesToStart(0, 1000)).toEqual([])
   })
 })

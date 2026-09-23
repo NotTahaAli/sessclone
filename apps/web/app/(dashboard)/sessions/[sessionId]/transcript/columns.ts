@@ -96,6 +96,23 @@ export const earlierRange = (
     ? null
     : { start: Math.max(0, loadedFrom - chunk), end: loadedFrom - 1 }
 
+/**
+ * Every range "Jump to start" fetches, newest first: `earlierRange` repeated
+ * down to byte 0, so the remainder arrives a chunk per request rather than as
+ * one response of arbitrary size.
+ */
+export const rangesToStart = (
+  loadedFrom: number,
+  chunk = CHUNK_BYTES,
+): { start: number; end: number }[] => {
+  const ranges = []
+  for (let range = earlierRange(loadedFrom, chunk); range;) {
+    ranges.push(range)
+    range = earlierRange(range.start, chunk)
+  }
+  return ranges
+}
+
 /** Room at the top that counts as "near the start" and triggers a load. */
 export const NEAR_TOP = 600
 

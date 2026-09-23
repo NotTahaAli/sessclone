@@ -21,7 +21,13 @@ import {
   type Preset,
 } from '@sessclone/shared'
 
-import { NEAR_TOP, agentColumn, earlierRange, keepReading } from './columns'
+import {
+  NEAR_TOP,
+  agentColumn,
+  earlierRange,
+  keepReading,
+  rangesToStart,
+} from './columns'
 import { ColumnContext, TaskStatusContext, useViewer } from './context'
 import { concat, readBytes, type StoredFile } from './data'
 import { Badge, RowView, rowKey } from './rows'
@@ -106,56 +112,67 @@ export function MainColumn({
   const load = useCallback(
     async (toStart: boolean) => {
       const state = current.current
-      const stored = latest.current
-      const range = toStart
-        ? state.from > 0
-          ? { start: 0, end: state.from - 1 }
-          : null
-        : earlierRange(state.from)
-      if (!range || loading.current) return
+      const next = earlierRange(state.from)
+      // "Jump to start" reads the whole remainder, but a chunk per request:
+      // one response of arbitrary size would hold it all in memory twice.
+      const ranges = toStart ? rangesToStart(state.from) : next ? [next] : []
+      if (ranges.length === 0 || loading.current) return
       loading.current = true
       setBusy(true)
       setError(null)
+      const refresh = async () => {
+        const fresh = await renew(latest.current.id)
+        if (fresh) latest.current = fresh
+        return fresh
+      }
       try {
-        const { bytes, whole } = await readBytes(
-          stored,
-          range,
-          async () => {
-            const fresh = await renew(stored.id)
-            if (fresh) latest.current = fresh
-            return fresh
-          },
-          signal,
-        )
-        const first = state.from === stored.sizeBytes
-        const next: Loaded = whole
-          ? {
-              items: parseLines(
+        // Newest first, so each chunk's `head` completes the line the chunk
+        // before it (earlier in the file) began.
+        const parts: Item[][] = [state.items]
+        let from = state.from
+        let head = state.head
+        for (const range of ranges) {
+          // oxlint-disable-next-line no-await-in-loop -- each chunk stitches onto the last; the signal aborts the loop
+          const { bytes, whole } = await readBytes(
+            latest.current,
+            range,
+            refresh,
+            signal,
+          )
+          if (whole) {
+            // A server that ignored Range sent the whole file.
+            parts.length = 0
+            parts.push(
+              parseLines(
                 splitChunk(bytes, 0, { atFileStart: true, atFileEnd: true })
                   .lines,
               ),
-              from: 0,
-              head: EMPTY,
-            }
-          : (() => {
-              const split = splitChunk(concat(bytes, state.head), range.start, {
-                atFileStart: range.start === 0,
-                atFileEnd: first,
-              })
-              return {
-                items: [...parseLines(split.lines), ...state.items],
-                from: range.start,
-                head: split.head,
-              }
-            })()
+            )
+            from = 0
+            head = EMPTY
+            break
+          }
+          const split = splitChunk(concat(bytes, head), range.start, {
+            atFileStart: range.start === 0,
+            atFileEnd: from === latest.current.sizeBytes,
+          })
+          parts.push(parseLines(split.lines))
+          from = range.start
+          head = split.head
+        }
+        const loadedNow: Loaded = {
+          items: parts.toReversed().flat(),
+          from,
+          head,
+        }
         const element = scroller.current
         settle.current = toStart
           ? 'top'
           : state.items.length === 0 || !element
             ? 'bottom'
             : { fromBottom: element.scrollHeight - element.scrollTop }
-        current.current = next
-        setLoaded(next)
+        current.current = loadedNow
+        setLoaded(loadedNow)
       } catch (failure) {
         if (!signal.aborted) {
           setError(
