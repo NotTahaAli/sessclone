@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useCallback, useState, type ChangeEvent, type ReactNode } from 'react'
 
-import { CONTACT_EMAIL, ISSUES, REPOSITORY } from '../constants'
+import { REPOSITORY } from '../constants'
 import {
   MAX_TEAM,
   peopleLabel,
@@ -12,6 +12,7 @@ import {
   shortPrice,
   unfitReason,
 } from '../../../lib/plans'
+import { contactEmail } from '../../../lib/site'
 import type { TierPricing } from '../../../lib/tiers'
 import { buttonClass, SectionBreak } from '../../_ui/primitives'
 
@@ -178,6 +179,7 @@ function PlanRow({
     ? { amount: shortPrice(plan), per: why }
     : priceFor(plan, team)
   const contact = plan.basePriceUsd === null && plan.seatPriceUsd === null
+  const email = contactEmail()
 
   return (
     <li
@@ -217,18 +219,16 @@ function PlanRow({
       {picked ? (
         <div className="mt-2.5 flex flex-wrap gap-2">
           {contact ? (
-            <a
-              // With no contact address the ask goes to the project's
-              // issues rather than to an inbox this deployment does not own.
-              href={
-                CONTACT_EMAIL
-                  ? `mailto:${CONTACT_EMAIL}?subject=SessClone%20${encodeURIComponent(plan.name)}`
-                  : ISSUES
-              }
-              className={buttonClass('primary')}
-            >
-              Talk to us
-            </a>
+            // With no contact address there is nobody to talk to: no CTA,
+            // rather than a link to somebody else's inbox or issue tracker.
+            email ? (
+              <a
+                href={`mailto:${email}?subject=SessClone%20${encodeURIComponent(plan.name)}`}
+                className={buttonClass('primary')}
+              >
+                Talk to us
+              </a>
+            ) : null
           ) : (
             // Until billing exists, sign-up is the waitlist: it records the
             // plan as an inactive subscription for the operator to approve.
