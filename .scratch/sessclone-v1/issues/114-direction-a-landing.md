@@ -8,7 +8,7 @@
 
 **Blocked by:** 111.
 
-**Status:** todo
+**Status:** done
 
-- [ ] Landing rebuilt
-- [ ] Screenshots
+- [x] Landing rebuilt
+- [x] Screenshots

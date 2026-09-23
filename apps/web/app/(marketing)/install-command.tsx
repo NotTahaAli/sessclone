@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { pillClass } from '../_ui/primitives'
+
 // A client module because it is a control the visitor operates, and for no
 // other reason: `'use client'` sits on the leaf and nowhere above it, so the
 // hero around this stays server-rendered markup.
@@ -33,20 +35,16 @@ export function InstallCommand({ commands }: { commands: string[] }) {
   }, [commands])
 
   return (
-    <div className="border-rule-strong bg-surface flex flex-col gap-3 border p-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="text-figure flex flex-col gap-1 font-mono">
+    <div className="bg-surface border-rule flex items-center justify-between gap-3 rounded-[10px] border py-2 pr-2 pl-3">
+      <div className="flex min-w-0 flex-col overflow-x-auto font-mono text-caption leading-[1.8] whitespace-nowrap">
         {commands.map((command) => (
-          <code key={command} className="break-all">
+          <code key={command}>
             <span className="text-text-muted">$ </span>
             {command}
           </code>
         ))}
       </div>
-      <button
-        type="button"
-        onClick={copy}
-        className="border-control-border text-label hover:bg-surface-hover h-[var(--control-h)] shrink-0 border px-4 font-mono uppercase"
-      >
+      <button type="button" onClick={copy} className={`${pillClass} shrink-0`}>
         {copied ? 'Copied' : 'Copy'}
       </button>
     </div>

@@ -10,8 +10,10 @@
 
 **Blocked by:** 111.
 
-**Status:** todo
+**Status:** done
 
-- [ ] Slider and plan rows from `tiers`
-- [ ] Comparison table
-- [ ] Screenshots
+- [x] Slider and plan rows from `tiers`
+- [x] Comparison table
+- [x] Screenshots
+
+Note (2026-09-23): the Enterprise line sits in the comparison's Per-model rates row, shown for a Tier whose `features.own_rates` is true; until ticket 121 writes that key, `lib/plans.ts` falls back to the `enterprise` key (marked `ponytail:`). The plan's own list still reads `features.includes`, which 121's "Pricing copy updated" changes.
