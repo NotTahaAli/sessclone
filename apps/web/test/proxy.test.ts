@@ -88,3 +88,36 @@ test('the marketing page is left alone either way', async () => {
   // which is `app/(marketing)/signed-in-link.tsx`.
   expect((await at('/')).status).toBe(200)
 })
+
+test('pages and files read before an account are public', async () => {
+  // Signed out throughout: none of these may redirect to the sign-in page, or
+  // crawlers index `/sign-in` and share cards come up blank.
+  for (const path of [
+    '/pricing',
+    '/docs',
+    '/docs/self-hosting',
+    '/api/search?q=install',
+    '/robots.txt',
+    '/sitemap.xml',
+    '/favicon.ico',
+    '/icon.svg',
+    '/icon0.png',
+    '/apple-icon.png',
+    '/opengraph-image',
+    '/opengraph-image.png',
+    '/twitter-image-abc123',
+    '/manifest.webmanifest',
+    '/llms.txt',
+  ]) {
+    expect({ path, status: (await at(path)).status }).toEqual({
+      path,
+      status: 200,
+    })
+  }
+})
+
+test('a lookalike of a public file is not public', async () => {
+  for (const path of ['/robots.txt.bak', '/icons/costs', '/llms.txt/x']) {
+    expect((await at(path)).status).toBe(307)
+  }
+})
