@@ -2,6 +2,7 @@ import Link from 'next/link'
 
 import { labelSessionAction } from './actions'
 import { Shelf } from './shelf'
+import { DownloadTranscript } from './transcript/download'
 import { ColumnHead } from '../../finder'
 import { InlineName } from '../../inline-name'
 import { PageHeader } from '../../page-header'
@@ -211,6 +212,8 @@ export async function sessionDetailView({
         archival={archival}
         agentRuns={agentRuns.length}
         view={viewPath}
+        sessionId={session.sessionId}
+        memberId={member}
       />
 
       {column ? (
@@ -393,7 +396,11 @@ function Transcripts({
   archival,
   agentRuns,
   view,
+  sessionId,
+  memberId,
 }: {
+  sessionId: string
+  memberId: string
   transcripts: StoredTranscript[]
   archival: 'off' | 'excluded' | 'on' | null
   agentRuns: number
@@ -438,14 +445,29 @@ function Transcripts({
                 sub={transcript.agentId ? undefined : 'Open in the viewer'}
               />
               <p className="pl-[22px] text-caption">
-                <a
-                  href={`/api/logs/download/${transcript.id}`}
-                  target="_blank"
-                  rel="noopener"
-                  className="text-text-muted hover:text-text underline"
-                >
-                  Download
-                </a>
+                {transcript.chunked ? (
+                  // Ticket 133: assembled in the browser from its chunks.
+                  <DownloadTranscript
+                    sessionId={sessionId}
+                    memberId={memberId}
+                    agentId={transcript.agentId}
+                    className="text-text-muted hover:text-text underline"
+                    label={
+                      transcript.agentId
+                        ? `Download the transcript of subagent ${transcript.agentId}`
+                        : 'Download the transcript of this session'
+                    }
+                  />
+                ) : (
+                  <a
+                    href={`/api/logs/download/${transcript.id}`}
+                    target="_blank"
+                    rel="noopener"
+                    className="text-text-muted hover:text-text underline"
+                  >
+                    Download
+                  </a>
+                )}
               </p>
             </li>
           ))}
