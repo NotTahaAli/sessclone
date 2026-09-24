@@ -466,16 +466,20 @@ export const deleteStoredSession = async (
     ), pending as (
       -- Uploads presigned under these files and not yet confirmed: a pass
       -- mid-flight has PUT, or is about to PUT, objects no row names. Taking
-      -- them here also refuses that pass's confirm.
-      delete from log_upload_pending upload
-       using transcript
-       where upload.member_id = transcript.member_id
-         and upload.session_id = transcript.session_id
-         and (upload.kind in ('transcript', 'agent_meta')
-                and upload.agent_id is not distinct from transcript.agent_id
-              or upload.kind = 'workflow_journal'
-                and transcript.agent_id is null)
-      returning upload.storage_key
+      -- them here also refuses that pass's confirm. A PUT can still land
+      -- after this, so each is queued for the sweep too, not before its URL
+      -- is dead.
+      select sessclone_forget_pending(array(
+        select upload.storage_key
+          from log_upload_pending upload
+          join transcript
+            on upload.member_id = transcript.member_id
+           and upload.session_id = transcript.session_id
+         where upload.kind in ('transcript', 'agent_meta')
+                 and upload.agent_id is not distinct from transcript.agent_id
+            or upload.kind = 'workflow_journal'
+                 and transcript.agent_id is null
+      )) as storage_key
     )
     select storage_key, true as artifact from artifacts
     union all
@@ -529,12 +533,14 @@ export const deleteStoredProject = async (
        where id in (select id from doomed)
       returning storage_key, kind
     ), pending as (
-      -- Uploads presigned in this Project and not yet confirmed (ADR 0008).
-      delete from log_upload_pending
-       where member_id = ${memberId}
-         and member_id in (select sessclone_own_member_ids())
-         and project_id is not distinct from ${projectId}
-      returning storage_key
+      -- Uploads presigned in this Project and not yet confirmed (ADR 0008),
+      -- queued for the sweep as well for a PUT that lands after this.
+      select sessclone_forget_pending(array(
+        select storage_key from log_upload_pending
+         where member_id = ${memberId}
+           and member_id in (select sessclone_own_member_ids())
+           and project_id is not distinct from ${projectId}
+      )) as storage_key
     )
     select storage_key, kind from artifacts
     union all

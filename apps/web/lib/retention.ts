@@ -193,6 +193,8 @@ export const sweepRetention = async (
                              where chunk.storage_key = orphan.storage_key)
             and not exists (select 1 from log_upload_pending pending
                              where pending.storage_key = orphan.storage_key)
+            -- A key taken from the ledger unrecorded waits out its URL.
+            and orphan.not_before <= now()
           order by orphan.noticed_at limit ${limit}
        )
       returning storage_key

@@ -7,7 +7,8 @@
 -- the whole-file case, whose tail is the object `storage_key` already names.
 -- Nothing is backfilled.
 --
--- No function is added or replaced, so no `search_path` pin is involved.
+-- One function is added, `sessclone_forget_pending`, and it pins
+-- `search_path = public, pg_temp` as every `security definer` must.
 
 alter table log_artifacts
   add column sealed_bytes bigint not null default 0
@@ -164,3 +165,45 @@ create policy log_upload_pending_delete on log_upload_pending for delete
 -- owning connection, after it has verified an API key.
 
 grant select, delete on log_upload_pending to sessclone_app;
+
+-- A key leaves the ledger unrecorded — a refused confirm, a Member's delete,
+-- a pass's unused keys — while its PUT URL may still be live, so a late PUT
+-- can land after the key was queued. The sweep deletes an orphan only once
+-- `not_before` has passed, which is the pending entry's `expires_at`: after
+-- the URL's life, so no PUT can land after the delete. Existing rows get
+-- the migration's time and go as before.
+alter table storage_orphans
+  add column not_before timestamptz not null default now();
+
+comment on column storage_orphans.not_before is
+  'The sweep deletes the object no earlier than this: a key queued from '
+  'log_upload_pending waits until its presigned PUT URL is dead (ADR 0008).';
+
+-- A Member's own delete takes the uploads pending under what it destroys
+-- and must queue them, and `storage_orphans` is the ingest role's alone:
+-- `sessclone_app` may not read it, and an RLS insert policy could not raise
+-- the `not_before` of a key already queued (on conflict do update needs a
+-- read policy there). So this one narrow `security definer` does it: it
+-- takes only the named keys pending for the caller's own Members, and
+-- queues each no earlier than its URL's expiry.
+create or replace function sessclone_forget_pending(keys text[])
+  returns setof text
+  language sql volatile security definer
+  set search_path = public, pg_temp as $$
+  with gone as (
+    delete from log_upload_pending
+     where storage_key = any(keys)
+       and member_id in (select sessclone_own_member_ids())
+    returning storage_key, expires_at
+  ), queued as (
+    insert into storage_orphans (storage_key, not_before)
+    select storage_key, max(expires_at) from gone group by storage_key
+    on conflict (storage_key) do update
+       set not_before = greatest(storage_orphans.not_before,
+                                 excluded.not_before)
+  )
+  select distinct storage_key from gone
+$$;
+
+revoke all on function sessclone_forget_pending(text[]) from public;
+grant execute on function sessclone_forget_pending(text[]) to sessclone_app;

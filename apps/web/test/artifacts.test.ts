@@ -7,6 +7,7 @@ import {
   storedProjects,
   storedSessions,
 } from '../lib/artifacts'
+import { sweepRetention } from '../lib/retention'
 import {
   asRole,
   asUser,
@@ -923,4 +924,57 @@ test('destroying a Project takes the uploads still pending in it', async () => {
 
   expect(deleted.toSorted()).toEqual([one.key, tail].toSorted())
   expect(await pendingLeft()).toEqual([kept])
+})
+
+test('a PUT that lands after a delete is swept once its URL has expired', async () => {
+  // ADR 0008: the delete removes the objects already there, but a presigned
+  // PUT stays valid until its expiry and can land afterwards. So each pending
+  // key is also queued for the sweep, not before its URL is dead.
+  const projectId = await project('github.com/acme/api')
+  const main = await artifact({ projectId })
+  const tail = await pendingUpload({
+    storageKey: 'p/session-1/tail-1-0123456789abcdef.jsonl',
+  })
+  expect(await asMember((tx) => deleteStoredSession(tx, main.id))).toBe(true)
+  expect(deleted).toContain(tail)
+  deleted.length = 0
+
+  // The late PUT lands now. Before the URL expires the sweep leaves it.
+  await sweepRetention(sql)
+  expect(deleted).toEqual([])
+
+  await sql`update storage_orphans set not_before = now() - interval '1 second'`
+  await sweepRetention(sql)
+  expect(deleted).toEqual([tail])
+})
+
+test('a Project delete queues its pending keys the same way', async () => {
+  const projectId = await project('github.com/acme/api')
+  await artifact({ projectId })
+  const tail = await pendingUpload({ storageKey: 'p/tail-1-aa', projectId })
+
+  await asMember((tx) =>
+    deleteStoredProject(tx, fixture.acme.members.member, projectId),
+  )
+
+  const queued = await sql<{ storage_key: string; waits: boolean }[]>`
+    select storage_key, not_before > now() + interval '30 minutes' as waits
+      from storage_orphans
+  `
+  expect(queued).toEqual([{ storage_key: tail, waits: true }])
+})
+
+test('nobody queues or takes another Member’s pending keys', async () => {
+  const theirs = await pendingUpload({ storageKey: 'p/tail-1-theirs' })
+
+  const taken = await asRole(
+    fixture.acme,
+    'admin',
+    (tx) =>
+      tx`select sessclone_forget_pending(array[${theirs}]) as storage_key`,
+  )
+
+  expect(taken).toEqual([])
+  expect(await pendingLeft()).toEqual([theirs])
+  expect(await sql`select 1 from storage_orphans`).toHaveLength(0)
 })
