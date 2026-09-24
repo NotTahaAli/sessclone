@@ -799,3 +799,16 @@ test('a storage failure rolls back the chunk rows with their artifact', async ()
   `
   expect(row!.count).toBe(1)
 })
+
+test('a chunked transcript is marked so the page downloads it in the browser', async () => {
+  // Ticket 133: its object is only the tail, so the 302 would be half a file.
+  const projectId = await project('github.com/acme/api')
+  const main = await artifact({ projectId })
+  await artifact({ projectId, agentId: 'agent-7' })
+  await sealChunks(main.id, 1)
+
+  const { sessions } = await asMember(storedSessions)
+  expect(
+    Object.fromEntries(sessions.map((s) => [s.agentId ?? 'main', s.chunked])),
+  ).toEqual({ main: true, 'agent-7': false })
+})

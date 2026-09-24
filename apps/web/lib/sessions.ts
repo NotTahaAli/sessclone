@@ -610,6 +610,8 @@ export type StoredTranscript = {
   agentId: string | null
   bytes: number
   uploadedAt: string
+  /** ADR 0008: downloaded in the browser (ticket 133), not through the 302. */
+  chunked: boolean
 }
 
 export const sessionTranscripts = async (
@@ -623,9 +625,10 @@ export const sessionTranscripts = async (
       agent_id: string | null
       size_bytes: string
       uploaded_at: Date
+      chunked: boolean
     }[]
   >`
-    select id, agent_id, size_bytes, uploaded_at
+    select id, agent_id, size_bytes, uploaded_at, sealed_bytes > 0 as chunked
       from log_artifacts
      where member_id = ${memberId}
        and session_id = ${sessionId}
@@ -639,6 +642,7 @@ export const sessionTranscripts = async (
     agentId: row.agent_id,
     bytes: Number(row.size_bytes),
     uploadedAt: row.uploaded_at.toISOString(),
+    chunked: row.chunked,
   }))
 }
 

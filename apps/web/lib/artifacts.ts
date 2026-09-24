@@ -93,6 +93,11 @@ export type StoredSession = {
   bytes: number
   uploadedAt: Date
   /**
+   * ADR 0008: stored as sealed chunks plus a tail, so the page downloads it
+   * in the browser (ticket 133) rather than through the 302.
+   */
+  chunked: boolean
+  /**
    * When the last message of this Session was reported, or null when no Turn
    * of it is readable.
    *
@@ -223,10 +228,11 @@ export const storedSessions = async (
       agent_id: string | null
       size_bytes: string
       uploaded_at: Date
+      chunked: boolean
     }[]
   >`
     select id, member_id, project_id, session_id, agent_id, size_bytes,
-           uploaded_at
+           uploaded_at, sealed_bytes > 0 as chunked
       from log_artifacts
      -- One Member by equality when a group is named, which is what lets
      -- log_artifacts_member_uploaded_idx answer the order as well as the
@@ -259,6 +265,7 @@ export const storedSessions = async (
     agentId: row.agent_id,
     bytes: Number(row.size_bytes),
     uploadedAt: row.uploaded_at,
+    chunked: row.chunked,
   }))
 
   const last = await lastTurns(tx, page)
@@ -349,11 +356,19 @@ export const downloadableArtifact = async (
   storageKey: string
   filename: string
   contentType: string
+  /** ADR 0008: `storageKey` is only the tail; the page assembles the rest. */
+  chunked: boolean
 } | null> => {
   const [row] = await tx<
-    { member_id: string; storage_key: string; name: string; kind: string }[]
+    {
+      member_id: string
+      storage_key: string
+      name: string
+      kind: string
+      chunked: boolean
+    }[]
   >`
-    select member_id, storage_key, kind,
+    select member_id, storage_key, kind, sealed_bytes > 0 as chunked,
            case when agent_id is null then session_id
                 when kind = 'workflow_journal'
                   then session_id || '-workflow-' || agent_id
@@ -374,6 +389,7 @@ export const downloadableArtifact = async (
     storageKey: row.storage_key,
     filename: `${row.name}${extension}`,
     contentType,
+    chunked: row.chunked,
   }
 }
 

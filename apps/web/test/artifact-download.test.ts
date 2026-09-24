@@ -234,3 +234,22 @@ test('the lock is the owning Org’s, not the viewer’s other Org’s', async (
     vi.unstubAllEnvs()
   }
 })
+
+test('a chunked transcript is refused rather than redirected to its tail alone', async () => {
+  // Ticket 133, ADR 0008: the object is only the bytes after the sealed
+  // chunks, so a 302 would hand over the end of the file as if it were all.
+  const id = await seedArtifact({
+    memberId: fixture.acme.members.member,
+    orgId: fixture.acme.id,
+  })
+  await sql`
+    update log_artifacts
+       set sealed_bytes = 1024, sealed_sha256 = ${'c'.repeat(64)}
+     where id = ${id}
+  `
+
+  const answer = await as('member', id)
+
+  expect(answer.status).toBe(409)
+  expect(answer.headers.get('location')).toBeNull()
+})

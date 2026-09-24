@@ -52,6 +52,16 @@ export async function GET(
     return new Response('this Org is waiting for approval', { status: 403 })
   }
 
+  // ADR 0008: a chunked transcript's object is only its tail, and a 302 to it
+  // would hand over the end of the file as if it were all of it. The dashboard
+  // assembles those in the browser (ticket 133); say so rather than redirect.
+  if (artifact.chunked) {
+    return new Response(
+      'this transcript is stored in chunks; download it from the dashboard',
+      { status: 409 },
+    )
+  }
+
   // A row can outlive its bucket's configuration — a deployment that moved
   // providers, or a self-hoster mid-setup. Say so rather than signing a URL
   // that points nowhere.
