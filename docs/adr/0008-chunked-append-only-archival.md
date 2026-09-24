@@ -133,8 +133,10 @@ stored_bytes, sha256, storage_key, member_id)`. Its RLS policies ship in the
 same migration and mirror `log_artifacts`: read for
 `sessclone_visible_member_ids()`, delete for `sessclone_own_member_ids()`, and
 no insert or update policy. `member_id` is denormalised so each policy is one
-indexed membership check, not a join. `artifact_id` references
-`log_artifacts` **`on delete no action`**, not `cascade`. A cascade would
+indexed membership check, not a join, and the foreign key is
+`(artifact_id, member_id)` onto `log_artifacts (id, member_id)`, so the copy
+cannot disagree with its artifact. That key is
+**`on delete no action`**, not `cascade`. A cascade would
 delete the chunk rows silently and lose the keys of objects that still hold
 source code. With `no action`, a delete path that forgets the chunks fails
 loudly. The paths that remember them delete chunks and artifact in one
@@ -147,8 +149,8 @@ count. What the bucket holds is `sum(stored_bytes)` plus the tail.
 
 ### Readers
 
-- **Viewer.** The file list gains `tailOffset` and `chunks: { rawOffset,
-  rawLength, url }[]`, each chunk with a presigned GET. One pure planner maps
+- **Viewer.** The file list gains `tailOffset` and
+  `chunks: { rawOffset, rawLength, url }[]`, each chunk with a presigned GET. One pure planner maps
   "the next earlier piece before raw byte `from`" onto either a Range read
   inside the tail object or one whole chunk. A chunk is fetched whole and
   gunzipped with `DecompressionStream('gzip')`. The backwards model and the

@@ -12,9 +12,9 @@
 
 **Blocked by:** 104
 
-**Status:** todo
+**Status:** done
 
-- [ ] Migration `supabase/migrations/<ts>_transcript_chunks.sql`, with a comment on the table and each new column
-- [ ] RLS test against real Postgres (`apps/web/test/rls.test.ts` pattern): a Manager outside Scope reads no chunk rows. An Admin reads them and cannot delete them. The owning Member deletes them.
-- [ ] Test against real Postgres: deleting a `log_artifacts` row that still has chunks fails with a 23503. Deleting both in one statement through a data-modifying CTE succeeds. Both directions are verified red.
+- [x] Migration `supabase/migrations/20260923203000_transcript_chunks.sql`, with a comment on the table and each new column
+- [x] RLS test against real Postgres (`apps/web/test/rls.test.ts` pattern): a Manager outside Scope reads no chunk rows. An Admin reads them and cannot delete them. The owning Member deletes them.
+- [x] Test against real Postgres: deleting a `log_artifacts` row that still has chunks fails with a 23503. Deleting both in one statement through a data-modifying CTE succeeds. Both directions are verified red.
 - [ ] **Production: Taha runs the migration SQL before the deploy of 129/130.** The columns are additive and defaulted, so code still live in that window runs unchanged.
