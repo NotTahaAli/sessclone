@@ -199,22 +199,31 @@ export const scanFile = async (path, size, { chunkBytes } = {}) => {
   } catch {
     return null
   }
-  return { sha256: all.digest('hex'), cuts }
+  return { sha256: all.digest('hex'), size, cuts }
 }
 
 /**
  * What to seal after the deployment's sealed prefix, from a scan. Pure.
  *
+ * `'stale'` when the deployment has sealed more bytes than this scan read:
+ * another pass read the file later and sealed more, so this one is behind and
+ * ends quietly — its whole file would roll the archive back. The next pass
+ * reads the file again and catches up. A file truly truncated below what is
+ * sealed is not archived again until it grows past it. Sealed bytes within
+ * the scan but past its last cut are not staleness: a cut depends only on the
+ * bytes before it, so this scan would have found it, and the file differs.
+ *
  * `'mismatch'` when no cut ends at the sealed bytes or its prefix hashes
- * differently: the file was rewritten or truncated (or sealed by rules other
- * than these), so the caller falls back to the whole file. Otherwise at most
+ * differently: the file was rewritten (or sealed by rules other than these),
+ * so the caller falls back to the whole file. Otherwise at most
  * `MAX_SEAL` new chunks, in order from seq `sealed.chunks + 1`, and the
  * SHA-256 of every raw byte up to the last of them.
  *
- * @param {{ cuts: { end: number, prefix: string, sha256: string }[] }} scan
+ * @param {{ size: number, cuts: { end: number, prefix: string, sha256: string }[] }} scan
  * @param {{ bytes: number, sha256: string | null, chunks: number }} sealed
  */
 export const planFrom = (scan, sealed) => {
+  if (sealed.bytes > scan.size) return 'stale'
   const from =
     sealed.bytes === 0
       ? 0
@@ -606,6 +615,8 @@ export const archiveTranscript = async ({
     if (!validSealed(sealed) || !scan) return 'whole'
     const plan = planFrom(scan, sealed)
     if (plan === 'mismatch') return 'whole'
+    // Behind a pass that read more of the file: left, unsettled, to the next.
+    if (plan === 'stale') return { archived: false, refused: 'stale' }
 
     const { chunks } = plan
     let tail = answer

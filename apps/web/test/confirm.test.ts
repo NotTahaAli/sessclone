@@ -875,6 +875,8 @@ test('a whole confirm from an older Collector clears the chunks and deletes thei
   await withArchival(fixture.acme.id)
   await seedSession()
   await seedChunked(2)
+  // The whole file holds at least what was sealed.
+  stored.sizes[`${base()}.jsonl`] = 3 * MiB
 
   // The shape every Collector before ADR 0008 sends: no layout at all.
   const [status, body] = await answer(
@@ -888,7 +890,7 @@ test('a whole confirm from an older Collector clears the chunks and deletes thei
     storage_key: `${base()}.jsonl`,
     sealed_bytes: '0',
     sealed_sha256: null,
-    size_bytes: '4096',
+    size_bytes: String(3 * MiB),
   })
   expect(await orphanKeys()).toEqual(
     [chunkAt(1), chunkAt(2), tailAt(2)].toSorted(),
@@ -902,6 +904,7 @@ test('replaced objects are queued in the transaction, never deleted by the confi
   await withArchival(fixture.acme.id)
   await seedSession()
   await seedChunked(1)
+  stored.sizes[`${base()}.jsonl`] = 2 * MiB
 
   expect((await ask({ storageKey: `${base()}.jsonl` })).status).toBe(200)
   expect(stored.deleted).toEqual([])
@@ -1219,4 +1222,19 @@ test('after a sealing pass confirms, none of its pending keys remain', async () 
       from storage_orphans
   `
   expect(queued).toEqual({ storage_key: unused, waits: true })
+})
+
+test('a whole file shorter than what is sealed is stale, and rolls nothing back', async () => {
+  // A pass that read the file before another sealed more. Recording its
+  // whole file would drop the newer chunks.
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await seedChunked(2)
+  stored.sizes[`${base()}.jsonl`] = 2 * MiB - 1
+
+  expect(
+    (await answer(await ask({ storageKey: `${base()}.jsonl` })))[1],
+  ).toMatchObject({ refused: 'stale_chunks' })
+  expect(await chunkRows()).toHaveLength(2)
+  expect((await sealedRow())?.storage_key).toBe(tailAt(2))
 })

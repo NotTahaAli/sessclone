@@ -645,6 +645,7 @@ test('the plan checks the sealed prefix before continuing from it', async () => 
   const sealed = { bytes: 64, sha256: sha(prefix), chunks: 1 }
   const size = 64 + 80
 
+  const raw104 = () => Buffer.concat([prefix, line(40)])
   const plan = await planSeals(file, size, sealed, { chunkBytes: 40 })
   expect(plan.chunks).toEqual([
     { seq: 2, rawOffset: 64, rawLength: 40, sha256: sha(line(40)) },
@@ -657,8 +658,15 @@ test('the plan checks the sealed prefix before continuing from it', async () => 
   // Rewritten: same length, different bytes.
   const rewritten = { ...sealed, sha256: sha(line(64).fill('z', 0, 1)) }
   expect(await planSeals(file, size, rewritten)).toBe('mismatch')
-  // Truncated: the file is now shorter than what is sealed.
-  expect(await planSeals(file, 50, sealed)).toBe('mismatch')
+  // Behind: another pass read more of the file and sealed past this scan.
+  // A whole file from here would roll the archive back.
+  expect(await planSeals(file, 50, sealed)).toBe('stale')
+  const beyond = { bytes: 104, sha256: sha(raw104()), chunks: 2 }
+  expect(await planSeals(file, 90, beyond, { chunkBytes: 40 })).toBe('stale')
+  // Within what was read but off every cut is a rewrite, not staleness.
+  expect(await planSeals(file, 90, sealed, { chunkBytes: 1000 })).toBe(
+    'mismatch',
+  )
   // Sealed somewhere this Collector would not have cut: the plan cannot
   // continue from it, so the pass falls back to the whole file.
   const raw = Buffer.concat([prefix, line(40), line(40)])
@@ -883,30 +891,39 @@ test('a transcript under 1 MiB is archived as it always was', async () => {
   expect(sha(sentRaw(requests))).toBe(sha(raw))
 })
 
-test('a truncated or rewritten transcript falls back to the whole file', async () => {
+test('a rewritten transcript falls back to the whole file', async () => {
   const prefix = line(100)
   const raw = Buffer.concat([prefix, line(30)])
-  for (const sealed of [
-    // Truncated: more is sealed than the file now holds.
-    { bytes: 500, sha256: sha(line(500)), chunks: 1 },
-    // Rewritten: the prefix hashes differently.
-    { bytes: 100, sha256: sha(line(100).fill('z', 0, 1)), chunks: 1 },
-  ]) {
-    // eslint-disable-next-line no-await-in-loop -- one trigger at a time, so a failure names which
-    const { result, requests } = await archiveChunked(raw, { sealed })
-    expect(result).toMatchObject({ archived: true })
-    expect(steps(requests)).toEqual([
-      'presign chunked',
-      'presign whole',
-      'put whole',
-      'confirm',
-    ])
-    expect(sha(sentRaw(requests))).toBe(sha(raw))
-    expect(requests.at(-1).body).toMatchObject({
-      layout: 'whole',
-      storageKey: 'p/session-a.jsonl',
-    })
+  // The prefix hashes differently.
+  const sealed = {
+    bytes: 100,
+    sha256: sha(line(100).fill('z', 0, 1)),
+    chunks: 1,
   }
+  const { result, requests } = await archiveChunked(raw, { sealed })
+  expect(result).toMatchObject({ archived: true })
+  expect(steps(requests)).toEqual([
+    'presign chunked',
+    'presign whole',
+    'put whole',
+    'confirm',
+  ])
+  expect(sha(sentRaw(requests))).toBe(sha(raw))
+  expect(requests.at(-1).body).toMatchObject({
+    layout: 'whole',
+    storageKey: 'p/session-a.jsonl',
+  })
+})
+
+test('a pass behind what is sealed ends quietly, and uploads nothing', async () => {
+  // Another pass read the file later and sealed past this pass's scan. A
+  // whole file from here would drop the newer chunks.
+  const raw = Buffer.concat([line(100), line(30)])
+  const { result, requests } = await archiveChunked(raw, {
+    sealed: { bytes: 500, sha256: sha(line(500)), chunks: 1 },
+  })
+  expect(result).toEqual({ archived: false, refused: 'stale' })
+  expect(steps(requests)).toEqual(['presign chunked'])
 })
 
 test('a deployment that does not chunk gets the whole file, as today', async () => {

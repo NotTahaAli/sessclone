@@ -345,6 +345,18 @@ export async function POST(request: Request) {
         if (!still) throw new StaleChunks()
       }
 
+      // A whole file shorter than what is sealed is a pass that read the file
+      // before another sealed more: recording it would drop the newer chunks
+      // and roll the transcript back. A file truly truncated below its sealed
+      // bytes is refused too, until it grows past them (ADR 0008).
+      if (
+        !chunked &&
+        current &&
+        tail.sizeBytes < Number(current.sealed_bytes)
+      ) {
+        throw new StaleChunks()
+      }
+
       // A whole-file pass — every older Collector's — clears the chunks: its
       // file would otherwise be read after them as a duplicate. So does a
       // chunked pass starting again from zero, whose old chunks sit under a
