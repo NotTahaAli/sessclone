@@ -11,16 +11,16 @@
   - There is one new transient refusal, `stale_chunks`.
 - `artifactKey` learns the chunk and tail keys from ADR 0008. The tail with zero chunks stays `…/<session>.jsonl`. Only `kind = 'transcript'` may chunk; any other kind with `layout: 'chunked'` is answered as `whole`.
 - Tier, `archival_off`, `project_excluded`, `no_turns` and the whole-file `unchanged` guard are checked before anything chunk-related and do not change.
-- The confirm locks the artifact row (`for update`), checks that the new chunks follow on from `sealed_bytes` and the next seq, and HEADs every new chunk plus the tail in parallel (at most 17) for `stored_bytes` and the tail's raw size. Then, in one transaction, it inserts the chunk rows and updates `storage_key`, `size_bytes`, `sha256`, `sealed_bytes` and `sealed_sha256`. The old tail is deleted after commit through the existing replaced-key path, including its `storage_orphans` fallback.
+- The confirm serialises on the transcript's identity (a transaction-scoped advisory lock, since a first upload has no row to lock; ADR 0008 updated), checks that the new chunks follow on from `sealed_bytes` and the next seq, and HEADs every new chunk plus the tail in parallel (at most 17) for `stored_bytes` and the tail's raw size. Then, in one transaction, it inserts the chunk rows and updates `storage_key`, `size_bytes`, `sha256`, `sealed_bytes` and `sealed_sha256`. The old tail is deleted after commit through the existing replaced-key path, including its `storage_orphans` fallback.
 - `layout: 'whole'`, which includes every older Collector's confirm, deletes the row's chunk rows in the same statement as the upsert. Their objects go after commit, and a failed delete lands in `storage_orphans`.
 - A Session that moved Project (`stale_key`) starts chunking again from zero under its new prefix. The old chunks go with the replaced row.
 
 **Blocked by:** 128
 
-**Status:** todo
+**Status:** done
 
-- [ ] Zod contract unit tests: an old request still parses with defaults; `seal` without `chunked` is refused; `seal` over 16 is refused
-- [ ] `apps/web/test/presign.test.ts` and `confirm.test.ts` against real Postgres, with storage mocked as today:
+- [x] Zod contract unit tests: an old request still parses with defaults; `seal` without `chunked` is refused; `seal` over 16 is refused
+- [x] `apps/web/test/presign.test.ts` and `confirm.test.ts` against real Postgres, with storage mocked as today:
   - a steady-state tail confirm
   - a sealing confirm that writes the chunk rows and moves the tail key
   - a non-contiguous chunk list refused as `stale_chunks`
@@ -28,5 +28,5 @@
   - an old-shape request behaving exactly as before
   - `unchanged` still short-circuiting
   - sizes coming from the HEAD, never from the body
-- [ ] Two claims verified red: trusting a Collector-reported `stored_bytes`, and a `whole` confirm leaving chunk rows behind
-- [ ] ADR 0003's key section points to ADR 0008
+- [x] Two claims verified red: trusting a Collector-reported `stored_bytes`, and a `whole` confirm leaving chunk rows behind
+- [x] ADR 0003's key section points to ADR 0008

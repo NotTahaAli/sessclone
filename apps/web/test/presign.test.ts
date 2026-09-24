@@ -338,3 +338,162 @@ test('a deployment with no storage says so rather than issuing a dead URL', asyn
     configured.mockRestore()
   }
 })
+
+// Ticket 129, ADR 0008: a Collector that asks for the chunked layout is told
+// what is already sealed and gets URLs for its new chunks and its tail.
+
+const base = (projectKey = 'github.com-acme-api') =>
+  `orgs/${fixture.acme.id}/members/${fixture.acme.members.member}/projects/${projectKey}/session-1`
+
+/** A transcript row with `chunks` sealed chunks of 1 MiB each, as the
+ * confirm route would have left it. */
+const seedChunked = async (chunks: number, projectKey?: string) => {
+  const dir = base(projectKey)
+  const [artifact] = await sql<{ id: string }[]>`
+    insert into log_artifacts
+      (org_id, member_id, session_id, storage_key, sha256, size_bytes,
+       sealed_bytes, sealed_sha256)
+    values (${fixture.acme.id}, ${fixture.acme.members.member}, 'session-1',
+            ${`${dir}/tail-${chunks}.jsonl`}, ${'b'.repeat(64)},
+            ${chunks * 1_048_576 + 10}, ${chunks * 1_048_576}, ${'c'.repeat(64)})
+    returning id
+  `
+  for (let seq = 1; seq <= chunks; seq++) {
+    // oxlint-disable-next-line no-await-in-loop -- a handful of fixture rows.
+    await sql`
+      insert into log_artifact_chunks
+        (artifact_id, member_id, seq, raw_offset, raw_length, stored_bytes,
+         sha256, storage_key)
+      values (${artifact!.id}, ${fixture.acme.members.member}, ${seq},
+              ${(seq - 1) * 1_048_576}, 1048576, 200000, ${'d'.repeat(64)},
+              ${`${dir}/chunks/${String(seq).padStart(6, '0')}.jsonl.gz`})
+    `
+  }
+}
+
+test('an old-shape request is answered exactly as before', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+
+  const [status, body] = await answer(await ask())
+
+  expect(status).toBe(200)
+  expect(Object.keys(body).toSorted()).toEqual([
+    'expiresIn',
+    'kind',
+    'storageKey',
+    'url',
+  ])
+  expect(body.storageKey).toBe(`${base()}.jsonl`)
+})
+
+test('a chunked ask with nothing sealed gets the whole-file key as its tail', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+
+  const [status, body] = await answer(await ask({ layout: 'chunked' }))
+
+  expect(status).toBe(200)
+  expect(body).toMatchObject({
+    layout: 'chunked',
+    sealed: { bytes: 0, sha256: null, chunks: 0 },
+    storageKey: `${base()}.jsonl`,
+  })
+  expect(body.seals).toBeUndefined()
+})
+
+test('a sealing ask gets its chunk URLs from the next seq, and the tail after them', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await seedChunked(3)
+
+  const [, body] = await answer(await ask({ layout: 'chunked', seal: 2 }))
+
+  expect(body).toMatchObject({
+    layout: 'chunked',
+    sealed: { bytes: 3 * 1_048_576, sha256: 'c'.repeat(64), chunks: 3 },
+    storageKey: `${base()}/tail-5.jsonl`,
+    url: `https://storage.test/${base()}/tail-5.jsonl?signed`,
+    seals: [
+      {
+        seq: 4,
+        storageKey: `${base()}/chunks/000004.jsonl.gz`,
+        url: `https://storage.test/${base()}/chunks/000004.jsonl.gz?signed`,
+      },
+      {
+        seq: 5,
+        storageKey: `${base()}/chunks/000005.jsonl.gz`,
+        url: `https://storage.test/${base()}/chunks/000005.jsonl.gz?signed`,
+      },
+    ],
+  })
+})
+
+test('a steady-state chunked ask gets one tail URL at the current seq', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await seedChunked(2)
+
+  const [, body] = await answer(await ask({ layout: 'chunked' }))
+
+  expect(body.storageKey).toBe(`${base()}/tail-2.jsonl`)
+  expect(body.seals).toBeUndefined()
+})
+
+test('an Agent Run chunks under its own directory', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession({ agentId: 'agent-7' })
+
+  const [, body] = await answer(
+    await ask({ agentId: 'agent-7', layout: 'chunked', seal: 1 }),
+  )
+
+  expect(body.seals[0].storageKey).toBe(
+    `${base()}/agents/agent-7/chunks/000001.jsonl.gz`,
+  )
+  expect(body.storageKey).toBe(`${base()}/agents/agent-7/tail-1.jsonl`)
+})
+
+test('only a transcript chunks: a sidecar asking for it is answered whole', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession({ agentId: 'agent-7' })
+
+  const [, body] = await answer(
+    await ask({
+      agentId: 'agent-7',
+      kind: 'agent_meta',
+      layout: 'chunked',
+      seal: 1,
+    }),
+  )
+
+  expect(body.layout).toBeUndefined()
+  expect(body.seals).toBeUndefined()
+  expect(body.storageKey).toBe(`${base()}/agents/agent-7.meta.json`)
+})
+
+test('the whole-file unchanged guard still comes first for a chunked ask', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await seedChunked(1)
+
+  expect(
+    await answer(
+      await ask({ layout: 'chunked', seal: 1, sha256: 'b'.repeat(64) }),
+    ),
+  ).toMatchObject([200, { refused: 'unchanged' }])
+})
+
+test('a Session that moved Project starts sealing again from zero', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await seedChunked(2, 'github.com-acme-old')
+
+  const [, body] = await answer(await ask({ layout: 'chunked', seal: 1 }))
+
+  expect(body).toMatchObject({
+    sealed: { bytes: 0, sha256: null, chunks: 0 },
+    storageKey: `${base()}/tail-1.jsonl`,
+    seals: [{ seq: 1, storageKey: `${base()}/chunks/000001.jsonl.gz` }],
+  })
+})

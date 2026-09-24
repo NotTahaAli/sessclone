@@ -61,7 +61,10 @@ new key. The confirm swaps the row's chunk set and its `storage_key` in one
 transaction, and the old tail is deleted only after that commits (the
 replaced-key cleanup ticket 59 already does). A reader therefore sees either
 the old set or the new set, never a tail that overlaps or leaves a gap after
-the chunks. With one fixed tail key, the tail PUT would land before the
+the chunks. The confirm serialises on the transcript's identity with a
+transaction-scoped advisory lock rather than a row lock, because a first
+upload has no row to lock. A whole-file confirm deletes the chunk rows in
+that same transaction, just before its upsert. With one fixed tail key, the tail PUT would land before the
 confirm, and every reader in that window would see a gap or a duplicate.
 
 **The server holds the cursor.** The artifact row records `sealed_bytes` and
@@ -102,7 +105,8 @@ Every change is additive, and every new field is optional or defaulted.
 - The allowed `PresignResponse`, when `layout` was `chunked`, gains
   `layout: 'chunked'`, `sealed: { bytes, sha256 | null, chunks }` and
   `seals?: { seq, url, storageKey }[]`. `url`/`storageKey` are the tail's.
-  A deployment that predates this strips `layout` and omits these fields. The
+  A deployment that predates this strips `layout` and omits these fields,
+  and so does this one for any kind other than `transcript`. The
   Collector treats a missing echo the way ticket 104 treats a missing `kind`:
   it uses the whole-file path.
 - `ConfirmRequest.layout` is defaulted the same way.

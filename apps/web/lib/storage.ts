@@ -100,22 +100,63 @@ const segment = (raw: string) => {
 }
 
 /**
- * The object key for one Session's transcript, from ADR 0003.
+ * The object key for one Session's transcript, from ADR 0003 and ADR 0008.
  *
  * ```
  * orgs/<org>/members/<member>/projects/<project key>/<session>.jsonl
  *   …/<session>/agents/<agent>.jsonl             an Agent Run
  *   …/<session>/agents/<agent>.meta.json         its sidecar (ticket 104)
  *   …/<session>/workflows/<run>.journal.jsonl    a workflow's journal
+ *   …/<session>/tail-<seq>.jsonl                 the tail after <seq> chunks
+ *   …/<session>/chunks/<seq>.jsonl.gz            a sealed chunk (chunkKey)
  * ```
+ *
+ * A transcript's tail with zero chunks is the whole-file key, so every row
+ * written before ADR 0008 is already the zero-chunk case. An Agent Run's
+ * chunks and tails sit under `…/agents/<agent>/` by the same rules.
  *
  * Every segment a Collector influences — the Project key, which carries
  * slashes as `host/owner/repo` or an absolute path, and the Session and Agent
  * ids, which arrive from a machine we do not control — goes through
  * {@link segment}. Raw, they would break the prefix a per-Project sweep
- * depends on (ADR 0005) and let a key escape its own prefix.
+ * depends on (ADR 0005) and let a key escape its own prefix. Everything else
+ * in a key is digits and literal text, so no `%` can appear.
  */
-export const artifactKey = (artifact: {
+export const artifactKey = (
+  artifact: ArtifactPath & {
+    /** ADR 0008: how many sealed chunks precede the transcript's tail. */
+    chunks?: number
+  },
+) => {
+  const dir = paths(artifact)
+  if (artifact.kind === 'workflow_journal')
+    return `${dir.workflow}.journal.jsonl`
+  if (artifact.kind === 'agent_meta') return `${dir.agent}.meta.json`
+  return artifact.chunks
+    ? `${dir.transcript}/tail-${artifact.chunks}.jsonl`
+    : `${dir.transcript}.jsonl`
+}
+
+/** The key of a transcript's sealed chunk `seq` (ADR 0008), zero-padded to 6. */
+export const chunkKey = (artifact: ArtifactPath, seq: number) =>
+  `${paths(artifact).transcript}/chunks/${String(seq).padStart(6, '0')}.jsonl.gz`
+
+/**
+ * Whether `key` is one of this transcript's own tail keys — whole-file or
+ * `tail-<n>` — which is how the confirm tells a stale seq (`stale_chunks`)
+ * from a Session that moved Project (`stale_key`).
+ */
+export const isTranscriptTail = (artifact: ArtifactPath, key: string) => {
+  const dir = paths(artifact).transcript
+  return (
+    key === `${dir}.jsonl` ||
+    /^tail-[1-9][0-9]*\.jsonl$/.test(
+      key.startsWith(`${dir}/`) ? key.slice(dir.length + 1) : '',
+    )
+  )
+}
+
+export type ArtifactPath = {
   orgId: string
   memberId: string
   projectKey: string | null
@@ -123,24 +164,20 @@ export const artifactKey = (artifact: {
   agentId: string | null
   /** Ticket 104: a sidecar sits beside the transcript it describes. */
   kind?: ArtifactKind
-}) => {
-  const session = segment(artifact.sessionId)
-  const agent = artifact.agentId && segment(artifact.agentId)
-  const name =
-    artifact.kind === 'workflow_journal'
-      ? `${session}/workflows/${agent ?? 'unnamed'}.journal.jsonl`
-      : artifact.kind === 'agent_meta'
-        ? `${session}/agents/${agent ?? 'unnamed'}.meta.json`
-        : agent
-          ? `${session}/agents/${agent}.jsonl`
-          : `${session}.jsonl`
+}
 
+const paths = (artifact: ArtifactPath) => {
   // A Session outside any repository still has a transcript, and it needs a
   // segment of its own rather than an empty one — two slashes in a row is a
   // different key to some providers and the same to others.
   const project = segment(artifact.projectKey ?? 'none')
-
-  return `orgs/${artifact.orgId}/members/${artifact.memberId}/projects/${project}/${name}`
+  const session = `orgs/${artifact.orgId}/members/${artifact.memberId}/projects/${project}/${segment(artifact.sessionId)}`
+  const agent = `${session}/agents/${artifact.agentId ? segment(artifact.agentId) : 'unnamed'}`
+  return {
+    transcript: artifact.agentId ? agent : session,
+    agent,
+    workflow: `${session}/workflows/${artifact.agentId ? segment(artifact.agentId) : 'unnamed'}`,
+  }
 }
 
 /**

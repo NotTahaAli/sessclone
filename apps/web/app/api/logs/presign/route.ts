@@ -9,6 +9,8 @@ import {
 } from '../../../../lib/collector-auth'
 import { presignDecision } from '../../../../lib/presign'
 import {
+  artifactKey,
+  chunkKey,
   MAX_KEY_BYTES,
   presignUpload,
   storageConfigured,
@@ -112,20 +114,46 @@ export async function POST(request: Request) {
     () => {},
   )
 
+  // ADR 0008: only a transcript chunks. Any other kind asking for it is
+  // answered as whole — no `layout` echo — which is the path a Collector
+  // takes when the echo is missing.
+  const chunked = parsed.data.layout === 'chunked' && kind === 'transcript'
+  const { sealed } = decision
+  const seal = chunked ? (parsed.data.seal ?? 0) : 0
+  // The tail is keyed by how many chunks precede it, so a sealing pass moves
+  // it and a reader never sees a tail that overlaps or gaps the chunks.
+  const storageKey = chunked
+    ? artifactKey({ ...decision.path, chunks: sealed.chunks + seal })
+    : decision.storageKey
+  const seals = Array.from({ length: seal }, (_, index) => {
+    const seq = sealed.chunks + 1 + index
+    return { seq, storageKey: chunkKey(decision.path, seq) }
+  })
+
   // Before the bytes move, not after: a key over the provider's limit is
   // refused once the whole transcript has been streamed, which is the cost
   // this route exists to save. The ids are bounded by the schema, so reaching
-  // this needs a Project key long enough to be worth saying so about.
-  if (Buffer.byteLength(decision.storageKey) > MAX_KEY_BYTES) {
+  // this needs a Project key long enough to be worth saying so about. A chunk
+  // key is the longest this request names.
+  const longest = [storageKey, ...seals.map((each) => each.storageKey)].reduce(
+    (a, b) => (Buffer.byteLength(b) > Buffer.byteLength(a) ? b : a),
+  )
+  if (Buffer.byteLength(longest) > MAX_KEY_BYTES) {
     return refused(
       'this Session cannot be stored under a key that long',
-      `${decision.storageKey.slice(0, 80)}…`,
+      `${longest.slice(0, 80)}…`,
     )
   }
 
   let url
+  let sealUrls
   try {
-    url = await presignUpload(decision.storageKey)
+    // Signing is local — no request to the provider — so seventeen of them
+    // cost nothing worth batching.
+    ;[url, ...sealUrls] = await Promise.all([
+      presignUpload(storageKey),
+      ...seals.map((each) => presignUpload(each.storageKey)),
+    ])
   } catch {
     // Signing fails for configuration reasons — a bad endpoint, credentials
     // the client rejects — so it is the same answer as no storage at all
@@ -138,11 +166,20 @@ export async function POST(request: Request) {
 
   return Response.json({
     url,
-    storageKey: decision.storageKey,
+    storageKey,
     expiresIn: ttl(),
     // Echoed so a Collector can tell this deployment knows kinds: an older
     // one strips it and would file a sidecar as a transcript.
     kind,
+    // ADR 0008, only when chunking: a deployment older than this omits all
+    // three, and the Collector reads that as the whole-file path.
+    ...(chunked && {
+      layout: 'chunked' as const,
+      sealed,
+      ...(seal > 0 && {
+        seals: seals.map((each, index) => ({ ...each, url: sealUrls[index]! })),
+      }),
+    }),
   } satisfies PresignResponse)
 }
 

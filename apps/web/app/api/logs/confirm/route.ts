@@ -7,9 +7,12 @@ import {
   resolveCaller,
   unauthenticated,
 } from '../../../../lib/collector-auth'
-import { presignDecision } from '../../../../lib/presign'
+import { presignDecision, type Sealed } from '../../../../lib/presign'
 import {
+  artifactKey,
+  chunkKey,
   deleteObjects,
+  isTranscriptTail,
   storageConfigured,
   storedObject,
 } from '../../../../lib/storage'
@@ -84,6 +87,16 @@ export async function POST(request: Request) {
   const { sessionId, sha256, storageKey, kind } = parsed.data
   const agentId = parsed.data.agentId ?? null
 
+  // ADR 0008: only a transcript chunks, and the presign answered any other
+  // kind as whole — so chunks named for one were never authorised.
+  const chunked = parsed.data.layout === 'chunked' && kind === 'transcript'
+  if (!chunked && parsed.data.chunks?.length) {
+    return refused(
+      'not a confirm request',
+      'chunks: only a transcript is stored in chunks',
+    )
+  }
+
   let decision
   try {
     decision = await presignDecision(sql, {
@@ -144,20 +157,38 @@ export async function POST(request: Request) {
     } satisfies ConfirmResponse)
   }
 
-  // The bytes went to the key the presign issued; this Session now belongs
-  // under `decision.storageKey`. When those differ the upload is stranded
-  // under the old key and the right answer is to presign again — recording it
-  // would file the wrong object and the hash guard would keep it forever.
-  if (storageKey !== decision.storageKey) {
-    return Response.json({
-      refused: 'stale_key',
-      detail: 'this Session’s Project changed since the upload was authorised',
-    } satisfies ConfirmResponse)
-  }
+  // ADR 0008. What this pass sealed, if it chunks at all: the chunks follow
+  // on from what the row holds, and the tail is keyed by how many chunks
+  // precede it — so the key the bytes went to says which pass this is.
+  const chunks = chunked ? (parsed.data.chunks ?? []) : []
+  const { sealed, path } = decision
+  const tailKey = chunked
+    ? artifactKey({ ...path, chunks: sealed.chunks + chunks.length })
+    : decision.storageKey
 
-  let object
+  // The bytes went to the key the presign issued; this Session now belongs
+  // under `tailKey`. When those differ the upload is stranded under the old
+  // key and the right answer is to presign again — recording it would file
+  // the wrong object and the hash guard would keep it forever. A key that is
+  // still this Session's own tail is a seq that moved on (`stale_chunks`);
+  // any other is a Session that moved Project (`stale_key`).
+  if (storageKey !== tailKey) {
+    return chunked && isTranscriptTail(path, storageKey)
+      ? staleChunks()
+      : Response.json({
+          refused: 'stale_key',
+          detail:
+            'this Session’s Project changed since the upload was authorised',
+        } satisfies ConfirmResponse)
+  }
+  if (!followsOn(sealed, chunks)) return staleChunks()
+
+  // Every size from storage, never from the request (ADR 0003): each new
+  // chunk's stored size and the tail's raw size, at most 17 HEADs at once.
+  const keys = [...chunks.map((chunk) => chunkKey(path, chunk.seq)), tailKey]
+  let objects
   try {
-    object = await storedObject(decision.storageKey)
+    objects = await Promise.all(keys.map((each) => storedObject(each)))
   } catch {
     // Reading it back failed for a configuration or availability reason, the
     // same class the presign route answers 503 for: the Collector retries,
@@ -169,7 +200,7 @@ export async function POST(request: Request) {
     )
   }
 
-  if (!object) {
+  if (objects.some((object) => !object)) {
     // The transient refusal on this route. An upload that never landed, or a
     // provider that has not made it visible yet.
     return Response.json({
@@ -178,73 +209,193 @@ export async function POST(request: Request) {
     } satisfies ConfirmResponse)
   }
 
-  // One row per Session — or per Agent Run within one — updated in place as
-  // the Session grows, which is what keeps one object per transcript instead
-  // of a version per report (`log_artifacts`' own unique key). The conflict
-  // target is the Session's identity; `storage_key` is derived from it, so an
-  // upload whose Project changed mid-Session (ticket 09) moves the row to the
-  // new key rather than writing a second one.
-  let replaced
+  const tail = objects.at(-1)!
+  const sealedBytes =
+    chunks.reduce((sum, chunk) => sum + chunk.rawLength, 0) + sealed.bytes
+  const sealedSha256 = chunks.length
+    ? parsed.data.sealedSha256!
+    : chunked
+      ? sealed.sha256
+      : null
+  // Raw bytes, chunks plus tail: what a download yields (ADR 0008).
+  const sizeBytes = (chunked ? sealedBytes : 0) + tail.sizeBytes
+
+  let written
   try {
-    // `returning` the key the row held before the update: a Session that
-    // moved Project has a new key, and the object at the old one would
-    // otherwise sit in the bucket with no row naming it — bytes no retention
-    // sweep can reach, which for a transcript means source code and sometimes
-    // credentials kept forever.
-    ;[replaced] = await sql<{ previous: string | null }[]>`
-      with previous as (
-        select storage_key from log_artifacts
+    written = await sql.begin(async (tx) => {
+      // One confirm of this Session's object at a time. A row lock is not
+      // enough: a first upload has no row to lock, and two first inserts
+      // racing meet on `storage_key`'s unique index as a 23505 instead of on
+      // the conflict target. Held to the commit, so the second confirm sees
+      // what the first sealed. A hash collision only serialises two
+      // unrelated Sessions for a moment.
+      await tx`
+        select pg_advisory_xact_lock(hashtextextended(
+          ${`${caller.memberId}:${sessionId}:${agentId ?? ''}:${kind}`}, 0))
+      `
+      const [current] = await tx<
+        {
+          id: string
+          storage_key: string
+          sealed_bytes: string
+          chunks: number
+        }[]
+      >`
+        select artifact.id, artifact.storage_key, artifact.sealed_bytes,
+               (select count(*)::int from log_artifact_chunks chunk
+                 where chunk.artifact_id = artifact.id) as chunks
+          from log_artifacts artifact
          where member_id = ${caller.memberId}
            and session_id = ${sessionId}
            and agent_id is not distinct from ${agentId}
            and kind = ${kind}
-      ), written as (
+      `
+
+      // What the presign read may have moved on since: another pass sealed
+      // in between. The same test `presignDecision` makes, on the locked row:
+      // chunks count only while the tail sits where they would put it.
+      if (chunked) {
+        const holds =
+          current &&
+          current.chunks > 0 &&
+          current.storage_key ===
+            artifactKey({ ...path, chunks: current.chunks })
+        const still = holds
+          ? current.chunks === sealed.chunks &&
+            Number(current.sealed_bytes) === sealed.bytes
+          : sealed.chunks === 0
+        if (!still) throw new StaleChunks()
+      }
+
+      // A whole-file pass — every older Collector's — clears the chunks: its
+      // file would otherwise be read after them as a duplicate. So does a
+      // chunked pass starting again from zero, whose old chunks sit under a
+      // Project the Session left. Their objects go after the commit.
+      const dropped =
+        current && (!chunked || sealed.chunks === 0)
+          ? await tx<{ storage_key: string }[]>`
+              delete from log_artifact_chunks where artifact_id = ${current.id}
+              returning storage_key
+            `
+          : []
+
+      // One row per Session — or per Agent Run within one — updated in place
+      // as the Session grows (`log_artifacts`' own unique key). The conflict
+      // target is the Session's identity; `storage_key` is derived from it,
+      // so an upload whose Project changed mid-Session (ticket 09) moves the
+      // row to the new key rather than writing a second one.
+      const [artifact] = await tx<{ id: string }[]>`
         insert into log_artifacts (org_id, member_id, project_id, session_id,
                                    agent_id, kind, storage_key, sha256,
-                                   size_bytes)
+                                   size_bytes, sealed_bytes, sealed_sha256)
         values (${caller.orgId}, ${caller.memberId}, ${decision.projectId},
-                ${sessionId}, ${agentId}, ${kind}, ${decision.storageKey},
-                ${sha256}, ${object.sizeBytes})
+                ${sessionId}, ${agentId}, ${kind}, ${tailKey}, ${sha256},
+                ${sizeBytes}, ${chunked ? sealedBytes : 0}, ${sealedSha256})
         on conflict (member_id, session_id, agent_id, kind) do update
            set project_id = excluded.project_id,
                storage_key = excluded.storage_key,
                sha256 = excluded.sha256,
                size_bytes = excluded.size_bytes,
+               sealed_bytes = excluded.sealed_bytes,
+               sealed_sha256 = excluded.sealed_sha256,
                uploaded_at = now()
-        returning storage_key
-      )
-      select (select storage_key from previous) as previous from written
-    `
+        returning id
+      `
+
+      if (chunks.length > 0) {
+        await tx`
+          insert into log_artifact_chunks ${tx(
+            chunks.map((chunk, index) => ({
+              artifact_id: artifact!.id,
+              member_id: caller.memberId,
+              seq: chunk.seq,
+              raw_offset: chunk.rawOffset,
+              raw_length: chunk.rawLength,
+              stored_bytes: objects[index]!.sizeBytes,
+              sha256: chunk.sha256,
+              storage_key: keys[index]!,
+            })),
+          )}
+        `
+      }
+
+      return {
+        // `previous` is the key the row held before: a moved tail, or a
+        // Session that moved Project, leaves an object no row names.
+        // Never a key this pass just wrote: a chunk resealed to the key an
+        // unconfirmed earlier pass left (ADR 0008's known ceiling).
+        replaced: [
+          ...dropped.map((row) => row.storage_key),
+          ...(current ? [current.storage_key] : []),
+        ].filter((each) => !keys.includes(each)),
+      }
+    })
   } catch (error) {
+    if (
+      error instanceof StaleChunks ||
+      (error instanceof postgres.PostgresError &&
+        error.code === '23505' &&
+        error.table_name === 'log_artifact_chunks')
+    ) {
+      return staleChunks()
+    }
     return databaseFailure(error)
   }
 
-  if (replaced?.previous && replaced.previous !== decision.storageKey) {
+  if (written.replaced.length > 0) {
     // After the row, never before: an orphaned object costs storage, and a
     // deleted object with a row still naming it costs the transcript.
     //
     // A failure here cannot fail a recorded upload, and it must not be
-    // swallowed either: the row has already moved to the new key, so nothing
-    // names the old object and no sweep could ever reach it — a transcript,
-    // which is source code and sometimes a credential, kept forever. Recorded
-    // instead, and the retention sweep deletes it (ticket 61).
-    await deleteObjects([replaced.previous]).catch(async () => {
+    // swallowed either: the row has already moved on, so nothing names these
+    // objects and no sweep could ever reach them — a transcript, which is
+    // source code and sometimes a credential, kept forever. Recorded instead,
+    // and the retention sweep deletes them (ticket 61).
+    const { replaced } = written
+    await deleteObjects(replaced).catch(async () => {
       await sql`
-        insert into storage_orphans (storage_key) values (${replaced.previous})
+        insert into storage_orphans ${sql(replaced.map((storage_key) => ({ storage_key })))}
         on conflict (storage_key) do nothing
       `.catch(() => {
-        // Nothing left to do: the object stays, and the operator's bucket
-        // lifecycle is the only thing that will reach it. Not worth failing an
-        // upload that is recorded and complete.
+        // Nothing left to do: the objects stay, and the operator's bucket
+        // lifecycle is the only thing that will reach them. Not worth failing
+        // an upload that is recorded and complete.
       })
     })
   }
 
   return Response.json({
     stored: true,
-    storageKey: decision.storageKey,
-    sizeBytes: object.sizeBytes,
+    storageKey: tailKey,
+    sizeBytes,
   } satisfies ConfirmResponse)
+}
+
+/** Thrown inside the transaction to roll it back as `stale_chunks`. */
+class StaleChunks extends Error {}
+
+const staleChunks = () =>
+  Response.json({
+    refused: 'stale_chunks',
+    detail: 'what is sealed moved on since the upload was authorised',
+  } satisfies ConfirmResponse)
+
+/**
+ * Whether the new chunks start at the row's next seq and sealed bytes, and
+ * run on from each other with no gap in seq or in raw bytes.
+ */
+const followsOn = (
+  sealed: Sealed,
+  chunks: { seq: number; rawOffset: number; rawLength: number }[],
+) => {
+  let seq = sealed.chunks + 1
+  let offset = sealed.bytes
+  for (const chunk of chunks) {
+    if (chunk.seq !== seq || chunk.rawOffset !== offset) return false
+    seq += 1
+    offset += chunk.rawLength
+  }
+  return true
 }
 
 /** The split ingest and presign both make: data the database refuses will

@@ -85,6 +85,12 @@ The latest upload replaces the prior one at the same key. One object per
 Session, not forty partial versions: the use case is feeding a whole session to
 an analysis agent, which partial copies only obstruct.
 
+[ADR 0008](0008-chunked-append-only-archival.md) refines this for a
+transcript that grows: sealed gzip chunks under
+`<session_id>/chunks/<seq>.jsonl.gz` plus a raw tail at
+`<session_id>/tail-<seq>.jsonl`. The key above is that layout's zero-chunk
+case, so everything said here about it still holds.
+
 The key carries Member and Project rather than Session alone. Ticket 02
 measured a Session id shared by two different conversations — a nested
 `claude -p` reported its parent's `session_id` while writing a separate
