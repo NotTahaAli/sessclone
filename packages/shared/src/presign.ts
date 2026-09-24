@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { MAX_SEAL } from './limits.ts'
+
 // Ticket 58. The presign wire contract, in the one place both ends import it
 // from — the same arrangement as `ingest.ts`, for the same reason: a change to
 // what the Collector sends breaks the build rather than production.
@@ -51,8 +53,8 @@ export const Layout = z.enum(['whole', 'chunked']).default('whole')
 
 export type Layout = z.output<typeof Layout>
 
-/** The most chunks one pass may seal, so a confirm HEADs at most 17 objects. */
-export const MAX_SEAL = 16
+/** Re-exported: the Collector reads it from the zod-free `limits.ts`. */
+export { MAX_SEAL }
 
 export const PresignRequest = z
   .object({
