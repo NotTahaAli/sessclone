@@ -491,3 +491,69 @@ test('a sweep records that it ran, even when it removed nothing', async () => {
   // One row, replaced: a log of every sweep is a table nobody reads.
   expect(rows.map((one) => one.removed)).toEqual([1])
 })
+
+/** Gives an artifact `count` sealed chunks (ADR 0008), keyed beside it. */
+const sealChunks = async (storageKey: string, count: number) => {
+  const [artifact] = await sql<{ id: string; member_id: string }[]>`
+    update log_artifacts
+       set sealed_bytes = ${count * 1024}, sealed_sha256 = ${'c'.repeat(64)}
+     where storage_key = ${storageKey}
+    returning id, member_id
+  `
+  const keys = Array.from(
+    { length: count },
+    (_, index) =>
+      `${storageKey}/chunks/${String(index + 1).padStart(6, '0')}.jsonl.gz`,
+  )
+  await sql`
+    insert into log_artifact_chunks ${sql(
+      keys.map((key, index) => ({
+        artifact_id: artifact!.id,
+        member_id: artifact!.member_id,
+        seq: index + 1,
+        raw_offset: index * 1024,
+        raw_length: 1024,
+        stored_bytes: 300,
+        sha256: 'd'.repeat(64),
+        storage_key: key,
+      })),
+    )}
+  `
+  return keys
+}
+
+const chunkCount = async () =>
+  (
+    await sql<
+      { n: number }[]
+    >`select count(*)::int as n from log_artifact_chunks`
+  )[0]!.n
+
+test('an expired chunked transcript takes every chunk with it, all at once', async () => {
+  // Ticket 130: chunks never expire one by one — the age is the artifact's.
+  await sql`update orgs set retention_days = 30 where id = ${fixture.acme.id}`
+  const tail = await seedArtifact({ age: 31 })
+  const chunks = await sealChunks(tail, 3)
+  const kept = await seedArtifact({ age: 1 })
+  const keptChunks = await sealChunks(kept, 1)
+
+  expect(await sweepRetention(sql)).toEqual({ removed: 1, more: false })
+
+  expect(bucket.deleted.toSorted()).toEqual([tail, ...chunks].toSorted())
+  const left = await sql<{ storage_key: string }[]>`
+    select storage_key from log_artifact_chunks
+  `
+  expect(left.map((row) => row.storage_key)).toEqual(keptChunks)
+})
+
+test('a bucket that refuses keeps the chunk rows as well as the artifact', async () => {
+  await sql`update orgs set retention_days = 1 where id = ${fixture.acme.id}`
+  const tail = await seedArtifact({ age: 10 })
+  await sealChunks(tail, 2)
+  bucket.fails = true
+
+  await expect(sweepRetention(sql)).rejects.toThrow(/refused/)
+
+  expect(await sql`select id from log_artifacts`).toHaveLength(1)
+  expect(await chunkCount()).toBe(2)
+})

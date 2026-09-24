@@ -143,3 +143,30 @@ test('another Member’s artifact is refused, whoever asks', async () => {
   expect(deleted).toEqual([])
   expect(await remaining()).toBe(1)
 })
+
+test('a signed-in Member deletes a chunked Session, chunks and all', async () => {
+  // Ticket 130, through the action and the policies: the chunk rows go as
+  // the Member, under `log_artifact_chunks_delete`.
+  const artifactId = await artifact()
+  const [row] = await sql<{ storage_key: string }[]>`
+    update log_artifacts
+       set sealed_bytes = 1024, sealed_sha256 = ${'c'.repeat(64)}
+     where id = ${artifactId}
+    returning storage_key
+  `
+  const chunk = `${row!.storage_key}/chunks/000001.jsonl.gz`
+  await sql`
+    insert into log_artifact_chunks
+      (artifact_id, member_id, seq, raw_offset, raw_length, stored_bytes,
+       sha256, storage_key)
+    values (${artifactId}, ${fixture.acme.members.member}, 1, 0, 1024, 300,
+            ${'d'.repeat(64)}, ${chunk})
+  `
+  const actions = await actAs(fixture.acme.users.member)
+
+  await actions.deleteSession(form({ artifactId }))
+
+  expect(deleted.toSorted()).toEqual([row!.storage_key, chunk].toSorted())
+  expect(await sql`select 1 from log_artifact_chunks`).toHaveLength(0)
+  expect(await remaining()).toBe(0)
+})

@@ -399,24 +399,40 @@ export const deleteStoredSession = async (
   // The transcript and its sidecars in one statement (ticket 104): an Agent
   // Run's `.meta.json`, and for the Session's own transcript its workflows'
   // journals. A sidecar's id names no transcript and deletes nothing.
-  const rows = await tx<{ storage_key: string }[]>`
+  //
+  // ADR 0008: each doomed transcript's chunks go in the same statement, their
+  // keys with them. The foreign key is `no action`, so a path that forgot
+  // them would fail here rather than leave source code in the bucket.
+  const rows = await tx<{ storage_key: string; artifact: boolean }[]>`
     with transcript as (
       select member_id, session_id, agent_id from log_artifacts
        where id = ${artifactId}
          and kind = 'transcript'
          and member_id in (select sessclone_own_member_ids())
+    ), doomed as (
+      select artifact.id
+        from log_artifacts artifact
+        join transcript
+          on artifact.member_id = transcript.member_id
+         and artifact.session_id = transcript.session_id
+       where artifact.kind in ('transcript', 'agent_meta')
+               and artifact.agent_id is not distinct from transcript.agent_id
+          or artifact.kind = 'workflow_journal'
+               and transcript.agent_id is null
+    ), chunks as (
+      delete from log_artifact_chunks
+       where artifact_id in (select id from doomed)
+      returning storage_key
+    ), artifacts as (
+      delete from log_artifacts
+       where id in (select id from doomed)
+      returning storage_key
     )
-    delete from log_artifacts artifact
-     using transcript
-     where artifact.member_id = transcript.member_id
-       and artifact.session_id = transcript.session_id
-       and (artifact.kind in ('transcript', 'agent_meta')
-              and artifact.agent_id is not distinct from transcript.agent_id
-            or artifact.kind = 'workflow_journal'
-              and transcript.agent_id is null)
-    returning artifact.storage_key
+    select storage_key, true as artifact from artifacts
+    union all
+    select storage_key, false from chunks
   `
-  if (rows.length === 0) return false
+  if (!rows.some((row) => row.artifact)) return false
 
   await deleteObjects(rows.map((row) => row.storage_key))
   return true
@@ -445,12 +461,25 @@ export const deleteStoredProject = async (
   memberId: string,
   projectId: string | null,
 ): Promise<number> => {
-  const rows = await tx<{ storage_key: string; kind: string }[]>`
-    delete from log_artifacts
-     where member_id = ${memberId}
-       and member_id in (select sessclone_own_member_ids())
-       and project_id is not distinct from ${projectId}
-    returning storage_key, kind
+  // ADR 0008: the chunks of every doomed transcript in the same statement.
+  const rows = await tx<{ storage_key: string; kind: string | null }[]>`
+    with doomed as (
+      select id from log_artifacts
+       where member_id = ${memberId}
+         and member_id in (select sessclone_own_member_ids())
+         and project_id is not distinct from ${projectId}
+    ), chunks as (
+      delete from log_artifact_chunks
+       where artifact_id in (select id from doomed)
+      returning storage_key
+    ), artifacts as (
+      delete from log_artifacts
+       where id in (select id from doomed)
+      returning storage_key, kind
+    )
+    select storage_key, kind from artifacts
+    union all
+    select storage_key, null from chunks
   `
   if (rows.length === 0) return 0
 

@@ -11,7 +11,7 @@
 
 **Blocked by:** 128
 
-**Status:** todo
+**Status:** done
 
-- [ ] `apps/web/test/retention.test.ts`, `artifact-action.test.ts` and `artifacts.test.ts` against real Postgres: a chunked transcript's chunk keys, its tail key and its sidecars all reach `deleteObjects`, and no chunk row is left behind. A storage failure rolls back artifact rows and chunk rows together.
-- [ ] Retention with a chunked backlog stays index-backed. `explain analyze` at the ticket-61 scale goes in the commit message.
+- [x] `apps/web/test/retention.test.ts`, `artifact-action.test.ts` and `artifacts.test.ts` against real Postgres: a chunked transcript's chunk keys, its tail key and its sidecars all reach `deleteObjects`, and no chunk row is left behind. A storage failure rolls back artifact rows and chunk rows together.
+- [x] Retention with a chunked backlog stays index-backed. `explain analyze` at the ticket-61 scale goes in the commit message.

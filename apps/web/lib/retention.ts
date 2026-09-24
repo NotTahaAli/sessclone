@@ -32,7 +32,7 @@ import { deleteObjects } from './storage'
 export const SWEEP_LIMIT = 500
 
 export type Swept = {
-  /** Rows removed, which equals objects deleted. */
+  /** Artifact rows removed. Their chunks (ADR 0008) went too, uncounted. */
   removed: number
   /** Whether more remain past the window: call again. */
   more: boolean
@@ -105,7 +105,9 @@ export const sweepRetention = async (
     // written after the transcript they describe and must not outlive it.
     // Found by the identity key's leading `(member_id, session_id)`, in the
     // same statement.
-    const rows = await tx<{ storage_key: string; expired: boolean }[]>`
+    const rows = await tx<
+      { storage_key: string; expired: boolean; artifact: boolean }[]
+    >`
       with cutoffs as (${CUTOFFS(tx)}), expired as (
         select artifact.id, artifact.member_id, artifact.session_id,
                artifact.agent_id, artifact.kind
@@ -129,12 +131,24 @@ export const sweepRetention = async (
                   and sidecar.agent_id = transcript.agent_id
                 or sidecar.kind = 'workflow_journal'
                   and transcript.agent_id is null)
+      ), chunks as (
+        -- ADR 0008: a transcript's chunks go in the same statement as the
+        -- transcript, and their keys with it. The foreign key is no action,
+        -- so forgetting this fails the sweep rather than orphaning them.
+        delete from log_artifact_chunks
+         where artifact_id in (select id from doomed)
+        returning storage_key
+      ), artifacts as (
+        delete from log_artifacts
+         where id in (select id from doomed)
+        returning storage_key, id in (select id from expired) as expired
       )
-      delete from log_artifacts
-       where id in (select id from doomed)
-      returning storage_key, id in (select id from expired) as expired
+      select storage_key, expired, true as artifact from artifacts
+      union all
+      select storage_key, false, false from chunks
     `
     const expired = rows.filter((row) => row.expired).length
+    const removed = rows.filter((row) => row.artifact).length
 
     // The objects nothing names any more (`storage_orphans`), taken in the
     // same batch: they are already paid for in one round trip, and they are
@@ -156,7 +170,7 @@ export const sweepRetention = async (
     // with no scheduler promises a window it never enforces.
     await tx`
       insert into retention_sweeps (swept_at, removed)
-      values (now(), ${rows.length})
+      values (now(), ${removed})
       on conflict (id) do update
          set swept_at = excluded.swept_at, removed = excluded.removed
     `
@@ -165,7 +179,7 @@ export const sweepRetention = async (
     // "more" when the backlog happened to end exactly on the limit costs one
     // extra call that removes nothing, which is the cheap way to be wrong.
     return {
-      removed: rows.length,
+      removed,
       more: expired === limit || orphans.length === limit,
     }
   })

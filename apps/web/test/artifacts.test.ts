@@ -696,3 +696,106 @@ test('sidecars are not listed as transcripts, and go with the transcript they be
   ).toBe(0)
   expect(deleted).toHaveLength(2)
 })
+
+/** Gives an artifact `count` sealed chunks (ADR 0008), keyed beside it. */
+const sealChunks = async (artifactId: string, count: number) => {
+  const [row] = await sql<{ storage_key: string; member_id: string }[]>`
+    update log_artifacts
+       set sealed_bytes = ${count * 1024}, sealed_sha256 = ${'c'.repeat(64)}
+     where id = ${artifactId}
+    returning storage_key, member_id
+  `
+  const keys = Array.from(
+    { length: count },
+    (_, index) =>
+      `${row!.storage_key}/chunks/${String(index + 1).padStart(6, '0')}.jsonl.gz`,
+  )
+  await sql`
+    insert into log_artifact_chunks ${sql(
+      keys.map((key, index) => ({
+        artifact_id: artifactId,
+        member_id: row!.member_id,
+        seq: index + 1,
+        raw_offset: index * 1024,
+        raw_length: 1024,
+        stored_bytes: 300,
+        sha256: 'd'.repeat(64),
+        storage_key: key,
+      })),
+    )}
+  `
+  return keys
+}
+
+const chunkKeys = async () =>
+  (
+    await sql<{ storage_key: string }[]>`
+      select storage_key from log_artifact_chunks order by storage_key
+    `
+  ).map((row) => row.storage_key)
+
+test('destroying a chunked Session takes its chunks, its tail and its sidecars', async () => {
+  // Ticket 130.
+  const projectId = await project('github.com/acme/api')
+  const main = await artifact({ projectId })
+  const chunks = await sealChunks(main.id, 2)
+  const run = await artifact({ projectId, agentId: 'agent-7' })
+  const runChunks = await sealChunks(run.id, 1)
+  const journal = await artifact({
+    projectId,
+    agentId: 'wf_1',
+    kind: 'workflow_journal',
+  })
+
+  expect(await asMember((tx) => deleteStoredSession(tx, main.id))).toBe(true)
+
+  expect(deleted.toSorted()).toEqual(
+    [main.key, ...chunks, journal.key].toSorted(),
+  )
+  // The Agent Run is its own transcript, and keeps its chunks.
+  expect(await chunkKeys()).toEqual(runChunks)
+})
+
+test('destroying a Project takes every chunk in it', async () => {
+  const projectId = await project('github.com/acme/api')
+  const one = await artifact({ projectId })
+  const chunks = await sealChunks(one.id, 3)
+  const otherId = await project('github.com/acme/web')
+  const kept = await artifact({
+    projectId: otherId,
+    projectKey: 'github.com/acme/web',
+    sessionId: 'session-3',
+  })
+  const keptChunks = await sealChunks(kept.id, 1)
+
+  expect(
+    await asMember((tx) =>
+      deleteStoredProject(tx, fixture.acme.members.member, projectId),
+    ),
+  ).toBe(1)
+
+  expect(deleted.toSorted()).toEqual([one.key, ...chunks].toSorted())
+  expect(await chunkKeys()).toEqual(keptChunks)
+})
+
+test('a storage failure rolls back the chunk rows with their artifact', async () => {
+  const projectId = await project('github.com/acme/api')
+  const one = await artifact({ projectId })
+  const chunks = await sealChunks(one.id, 2)
+  refuseDelete = true
+
+  await expect(
+    asMember((tx) => deleteStoredSession(tx, one.id)),
+  ).rejects.toThrow(/storage is unreachable/)
+  await expect(
+    asMember((tx) =>
+      deleteStoredProject(tx, fixture.acme.members.member, projectId),
+    ),
+  ).rejects.toThrow(/storage is unreachable/)
+
+  expect(await chunkKeys()).toEqual(chunks)
+  const [row] = await sql<{ count: number }[]>`
+    select count(*)::int as count from log_artifacts where id = ${one.id}
+  `
+  expect(row!.count).toBe(1)
+})
