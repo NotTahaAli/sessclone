@@ -146,7 +146,10 @@ function Group({
       <SectionBreak as="h3">
         <span className={project.projectKey ? 'font-mono' : ''}>{name}</span>
       </SectionBreak>
-      <p className="text-text-muted flex flex-wrap items-baseline justify-between gap-x-3 text-caption">
+      {/* A div, not a p: the disclosure below holds a form and a p, and a
+          p cannot contain either. The parser closes it early, and the page
+          fails to hydrate (React #418). */}
+      <div className="text-text-muted flex flex-wrap items-baseline justify-between gap-x-3 text-caption">
         <span>
           {own ? '' : `${project.memberEmail ?? 'A Member'} · `}
           {project.sessions} session{project.sessions === 1 ? '' : 's'} ·{' '}
@@ -168,7 +171,7 @@ function Group({
             projectId={project.projectId ?? 'none'}
           />
         ) : null}
-      </p>
+      </div>
 
       {sessions.length === 0 ? null : (
         <ol className="mt-1">
