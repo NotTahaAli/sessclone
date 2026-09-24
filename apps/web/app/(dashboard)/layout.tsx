@@ -359,8 +359,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       </Suspense>
 
       {/* The bottom bar is fixed, so the content column reserves room for it
-          rather than ending underneath it. */}
-      <main className="min-w-0 grow px-4 py-5 pb-28 lg:px-7 lg:pb-8">
+          rather than ending underneath it: the bar's 62px, a gap, and the
+          same safe-area inset the bar's own padding grows by. */}
+      <main className="min-w-0 grow px-4 py-5 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:px-7 lg:pb-8">
         <Suspense fallback={PENDING_CONTENT}>
           <Content>{children}</Content>
         </Suspense>
