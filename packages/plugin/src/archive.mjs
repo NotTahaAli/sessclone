@@ -529,9 +529,9 @@ export const archiveTranscript = async ({
         return { archived: false, refused: confirm.body.refused }
       }
       // The bytes are in the bucket and no row names them. The next pass
-      // re-uploads and re-confirms, which is why the object is replaced in
-      // place rather than versioned: a repeat costs the upload again and never
-      // a second object.
+      // re-uploads and re-confirms; the deployment recorded these keys as
+      // pending when it signed them, and its sweep deletes them once that
+      // lapses (ADR 0008).
       return { archived: false, refused: 'unconfirmed' }
     }
     await settle('archived')

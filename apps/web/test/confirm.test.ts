@@ -114,11 +114,54 @@ const setArchival = (enabled: boolean) =>
           where id = ${fixture.acme.members.member}`,
   )
 
+/**
+ * Whether `ask` first records the keys it names as pending, as the presign
+ * that issued them would have. The tests about an unpresigned key clear it.
+ */
+let presigned = true
+
+/** The keys a confirm body names: its tail, and each chunk's content key. */
+const keysOf = (body: {
+  storageKey: string
+  chunks?: { seq: number; sha256: string }[]
+}) => {
+  const dir = body.storageKey.replace(/\/tail-[^/]*$/, '')
+  return [
+    body.storageKey,
+    ...(body.chunks ?? []).map(
+      (chunk) =>
+        `${dir}/chunks/${String(chunk.seq).padStart(6, '0')}-${chunk.sha256.slice(0, 16)}.jsonl.gz`,
+    ),
+  ]
+}
+
 const ask = async (
   body: Record<string, unknown> = {},
   presented: string | null = key,
-) =>
-  POST(
+) => {
+  const sent = {
+    sessionId: 'session-1',
+    sha256: SHA,
+    // The key the presign issued, which the Collector echoes. Overridden
+    // by the tests that are about it.
+    storageKey: derivedKey(),
+    ...body,
+  }
+  if (presigned && typeof sent.storageKey === 'string') {
+    await sql`
+      insert into log_upload_pending ${sql(
+        keysOf(sent as Parameters<typeof keysOf>[0]).map((storage_key) => ({
+          storage_key,
+          member_id: fixture.acme.members.member,
+          session_id: 'session-1',
+          kind: 'transcript',
+          expires_at: new Date(Date.now() + 3_600_000),
+        })),
+      )}
+      on conflict (storage_key) do nothing
+    `
+  }
+  return POST(
     new Request('https://sessclone.test/api/logs/confirm', {
       method: 'POST',
       headers: presented
@@ -127,16 +170,10 @@ const ask = async (
             'content-type': 'application/json',
           }
         : { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        sessionId: 'session-1',
-        sha256: SHA,
-        // The key the presign issued, which the Collector echoes. Overridden
-        // by the tests that are about it.
-        storageKey: derivedKey(),
-        ...body,
-      }),
+      body: JSON.stringify(sent),
     }),
   )
+}
 
 const answer = async (response: Response) =>
   [response.status, await response.json()] as const
@@ -182,6 +219,7 @@ beforeEach(async () => {
   stored.unreadable = false
   stored.configured = true
   stored.deleted = []
+  presigned = true
   await setArchival(true)
 })
 
@@ -990,4 +1028,114 @@ test('two sealing confirms racing on one seq record it once and delete neither c
   expect(await chunkRows()).toHaveLength(1)
   expect(stored.deleted.flat()).not.toContain(chunkAt(1, SHA))
   expect(stored.deleted.flat()).not.toContain(tailAt(1))
+})
+
+// ADR 0008: the presign records every key it signs as pending. The confirm
+// takes the keys it records out of that ledger in its transaction, and a
+// pass that ends any other way queues its keys for the sweep.
+
+const pendingKeys = async () =>
+  (
+    await sql<{ storage_key: string }[]>`
+      select storage_key from log_upload_pending order by storage_key
+    `
+  ).map((row) => row.storage_key)
+
+const orphanKeys = async () =>
+  (
+    await sql<{ storage_key: string }[]>`
+      select storage_key from storage_orphans order by storage_key
+    `
+  ).map((row) => row.storage_key)
+
+const sealOne = () => ({
+  layout: 'chunked',
+  sha256: 'f'.repeat(64),
+  storageKey: tailAt(1, '1111222233334444'),
+  sealedSha256: '9'.repeat(64),
+  chunks: [{ seq: 1, rawOffset: 0, rawLength: MiB, sha256: SHA }],
+})
+
+test('a recorded confirm takes its keys out of the pending ledger', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await sql`
+    insert into log_upload_pending
+      (storage_key, member_id, session_id, kind, expires_at)
+    values ('another-pass', ${fixture.acme.members.member}, 'session-1',
+            'transcript', now() + interval '1 hour')
+  `
+
+  expect((await answer(await ask(sealOne())))[1]).toMatchObject({
+    stored: true,
+  })
+
+  expect(await pendingKeys()).toEqual(['another-pass'])
+})
+
+test('a key no presign signed, or whose authorisation lapsed, is not recorded', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  presigned = false
+
+  expect(await answer(await ask(sealOne()))).toMatchObject([
+    200,
+    { refused: 'not_uploaded' },
+  ])
+  expect(await artifacts()).toHaveLength(0)
+  expect(await chunkRows()).toHaveLength(0)
+})
+
+test('a stale, unchanged or refused confirm queues its pass’s keys for the sweep', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await seedChunked(1)
+  const passKeys = (body: Parameters<typeof keysOf>[0]) =>
+    keysOf(body).toSorted()
+
+  // Lost a race: the pass sealed seq 1 again after another sealed it.
+  expect((await answer(await ask(sealOne())))[1].refused).toBe('stale_chunks')
+  expect(await orphanKeys()).toEqual(passKeys(sealOne()))
+  expect(await pendingKeys()).toEqual([])
+  await sql`delete from storage_orphans`
+
+  // Unchanged: the row already holds these bytes, so this pass's tail is
+  // nobody's.
+  const unchanged = {
+    layout: 'chunked',
+    sha256: 'e'.repeat(64),
+    storageKey: tailAt(1, 'fedcba9876543210'),
+  }
+  expect((await answer(await ask(unchanged)))[1].stored).toBe(true)
+  expect(await orphanKeys()).toEqual([unchanged.storageKey])
+  await sql`delete from storage_orphans`
+
+  // Refused: archival was switched off between the presign and the confirm.
+  await setArchival(false)
+  const off = { ...unchanged, sha256: 'f'.repeat(64) }
+  expect((await answer(await ask(off)))[1].refused).toBe('archival_off')
+  expect(await orphanKeys()).toEqual([off.storageKey])
+  expect(await pendingKeys()).toEqual([])
+})
+
+test('a confirm queues only its own Member’s pending keys', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await seedChunked(1)
+  presigned = false
+  await sql`
+    insert into log_upload_pending
+      (storage_key, member_id, session_id, kind, expires_at)
+    values (${tailAt(1, 'fedcba9876543210')}, ${fixture.acme.members.admin},
+            'session-1', 'transcript', now() + interval '1 hour')
+  `
+
+  await ask({
+    layout: 'chunked',
+    sha256: 'e'.repeat(64),
+    storageKey: tailAt(1, 'fedcba9876543210'),
+  })
+
+  expect(await orphanKeys()).toEqual([])
+  expect(await pendingKeys()).toEqual([tailAt(1, 'fedcba9876543210')])
 })

@@ -443,10 +443,25 @@ export const deleteStoredSession = async (
       delete from log_artifacts
        where id in (select id from doomed)
       returning storage_key
+    ), pending as (
+      -- Uploads presigned under these files and not yet confirmed: a pass
+      -- mid-flight has PUT, or is about to PUT, objects no row names. Taking
+      -- them here also refuses that pass's confirm.
+      delete from log_upload_pending upload
+       using transcript
+       where upload.member_id = transcript.member_id
+         and upload.session_id = transcript.session_id
+         and (upload.kind in ('transcript', 'agent_meta')
+                and upload.agent_id is not distinct from transcript.agent_id
+              or upload.kind = 'workflow_journal'
+                and transcript.agent_id is null)
+      returning upload.storage_key
     )
     select storage_key, true as artifact from artifacts
     union all
     select storage_key, false from chunks
+    union all
+    select storage_key, false from pending
   `
   if (!rows.some((row) => row.artifact)) return false
 
@@ -477,7 +492,8 @@ export const deleteStoredProject = async (
   memberId: string,
   projectId: string | null,
 ): Promise<number> => {
-  // ADR 0008: the chunks of every doomed transcript in the same statement.
+  // ADR 0008: the chunks of every doomed transcript in the same statement,
+  // and the uploads still pending in the Project.
   const rows = await tx<{ storage_key: string; kind: string | null }[]>`
     with doomed as (
       select id from log_artifacts
@@ -492,10 +508,19 @@ export const deleteStoredProject = async (
       delete from log_artifacts
        where id in (select id from doomed)
       returning storage_key, kind
+    ), pending as (
+      -- Uploads presigned in this Project and not yet confirmed (ADR 0008).
+      delete from log_upload_pending
+       where member_id = ${memberId}
+         and member_id in (select sessclone_own_member_ids())
+         and project_id is not distinct from ${projectId}
+      returning storage_key
     )
     select storage_key, kind from artifacts
     union all
     select storage_key, null from chunks
+    union all
+    select storage_key, null from pending
   `
   if (rows.length === 0) return 0
 

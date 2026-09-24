@@ -95,3 +95,72 @@ create policy log_artifact_chunks_delete on log_artifact_chunks for delete
 -- owning connection, after it has verified an API key.
 
 grant select, delete on log_artifact_chunks to sessclone_app;
+
+-- Every key a presign has signed and no confirm has recorded yet (ADR 0008).
+--
+-- A pass cut off by its deadline or a crash, one that loses a race to
+-- another pass, one refused at the confirm, and an upload whose confirm is
+-- `unchanged` all leave objects that no row and no `storage_orphans` entry
+-- names. The presign writes each key here before it answers; the confirm
+-- deletes the keys it records in its own transaction, and queues a refused
+-- pass's keys into `storage_orphans`; the retention sweep moves what has
+-- expired there; and a Member's own delete takes what is pending under the
+-- transcript it destroys.
+--
+-- No foreign key to `members`: a cascade would drop the only record of
+-- these objects, and `no action` would block removing the Member. The sweep
+-- reaches them by `expires_at` either way.
+create table log_upload_pending (
+  storage_key text primary key check (length(btrim(storage_key)) > 0),
+  member_id uuid not null,
+  session_id text not null,
+  agent_id text,
+  kind text not null
+    check (kind in ('transcript', 'agent_meta', 'workflow_journal')),
+  project_id uuid,
+  expires_at timestamptz not null
+);
+
+comment on table log_upload_pending is
+  'Object keys a presign signed that no confirm has recorded yet (ADR 0008). '
+  'Written by the presign route; deleted by the confirm, the retention sweep '
+  '(once expired, through storage_orphans) and the Member''s own deletes.';
+comment on column log_upload_pending.storage_key is
+  'The object key the presign signed a PUT URL for.';
+comment on column log_upload_pending.member_id is
+  'The Member whose API key asked for it; the only one a confirm or a delete '
+  'may take it for.';
+comment on column log_upload_pending.session_id is
+  'The Session it belongs to, so a per-Session delete takes it.';
+comment on column log_upload_pending.agent_id is
+  'The Agent Run or workflow run, as on log_artifacts; null for the Session.';
+comment on column log_upload_pending.kind is
+  'As log_artifacts.kind.';
+comment on column log_upload_pending.project_id is
+  'The Project the presign resolved, so a per-Project delete takes it.';
+comment on column log_upload_pending.expires_at is
+  'Past the URL''s life plus a grace for a slow confirm. After this the '
+  'retention sweep queues the key for deletion, and a confirm naming it is '
+  'refused as not_uploaded.';
+
+-- The per-Session and per-Project deletes lead on the Member; the sweep on
+-- the expiry.
+create index log_upload_pending_member_idx
+  on log_upload_pending (member_id, session_id);
+create index log_upload_pending_expires_idx
+  on log_upload_pending (expires_at);
+
+alter table log_upload_pending enable row level security;
+
+-- The Member's own, for their own deletes, and nobody else's: the keys carry
+-- an Org, a Member and a Project.
+create policy log_upload_pending_read on log_upload_pending for select
+  using (member_id in (select sessclone_own_member_ids()));
+
+create policy log_upload_pending_delete on log_upload_pending for delete
+  using (member_id in (select sessclone_own_member_ids()));
+
+-- No insert or update policy: rows are written by the presign route on the
+-- owning connection, after it has verified an API key.
+
+grant select, delete on log_upload_pending to sessclone_app;

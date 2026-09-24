@@ -45,6 +45,14 @@ import {
 // "already stored" anyway, and the transient one — the Session is not ingested
 // yet — is simply "ask again later".
 
+/**
+ * How long past the URL's own life a signed key stays pending (ADR 0008): a
+ * PUT may start just before the URL expires and run for its own timeout, and
+ * the confirm comes after it. Past this the sweep takes the key, and a
+ * confirm naming it is `not_uploaded`.
+ */
+const PENDING_GRACE_SECONDS = 3600
+
 const refused = (error: string, detail?: string) =>
   Response.json({ error, detail }, { status: 400 })
 
@@ -147,6 +155,43 @@ export async function POST(request: Request) {
       'this Session cannot be stored under a key that long',
       `${longest.slice(0, 80)}…`,
     )
+  }
+
+  // Every key this answer signs is recorded as pending before it is handed
+  // out (ADR 0008), so an upload that is never confirmed — a pass cut off,
+  // a lost race, a refused confirm — still has a delete path: the confirm
+  // takes the keys it records, and the retention sweep the rest once they
+  // expire. A key queued in `storage_orphans` is live again from here: the
+  // delete waits on a sweep holding that row, so no sweep deletes it after
+  // this answer goes out.
+  const signed = [storageKey, ...seals.map((each) => each.storageKey)]
+  const expiresAt = new Date(
+    Date.now() + (ttl() + PENDING_GRACE_SECONDS) * 1000,
+  )
+  try {
+    await sql`
+      with pending as (
+        insert into log_upload_pending ${sql(
+          signed.map((key) => ({
+            storage_key: key,
+            member_id: caller.memberId,
+            session_id: sessionId,
+            agent_id: agentId,
+            kind,
+            project_id: decision.projectId,
+            expires_at: expiresAt,
+          })),
+        )}
+        on conflict (storage_key) do update
+           set expires_at = excluded.expires_at,
+               project_id = excluded.project_id
+        returning storage_key
+      )
+      delete from storage_orphans
+       where storage_key in (select storage_key from pending)
+    `
+  } catch (error) {
+    return databaseFailure(error)
   }
 
   let url

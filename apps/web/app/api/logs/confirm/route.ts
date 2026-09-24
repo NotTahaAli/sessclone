@@ -10,6 +10,7 @@ import {
 import { presignDecision, type Sealed } from '../../../../lib/presign'
 import {
   chunkKey,
+  chunkKeysBeside,
   deleteObjects,
   storageConfigured,
   storedObject,
@@ -96,6 +97,33 @@ export async function POST(request: Request) {
     )
   }
 
+  // ADR 0008: a pass that ends here without being recorded — refused, lost
+  // a race, unchanged — leaves every key it PUT to unnamed. Those keys move
+  // from the pending ledger into `storage_orphans` for the sweep, which
+  // deletes each once no row names it. Only this Member's pending keys: a
+  // key is a claim, and the ledger is what says this Member was issued it.
+  const named = [
+    storageKey,
+    ...(chunked ? chunkKeysBeside(storageKey, parsed.data.chunks ?? []) : []),
+  ]
+  const giveUp = async (response: Response) => {
+    await sql`
+      with gone as (
+        delete from log_upload_pending
+         where member_id = ${caller.memberId}
+           and storage_key = any(${named})
+        returning storage_key
+      )
+      insert into storage_orphans (storage_key)
+      select storage_key from gone
+      on conflict (storage_key) do nothing
+    `.catch(() => {
+      // The ledger still holds them, and the sweep takes them once they
+      // expire; not worth turning a refusal into an error.
+    })
+    return response
+  }
+
   let decision
   try {
     decision = await presignDecision(sql, {
@@ -120,10 +148,12 @@ export async function POST(request: Request) {
     // gives, because the same switch is still off and nothing should have
     // been uploaded.
     if (decision.refusal !== 'unchanged') {
-      return Response.json({
-        refused: decision.refusal,
-        detail: decision.detail,
-      } satisfies ConfirmResponse)
+      return giveUp(
+        Response.json({
+          refused: decision.refusal,
+          detail: decision.detail,
+        } satisfies ConfirmResponse),
+      )
     }
 
     let stored
@@ -143,17 +173,22 @@ export async function POST(request: Request) {
     // destroyed it between the two statements (ticket 73), and a missing row
     // is the transient answer rather than a thrown assertion.
     if (!stored) {
-      return Response.json({
-        refused: 'not_uploaded',
-        detail: 'nothing is stored for this Session any more',
-      } satisfies ConfirmResponse)
+      return giveUp(
+        Response.json({
+          refused: 'not_uploaded',
+          detail: 'nothing is stored for this Session any more',
+        } satisfies ConfirmResponse),
+      )
     }
 
-    return Response.json({
-      stored: true,
-      storageKey: stored.storage_key,
-      sizeBytes: Number(stored.size_bytes),
-    } satisfies ConfirmResponse)
+    // This pass's own keys are nobody's: the row names an earlier pass's.
+    return giveUp(
+      Response.json({
+        stored: true,
+        storageKey: stored.storage_key,
+        sizeBytes: Number(stored.size_bytes),
+      } satisfies ConfirmResponse),
+    )
   }
 
   // ADR 0008. What this pass sealed, if it chunks at all: the chunks follow
@@ -177,15 +212,17 @@ export async function POST(request: Request) {
   // moved on (`stale_chunks`); any other is a Session that moved Project
   // (`stale_key`).
   if (at !== (chunked ? sealed.chunks + chunks.length : 0)) {
-    return chunked && at !== null
-      ? staleChunks()
-      : Response.json({
-          refused: 'stale_key',
-          detail:
-            'this Session’s Project changed since the upload was authorised',
-        } satisfies ConfirmResponse)
+    return giveUp(
+      chunked && at !== null
+        ? staleChunks()
+        : Response.json({
+            refused: 'stale_key',
+            detail:
+              'this Session’s Project changed since the upload was authorised',
+          } satisfies ConfirmResponse),
+    )
   }
-  if (!followsOn(sealed, chunks)) return staleChunks()
+  if (!followsOn(sealed, chunks)) return giveUp(staleChunks())
 
   // Every size from storage, never from the request (ADR 0003): each new
   // chunk's stored size and the tail's raw size, at most 17 HEADs at once.
@@ -211,11 +248,14 @@ export async function POST(request: Request) {
 
   if (objects.some((object) => !object)) {
     // The transient refusal on this route. An upload that never landed, or a
-    // provider that has not made it visible yet.
-    return Response.json({
-      refused: 'not_uploaded',
-      detail: 'no object is stored under this Session’s key yet',
-    } satisfies ConfirmResponse)
+    // provider that has not made it visible yet. The next pass presigns again,
+    // which records its keys as pending once more.
+    return giveUp(
+      Response.json({
+        refused: 'not_uploaded',
+        detail: 'no object is stored under this Session’s key yet',
+      } satisfies ConfirmResponse),
+    )
   }
 
   const tail = objects.at(-1)!
@@ -310,6 +350,19 @@ export async function POST(request: Request) {
         returning id
       `
 
+      // Every key recorded here must still be pending: issued to this
+      // Member by a presign, and not yet swept as expired. The sweep takes an
+      // expired key in a transaction that holds its row until the object is
+      // gone, so this waits for it and then finds nothing — rather than
+      // recording a row whose object the sweep is deleting.
+      const taken = await tx`
+        delete from log_upload_pending
+         where member_id = ${caller.memberId}
+           and storage_key = any(${keys})
+        returning storage_key
+      `
+      if (taken.length !== keys.length) throw new NotPending()
+
       // A key recorded here is live again, whatever an earlier replace
       // queued: the sweep must not delete it (by its primary key).
       await tx`
@@ -351,7 +404,15 @@ export async function POST(request: Request) {
         error.code === '23505' &&
         error.table_name === 'log_artifact_chunks')
     ) {
-      return staleChunks()
+      return giveUp(staleChunks())
+    }
+    if (error instanceof NotPending) {
+      return giveUp(
+        Response.json({
+          refused: 'not_uploaded',
+          detail: 'this upload was not authorised, or its authorisation lapsed',
+        } satisfies ConfirmResponse),
+      )
     }
     return databaseFailure(error)
   }
@@ -387,6 +448,9 @@ export async function POST(request: Request) {
 
 /** Thrown inside the transaction to roll it back as `stale_chunks`. */
 class StaleChunks extends Error {}
+
+/** Thrown inside the transaction when a key it records is not pending. */
+class NotPending extends Error {}
 
 const staleChunks = () =>
   Response.json({

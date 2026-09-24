@@ -156,7 +156,28 @@ export const tailNonce = () => randomBytes(8).toString('hex')
  * different bytes never share a key and a resealed chunk lands on its own.
  */
 export const chunkKey = (artifact: ArtifactPath, seq: number, sha256: string) =>
-  `${paths(artifact).transcript}/chunks/${String(seq).padStart(6, '0')}-${sha256.slice(0, 16)}.jsonl.gz`
+  `${paths(artifact).transcript}/${chunkName(seq, sha256)}`
+
+const chunkName = (seq: number, sha256: string) =>
+  `chunks/${String(seq).padStart(6, '0')}-${sha256.slice(0, 16)}.jsonl.gz`
+
+/**
+ * The chunk keys beside a tail key, read from the tail's own directory
+ * rather than from a resolved path: what a refused confirm names, when the
+ * deployment did not get as far as resolving one. Empty for a key that is
+ * not a `tail-<n>-<nonce>` key, since only those follow chunks.
+ */
+export const chunkKeysBeside = (
+  tail: string,
+  chunks: { seq: number; sha256: string }[],
+) => {
+  const at = tail.lastIndexOf('/tail-')
+  return at === -1
+    ? []
+    : chunks.map(
+        (chunk) => `${tail.slice(0, at)}/${chunkName(chunk.seq, chunk.sha256)}`,
+      )
+}
 
 /**
  * How many chunks precede `key` if it is one of this transcript's own tail

@@ -812,3 +812,84 @@ test('a chunked transcript is marked so the page downloads it in the browser', a
     Object.fromEntries(sessions.map((s) => [s.agentId ?? 'main', s.chunked])),
   ).toEqual({ main: true, 'agent-7': false })
 })
+
+/** A key a presign signed for this Member and no confirm recorded yet. */
+const pendingUpload = async ({
+  storageKey,
+  sessionId = 'session-1',
+  agentId = null,
+  kind = 'transcript',
+  projectId = null,
+}: {
+  storageKey: string
+  sessionId?: string
+  agentId?: string | null
+  kind?: 'transcript' | 'agent_meta' | 'workflow_journal'
+  projectId?: string | null
+}) => {
+  await sql`
+    insert into log_upload_pending ${sql({
+      storage_key: storageKey,
+      member_id: fixture.acme.members.member,
+      session_id: sessionId,
+      agent_id: agentId,
+      kind,
+      project_id: projectId,
+      expires_at: new Date(Date.now() + 3_600_000),
+    })}
+  `
+  return storageKey
+}
+
+const pendingLeft = async () =>
+  (
+    await sql<{ storage_key: string }[]>`
+      select storage_key from log_upload_pending order by storage_key
+    `
+  ).map((row) => row.storage_key)
+
+test('destroying a Session takes the uploads still pending under it', async () => {
+  // ADR 0008: a pass mid-upload when the Member deletes has PUT, or is
+  // about to PUT, objects no row names yet. They go with the transcript.
+  const projectId = await project('github.com/acme/api')
+  const main = await artifact({ projectId })
+  const tail = await pendingUpload({
+    storageKey: 'p/session-1/tail-2-aa.jsonl',
+  })
+  const chunk = await pendingUpload({ storageKey: 'p/session-1/chunks/2-bb' })
+  const journal = await pendingUpload({
+    storageKey: 'p/session-1/workflows/wf_1.journal.jsonl',
+    agentId: 'wf_1',
+    kind: 'workflow_journal',
+  })
+  // An Agent Run's own upload is its transcript's, not the Session's.
+  const run = await pendingUpload({
+    storageKey: 'p/session-1/agents/agent-7/tail-1-cc.jsonl',
+    agentId: 'agent-7',
+  })
+
+  expect(await asMember((tx) => deleteStoredSession(tx, main.id))).toBe(true)
+
+  expect(deleted.toSorted()).toEqual(
+    [main.key, tail, chunk, journal].toSorted(),
+  )
+  expect(await pendingLeft()).toEqual([run])
+})
+
+test('destroying a Project takes the uploads still pending in it', async () => {
+  const projectId = await project('github.com/acme/api')
+  const one = await artifact({ projectId })
+  const tail = await pendingUpload({ storageKey: 'p/tail-1-aa', projectId })
+  const otherId = await project('github.com/acme/web')
+  const kept = await pendingUpload({
+    storageKey: 'q/tail-1-bb',
+    projectId: otherId,
+  })
+
+  await asMember((tx) =>
+    deleteStoredProject(tx, fixture.acme.members.member, projectId),
+  )
+
+  expect(deleted.toSorted()).toEqual([one.key, tail].toSorted())
+  expect(await pendingLeft()).toEqual([kept])
+})

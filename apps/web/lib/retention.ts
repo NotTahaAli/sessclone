@@ -150,14 +150,33 @@ export const sweepRetention = async (
     const expired = rows.filter((row) => row.expired).length
     const removed = rows.filter((row) => row.artifact).length
 
+    // ADR 0008: keys a presign signed that no confirm recorded before they
+    // expired — a pass cut off, crashed, or whose confirm never came. They
+    // join the orphans below, which deletes each once no row names it. A
+    // confirm arriving now waits on these rows and is then refused.
+    const lapsed = await tx`
+      with lapsed as (
+        delete from log_upload_pending
+         where storage_key in (
+           select storage_key from log_upload_pending
+            where expires_at < now()
+            order by expires_at limit ${limit}
+         )
+        returning storage_key
+      )
+      insert into storage_orphans (storage_key)
+      select storage_key from lapsed
+      on conflict (storage_key) do nothing
+    `
+
     // The objects nothing names any more (`storage_orphans`), taken in the
     // same batch: they are already paid for in one round trip, and they are
     // the one class of stored transcript no row can lead anybody to.
     //
-    // Only while no row names the key again: the whole-file key is reused
-    // by every zero-chunk pass, so a key queued here can be live once more.
-    // Both lookups are the columns' unique indexes. Such a key stays queued,
-    // and goes once it is an orphan again.
+    // Only while no row names the key again, and no presign has signed it
+    // again: the whole-file key is reused by every zero-chunk pass, so a key
+    // queued here can be live once more. All three lookups are unique
+    // indexes. Such a key stays queued, and goes once it is an orphan again.
     const orphans = await tx<{ storage_key: string }[]>`
       delete from storage_orphans
        where storage_key in (
@@ -166,6 +185,8 @@ export const sweepRetention = async (
                              where artifact.storage_key = orphan.storage_key)
             and not exists (select 1 from log_artifact_chunks chunk
                              where chunk.storage_key = orphan.storage_key)
+            and not exists (select 1 from log_upload_pending pending
+                             where pending.storage_key = orphan.storage_key)
           order by orphan.noticed_at limit ${limit}
        )
       returning storage_key
@@ -189,7 +210,8 @@ export const sweepRetention = async (
     // extra call that removes nothing, which is the cheap way to be wrong.
     return {
       removed,
-      more: expired === limit || orphans.length === limit,
+      more:
+        expired === limit || orphans.length === limit || lapsed.count === limit,
     }
   })
 

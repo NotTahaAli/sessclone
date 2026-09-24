@@ -573,3 +573,49 @@ test('a bucket that refuses keeps the chunk rows as well as the artifact', async
   expect(await sql`select id from log_artifacts`).toHaveLength(1)
   expect(await chunkCount()).toBe(2)
 })
+
+// ADR 0008: a key a presign signed and no confirm recorded — a pass cut off
+// by its deadline, a crash, a lost confirm — expires out of the pending
+// ledger into the sweep.
+
+const pendingAt = (storageKey: string, expiresIn: number) => sql`
+  insert into log_upload_pending
+    (storage_key, member_id, session_id, kind, expires_at)
+  values (${storageKey}, ${fixture.acme.members.member}, 'session-1',
+          'transcript', ${new Date(Date.now() + expiresIn)})
+`
+
+test('an expired pending upload is deleted; one still in time is kept', async () => {
+  await pendingAt('lapsed/tail-1-0123456789abcdef.jsonl', -1000)
+  await pendingAt('in-time/tail-1-0123456789abcdef.jsonl', 3_600_000)
+
+  expect(await sweepRetention(sql)).toEqual({ removed: 0, more: false })
+
+  expect(bucket.deleted).toEqual(['lapsed/tail-1-0123456789abcdef.jsonl'])
+  const left = await sql<{ storage_key: string }[]>`
+    select storage_key from log_upload_pending
+  `
+  expect(left.map((row) => row.storage_key)).toEqual([
+    'in-time/tail-1-0123456789abcdef.jsonl',
+  ])
+})
+
+test('an expired pending key a row names is not deleted', async () => {
+  // The whole-file key is presigned by every zero-chunk pass, including one
+  // whose confirm never came after an earlier one recorded it.
+  const live = await seedArtifact({ age: 1 })
+  await pendingAt(live, -1000)
+
+  await sweepRetention(sql)
+
+  expect(bucket.deleted).toEqual([])
+})
+
+test('a queued orphan a presign has signed again is kept while that upload is pending', async () => {
+  await sql`insert into storage_orphans (storage_key) values ('again.jsonl')`
+  await pendingAt('again.jsonl', 3_600_000)
+
+  await sweepRetention(sql)
+
+  expect(bucket.deleted).toEqual([])
+})

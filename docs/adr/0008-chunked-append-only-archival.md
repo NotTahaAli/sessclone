@@ -167,6 +167,11 @@ statement, through data-modifying CTEs whose `returning` gathers every key.
 transcript, which is what a download yields and what the viewer's offsets
 count. What the bucket holds is `sum(stored_bytes)` plus the tail.
 
+A second table, `log_upload_pending (storage_key, member_id, session_id,
+agent_id, kind, project_id, expires_at)`, holds the keys a presign signed
+that no confirm has recorded yet (see Consequences). It has read and delete
+policies for `sessclone_own_member_ids()` and no insert or update policy.
+
 ### Readers
 
 - **Viewer.** The file list gains `tailOffset` and
@@ -225,11 +230,22 @@ keep the existing TTL and the existing renew-on-403 in `readBytes`.
 - Each pass hashes the file locally twice, once for the unchanged guard and
   once for the prefix check. That is local disk reading at hundreds of MB/s.
   It becomes worth optimising only if measured.
-- **Known ceiling, as today:** a chunk PUT whose confirm never arrives leaves
-  an object no row names. The next pass reseals the same seq to the same key,
-  so it converges. It stays behind only if that Collector never confirms
-  again. This is the same orphan the whole-file path already has when a PUT
-  lands and its confirm is lost.
+- **Unconfirmed uploads have a delete path.** A pass can PUT objects that no
+  row ever names: one cut off by its deadline or a crash, one that loses a
+  race (`stale_chunks`), one refused at the confirm, one whose Session is
+  deleted between the PUT and the confirm, and one whose confirm is
+  `unchanged`. Because every pass now writes new keys, this is not the
+  whole-file path's orphan, which the next upload overwrote. So the presign
+  records every key it signs in `log_upload_pending` (the Member, the
+  Session and Project, and an expiry of the URL's life plus an hour) before
+  it answers. The confirm deletes the keys it records from that ledger in
+  its transaction, and refuses as `not_uploaded` if any is no longer there.
+  A confirm that ends any other way moves that pass's pending keys into
+  `storage_orphans`. The retention sweep moves expired entries there too,
+  and deletes an orphan only while no artifact row, chunk row or pending
+  entry names its key. A Member's own per-Session and per-Project deletes
+  take the pending keys under what they destroy. The ledger has RLS: the
+  Member may read and delete their own rows, and only the presign writes.
 - A Session that moves Project changes its key prefix, so its chunks start
   again from zero under the new prefix. The old chunks go with the replaced
   row, through the existing `stale_key` and replaced-key path.

@@ -7,6 +7,7 @@
 - There are three sites: `sweepRetention` in `lib/retention.ts`, and `deleteStoredSession` and `deleteStoredProject` in `lib/artifacts.ts`. Each already deletes rows with a data-modifying CTE and `returning storage_key`. Each gains a sibling CTE that deletes `log_artifact_chunks` for the doomed artifact ids and returns their keys. The union of keys goes to the existing `deleteObjects` call. The same rule as today holds: rows are deleted inside the transaction, objects next, commit last.
 - Retention measures age from the artifact's `created_at`, so all of a transcript's chunks and its tail expire together. Chunks never expire one by one.
 - `SWEEP_LIMIT` still counts artifacts. A chunked artifact contributes one key per MiB, and `deleteObjects` already sends them in batches of 1000.
+- Review fix: uploads presigned and not yet confirmed are recorded in `log_upload_pending` (ADR 0008). `deleteStoredSession` and `deleteStoredProject` take the pending keys under what they destroy in the same statement, and the retention sweep moves expired entries into `storage_orphans`, whose deletion now skips any key a row or a pending entry names.
 - The transcripts page's "Stored" size and every `sum(size_bytes)` stay raw bytes (ADR 0008). No query changes here.
 
 **Blocked by:** 128

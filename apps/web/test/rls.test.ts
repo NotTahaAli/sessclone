@@ -1218,6 +1218,77 @@ describe('log_artifact_chunks', () => {
   })
 })
 
+describe('log_upload_pending', () => {
+  // ADR 0008: the keys a presign signed and no confirm has recorded yet. A
+  // Member's own delete takes them with their transcript; nobody else reads
+  // or removes them, and nothing the browser reaches writes them.
+  beforeEach(async () => {
+    await sql`
+      insert into log_upload_pending
+        (storage_key, member_id, session_id, kind, expires_at)
+      select storage_key || '.pending', member_id, session_id, 'transcript',
+             now() + interval '1 hour'
+        from log_artifacts where org_id = ${fixture.acme.id}
+    `
+  })
+
+  test('is read by its own Member alone', async () => {
+    expect(await reach('log_upload_pending')).toEqual({
+      owner: 1,
+      admin: 1,
+      manager: 1,
+      managerWithoutScope: 1,
+      member: 1,
+      removed: 0,
+      platformAdmin: 0,
+      stranger: 0,
+    })
+  })
+
+  test('is deleted by its own Member and by nobody above them', async () => {
+    const theirs = fixture.acme.members.member
+    for (const role of ['owner', 'admin', 'manager'] as const) {
+      // oxlint-disable-next-line no-await-in-loop -- one Role at a time reads clearly on failure.
+      const refused = await asRole(
+        fixture.acme,
+        role,
+        (tx) => tx`delete from log_upload_pending where member_id = ${theirs}`,
+      )
+      expect(refused.count, role).toBe(0)
+    }
+
+    const own = await asRole(
+      fixture.acme,
+      'member',
+      (tx) => tx`delete from log_upload_pending where member_id = ${theirs}`,
+    )
+    expect(own.count).toBe(1)
+  })
+
+  test('is written by the presign route alone', async () => {
+    await expect(
+      asRole(
+        fixture.acme,
+        'member',
+        (tx) => tx`
+          insert into log_upload_pending
+            (storage_key, member_id, session_id, kind, expires_at)
+          values ('acme/forged', ${fixture.acme.members.member}, 's',
+                  'transcript', now())
+        `,
+      ),
+    ).rejects.toThrow(/permission denied for table log_upload_pending/)
+
+    await expect(
+      asRole(
+        fixture.acme,
+        'member',
+        (tx) => tx`update log_upload_pending set expires_at = now()`,
+      ),
+    ).rejects.toThrow(/permission denied for table log_upload_pending/)
+  })
+})
+
 describe('across Orgs', () => {
   test('no Role reads a row of the other Org, on any table that has one', async () => {
     // Globex holds the same rows Acme does, seeded the same way, so each zero

@@ -517,3 +517,48 @@ test('a Session that moved Project starts sealing again from zero', async () => 
   })
   expect(body.storageKey).toMatch(tailPattern(base(), 1))
 })
+
+// ADR 0008: every key a presign signs is recorded as pending until a confirm
+// records it, so an upload that is never confirmed still has a delete path.
+
+const pending = () =>
+  sql<{ storage_key: string; member_id: string; ttl: number }[]>`
+    select storage_key, member_id,
+           extract(epoch from expires_at - now())::int as ttl
+      from log_upload_pending order by storage_key
+  `
+
+test('every key a presign signs is recorded as pending, and taken out of storage_orphans', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await seedChunked(1)
+  const four = `${base()}/chunks/000002-${'2'.repeat(16)}.jsonl.gz`
+  await sql`insert into storage_orphans (storage_key) values (${four})`
+
+  const [, body] = await answer(
+    await ask({ layout: 'chunked', seal: planned(2) }),
+  )
+
+  const rows = await pending()
+  expect(rows.map((row) => row.storage_key).toSorted()).toEqual(
+    [four, String(body.storageKey)].toSorted(),
+  )
+  for (const row of rows) {
+    expect(row.member_id).toBe(fixture.acme.members.member)
+    // Past the URL's own life, so a confirm that follows a slow PUT is
+    // still in time; bounded, so an unconfirmed one is swept.
+    expect(row.ttl).toBeGreaterThan(300)
+    expect(row.ttl).toBeLessThanOrEqual(300 + 3600)
+  }
+  expect(await sql`select 1 from storage_orphans`).toHaveLength(0)
+})
+
+test('a refused presign records nothing as pending', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await seedChunked(1)
+
+  await ask({ layout: 'chunked', sha256: 'b'.repeat(64) })
+
+  expect(await pending()).toEqual([])
+})
