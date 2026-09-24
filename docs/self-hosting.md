@@ -212,6 +212,13 @@ user profile from external provider`, because Supabase asks for the
    with no need for approval — one person, or sign-ups already restricted in
    Supabase — can skip this with `SIGNUP_APPROVAL=off` (see
    [configuration](configuration.md#sign-up-approval)).
+
+   An Enterprise Org, or any Org on a negotiated deal, can carry an **agreed
+   price** on the same page: a monthly base and a per-seat amount, in dollars,
+   either or both. The Org's **Settings → Tier** page then shows it (for
+   example "$500 + $8/seat/month") instead of the Tier's own price. Leave both
+   empty to go back to the Tier's price.
+
 4. Issue a key under **Keys**.
 5. Install the Collector on a machine: `docs/install.md`, which is two
    commands, the key, and a restart of Claude Code.
@@ -223,6 +230,21 @@ the order worth checking, and the Collector's own session-start message names
 the common causes. Nothing about a failed report is silent on the machine and
 invisible in the dashboard: **Costs → Failures** shows what the Collector
 recorded.
+
+## Reading Costs
+
+- **Over time** draws a bar for every day of the period, including empty days.
+  A bar, a day row or a model row opens a column: a day shows its tokens by
+  class and by model, then the Sessions that ran that day. A model shows its
+  tokens by class (input, output, cache read, cache write), each with its
+  cost, then the Sessions that used it.
+- **People**, **Projects** and **Devices** open the same column for a row: its
+  token table, a compact table by model, then its Sessions. Every column lists
+  Sessions, not Turns, each with its name, start time, cost and tokens, and
+  links to the Session.
+- Counts outside a Session's own page are **sessions**, not turns. A Session
+  of many Turns counts once.
+- **Failures** counts failed Sessions you have not marked viewed.
 
 ## Rates, so the costs are not zero
 

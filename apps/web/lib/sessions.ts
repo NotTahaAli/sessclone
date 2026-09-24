@@ -159,6 +159,12 @@ export type SessionFilter = {
   /** A Project id, or `null` for the Sessions that ran outside a repository. */
   projectId?: string | null
   memberId?: string
+  /** A Device id, or `null` for the Sessions whose Turns named no Device. */
+  deviceId?: string | null
+  /** A model, or `null` for Turns that reported none. Like the Project and
+   * Device filters it narrows the Turns, so a row's figures are that model's
+   * share of the Session. */
+  model?: string | null
   /**
    * Which shelf to read (ticket 92). `listed` is the default and the one a
    * reader arrives on; `archived` is the filter that brings them back.
@@ -176,6 +182,19 @@ export type SessionFilter = {
 
 /** `(last turn, session id)`: the ordering key, so a page cannot repeat a row. */
 export type SessionCursor = { lastTurnAt: string; sessionId: string }
+
+/** `<iso>,<session id>` from a URL, or nothing: anything else is page one. */
+export const sessionCursorOf = (
+  value: string | string[] | undefined,
+): SessionCursor | undefined => {
+  const raw = (Array.isArray(value) ? value[0] : value) ?? ''
+  const comma = raw.indexOf(',')
+  if (comma < 1) return undefined
+  const lastTurnAt = raw.slice(0, comma)
+  const sessionId = raw.slice(comma + 1)
+  if (!sessionId || Number.isNaN(Date.parse(lastTurnAt))) return undefined
+  return { lastTurnAt, sessionId }
+}
 
 /**
  * The Sessions of a period, newest first.
@@ -198,6 +217,8 @@ export const sessionList = async (
   {
     projectId,
     memberId,
+    deviceId,
+    model,
     state = 'listed',
     search,
     failedOnly,
@@ -227,6 +248,18 @@ export const sessionList = async (
              : tx`and turn.project_id = ${projectId}`
        }
        ${memberId ? tx`and turn.member_id = ${memberId}` : tx``}
+       ${
+         deviceId === undefined
+           ? tx``
+           : deviceId === null
+             ? tx`and turn.device_id is null`
+             : tx`and turn.device_id = ${deviceId}`
+       }
+       ${
+         model === undefined
+           ? tx``
+           : tx`and turn.model is not distinct from ${model}::text`
+       }
        ${
          // Ticket 92. A `where` rather than a `having`, because the state is
          // one value per Session and the join already carries it onto every

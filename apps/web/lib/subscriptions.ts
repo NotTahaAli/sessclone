@@ -45,6 +45,9 @@ export type AdminOrg = {
   requestedSeats: number | null
   /** Waiting for approval (ticket 120): `inactive`, or no row at all. */
   pending: boolean
+  /** The price agreed with this Org, monthly US cents, or null for none. */
+  priceBaseCents: number | null
+  priceSeatCents: number | null
 }
 
 type OrgRow = {
@@ -59,6 +62,8 @@ type OrgRow = {
   status: SubscriptionStatus | null
   current_period_end: Date | null
   requested_seats: number | null
+  price_base_cents: number | null
+  price_seat_cents: number | null
 }
 
 /** Ticket 120's "pending": never approved, as far as the row can say. */
@@ -78,6 +83,8 @@ const toAdminOrg = (row: OrgRow): AdminOrg => ({
   currentPeriodEnd: row.current_period_end,
   requestedSeats: row.requested_seats,
   pending: isPending(row.status),
+  priceBaseCents: row.price_base_cents,
+  priceSeatCents: row.price_seat_cents,
 })
 
 /**
@@ -113,7 +120,9 @@ export const listOrgs = async (
            tier.name as tier_name,
            subscription.status,
            subscription.current_period_end,
-           subscription.requested_seats
+           subscription.requested_seats,
+           subscription.price_base_cents,
+           subscription.price_seat_cents
       from orgs org
       left join org_operator_names operator on operator.org_id = org.id
       left join subscriptions subscription on subscription.org_id = org.id
@@ -163,7 +172,9 @@ export const adminOrg = async (
            tier.name as tier_name,
            subscription.status,
            subscription.current_period_end,
-           subscription.requested_seats
+           subscription.requested_seats,
+           subscription.price_base_cents,
+           subscription.price_seat_cents
       from orgs org
       left join org_operator_names operator on operator.org_id = org.id
       left join subscriptions subscription on subscription.org_id = org.id
@@ -200,6 +211,10 @@ export type SubscriptionEvent = {
   actorName: string | null
   provider: string
   occurredAt: Date
+  /** The price agreed when this happened, monthly US cents; both null when
+   * the Tier's own price applied. */
+  priceBaseCents: number | null
+  priceSeatCents: number | null
 }
 
 /**
@@ -224,6 +239,8 @@ export const subscriptionHistory = async (
       actor_name: string | null
       provider: string
       occurred_at: Date
+      price_base_cents: number | null
+      price_seat_cents: number | null
     }[]
   >`
     select event.id::text as id,
@@ -232,7 +249,9 @@ export const subscriptionHistory = async (
            event.note,
            coalesce(actor.display_name, actor.email) as actor_name,
            event.provider,
-           event.occurred_at
+           event.occurred_at,
+           event.price_base_cents,
+           event.price_seat_cents
       from subscription_events event
       join tiers tier on tier.id = event.tier_id
       left join users actor on actor.id = event.actor_user_id
@@ -249,6 +268,8 @@ export const subscriptionHistory = async (
     actorName: row.actor_name,
     provider: row.provider,
     occurredAt: row.occurred_at,
+    priceBaseCents: row.price_base_cents,
+    priceSeatCents: row.price_seat_cents,
   }))
 }
 
@@ -303,8 +324,8 @@ export const requestPlan = async (
  * so the history says plainly which rows a person wrote by hand, including a
  * hand-made change to a row some provider created.
  *
- * `recorded` is false when the write changed neither Tier nor status:
- * `sessclone_write_subscription_event` returns early on that, so a note typed
+ * `recorded` is false when the write changed neither Tier, status nor agreed
+ * price: `sessclone_write_subscription_event` returns early on that, so a note typed
  * beside it goes nowhere and the page must not claim it was written down.
  */
 export const setSubscription = async (
@@ -314,12 +335,33 @@ export const setSubscription = async (
     tierId: string
     status: SubscriptionStatus
     note: string | null
+    /** The price agreed with the Org, monthly US cents; null clears it and
+     * omitted keeps what is stored, so a status-only change cannot erase it. */
+    priceBaseCents?: number | null
+    priceSeatCents?: number | null
   },
 ): Promise<{ saved: boolean; recorded: boolean }> => {
-  const [before] = await tx<{ tier_id: string; status: string }[]>`
-    select tier_id, status from subscriptions
+  const [before] = await tx<
+    {
+      tier_id: string
+      status: string
+      price_base_cents: number | null
+      price_seat_cents: number | null
+    }[]
+  >`
+    select tier_id, status, price_base_cents, price_seat_cents
+      from subscriptions
      where org_id = ${subscription.orgId}
   `
+
+  const base =
+    subscription.priceBaseCents === undefined
+      ? (before?.price_base_cents ?? null)
+      : subscription.priceBaseCents
+  const seat =
+    subscription.priceSeatCents === undefined
+      ? (before?.price_seat_cents ?? null)
+      : subscription.priceSeatCents
 
   await tx`
     select set_config('sessclone.subscription_note',
@@ -327,13 +369,17 @@ export const setSubscription = async (
   `
 
   const rows = await tx`
-    insert into subscriptions (org_id, tier_id, status, provider)
+    insert into subscriptions
+      (org_id, tier_id, status, provider, price_base_cents, price_seat_cents)
     values (${subscription.orgId}, ${subscription.tierId},
-            ${subscription.status}, 'manual')
+            ${subscription.status}, 'manual',
+            ${base}, ${seat})
     on conflict (org_id) do update
        set tier_id = excluded.tier_id,
            status = excluded.status,
            provider = excluded.provider,
+           price_base_cents = excluded.price_base_cents,
+           price_seat_cents = excluded.price_seat_cents,
            updated_at = now()
     returning id
   `
@@ -347,6 +393,8 @@ export const setSubscription = async (
       rows.length > 0 &&
       (!before ||
         before.tier_id !== subscription.tierId ||
-        before.status !== subscription.status),
+        before.status !== subscription.status ||
+        before.price_base_cents !== base ||
+        before.price_seat_cents !== seat),
   }
 }

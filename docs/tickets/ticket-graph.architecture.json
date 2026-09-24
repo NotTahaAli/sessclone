@@ -3,7 +3,7 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "sessclone v1 — ticket status",
-    "subtitle": "121 tickets · 113 done · 2 ready to start · 6 blocked",
+    "subtitle": "127 tickets · 119 done · 2 ready to start · 6 blocked",
     "output": "docs/tickets/ticket-graph.html",
     "quality_profile": "showcase"
   },
@@ -217,6 +217,20 @@
         165,
         68
       ]
+    },
+    {
+      "id": "review",
+      "type": "frontend",
+      "label": "Review Fixes (122-127)",
+      "sublabel": "6 done",
+      "pos": [
+        730,
+        1000
+      ],
+      "size": [
+        165,
+        68
+      ]
     }
   ],
   "connections": [
@@ -230,6 +244,18 @@
       "id": "overhaul_approval",
       "from": "overhaul",
       "to": "approval",
+      "variant": "default"
+    },
+    {
+      "id": "overhaul_review",
+      "from": "overhaul",
+      "to": "review",
+      "variant": "default"
+    },
+    {
+      "id": "product_review",
+      "from": "product",
+      "to": "review",
       "variant": "default"
     },
     {

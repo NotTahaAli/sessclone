@@ -13,6 +13,13 @@ import type { NameState } from '../../../(dashboard)/inline-name'
 // a statement, and `subscriptions_write` refuses it independently of this
 // check (ADR 0001).
 
+/** `''` to null, `500` or `8.50` to cents, anything else refused. */
+const dollarsToCents = z
+  .string()
+  .trim()
+  .regex(/^(\d{1,7}(\.\d{1,2})?)?$/)
+  .transform((value) => (value === '' ? null : Math.round(Number(value) * 100)))
+
 const Form = z.object({
   orgId: z.uuid(),
   tierId: z.uuid(),
@@ -24,6 +31,10 @@ const Form = z.object({
     .trim()
     .max(500)
     .transform((value) => value || null),
+  // The price agreed with this Org, typed in dollars, stored in cents. Blank
+  // clears it and the Tier's own price (or "Contact") shows again.
+  priceBase: dollarsToCents,
+  priceSeat: dollarsToCents,
 })
 
 export const activateAction = async (
@@ -39,10 +50,22 @@ export const activateAction = async (
     tierId: formData.get('tierId'),
     status: formData.get('status'),
     note: formData.get('note') ?? '',
+    priceBase: formData.get('priceBase') ?? '',
+    priceSeat: formData.get('priceSeat') ?? '',
   })
-  if (!parsed.success) return { error: 'Pick a Tier and a status.' }
+  if (!parsed.success) {
+    return {
+      error:
+        'Pick a Tier and a status, and give a price as dollars (500 or 8.50), or leave it blank.',
+    }
+  }
 
-  const { orgId, ...subscription } = parsed.data
+  const { orgId, priceBase, priceSeat, ...rest } = parsed.data
+  const subscription = {
+    ...rest,
+    priceBaseCents: priceBase,
+    priceSeatCents: priceSeat,
+  }
   let result
   try {
     result = await asOperator((tx) =>

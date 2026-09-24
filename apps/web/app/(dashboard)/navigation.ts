@@ -23,9 +23,29 @@ import { reachesOrgSettings, reachesTier, type Role } from '../../lib/viewer'
 // `platformAdmin` is a separate argument from `role` here and why the flag is
 // read from the database (`lib/platform-admin.ts`) rather than from a claim.
 
+/**
+ * Which icon an entry draws (2026-09-23). A name rather than the component,
+ * because the items cross from the server layout into the client links, and
+ * a function cannot be a prop there; `nav-links.tsx` maps the name.
+ */
+export type NavIcon =
+  | 'costs'
+  | 'sessions'
+  | 'transcripts'
+  | 'keys'
+  | 'devices'
+  | 'settings'
+  | 'admin'
+  | 'more'
+  | 'back'
+  | 'rates'
+  | 'tiers'
+  | 'orgs'
+
 export type NavItem = {
   href: string
   label: string
+  icon?: NavIcon
   /** A count beside the label, such as Orgs waiting for approval (ticket
    * 120). Absent or zero draws nothing. */
   badge?: number
@@ -34,24 +54,32 @@ export type NavGroup = { label: string; items: NavItem[] }
 
 /** What the product is for: the three a person opens the dashboard to read. */
 export const PRIMARY: NavItem[] = [
-  { href: '/costs', label: 'Costs' },
-  { href: '/sessions', label: 'Sessions' },
-  { href: '/transcripts', label: 'Transcripts' },
+  { href: '/costs', label: 'Costs', icon: 'costs' },
+  { href: '/sessions', label: 'Sessions', icon: 'sessions' },
+  { href: '/transcripts', label: 'Transcripts', icon: 'transcripts' },
 ]
 
 /** Installed once, revisited when a machine changes. */
 export const COLLECTOR: NavItem[] = [
-  { href: '/keys', label: 'Keys' },
-  { href: '/devices', label: 'Devices' },
+  { href: '/keys', label: 'Keys', icon: 'keys' },
+  { href: '/devices', label: 'Devices', icon: 'devices' },
 ]
 
-export const SETTINGS: NavItem = { href: '/settings', label: 'Settings' }
+export const SETTINGS: NavItem = {
+  href: '/settings',
+  label: 'Settings',
+  icon: 'settings',
+}
 
 /**
  * The operator's area (ticket 62), which is not an Org surface at all — it is
  * listed here only because Taha asked for a way in that is not a typed path.
  */
-export const ADMIN_PANEL: NavItem = { href: '/admin', label: 'Admin panel' }
+export const ADMIN_PANEL: NavItem = {
+  href: '/admin',
+  label: 'Admin panel',
+  icon: 'admin',
+}
 
 /** The Admin panel entry with the count of Orgs waiting for approval beside
  * it (ticket 120). */
@@ -69,7 +97,7 @@ export const adminPanelEntry = (pending: number): NavItem[] => [
  * current-destination mark is the same `usePathname` comparison every other
  * entry uses.
  */
-export const MORE: NavItem = { href: '/more', label: 'More' }
+export const MORE: NavItem = { href: '/more', label: 'More', icon: 'more' }
 
 /**
  * The three groups, with the admin entry present only for the flag.
@@ -97,9 +125,11 @@ export const BOTTOM_BAR: NavItem[] = [...PRIMARY, MORE]
  * to a group below the first appears on the More page by being in that group.
  */
 export const moreItems = (platformAdmin = false): NavItem[] =>
-  navGroups(platformAdmin)
-    .slice(1)
-    .flatMap((group) => group.items)
+  moreGroups(platformAdmin).flatMap((group) => group.items)
+
+/** The same, under the group headings the sidebar shows (2026-09-23). */
+export const moreGroups = (platformAdmin = false): NavGroup[] =>
+  navGroups(platformAdmin).slice(1)
 
 /**
  * The settings destinations this Role reaches, in the order they are listed.

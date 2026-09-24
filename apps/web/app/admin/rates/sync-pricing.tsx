@@ -3,13 +3,12 @@
 import { useActionState } from 'react'
 
 import { syncPricingAction } from './actions'
+import { buttonClass } from '../../_ui/primitives'
 
 // Ticket 97: fetch the published price list, approve each model's changes,
 // apply the approved ones. Every model's changes are one checkbox, because a
 // model's classes change together on the page and a half-applied model prices
 // its cache reads from one list and its output from another.
-
-const FIELD = 'border-control-border text-text rounded border px-3 py-1 text-sm'
 
 const LABELS: Record<string, string> = {
   input: 'Input',
@@ -33,7 +32,7 @@ export function SyncPricing() {
           name="intent"
           value="fetch"
           disabled={pending}
-          className={FIELD}
+          className={buttonClass()}
         >
           {pending ? 'Working…' : 'Fetch latest pricing'}
         </button>
@@ -52,10 +51,7 @@ export function SyncPricing() {
           <>
             <ul className="flex flex-col gap-2">
               {state.proposals.map((proposal) => (
-                <li
-                  key={proposal.model}
-                  className="border-rule bg-surface rounded-md border p-3"
-                >
+                <li key={proposal.model} className="py-2">
                   <label className="flex items-baseline gap-2">
                     <input
                       type="checkbox"
@@ -102,7 +98,7 @@ export function SyncPricing() {
                 name="intent"
                 value="apply"
                 disabled={pending}
-                className={FIELD}
+                className={buttonClass('primary')}
               >
                 Apply ticked
               </button>

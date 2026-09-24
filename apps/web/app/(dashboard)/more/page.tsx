@@ -1,9 +1,12 @@
+import { AccountBlock } from '../account'
 import { PageHeader } from '../page-header'
 import { PendingLink } from '../pending-link'
-import { moreItems } from '../navigation'
+import { GROUP_HEADING, NavGlyph } from '../nav-glyph'
+import { moreGroups } from '../navigation'
 import { asViewer } from '../../../lib/db'
 import { currentOperator } from '../../../lib/platform-admin'
 import { pendingOrgCount } from '../../../lib/subscriptions'
+import { currentViewer } from '../../../lib/viewer'
 
 // Ticket 85: what the phone's More entry opens.
 //
@@ -38,7 +41,10 @@ export default async function More() {
   // The flag rather than a Role: no Role reaches the operator's area, and this
   // asks `sessclone_is_platform_admin()` — the same function the `/admin`
   // layout's own gate asks, so the entry and the refusal cannot disagree.
-  const operator = await currentOperator()
+  const [operator, viewer] = await Promise.all([
+    currentOperator(),
+    currentViewer(),
+  ])
   // Ticket 120: the phone's way to the Admin panel carries the count too.
   const pending = operator
     ? await asViewer(operator.userId, pendingOrgCount)
@@ -47,33 +53,46 @@ export default async function More() {
   return (
     <div className="flex max-w-3xl flex-col">
       <PageHeader title="More" />
+      {/* 2026-09-23: on a phone the account lives here, at the top; the
+          desktop sidebar carries the same block at its foot. */}
+      {viewer ? (
+        <div className="border-rule border-b py-4 lg:hidden">
+          <AccountBlock viewer={viewer} />
+        </div>
+      ) : null}
       {/* Direction A (ticket 112): plain rows with chevrons, one per
           destination, what it is for on the line under. */}
-      <ul className="mt-2">
-        {moreItems(operator !== null).map((item) => (
-          <li key={item.href}>
-            <PendingLink href={item.href} className={ROW}>
-              <span className="grid grid-cols-[14px_minmax(0,1fr)] gap-x-2">
-                <span
-                  aria-hidden="true"
-                  className="text-text-muted text-[13px]"
-                >
-                  ›
-                </span>
-                <span>
-                  {item.label}
-                  {item.href === '/admin' && pending > 0
-                    ? ` · ${pending} waiting for approval`
-                    : ''}
-                </span>
-                <span className="text-text-muted col-start-2 text-caption">
-                  {ABOUT[item.href]}
-                </span>
-              </span>
-            </PendingLink>
-          </li>
+      {/* Under the sidebar's own group headings (2026-09-23), so a phone
+          reads the same map a desktop does. */}
+      <div className="mt-2">
+        {moreGroups(operator !== null).map((group) => (
+          <section key={group.label}>
+            <h2 className={`${GROUP_HEADING} !mx-0`}>{group.label}</h2>
+            <ul>
+              {group.items.map((item) => (
+                <li key={item.href}>
+                  <PendingLink href={item.href} className={ROW}>
+                    <span className="grid grid-cols-[16px_minmax(0,1fr)] items-center gap-x-2.5">
+                      <span className="text-text-muted">
+                        <NavGlyph icon={item.icon} />
+                      </span>
+                      <span>
+                        {item.label}
+                        {item.href === '/admin' && pending > 0
+                          ? ` · ${pending} waiting for approval`
+                          : ''}
+                      </span>
+                      <span className="text-text-muted col-start-2 text-caption">
+                        {ABOUT[item.href]}
+                      </span>
+                    </span>
+                  </PendingLink>
+                </li>
+              ))}
+            </ul>
+          </section>
         ))}
-      </ul>
+      </div>
     </div>
   )
 }

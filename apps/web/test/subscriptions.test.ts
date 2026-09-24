@@ -387,3 +387,157 @@ test('an ask names a self-serve Tier, and states its size', async () => {
   await expect(ask('team', null)).rejects.toThrow(/row-level security/)
   expect(await ask('team', 2)).toBe(true)
 })
+
+test('an agreed price is the operator’s to set; the Owner reads it and cannot write it', async () => {
+  const tierId = await seedTier('enterprise')
+  await asOperator((tx) =>
+    setSubscription(tx, {
+      orgId: fixture.acme.id,
+      tierId,
+      status: 'active',
+      note: null,
+      priceBaseCents: 50_000,
+      priceSeatCents: 800,
+    }),
+  )
+
+  // Read as before: the Org's own row, through `subscriptions_read`.
+  const tier = await asRole(fixture.acme, 'owner', (tx) =>
+    orgTier(tx, fixture.acme.id),
+  )
+  expect(tier).toMatchObject({ priceBaseCents: 50_000, priceSeatCents: 800 })
+
+  // As `sessclone_app`, the Owner's update touches nothing: `subscriptions_write`
+  // is the platform flag and nothing else.
+  const updated = await asRole(
+    fixture.acme,
+    'owner',
+    (tx) => tx`
+      update subscriptions set price_base_cents = 0, price_seat_cents = 0
+       where org_id = ${fixture.acme.id}
+    `,
+  )
+  expect(updated.count).toBe(0)
+  const [row] = await sql<{ base: number; seat: number }[]>`
+    select price_base_cents as base, price_seat_cents as seat
+      from subscriptions where org_id = ${fixture.acme.id}
+  `
+  expect(row).toEqual({ base: 50_000, seat: 800 })
+})
+
+test('an Owner’s ask cannot carry an agreed price', async () => {
+  const tierId = await seedSizedTier('team', 2, 10)
+  // Everything else is a valid ask; only the price is the Owner's to not set.
+  const ask = (base: number | null, seat: number | null) =>
+    asRole(
+      fixture.acme,
+      'owner',
+      (tx) => tx`
+        insert into subscriptions
+          (org_id, tier_id, status, requested_seats,
+           price_base_cents, price_seat_cents)
+        values (${fixture.acme.id}, ${tierId}, 'inactive', 5, ${base}, ${seat})
+      `,
+    )
+
+  await expect(ask(0, null)).rejects.toThrow(/row-level security/)
+  await expect(ask(null, 0)).rejects.toThrow(/row-level security/)
+  expect((await ask(null, null)).count).toBe(1)
+})
+
+test('a price-only change is a change, and the history keeps the price', async () => {
+  const tierId = await seedTier('enterprise')
+  const set = (priceBaseCents: number | null, note: string) =>
+    asOperator((tx) =>
+      setSubscription(tx, {
+        orgId: fixture.acme.id,
+        tierId,
+        status: 'active',
+        note,
+        priceBaseCents,
+        priceSeatCents: null,
+      }),
+    )
+
+  await set(null, 'activated')
+  expect(await set(50_000, 'agreed on the call')).toEqual({
+    saved: true,
+    recorded: true,
+  })
+
+  const events = await sql<{ note: string; base: number | null }[]>`
+    select note, price_base_cents as base from subscription_events
+     where org_id = ${fixture.acme.id} order by id
+  `
+  expect(events).toEqual([
+    { note: 'activated', base: null },
+    { note: 'agreed on the call', base: 50_000 },
+  ])
+})
+
+test("the history reads each event's agreed price back", async () => {
+  const tierId = await seedTier('enterprise')
+  const set = (priceBaseCents: number | null, priceSeatCents: number | null) =>
+    asOperator((tx) =>
+      setSubscription(tx, {
+        orgId: fixture.acme.id,
+        tierId,
+        status: 'active',
+        note: null,
+        priceBaseCents,
+        priceSeatCents,
+      }),
+    )
+
+  await set(null, null)
+  await set(50_000, 800)
+
+  const history = await asOperator((tx) =>
+    subscriptionHistory(tx, fixture.acme.id),
+  )
+  expect(
+    history.map(({ priceBaseCents, priceSeatCents }) => ({
+      priceBaseCents,
+      priceSeatCents,
+    })),
+  ).toEqual([
+    { priceBaseCents: 50_000, priceSeatCents: 800 },
+    { priceBaseCents: null, priceSeatCents: null },
+  ])
+})
+
+test('a status-only change keeps the agreed price', async () => {
+  const tierId = await seedTier('enterprise')
+  const set = (price: { priceBaseCents?: null; priceSeatCents?: null } = {}) =>
+    asOperator((tx) =>
+      setSubscription(tx, {
+        orgId: fixture.acme.id,
+        tierId,
+        status: 'past_due',
+        note: null,
+        ...price,
+      }),
+    )
+  await asOperator((tx) =>
+    setSubscription(tx, {
+      orgId: fixture.acme.id,
+      tierId,
+      status: 'active',
+      note: null,
+      priceBaseCents: 50_000,
+      priceSeatCents: 800,
+    }),
+  )
+
+  // Omitted is "leave it"; only an explicit null clears it.
+  expect(await set()).toEqual({ saved: true, recorded: true })
+  const price = () => sql<{ base: number | null; seat: number | null }[]>`
+    select price_base_cents as base, price_seat_cents as seat
+      from subscriptions where org_id = ${fixture.acme.id}
+  `
+  expect(await price()).toEqual([{ base: 50_000, seat: 800 }])
+  expect(await set()).toEqual({ saved: true, recorded: false })
+
+  await set({ priceBaseCents: null, priceSeatCents: null })
+  expect(await price()).toEqual([{ base: null, seat: null }])
+})

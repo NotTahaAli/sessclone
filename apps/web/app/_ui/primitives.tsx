@@ -459,7 +459,9 @@ export function CustomSwatch({
 
 /**
  * A settings line: the label on the left, its control or value on the right,
- * an optional hint under both, and a hairline between lines. `htmlFor` makes
+ * an optional hint under both. No hairline between lines: the section breaks
+ * are the only dividers, and a rule under every line doubled up against them
+ * (Taha, 2026-09-23). `htmlFor` makes
  * the label a real `<label>` for a control with an id.
  */
 export function Field({
@@ -481,7 +483,7 @@ export function Field({
 }) {
   const Label = htmlFor ? 'label' : 'span'
   return (
-    <div className="border-rule grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b py-[11px] last:border-b-0">
+    <div className="grid grid-cols-[minmax(min(40%,10rem),1fr)_minmax(0,auto)] items-center gap-x-3 gap-y-1 py-[11px]">
       <Label
         htmlFor={htmlFor}
         title={mono && typeof label === 'string' ? label : undefined}
@@ -492,7 +494,7 @@ export function Field({
       {/* A plain value reads as data, mono and muted; a control keeps its
           own type. */}
       <span
-        className={`justify-self-end ${typeof children === 'string' ? 'text-text-muted font-mono text-[13px]' : ''}`}
+        className={`min-w-0 justify-self-end text-right ${typeof children === 'string' ? 'text-text-muted font-mono text-[13px]' : ''}`}
       >
         {children}
       </span>

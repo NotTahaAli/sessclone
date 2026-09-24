@@ -36,6 +36,8 @@ export type BreakdownRow = {
   costUsd: number | null
   tokens: number
   turns: number
+  /** Distinct Sessions with a Turn in the group and period. */
+  sessions: number
   unpricedTurns: number
 }
 
@@ -46,7 +48,9 @@ type RawRow = {
   cost_usd: string | null
   tokens: string
   turns: string
+  sessions: string
   unpriced_turns: string
+  total_sessions: string
   total_cost_usd: string | null
   total_tokens: string
   total_turns: string
@@ -71,6 +75,7 @@ export type Breakdown = {
     costUsd: number | null
     tokens: number
     turns: number
+    sessions: number
     unpricedTurns: number
   }
   /** Groups beyond the cap, or zero. */
@@ -93,7 +98,14 @@ const AGGREGATES = (tx: TransactionSql) => tx`
       + turn.cache_creation_input_tokens
   ) as tokens,
   count(*) as turns,
+  count(distinct (turn.member_id, turn.session_id)) as sessions,
   count(*) filter (where cost.unpriced) as unpriced_turns,
+  -- The groups' Sessions added up. Exact for people, since a Session is one
+  -- Member's; for Projects and Devices a Session that moved between two
+  -- would count in each, which a Session, one machine on one repository in
+  -- practice (lib/sessions.ts), does not do.
+  sum(count(distinct (turn.member_id, turn.session_id))) over ()
+    as total_sessions,
   -- The totals across every group, carried on each row by a window over the
   -- grouped aggregates. The row list is capped below, and a total summed from
   -- a capped list is a total that quietly drops the tail — on a page about
@@ -244,6 +256,7 @@ export const breakdown = async (
         first?.total_cost_usd == null ? null : Number(first.total_cost_usd),
       tokens: Number(first?.total_tokens ?? 0),
       turns: Number(first?.total_turns ?? 0),
+      sessions: Number(first?.total_sessions ?? 0),
       unpricedTurns: Number(first?.total_unpriced_turns ?? 0),
     },
     more: Math.max(0, Number(first?.groups ?? 0) - BREAKDOWN_LIMIT),
@@ -277,6 +290,7 @@ const ranked = (rows: RawRow[], dimension: Dimension): BreakdownRow[] =>
       costUsd: row.cost_usd === null ? null : Number(row.cost_usd),
       tokens: Number(row.tokens),
       turns: Number(row.turns),
+      sessions: Number(row.sessions),
       unpricedTurns: Number(row.unpriced_turns),
     }))
     // The database has already ranked these; this only settles a tie between

@@ -77,8 +77,11 @@ export type SpendRow = {
 }
 
 type RawRow = {
-  date: string
+  date: string | null
   model: string | null
+  /** 0 for a day-and-model cell, 1 for a day, 3 for the whole range. */
+  level: number
+  sessions: string
   cost_usd: string | null
   tokens: string
   turns: string
@@ -109,48 +112,79 @@ type RawRow = {
  * subsets of `cache_creation_input_tokens`, and thinking is a subset of
  * output, so adding either would count the same token twice.
  */
+export type DailySpend = {
+  rows: SpendRow[]
+  /** Distinct Sessions with a Turn on each day that had any. */
+  sessionsByDay: Record<string, number>
+  /** Distinct Sessions over the range: not the days' sum, since a Session
+   * that ran past midnight is one Session on two days. */
+  sessions: number
+}
+
 export const dailySpend = async (
   tx: TransactionSql,
   orgId: string,
   timezone: string,
   range: LocalRange,
-): Promise<SpendRow[]> => {
-  const rows = await tx<RawRow[]>`
-    select to_char(
-             (turn.occurred_at at time zone ${timezone})::date, 'YYYY-MM-DD'
-           ) as date,
-           turn.model,
-           sum(cost.cost_usd) as cost_usd,
-           sum(
-             turn.input_tokens + turn.output_tokens
-               + turn.cache_read_input_tokens
-               + turn.cache_creation_input_tokens
-           ) as tokens,
+): Promise<DailySpend> => {
+  // Grouping sets rather than a second statement: the day-and-model cells
+  // the chart needs, and a Session count per day and for the range, which
+  // cannot be added up from the cells — a Session on two models, or two
+  // days, is one Session.
+  const raw = await tx<RawRow[]>`
+    select to_char(picked.day, 'YYYY-MM-DD') as date,
+           picked.model,
+           grouping(picked.day, picked.model) as level,
+           count(distinct (picked.member_id, picked.session_id)) as sessions,
+           sum(picked.cost_usd) as cost_usd,
+           sum(picked.tokens) as tokens,
            count(*) as turns,
-           count(*) filter (where cost.unpriced) as unpriced_turns
-      from turn_costs cost
-      join turns turn on turn.id = cost.turn_id
-     where cost.org_id = ${orgId}
-       and turn.org_id = ${orgId}
-       and cost.occurred_at
-             >= (${range.from}::date)::timestamp at time zone ${timezone}
-       and cost.occurred_at
-             < (${range.to}::date)::timestamp at time zone ${timezone}
-       and turn.occurred_at
-             >= (${range.from}::date)::timestamp at time zone ${timezone}
-       and turn.occurred_at
-             < (${range.to}::date)::timestamp at time zone ${timezone}
-     group by 1, 2
+           count(*) filter (where picked.unpriced) as unpriced_turns
+      from (
+        select (turn.occurred_at at time zone ${timezone})::date as day,
+               turn.model,
+               turn.member_id,
+               turn.session_id,
+               cost.cost_usd,
+               cost.unpriced,
+               turn.input_tokens + turn.output_tokens
+                 + turn.cache_read_input_tokens
+                 + turn.cache_creation_input_tokens as tokens
+          from turn_costs cost
+          join turns turn on turn.id = cost.turn_id
+         where cost.org_id = ${orgId}
+           and turn.org_id = ${orgId}
+           and cost.occurred_at
+                 >= (${range.from}::date)::timestamp at time zone ${timezone}
+           and cost.occurred_at
+                 < (${range.to}::date)::timestamp at time zone ${timezone}
+           and turn.occurred_at
+                 >= (${range.from}::date)::timestamp at time zone ${timezone}
+           and turn.occurred_at
+                 < (${range.to}::date)::timestamp at time zone ${timezone}
+      ) picked
+     group by grouping sets ((picked.day, picked.model), (picked.day), ())
   `
 
-  return rows.map((row) => ({
-    date: row.date,
-    model: row.model,
-    costUsd: row.cost_usd === null ? null : Number(row.cost_usd),
-    tokens: Number(row.tokens),
-    turns: Number(row.turns),
-    unpricedTurns: Number(row.unpriced_turns),
-  }))
+  const sessionsByDay: Record<string, number> = {}
+  let sessions = 0
+  for (const row of raw) {
+    if (row.level === 1) sessionsByDay[row.date!] = Number(row.sessions)
+    if (row.level === 3) sessions = Number(row.sessions)
+  }
+
+  const rows = raw
+    .filter((row) => row.level === 0)
+    .map((row) => ({
+      date: row.date!,
+      model: row.model,
+      costUsd: row.cost_usd === null ? null : Number(row.cost_usd),
+      tokens: Number(row.tokens),
+      turns: Number(row.turns),
+      unpricedTurns: Number(row.unpriced_turns),
+    }))
+
+  return { rows, sessionsByDay, sessions }
 }
 
 /** A colour slot. Assigned by value, largest first; `other` always sorts last. */
@@ -167,6 +201,8 @@ export type Day = {
   costUsd: number
   tokens: number
   turns: number
+  /** Distinct Sessions with a Turn on this day. */
+  sessions: number
   unpricedTurns: number
 }
 
@@ -178,11 +214,12 @@ export type SpendSeries = {
   costUsd: number | null
   tokens: number
   turns: number
+  sessions: number
   unpricedTurns: number
 }
 
 /** What the design system will draw a model-less Turn as. */
-const UNKNOWN_MODEL = 'No model reported'
+export const UNKNOWN_MODEL = 'No model reported'
 
 /** Five slots and a sixth that is everything else. */
 const SLOTS = 5
@@ -199,6 +236,10 @@ const SLOTS = 5
 export const spendSeries = (
   rows: SpendRow[],
   range: LocalRange,
+  sessions: Pick<DailySpend, 'sessionsByDay' | 'sessions'> = {
+    sessionsByDay: {},
+    sessions: 0,
+  },
 ): SpendSeries => {
   const byModel = new Map<string, number>()
   for (const row of rows) {
@@ -289,6 +330,7 @@ export const spendSeries = (
       costUsd,
       tokens,
       turns,
+      sessions: sessions.sessionsByDay[date] ?? 0,
       unpricedTurns,
     })
   }
@@ -307,6 +349,7 @@ export const spendSeries = (
       : rows.reduce((sum, row) => sum + (row.costUsd ?? 0), 0),
     tokens: rows.reduce((sum, row) => sum + row.tokens, 0),
     turns: rows.reduce((sum, row) => sum + row.turns, 0),
+    sessions: sessions.sessions,
     unpricedTurns: rows.reduce((sum, row) => sum + row.unpricedTurns, 0),
   }
 }

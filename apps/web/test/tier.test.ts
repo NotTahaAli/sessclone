@@ -6,6 +6,7 @@ import {
   isActive,
   orgTier,
   retentionCeiling,
+  agreedPrice,
   shownCapabilities,
 } from '../lib/tier'
 import { tierPrice, tierSeats } from '../lib/tiers'
@@ -167,22 +168,59 @@ test('the Tier page is the Owner’s, and the guard is on the page not the link'
 
   // And no Tier key is compared anywhere on it: a capability decided by a key
   // in code is the deployment the `tiers` table exists to avoid.
-  expect(page).not.toMatch(/'(team|personal|enterprise|self_hosted)'/)
+  const view = readFileSync(
+    new URL('../app/(dashboard)/settings/tier/tier-view.tsx', import.meta.url),
+    'utf8',
+  )
+  expect(page + view).not.toMatch(/'(team|personal|enterprise|self_hosted)'/)
 })
 
-test('internal flags are not listed as capabilities', () => {
-  // `self_serve` and `own_rates` gate code paths; the page would print them as
-  // "self serve" and "own rates". A real gate, numeric or not, still shows.
+test('the Tier lists its includes lines and named flags, never raw keys', () => {
+  // Enterprise as seeded: `includes` is the plan's prose, not a flag, and
+  // "Single sign-on and an invoice" already says `sso`.
+  expect(
+    shownCapabilities({
+      manager_scopes: true,
+      sso: true,
+      includes: [
+        'Everything in Team, with no seat ceiling',
+        'Single sign-on and an invoice',
+      ],
+    }),
+  ).toEqual({
+    includes: [
+      'Everything in Team, with no seat ceiling',
+      'Single sign-on and an invoice',
+    ],
+    flags: [{ label: 'Manager scopes', value: null }],
+  })
+})
+
+test('internal, unknown and off flags are not listed', () => {
+  // `self_serve` and `own_rates` gate code paths; a key with no label would
+  // print raw; an off flag is not on the Tier. A named flag with a setting
+  // rather than a switch shows the setting.
   expect(
     shownCapabilities({
       self_serve: true,
       own_rates: true,
-      sso: true,
       max_projects: 50,
-      audit_log: false,
+      manager_scopes: false,
+      sso: 'saml',
     }),
-  ).toEqual([
-    ['sso', true],
-    ['max_projects', 50],
-  ])
+  ).toEqual({
+    includes: [],
+    flags: [{ label: 'Single sign-on', value: 'saml' }],
+  })
+})
+
+const agreed = (base: number | null, seat: number | null) =>
+  agreedPrice({ priceBaseCents: base, priceSeatCents: seat })
+
+test('an agreed price reads as base plus per seat, or whichever is set', () => {
+  expect(agreed(50_000, 800)).toBe('$500 + $8/seat/month')
+  expect(agreed(200_000, null)).toBe('$2,000/month')
+  expect(agreed(null, 1_250)).toBe('$12.50/seat/month')
+  expect(agreed(0, 800)).toBe('$0 + $8/seat/month')
+  expect(agreed(null, null)).toBeNull()
 })

@@ -3,6 +3,7 @@
 import { useActionState } from 'react'
 
 import { saveTierAction } from './actions'
+import { buttonClass, inputClass } from '../../_ui/primitives'
 
 // One form per Tier, plus one empty one for a new Tier. Client-side for the
 // refusal and for the saved line, as everywhere else in the admin area.
@@ -12,7 +13,8 @@ import { saveTierAction } from './actions'
 // are a JSON field an operator types into rather than a form that has to be
 // redeployed to learn a new key.
 
-const FIELD = 'border-control-border text-text rounded border px-3 py-1 text-sm'
+// Direction A's round field (2026-09-23 admin restyle).
+const FIELD = inputClass
 
 export type TierValues = {
   key: string
@@ -42,10 +44,7 @@ export function TierForm({
   const [state, formAction, pending] = useActionState(saveTierAction, null)
 
   return (
-    <form
-      action={formAction}
-      className="border-rule bg-surface flex flex-col gap-3 rounded-md border p-4"
-    >
+    <form action={formAction} className="flex flex-col gap-3 py-2">
       {/* Which form this is. The action refuses a create whose key is taken,
           rather than replacing a Tier every Org on it is entitled by. */}
       <input type="hidden" name="mode" value={tier ? 'edit' : 'create'} />
@@ -173,7 +172,11 @@ export function TierForm({
           />
           On sale
         </label>
-        <button type="submit" disabled={pending} className={FIELD}>
+        <button
+          type="submit"
+          disabled={pending}
+          className={buttonClass('primary')}
+        >
           {pending ? 'Saving…' : tier ? 'Save' : 'Create Tier'}
         </button>
         {orgs ? (
@@ -207,7 +210,7 @@ function Field({
   children: React.ReactNode
 }) {
   return (
-    <label className="flex flex-col gap-1 text-caption">
+    <label className="text-text-muted flex flex-col gap-1 text-caption">
       <span>
         {label}
         {hint ? <span className="text-text-muted"> · {hint}</span> : null}

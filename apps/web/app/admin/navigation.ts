@@ -13,7 +13,7 @@ import type { NavItem } from '../(dashboard)/navigation'
 // it.
 
 export const ADMIN_DESTINATIONS: NavItem[] = [
-  { href: '/admin/rates', label: 'Rates' },
-  { href: '/admin/tiers', label: 'Tiers' },
-  { href: '/admin/orgs', label: 'Orgs' },
+  { href: '/admin/rates', label: 'Rates', icon: 'rates' },
+  { href: '/admin/tiers', label: 'Tiers', icon: 'tiers' },
+  { href: '/admin/orgs', label: 'Orgs', icon: 'orgs' },
 ]

@@ -1,6 +1,8 @@
 import { Suspense, type ReactNode } from 'react'
 
-import { AccountMenu } from './account'
+import Link from 'next/link'
+
+import { AccountBlock, Avatar } from './account'
 import { AppearanceSync } from './appearance-sync'
 import { LogoMark } from '../_ui/logo'
 import { Waiting } from './waiting'
@@ -157,10 +159,39 @@ async function OrgName({ className }: { className: string }) {
   )
 }
 
-/** The account control, which knows the Role and the address it signs out. */
+/** The account block, which knows the Role and the address it signs out. */
 async function Account() {
   const viewer = await sessionViewer()
-  return viewer ? <AccountMenu viewer={viewer} /> : null
+  // The account block carries Legal beside Sign out, so the credit under it
+  // leaves Legal out. Without a viewer there is no block, and the credit is
+  // the only place Legal can be.
+  return viewer ? (
+    <>
+      <AccountBlock viewer={viewer} />
+      <PanelCredit legal={false} />
+    </>
+  ) : (
+    <PanelCredit />
+  )
+}
+
+/**
+ * The phone header's avatar: a way to the More page, where the account block
+ * is at the top (2026-09-23). A link rather than a menu, so there is nothing
+ * to open and nothing to clip.
+ */
+async function HeaderAccount() {
+  const viewer = await sessionViewer()
+  if (!viewer) return null
+  return (
+    <Link
+      href={MORE.href}
+      aria-label="Your account"
+      className="hover:bg-surface-hover flex size-[var(--control-h)] items-center justify-center rounded-md"
+    >
+      <Avatar name={viewer.displayName ?? viewer.email} />
+    </Link>
+  )
 }
 
 /**
@@ -250,6 +281,8 @@ const BEHIND_MORE = { [MORE.href]: moreItems(true) }
 const PENDING_SIDEBAR = <Pending className="mt-1" />
 const PENDING_HEADER = <Pending className="" />
 const PENDING_CONTENT = <Loading />
+/** The full credit, Legal included, while the account block loads. */
+const PENDING_CREDIT = <PanelCredit />
 // The navigation reads `usePathname()` to mark the current destination, and on
 // a route with a dynamic segment that value only exists at runtime — so these
 // two boundaries are what let `/sessions/[sessionId]`, `/turns/[id]` and
@@ -295,10 +328,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             every deployment rather than only a self-hosted one, because the
             additional term in `NOTICE.md` makes no such distinction. */}
         <div className="flex flex-col gap-4">
-          <Suspense fallback={null}>
+          {/* The credit, with Legal wherever the account block is not
+              there to carry it — including while it loads. */}
+          <Suspense fallback={PENDING_CREDIT}>
             <Account />
           </Suspense>
-          <PanelCredit />
         </div>
       </aside>
 
@@ -312,7 +346,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           </Suspense>
         </p>
         <Suspense fallback={null}>
-          <Account />
+          <HeaderAccount />
         </Suspense>
       </header>
 

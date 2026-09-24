@@ -61,10 +61,10 @@ test('the phone bar carries the first group and a way to the rest', () => {
 test('More holds every destination the bar does not', () => {
   // Generated from the groups rather than listed twice, so a destination added
   // to a later group cannot go missing from the phone.
-  expect(moreItems()).toEqual([
-    { href: '/keys', label: 'Keys' },
-    { href: '/devices', label: 'Devices' },
-    { href: '/settings', label: 'Settings' },
+  expect(moreItems().map((item) => item.href)).toEqual([
+    '/keys',
+    '/devices',
+    '/settings',
   ])
 
   const bar = new Set(BOTTOM_BAR.map((item) => item.href))
@@ -192,6 +192,31 @@ test('the viewer is read once per request, not once per component', () => {
   expect(viewer).toMatch(/export const currentViewer = cache\(/)
 })
 
+// 2026-09-23 review: the More page read `sessionViewer()`, which ignores the
+// lock (ticket 119). The shell never renders a locked Org's page, so nothing
+// leaked, but a page asking the lock-blind read is one refactor from showing a
+// waiting Org its account. Only the shell, which draws the waiting page, asks
+// it; every page asks `currentViewer()`.
+const APP_DIR = new URL('../app/', import.meta.url)
+const sessionViewerCallers = (dir: URL, prefix = ''): string[] =>
+  readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+    entry.isDirectory()
+      ? sessionViewerCallers(
+          new URL(`${entry.name}/`, dir),
+          `${prefix}${entry.name}/`,
+        )
+      : (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')) &&
+          readFileSync(new URL(entry.name, dir), 'utf8').includes(
+            'sessionViewer(',
+          )
+        ? [`${prefix}${entry.name}`]
+        : [],
+  )
+
+test('only the dashboard shell reads the viewer without the lock', () => {
+  expect(sessionViewerCallers(APP_DIR)).toEqual(['(dashboard)/layout.tsx'])
+})
+
 // Ticket 62: the operator's area, which is not reached from any of the four
 // destinations above and is gated on a flag rather than on a Role.
 
@@ -297,4 +322,10 @@ test('the operator is read from the database, not from the session', () => {
 
   expect(source).toContain('sessclone_is_platform_admin()')
   expect(source).toContain('cache(')
+})
+
+test('every destination draws an icon, the admin area included', () => {
+  // 2026-09-23: icons on every nav item, sidebar, bottom bar and More alike.
+  const items = [...everyHref(true), ...ADMIN_DESTINATIONS]
+  expect(items.filter((item) => !item.icon)).toEqual([])
 })

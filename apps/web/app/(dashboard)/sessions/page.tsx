@@ -15,8 +15,8 @@ import { resolveRange, type RangeParams } from '../../../lib/range'
 import { compact, usd } from '../../../lib/money'
 import {
   sessionFilters,
+  sessionCursorOf,
   sessionList,
-  type SessionCursor,
   type SessionRow,
 } from '../../../lib/sessions'
 import { currentViewer } from '../../../lib/viewer'
@@ -102,7 +102,7 @@ export default async function Sessions({
         viewer.orgTimezone,
         resolved.range,
         filter,
-        { before: cursorOf(params.before) },
+        { before: sessionCursorOf(params.before) },
       ),
       sessionFilters(tx, viewer.orgId),
     ]),
@@ -259,8 +259,6 @@ function SessionLine({
           {session.label
             ? ` · ${session.projectName ?? session.projectKey ?? 'outside a repository'}`
             : ''}
-          {' · '}
-          {session.turns} {session.turns === 1 ? 'Turn' : 'Turns'}
           {session.agentRuns > 0
             ? ` · ${session.agentRuns} ${
                 session.agentRuns === 1 ? 'subagent' : 'subagents'
@@ -305,17 +303,4 @@ const nextPage = (params: Query, last: SessionRow) => {
   }
   search.set('before', `${last.lastTurnAt},${last.sessionId}`)
   return search.toString()
-}
-
-/** `<iso>,<session id>`, or nothing. Anything else shows the first page. */
-const cursorOf = (
-  value: string | string[] | undefined,
-): SessionCursor | undefined => {
-  const raw = one(value) ?? ''
-  const comma = raw.indexOf(',')
-  if (comma < 1) return undefined
-  const lastTurnAt = raw.slice(0, comma)
-  const sessionId = raw.slice(comma + 1)
-  if (!sessionId || Number.isNaN(Date.parse(lastTurnAt))) return undefined
-  return { lastTurnAt, sessionId }
 }

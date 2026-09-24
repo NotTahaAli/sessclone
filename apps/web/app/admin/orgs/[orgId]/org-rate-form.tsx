@@ -47,7 +47,7 @@ export function AddOrgRateForm({
     <>
       <form action={formAction} className="flex flex-wrap items-end gap-3">
         <input type="hidden" name="orgId" value={orgId} />
-        <label className="flex flex-col gap-1 text-caption">
+        <label className="text-text-muted flex flex-col gap-1 text-caption">
           Model
           <input
             name="model"
@@ -62,7 +62,7 @@ export function AddOrgRateForm({
             ))}
           </datalist>
         </label>
-        <label className="flex flex-col gap-1 text-caption">
+        <label className="text-text-muted flex flex-col gap-1 text-caption">
           Class
           <select name="class" defaultValue="input" className={FIELD}>
             {RATE_CLASSES.map((rateClass) => (
@@ -72,7 +72,7 @@ export function AddOrgRateForm({
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-caption">
+        <label className="text-text-muted flex flex-col gap-1 text-caption">
           Price USD
           <input
             name="priceUsd"
@@ -83,7 +83,7 @@ export function AddOrgRateForm({
             className={FIELD}
           />
         </label>
-        <label className="flex flex-col gap-1 text-caption">
+        <label className="text-text-muted flex flex-col gap-1 text-caption">
           From
           <input
             name="effectiveFrom"
@@ -93,7 +93,7 @@ export function AddOrgRateForm({
             className={FIELD}
           />
         </label>
-        <label className="flex grow flex-col gap-1 text-caption">
+        <label className="text-text-muted flex grow flex-col gap-1 text-caption">
           Note
           <input
             name="note"

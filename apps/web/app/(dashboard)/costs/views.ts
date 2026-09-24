@@ -55,3 +55,51 @@ export const viewHref = (
   const search = query.toString()
   return search ? `${path}?${search}` : path
 }
+
+/** What an Over time row or bar opens in the Finder column. */
+export type TimeColumn =
+  { kind: 'day'; date: string } | { kind: 'model'; model: string }
+
+/**
+ * `?open=day:2026-09-23` or `?open=model:claude-opus-4-6`, or nothing. A
+ * value that names no real calendar date or no model opens nothing rather
+ * than failing the page: it is a URL, and anybody can type one.
+ */
+export const resolveTimeColumn = (
+  value: string | undefined,
+): TimeColumn | null => {
+  if (!value) return null
+  const colon = value.indexOf(':')
+  if (colon < 0) return null
+  const [kind, rest] = [value.slice(0, colon), value.slice(colon + 1)]
+  if (kind === 'model' && rest && rest.length <= 200) {
+    return { kind, model: rest }
+  }
+  if (
+    kind === 'day' &&
+    /^\d{4}-\d{2}-\d{2}$/.test(rest) &&
+    // An impossible date is an invalid Date, whose toISOString() throws.
+    !Number.isNaN(Date.parse(`${rest}T00:00:00Z`)) &&
+    new Date(`${rest}T00:00:00Z`).toISOString().startsWith(rest)
+  ) {
+    return { kind, date: rest }
+  }
+  return null
+}
+
+/**
+ * Which bars get a date under them: the first, the last, and today when it
+ * is in the range and far enough from both ends not to print over them.
+ */
+export const tickDates = (dates: string[], today: string): string[] => {
+  const first = dates[0]
+  const last = dates.at(-1)
+  if (!first || !last) return []
+  const at = dates.indexOf(today)
+  const room = Math.max(2, Math.round(dates.length / 5))
+  return [
+    first,
+    ...(at >= room && at <= dates.length - 1 - room ? [today] : []),
+    ...(last === first ? [] : [last]),
+  ]
+}

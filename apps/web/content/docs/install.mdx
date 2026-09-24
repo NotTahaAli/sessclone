@@ -131,7 +131,7 @@ safe to paste to whoever is helping.
 The **Failures** view on Costs answers a different question: turns that ended on
 a Claude API error — a rate limit, an overload, a billing problem. It is empty
 while the Collector is not reporting, and is not where a broken install shows
-up.
+up. The count beside the view is failed **Sessions** you have not looked at yet, not failure events: a rate-limit storm in one Session counts once. **Mark viewed** on a row, or **Mark all viewed**, clears it for you alone. A viewed failure stays on the list, and a new failure in that Session counts again.
 
 ## In a Claude Code cloud environment
 
@@ -144,16 +144,18 @@ claude.ai/code.
    placeholder and stays exactly as written; step 2 is what puts the real key
    on the wire.
 
-   ```bash
-   claude plugin marketplace add NotTahaAli/sessclone
-   claude plugin install sessclone --config url=https://sessclone.com --config api_key=sk_0000000000000000000000000000000000000000000
-   ```
+   <SiteCode
+     lang="bash"
+     code={
+       'claude plugin marketplace add NotTahaAli/sessclone\nclaude plugin install sessclone --config url=$SITE_URL --config api_key=sk_0000000000000000000000000000000000000000000'
+     }
+   />
 
 2. **API credential.** Under **API credentials**, select **Add credential**
    ([Claude's docs](https://code.claude.com/docs/en/cloud-environments#add-api-credentials)):
    - **Name**: `SessClone`
    - **Credential type**: Bearer
-   - **Allowed websites**: `sessclone.com`
+   - **Allowed websites**: <SiteHost />
    - **Custom headers**: name `Authorization`, prefix `Bearer`, and your key
      from **Keys** as the value
 
@@ -164,8 +166,9 @@ the session, Claude, or the setup script, which anyone using the environment
 can read. The placeholder has the shape of a real key so the session-start
 check passes; it matches nothing on the deployment.
 
-A self-hosted deployment uses its own `NEXT_PUBLIC_APP_URL` in the command and
-its own host in **Allowed websites**. If the credential is missing or wrong,
+The command and **Allowed websites** above name the deployment serving these
+docs, from its `NEXT_PUBLIC_APP_URL`, so a self-hosted copy's docs already say
+the right thing. If the credential is missing or wrong,
 the deployment answers `401` and the next session start prints a line saying
 the key was refused.
 

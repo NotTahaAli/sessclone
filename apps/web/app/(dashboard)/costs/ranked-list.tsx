@@ -1,3 +1,4 @@
+import { sessionCount } from './token-table'
 import { Row } from '../../_ui/primitives'
 import { hrefWith, type Query } from '../query'
 import type { BreakdownRow, Dimension } from '../../../lib/breakdown'
@@ -5,7 +6,7 @@ import { compact, count, usd } from '../../../lib/money'
 
 // The ranked list that tickets 54, 55 and 56 each show, as Direction A's rows
 // (ticket 112): the name, the cost as the right-aligned mono figure, a meter
-// under the name, and tokens, turns and the share on the line below.
+// under the name, and tokens, Sessions and the share on the line below.
 //
 // `docs/design/dashboard-wireframes.md` picked the shape and said why — a pie
 // cannot be read past four slices and cannot be sorted — and it is one
@@ -102,7 +103,7 @@ export function RankedList({
               sub={
                 <>
                   {compact.format(row.tokens)} tokens ·{' '}
-                  {count.format(row.turns)} {row.turns === 1 ? 'turn' : 'turns'}
+                  {sessionCount(row.sessions)}
                   {row.unpricedTurns > 0
                     ? ` · ${count.format(row.unpricedTurns)} unpriced`
                     : ''}

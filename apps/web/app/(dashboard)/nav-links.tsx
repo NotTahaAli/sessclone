@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation'
 
+import { GROUP_HEADING, NavGlyph } from './nav-glyph'
 import type { NavGroup, NavItem } from './navigation'
 import { PendingLink } from './pending-link'
 
@@ -57,9 +58,7 @@ const groupsMarkup = (
   <div className="flex flex-col">
     {groups.map((group, index) => (
       <div key={group.label} className="flex flex-col">
-        <p className="text-label text-text-muted mx-2 mt-3.5 mb-1 uppercase">
-          {group.label}
-        </p>
+        <p className={GROUP_HEADING}>{group.label}</p>
         {linksMarkup(group.items, pathname)}
         {index === groups.length - 1 ? children : null}
       </div>
@@ -93,12 +92,13 @@ const linksMarkup = (items: NavItem[], pathname: string | null) => {
               // Direction A (ticket 111): the current item takes the neutral
               // `selected` fill and the text colour, and no accent at all —
               // the accent is kept for live state, as on the transcript page.
-              className={`flex items-center rounded-[7px] px-2 py-1.5 text-body ${
+              className={`flex items-center gap-2.5 rounded-[7px] px-2 py-1.5 text-body ${
                 current
                   ? 'bg-selected text-text font-medium'
                   : 'text-text-muted hover:bg-surface-hover hover:text-text'
               }`}
             >
+              <NavGlyph icon={item.icon} />
               {item.label}
               {item.badge ? (
                 <span className="border-rule text-text-secondary ml-auto rounded-full border px-2 text-caption">
@@ -172,12 +172,14 @@ const barMarkup = ({ items, behind }: Bar, pathname: string | null) => {
               // A 2px rule in the text colour above the current label, and no
               // accent: the accent is for live state (Direction A, ticket
               // 111). The bottom padding clears a phone's home indicator.
-              className={`flex flex-col items-center justify-center pt-2.5 pb-[max(14px,env(safe-area-inset-bottom))] text-caption ${
+              // The icon above a small label (2026-09-23).
+              className={`flex flex-col items-center justify-center gap-1 pt-2.5 pb-[max(14px,env(safe-area-inset-bottom))] text-[11px] ${
                 current
                   ? 'text-text font-medium shadow-[inset_0_2px_0_var(--color-text)]'
                   : 'text-text-muted'
               }`}
             >
+              <NavGlyph icon={item.icon} />
               {item.label}
             </PendingLink>
           </li>

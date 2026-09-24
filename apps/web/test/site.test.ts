@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { asksConsent } from '../app/(marketing)/clarity'
 import robots from '../app/robots'
+import { contactEmail, siteHost, siteUrl } from '../lib/site'
 
 describe('robots', () => {
   afterEach(() => vi.unstubAllEnvs())
@@ -64,5 +65,26 @@ describe('asksConsent', () => {
     for (const zone of ['America/New_York', 'Asia/Karachi', 'Asia/Riyadh']) {
       expect(asksConsent(zone), zone).toBe(false)
     }
+  })
+})
+
+describe('siteUrl and contactEmail', () => {
+  afterEach(() => vi.unstubAllEnvs())
+
+  it('reads the deployment from NEXT_PUBLIC_APP_URL, without a trailing slash', () => {
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://costs.example.org/')
+    expect(siteUrl()).toBe('https://costs.example.org')
+    expect(siteHost()).toBe('costs.example.org')
+  })
+
+  it('has no contact address unless one is set: no fallback inbox', () => {
+    // 2026-09-23: a self-hosted copy must not send visitors to upstream's
+    // inbox, so unset and empty are both "none", and the links hide.
+    vi.stubEnv('NEXT_PUBLIC_CONTACT_EMAIL', undefined)
+    expect(contactEmail()).toBeNull()
+    vi.stubEnv('NEXT_PUBLIC_CONTACT_EMAIL', '')
+    expect(contactEmail()).toBeNull()
+    vi.stubEnv('NEXT_PUBLIC_CONTACT_EMAIL', 'ops@example.org')
+    expect(contactEmail()).toBe('ops@example.org')
   })
 })

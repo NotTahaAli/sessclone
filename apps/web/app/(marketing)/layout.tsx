@@ -68,9 +68,11 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
             <Link href="/terms" className={LINK}>
               Terms
             </Link>
-            <a href={`mailto:${CONTACT_EMAIL}`} className={LINK}>
-              {CONTACT_EMAIL}
-            </a>
+            {CONTACT_EMAIL ? (
+              <a href={`mailto:${CONTACT_EMAIL}`} className={LINK}>
+                {CONTACT_EMAIL}
+              </a>
+            ) : null}
           </div>
         </div>
       </footer>

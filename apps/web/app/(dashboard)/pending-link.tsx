@@ -28,7 +28,13 @@ function Pending({ children }: { children: ReactNode }) {
       // indicator that appears on click shifts whatever is beside it. An
       // inline span around the label changes no layout either — and it has to
       // be a real box, since `display: contents` has nothing to fade.
-      className={pending ? 'opacity-50' : undefined}
+      //
+      // It takes the link's own layout (2026-09-23), so an icon beside a
+      // label in a flex row, or above it in the bottom bar's column, lays out
+      // as if this box were not there.
+      className={`flex-1 [display:inherit] [flex-direction:inherit] [align-items:inherit] [justify-content:inherit] [gap:inherit] ${
+        pending ? 'opacity-50' : ''
+      }`}
     >
       {children}
       {/* Announced once, when it becomes true, for a reader who cannot see

@@ -1,3 +1,5 @@
+import { markFailuresViewedAction } from './failure-actions'
+import { one, type Query } from '../query'
 import { Row } from '../../_ui/primitives'
 import { adviceFor, type FailureTone } from '../../../lib/failure-advice'
 import type { FailureRow, Failures } from '../../../lib/failures'
@@ -31,11 +33,21 @@ const shortId = (id: string, limit = 20) =>
 
 export function FailuresList({
   failures,
+  unviewed,
+  seenAt,
   timezone,
+  params,
 }: {
   failures: Failures
+  /** Failed Sessions in the period the viewer has not marked seen — the
+   * pill's count, which reaches past the capped rows. */
+  unviewed: number
+  /** When the page's reads began: a mark covers only what they showed. */
+  seenAt: string
   /** The Org's timezone, so a time reads in the same zone the range is cut in. */
   timezone: string
+  /** The current query: the period a mark applies to rides in the form. */
+  params: Query
 }) {
   const when = new Intl.DateTimeFormat('en-GB', {
     dateStyle: 'medium',
@@ -54,25 +66,71 @@ export function FailuresList({
   }
 
   return (
-    <ol className="flex flex-col">
-      {failures.rows.map((row) => (
-        <Failure
-          key={row.id}
-          row={row}
-          when={when.format(new Date(row.occurredAt))}
-        />
-      ))}
-      {failures.more > 0 ? (
-        <li className="text-text-muted py-3 text-caption">
-          {new Intl.NumberFormat('en-US').format(failures.more)} more, below the
-          most recent {failures.rows.length}. Narrow the period to see them.
-        </li>
+    <>
+      {unviewed > 0 ? (
+        <form
+          action={markFailuresViewedAction}
+          className="-mt-1 mb-1 flex justify-end"
+        >
+          <Period params={params} seenAt={seenAt} />
+          <button
+            type="submit"
+            className="text-text-muted hover:text-text text-caption underline underline-offset-2"
+          >
+            Mark all viewed
+          </button>
+        </form>
       ) : null}
-    </ol>
+      <ol className="flex flex-col">
+        {failures.rows.map((row) => (
+          <Failure
+            key={row.id}
+            row={row}
+            params={params}
+            seenAt={seenAt}
+            when={when.format(new Date(row.occurredAt))}
+          />
+        ))}
+        {failures.more > 0 ? (
+          <li className="text-text-muted py-3 text-caption">
+            {new Intl.NumberFormat('en-US').format(failures.more)} more, below
+            the most recent {failures.rows.length}. Narrow the period to see
+            them.
+          </li>
+        ) : null}
+      </ol>
+    </>
   )
 }
 
-function Failure({ row, when }: { row: FailureRow; when: string }) {
+/** The period the page shows, and when it was read, as hidden fields, so a
+ * mark covers the same Sessions the reader is looking at and not a failure
+ * received after. */
+function Period({ params, seenAt }: { params: Query; seenAt: string }) {
+  return (
+    <>
+      <input type="hidden" name="seenAt" value={seenAt} />
+      {(['range', 'from', 'to'] as const).map((key) => {
+        const value = one(params[key])
+        return value ? (
+          <input key={key} type="hidden" name={key} value={value} />
+        ) : null
+      })}
+    </>
+  )
+}
+
+function Failure({
+  row,
+  when,
+  params,
+  seenAt,
+}: {
+  row: FailureRow
+  when: string
+  params: Query
+  seenAt: string
+}) {
   const advice = adviceFor(row.errorType)
 
   // Who and where it failed, joined into one muted line: the Session always,
@@ -87,7 +145,9 @@ function Failure({ row, when }: { row: FailureRow; when: string }) {
     .join(' · ')
 
   return (
-    <li className="border-rule border-b pb-2 last:border-b-0">
+    <li
+      className={`border-rule border-b pb-2 last:border-b-0 ${row.viewed ? 'opacity-70' : ''}`}
+    >
       {/* The type is collector-controlled text of up to 64 characters
           (ticket 40's schema); the row truncates it rather than letting 64
           unbreakable characters push the page sideways on a phone. */}
@@ -130,6 +190,23 @@ function Failure({ row, when }: { row: FailureRow; when: string }) {
           <p className="text-text-secondary break-all">
             {row.message ?? 'No message was recorded for this failure.'}
           </p>
+        )}
+        {/* Viewed stays listed as the failure it was; it only stops being
+            counted on the view pill, for this reader. */}
+        {row.viewed ? (
+          <p className="text-text-muted text-caption">✓ Viewed</p>
+        ) : (
+          <form action={markFailuresViewedAction}>
+            <Period params={params} seenAt={seenAt} />
+            <input type="hidden" name="memberId" value={row.memberId} />
+            <input type="hidden" name="sessionId" value={row.sessionId} />
+            <button
+              type="submit"
+              className="text-text-muted hover:text-text text-caption underline underline-offset-2"
+            >
+              Mark viewed
+            </button>
+          </form>
         )}
       </div>
     </li>

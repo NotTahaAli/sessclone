@@ -67,11 +67,37 @@ describe('the read', () => {
     })
 
     const rows = await asRole(fixture.acme, 'owner', (tx) =>
-      dailySpend(tx, fixture.acme.id, 'America/New_York', september),
+      dailySpend(tx, fixture.acme.id, 'America/New_York', september).then(
+        (spend) => spend.rows,
+      ),
     )
 
     expect(rows).toHaveLength(1)
     expect(rows[0]!.date).toBe('2026-09-20')
+  })
+
+  test('counts Sessions per day and for the range, not per model', async () => {
+    // One Session on two models and across midnight, and a second Session.
+    await seedTurn({ input_tokens: MILLION })
+    await seedTurn({ model: 'claude-opus-4-8', input_tokens: MILLION })
+    await seedTurn({
+      occurred_at: '2026-09-21T01:00:00Z',
+      input_tokens: MILLION,
+    })
+    await seedTurn({ session_id: 'session-2', input_tokens: MILLION })
+
+    const spend = await asRole(fixture.acme, 'owner', (tx) =>
+      dailySpend(tx, fixture.acme.id, 'UTC', september),
+    )
+
+    expect(spend.sessionsByDay).toEqual({ '2026-09-20': 2, '2026-09-21': 1 })
+    expect(spend.sessions).toBe(2)
+    expect(spend.rows).toHaveLength(3)
+    const series = spendSeries(spend.rows, september, spend)
+    expect(series.sessions).toBe(2)
+    expect(series.days.find((day) => day.date === '2026-09-20')!.sessions).toBe(
+      2,
+    )
   })
 
   test('counts an unpriced Turn without adding it to the cost', async () => {
@@ -79,7 +105,9 @@ describe('the read', () => {
     await seedTurn({ model: 'claude-unreleased-9', input_tokens: MILLION })
 
     const rows = await asRole(fixture.acme, 'owner', (tx) =>
-      dailySpend(tx, fixture.acme.id, 'UTC', september),
+      dailySpend(tx, fixture.acme.id, 'UTC', september).then(
+        (spend) => spend.rows,
+      ),
     )
 
     const unknown = rows.find((row) => row.model === 'claude-unreleased-9')
@@ -105,7 +133,9 @@ describe('the read', () => {
     })
 
     const rows = await asRole(fixture.acme, 'owner', (tx) =>
-      dailySpend(tx, fixture.acme.id, 'UTC', september),
+      dailySpend(tx, fixture.acme.id, 'UTC', september).then(
+        (spend) => spend.rows,
+      ),
     )
 
     expect(rows[0]!.tokens).toBe(400)
@@ -117,7 +147,9 @@ describe('the read', () => {
     await seedTurn({ occurred_at: '2026-10-01T00:00:00Z' })
 
     const rows = await asRole(fixture.acme, 'owner', (tx) =>
-      dailySpend(tx, fixture.acme.id, 'UTC', september),
+      dailySpend(tx, fixture.acme.id, 'UTC', september).then(
+        (spend) => spend.rows,
+      ),
     )
 
     expect(rows.map((row) => row.date)).toEqual(['2026-09-30'])
@@ -129,10 +161,14 @@ describe('the read', () => {
     await seedTurn({ member_id: fixture.acme.members.owner })
 
     const asOwner = await asRole(fixture.acme, 'owner', (tx) =>
-      dailySpend(tx, fixture.acme.id, 'UTC', september),
+      dailySpend(tx, fixture.acme.id, 'UTC', september).then(
+        (spend) => spend.rows,
+      ),
     )
     const asMember = await asRole(fixture.acme, 'member', (tx) =>
-      dailySpend(tx, fixture.acme.id, 'UTC', september),
+      dailySpend(tx, fixture.acme.id, 'UTC', september).then(
+        (spend) => spend.rows,
+      ),
     )
 
     expect(asOwner[0]!.turns).toBe(2)
@@ -143,7 +179,9 @@ describe('the read', () => {
     await seedTurn({ input_tokens: MILLION })
 
     const rows = await asRole(fixture.globex, 'owner', (tx) =>
-      dailySpend(tx, fixture.acme.id, 'UTC', september),
+      dailySpend(tx, fixture.acme.id, 'UTC', september).then(
+        (spend) => spend.rows,
+      ),
     )
 
     expect(rows).toEqual([])

@@ -1,10 +1,13 @@
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import type { ReactNode } from 'react'
 
 import { ADMIN_DESTINATIONS } from './navigation'
 import { LogoMark } from '../_ui/logo'
 import { PanelCredit } from '../(dashboard)/credit'
-import { BottomBarLinks, SidebarLinks } from '../(dashboard)/nav-links'
+import { NavGlyph } from '../(dashboard)/nav-glyph'
+import { BottomBarLinks, SidebarGroups } from '../(dashboard)/nav-links'
+import type { NavGroup } from '../(dashboard)/navigation'
 import { currentOperator } from '../../lib/platform-admin'
 
 // Cache Components (ticket 80) prerenders a static shell for every route. The
@@ -44,6 +47,18 @@ export const instant = false
 // Org shell: no Org name, no account switcher, nothing that implies the person
 // is looking at one Org's numbers.
 
+/** The sidebar's one group, headed as the dashboard's are (2026-09-23). */
+const GROUPS: NavGroup[] = [{ label: 'Deployment', items: ADMIN_DESTINATIONS }]
+
+/**
+ * The way back to the Org dashboard, at the top of the sidebar and in the
+ * phone header (2026-09-23). Always `/costs`: an operator whose own Org is
+ * waiting or cancelled gets the waiting page there, because the dashboard's
+ * layout renders it in place of every page of a locked Org (ticket 119).
+ */
+const BACK =
+  'text-text-muted hover:text-text hover:bg-surface-hover flex items-center gap-2.5 rounded-[7px] px-2 py-1.5 text-body'
+
 /** The brand line, as the Org shell draws it (ticket 111). */
 const BRAND =
   'text-text-muted flex items-center gap-2 text-caption tracking-[0.1em] uppercase lg:mx-2'
@@ -60,12 +75,16 @@ export default async function AdminLayout({
     <div className="bg-ground text-text min-h-dvh lg:flex">
       <aside className="border-rule hidden w-[232px] shrink-0 flex-col justify-between overflow-y-auto border-r px-3.5 py-[18px] lg:sticky lg:top-0 lg:flex lg:h-dvh">
         <div>
-          <p className={BRAND}>
+          <Link href="/costs" className={BACK}>
+            <NavGlyph icon="back" />
+            Back to dashboard
+          </Link>
+          <p className={`${BRAND} mt-4`}>
             <LogoMark className="text-text" />
             Platform
           </p>
-          <nav aria-label="Platform administration" className="mt-4">
-            <SidebarLinks items={ADMIN_DESTINATIONS} />
+          <nav aria-label="Platform administration" className="mt-2">
+            <SidebarGroups groups={GROUPS} />
           </nav>
         </div>
         {/* Who is operating, so a deployment with more than one operator can
@@ -86,16 +105,14 @@ export default async function AdminLayout({
       </aside>
 
       <header className="border-rule bg-ground sticky top-0 z-10 flex items-center justify-between gap-3 border-b px-4 py-2 lg:hidden">
+        <Link href="/costs" className={`${BACK} -ml-2`}>
+          <NavGlyph icon="back" />
+          Dashboard
+        </Link>
         <p className={BRAND}>
           <LogoMark className="text-text" />
           Platform
         </p>
-        <span
-          className="text-text-muted truncate text-caption"
-          title={operator.email}
-        >
-          {operator.name ?? operator.email}
-        </span>
       </header>
 
       <main className="min-w-0 grow px-4 py-5 pb-28 lg:px-7 lg:pb-8">
@@ -104,6 +121,14 @@ export default async function AdminLayout({
             go under the content instead. One of the two is visible at a
             time. */}
         <div className="lg:hidden">
+          {/* Who is operating, which the header has no room for beside the
+              way back. */}
+          <p
+            className="text-text-muted mt-10 truncate text-caption"
+            title={operator.email}
+          >
+            Operating as {operator.name ?? operator.email}
+          </p>
           <PanelCredit />
         </div>
       </main>

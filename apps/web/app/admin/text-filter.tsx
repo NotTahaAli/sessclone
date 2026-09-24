@@ -1,5 +1,7 @@
 import Link from 'next/link'
 
+import { buttonClass, inputClass } from '../_ui/primitives'
+
 // A plain GET form: the filter is a URL, so a filtered list can be linked,
 // reloaded and gone back to. No client component and no state — the server
 // already re-renders with what the query names.
@@ -20,20 +22,20 @@ export function TextFilter({
   clearHref: string
 }) {
   return (
-    <form className="flex flex-wrap items-end gap-2">
-      <label className="flex flex-col gap-1 text-caption">
+    <form className="flex flex-wrap items-center gap-2">
+      {/* The label is the field's name for a screen reader; the placeholder
+          carries it for everyone else, as the header pills do. */}
+      <label className="sr-only" htmlFor={`filter-${name}`}>
         {label}
-        <input
-          name={name}
-          defaultValue={value}
-          placeholder={placeholder}
-          className="border-control-border text-text rounded border px-3 py-1 font-mono text-sm"
-        />
       </label>
-      <button
-        type="submit"
-        className="border-control-border text-text rounded border px-3 py-1 text-sm"
-      >
+      <input
+        id={`filter-${name}`}
+        name={name}
+        defaultValue={value}
+        placeholder={`${label}, e.g. ${placeholder}`}
+        className={`${inputClass} w-80 max-w-full`}
+      />
+      <button type="submit" className={buttonClass()}>
         Filter
       </button>
       {value ? (

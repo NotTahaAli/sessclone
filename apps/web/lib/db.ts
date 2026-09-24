@@ -102,3 +102,18 @@ export const asViewer = <T>(
     await tx`select set_config('request.jwt.claims', ${JSON.stringify({ sub: userId })}, true)`
     return query(tx)
   })
+
+/**
+ * The database's own clock, read as its own statement inside a viewer's
+ * transaction — for a "page was read at" timestamp that a later mark (e.g.
+ * `markFailuresViewed`) compares against a column the database itself
+ * stamped (`received_at`). The app server's clock can skew from the
+ * database's; `now()` is transaction start, which is fine here since it is
+ * read before this transaction's other statements.
+ */
+export const pageSeenAt = async (
+  tx: postgres.TransactionSql,
+): Promise<Date> => {
+  const [row] = await tx<{ now: Date }[]>`select now()`
+  return row!.now
+}

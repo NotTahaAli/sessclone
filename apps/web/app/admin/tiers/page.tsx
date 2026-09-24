@@ -1,5 +1,6 @@
 import { TierForm } from './tier-form'
 import { PageHeader } from '../../(dashboard)/page-header'
+import { SectionBreak } from '../../_ui/primitives'
 import { asOperator } from '../../../lib/platform-admin'
 import { listTiers } from '../../../lib/tier-admin'
 
@@ -14,31 +15,31 @@ export default async function Page() {
   const tiers = await asOperator((tx) => listTiers(tx))
 
   return (
-    <div className="flex max-w-3xl flex-col gap-8">
-      <PageHeader
-        title="Tiers"
-        description="What each Tier includes. An edit takes effect on the next read — there is nothing to deploy."
-      />
+    <div className="flex max-w-3xl flex-col">
+      <PageHeader title="Tiers" />
+      <p className="text-text-muted mt-3 text-caption">
+        What each Tier includes. An edit takes effect on the next read — there
+        is nothing to deploy.
+      </p>
+
+      {tiers.length === 0 ? (
+        <p className="text-text-muted py-3 text-body">
+          No Tier is defined yet, so no Org can be activated. Create one below.
+        </p>
+      ) : (
+        // One section per Tier, headed by its name: the break is the only
+        // divider, as on every Direction A page.
+        tiers.map((tier) => (
+          <section key={tier.id}>
+            <SectionBreak>{tier.name}</SectionBreak>
+            <TierForm tier={tier} orgs={tier.orgs} />
+          </section>
+        ))
+      )}
 
       <section>
-        <h2 className="text-heading">Defined</h2>
-        {tiers.length === 0 ? (
-          <p className="text-text-secondary mt-2 text-body">
-            No Tier is defined yet, so no Org can be activated. Create one
-            below.
-          </p>
-        ) : (
-          <div className="mt-3 flex flex-col gap-4">
-            {tiers.map((tier) => (
-              <TierForm key={tier.id} tier={tier} orgs={tier.orgs} />
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section>
-        <h2 className="text-heading">New Tier</h2>
-        <p className="text-text-secondary mt-1 text-caption">
+        <SectionBreak>New Tier</SectionBreak>
+        <p className="text-text-muted mt-1 text-caption">
           The key is what code and support both name it by, and it does not
           change afterwards. Both prices empty means &ldquo;contact us&rdquo;.
         </p>

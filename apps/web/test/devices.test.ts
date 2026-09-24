@@ -53,17 +53,23 @@ test('an Owner sees their own machines, not the Org’s', async () => {
   expect(rows).toEqual([])
 })
 
-test('the Turn count is per machine', async () => {
+test('the Session count is per machine, a Session of many Turns once', async () => {
   const id = await device(fixture.acme.members.member, 'host:thinkpad')
   const other = await device(fixture.acme.members.member, 'cloud:acct-1')
-  for (const [index, deviceId] of [id, id, other].entries()) {
-    // oxlint-disable-next-line no-await-in-loop -- three rows, ordered seeds.
+  const seeds = [
+    [id, 'session-1'],
+    [id, 'session-2'],
+    [id, 'session-2'],
+    [other, 'session-1'],
+  ] as const
+  for (const [index, [deviceId, sessionId]] of seeds.entries()) {
+    // oxlint-disable-next-line no-await-in-loop -- four rows, ordered seeds.
     await sql`
       insert into turns ${sql({
         org_id: fixture.acme.id,
         member_id: fixture.acme.members.member,
         device_id: deviceId,
-        session_id: 'session-1',
+        session_id: sessionId,
         message_id: `msg_${index}`,
         occurred_at: '2026-09-20T08:00:00Z',
         model: 'claude-opus-4-6',
@@ -75,7 +81,9 @@ test('the Turn count is per machine', async () => {
     listOwnDevices(tx),
   ).then((result) => result.devices)
 
-  expect(Object.fromEntries(rows.map((row) => [row.key, row.turns]))).toEqual({
+  expect(
+    Object.fromEntries(rows.map((row) => [row.key, row.sessions])),
+  ).toEqual({
     'host:thinkpad': 2,
     'cloud:acct-1': 1,
   })
@@ -156,7 +164,7 @@ test('the list is capped, and says so', async () => {
   expect(more).toBe(true)
 })
 
-test('the Turn count is the last 30 days, not all of history', async () => {
+test('the Session count is the last 30 days, not all of history', async () => {
   const id = await device(fixture.acme.members.member, 'host:thinkpad')
   await sql`
     insert into turns ${sql({
@@ -174,5 +182,5 @@ test('the Turn count is the last 30 days, not all of history', async () => {
     listOwnDevices(tx),
   )
 
-  expect(devices[0]!.turns).toBe(0)
+  expect(devices[0]!.sessions).toBe(0)
 })

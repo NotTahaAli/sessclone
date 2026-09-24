@@ -5,22 +5,23 @@ import { ColumnHead } from '../../../finder'
 import { InlineName } from '../../../inline-name'
 import { PageHeader } from '../../../page-header'
 import { RangeControl } from '../../range-control'
-import { TurnRows } from '../../../turns/turn-row'
-import { hrefWith, one, type Query } from '../../../query'
-import { SectionBreak } from '../../../../_ui/primitives'
+import { SessionRows } from '../../session-rows'
+import { sessionCount, TokenTable } from '../../token-table'
+import { hrefWith, type Query } from '../../../query'
 import { asViewer } from '../../../../../lib/db'
 import { breakdown, type Dimension } from '../../../../../lib/breakdown'
 import { compact, usd } from '../../../../../lib/money'
 import { projectNickname } from '../../../../../lib/names'
 import type { ResolvedRange } from '../../../../../lib/range'
 import {
-  turnList,
-  type TurnCursor,
-  type TurnFilter,
-} from '../../../../../lib/turns'
+  sessionCursorOf,
+  sessionList,
+  type SessionFilter,
+} from '../../../../../lib/sessions'
+import { tokenBreakdown, type TokenCut } from '../../../../../lib/tokens'
 import { reachesOrgSettings, type Viewer } from '../../../../../lib/viewer'
 
-// Ticket 88's first level — a ranked row and the Turns under it — drawn two
+// Ticket 88's first level — a ranked row and what is under it — drawn two
 // ways since ticket 112: as its own page (a phone, a sent link) and as the
 // Finder column beside the Costs list on desktop. One component, so the two
 // cannot disagree about what a group spent.
@@ -28,6 +29,10 @@ import { reachesOrgSettings, type Viewer } from '../../../../../lib/viewer'
 // The Role scoping is the policies' (ADR 0001) and nothing here. A Member
 // opening a link to another Member's cut sees their own Turns in it, because
 // `turns_read` hands them their own and no others.
+//
+// Since 2026-09-23 (Taha) the column opens with the cut's tokens by class and
+// by model, one aggregate, and lists its Sessions rather than its Turns: the
+// Sessions page's statement narrowed to the group, paged by its cursor.
 
 /** What the cut is called, when the group has no name of its own. */
 const UNNAMED: Record<Dimension, string> = {
@@ -37,9 +42,9 @@ const UNNAMED: Record<Dimension, string> = {
 }
 
 const NOTHING: Record<Dimension, string> = {
-  members: 'No Turns from this person in this period.',
-  projects: 'No Turns from this Project in this period.',
-  devices: 'No Turns from this Device in this period.',
+  members: 'No Sessions from this person in this period.',
+  projects: 'No Sessions in this Project in this period.',
+  devices: 'No Sessions on this Device in this period.',
 }
 
 export async function Cut({
@@ -60,23 +65,28 @@ export async function Cut({
   closeHref?: string
 }) {
   const groupId = id === 'none' ? null : id
-  const before = cursorOf(query.before)
 
   // `id` rather than `groupId` for a Member: the caller has refused `none`
-  // for one, and the filter type says the absent group is not expressible.
-  const filter: TurnFilter =
+  // for one, and the cut type says the absent group is not expressible.
+  const cut: TokenCut =
     dimension === 'members'
       ? { kind: 'members', id }
       : { kind: dimension, id: groupId }
+  const filter: SessionFilter =
+    dimension === 'members'
+      ? { memberId: id }
+      : dimension === 'projects'
+        ? { projectId: groupId }
+        : { deviceId: groupId }
 
   // Ticket 90: only a Project can be named, and only an Owner or Admin may —
   // so nobody else pays for the statement.
   const naming = dimension === 'projects' && groupId !== null
-  const [cut, page, nickname] = await asViewer(viewer.userId, (tx) =>
+  const [ranked, tokens, page, nickname] = await asViewer(viewer.userId, (tx) =>
     Promise.all([
-      // The group's own totals, read by name rather than summed from the page
-      // below: the page is capped, and a total summed from a capped list drops
-      // the tail without saying so.
+      // The group's name and totals, read by name rather than summed from
+      // the page below: the page is capped, and a total summed from a capped
+      // list drops the tail without saying so.
       breakdown(
         tx,
         viewer.orgId,
@@ -85,18 +95,21 @@ export async function Cut({
         dimension,
         { id: groupId },
       ),
-      turnList(tx, viewer.orgId, filter, {
-        timezone: viewer.orgTimezone,
-        range: resolved.range,
-        before,
-      }),
+      tokenBreakdown(tx, viewer.orgId, viewer.orgTimezone, resolved.range, cut),
+      sessionList(
+        tx,
+        viewer.orgId,
+        viewer.orgTimezone,
+        resolved.range,
+        filter,
+        { before: sessionCursorOf(query.before) },
+      ),
       naming ? projectNickname(tx, groupId) : Promise.resolve(null),
     ]),
   )
 
-  const [row] = cut.rows
+  const [row] = ranked.rows
   const label = row?.label ?? UNNAMED[dimension]
-  const last = page.turns.at(-1)
   const path = `/costs/${dimension}/${id}`
 
   const title =
@@ -117,9 +130,7 @@ export async function Cut({
   const figures = row ? (
     <>
       <span className="font-mono">{usd(row.costUsd)}</span> ·{' '}
-      {compact.format(row.tokens)} tokens · {row.turns}{' '}
-      {row.turns === 1 ? 'Turn' : 'Turns'}
-      {row.unpricedTurns > 0 ? `, ${row.unpricedTurns} unpriced` : ''} in this
+      {compact.format(row.tokens)} tokens · {sessionCount(row.sessions)} in this
       period
     </>
   ) : (
@@ -155,39 +166,17 @@ export async function Cut({
         </>
       )}
 
-      <SectionBreak>Turns</SectionBreak>
-      <TurnRows
-        turns={page.turns}
+      {row ? <TokenTable totals={tokens} models={tokens.models} /> : null}
+      {/* The next page opens the cut's own page, which is where a long list
+          belongs. */}
+      <SessionRows
+        page={page}
         timezone={viewer.orgTimezone}
         empty={NOTHING[dimension]}
+        path={path}
+        query={query}
+        standalone
       />
-
-      {/* A cursor rather than an offset: a page boundary that repeats or
-          skips a row is worse than no paging at all. It opens the cut's own
-          page, which is where a long list belongs. */}
-      {page.more && last ? (
-        <p className="mt-3 text-body">
-          <Link
-            href={hrefWith(path, query, {
-              open: undefined,
-              view: undefined,
-              before: `${last.occurredAt},${last.id}`,
-            })}
-            className="text-text-muted hover:text-text"
-          >
-            Older Turns ›
-          </Link>
-        </p>
-      ) : null}
     </div>
   )
-}
-
-/** `<iso>,<id>`, or nothing. Anything else shows the first page. */
-const cursorOf = (
-  value: string | string[] | undefined,
-): TurnCursor | undefined => {
-  const [at, id] = (one(value) ?? '').split(',')
-  if (!at || !id || !/^\d+$/.test(id)) return undefined
-  return Number.isNaN(Date.parse(at)) ? undefined : { occurredAt: at, id }
 }

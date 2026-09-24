@@ -88,7 +88,7 @@ export const readMarketingTiers = async (
 }
 
 /** `features.includes`, when it is a list of lines, and nothing otherwise. */
-const includesOf = (features: unknown) => {
+export const includesOf = (features: unknown) => {
   const value =
     features && typeof features === 'object' && 'includes' in features
       ? features.includes

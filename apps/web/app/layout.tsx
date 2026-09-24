@@ -2,6 +2,7 @@ import { Geist, Geist_Mono } from 'next/font/google'
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 
+import { LegalNotice } from './(dashboard)/credit'
 import { AppearanceScript } from './appearance-script'
 import { SITE_DESCRIPTION, siteUrl } from '../lib/site'
 
@@ -72,7 +73,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <head>
         <AppearanceScript />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        {/* The notices every Legal button opens (ticket 79): here, so every
+            page that shows a Legal button has them, once, outside any column
+            a breakpoint hides. Closed, it is inert markup. */}
+        <LegalNotice />
+      </body>
     </html>
   )
 }

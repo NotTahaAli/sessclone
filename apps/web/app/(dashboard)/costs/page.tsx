@@ -2,20 +2,27 @@ import Link from 'next/link'
 
 import { Cut } from './[dimension]/[id]/cut'
 import { FailuresList } from './failures-list'
+import { TimeColumnView } from './over-time-column'
 import { RangeControl } from './range-control'
 import { RankedList } from './ranked-list'
-import { dayName, Sparkline, Summary } from './summary'
-import { isDimension, resolveView, VIEWS, type View } from './views'
+import { OverTime } from './over-time'
+import { Summary } from './summary'
+import {
+  isDimension,
+  resolveTimeColumn,
+  resolveView,
+  VIEWS,
+  type View,
+} from './views'
 import { EmptyState } from '../empty-state'
 import { Finder, FinderColumn, FinderList } from '../finder'
-import { todayIn } from '../sessions/status'
 import { InstallCollector } from '../install-collector'
 import { PageHeader } from '../page-header'
 import { hrefWith, one, type Query } from '../query'
 import { MenuItem, PillMenu } from '../../_ui/pill-menu'
 import { Row, SectionBreak } from '../../_ui/primitives'
 import { appUrl } from '../../../lib/auth/app-url'
-import { asViewer } from '../../../lib/db'
+import { asViewer, pageSeenAt } from '../../../lib/db'
 import {
   onboardingFacts,
   onboardingState,
@@ -31,7 +38,6 @@ import {
   sessionFailures,
   type Failures,
 } from '../../../lib/failures'
-import { compact, count, usd } from '../../../lib/money'
 import { resolveRange, type RangeParams } from '../../../lib/range'
 import { dailySpend, spendSeries, type SpendSeries } from '../../../lib/series'
 import { currentViewer } from '../../../lib/viewer'
@@ -81,14 +87,20 @@ export default async function Costs({
   // decide whether there is anything to draw at all. The reads are
   // independent, so they go together rather than one after the other.
   //
-  // The failures count is the view menu's badge, shown on every view — but on
-  // the failures view itself the row read already carries the full total from
-  // one statement, so counting again there would be a second count that could
-  // disagree with the list beside it under a concurrent insert.
-  const [facts, days, ranked, counted, failures] = await asViewer(
+  // The failures count is the view menu's badge, shown on every view: failed
+  // Sessions in the period this viewer has not marked viewed. It is read on
+  // the failures view too, since the list's own total counts every failure,
+  // viewed or not, and is a different number.
+  //
+  // `seenAt` is taken before the reads, from the database's own clock rather
+  // than the app server's, so a "Mark viewed" posted from this page never
+  // covers a failure received after what it showed — and never covers one
+  // that only looks later because the two clocks disagree.
+  const [dbSeenAt, [facts, days, ranked, counted, failures]] = await asViewer(
     viewer.userId,
-    (tx) =>
-      Promise.all([
+    async (tx) => {
+      const seenAt = await pageSeenAt(tx)
+      const reads = await Promise.all([
         onboardingFacts(tx, viewer.orgId),
         view === 'time'
           ? dailySpend(tx, viewer.orgId, viewer.orgTimezone, range)
@@ -96,16 +108,29 @@ export default async function Costs({
         isDimension(view)
           ? breakdown(tx, viewer.orgId, viewer.orgTimezone, range, view)
           : null,
+        countFailures(
+          tx,
+          viewer.orgId,
+          viewer.memberId,
+          viewer.orgTimezone,
+          range,
+        ),
         view === 'failures'
-          ? null
-          : countFailures(tx, viewer.orgId, viewer.orgTimezone, range),
-        view === 'failures'
-          ? sessionFailures(tx, viewer.orgId, viewer.orgTimezone, range)
+          ? sessionFailures(
+              tx,
+              viewer.orgId,
+              viewer.memberId,
+              viewer.orgTimezone,
+              range,
+            )
           : null,
-      ]),
+      ])
+      return [seenAt, reads] as const
+    },
   )
-  const spend = days === null ? null : spendSeries(days, range)
-  const failuresCount = failures ? failures.total : (counted ?? 0)
+  const seenAt = dbSeenAt.toISOString()
+  const spend = days === null ? null : spendSeries(days.rows, range, days)
+  const failuresCount = counted
 
   // The failures view (and its link from the waiting surface) is reachable
   // whenever a key exists, since a failure can arrive before the first Turn —
@@ -124,6 +149,10 @@ export default async function Costs({
     !(open === 'none' && view === 'members')
       ? { dimension: view, id: open }
       : null
+  // Over time's rows and bars open a day's Sessions or a model's tokens.
+  const timeColumn =
+    state === 'collecting' && view === 'time' ? resolveTimeColumn(open) : null
+  const opened = column !== null || timeColumn !== null
 
   return (
     <div className="flex flex-col">
@@ -142,8 +171,8 @@ export default async function Costs({
           ) : null
         }
       />
-      <Finder column={column !== null}>
-        <FinderList column={column !== null}>
+      <Finder column={opened}>
+        <FinderList column={opened}>
           <Body
             facts={facts}
             view={view}
@@ -151,6 +180,7 @@ export default async function Costs({
             ranked={ranked}
             failures={failures}
             failuresCount={failuresCount}
+            seenAt={seenAt}
             timezone={viewer.orgTimezone}
             params={params}
             open={open}
@@ -165,6 +195,16 @@ export default async function Costs({
               resolved={resolved}
               query={params}
               closeHref={hrefWith('/costs', params, { open: undefined })}
+            />
+          </FinderColumn>
+        ) : null}
+        {timeColumn ? (
+          <FinderColumn>
+            <TimeColumnView
+              viewer={viewer}
+              column={timeColumn}
+              resolved={resolved}
+              query={params}
             />
           </FinderColumn>
         ) : null}
@@ -215,7 +255,9 @@ function ViewMenu({
           {view.key === 'failures' && failuresCount > 0 ? (
             <span
               className="text-text-muted font-mono text-caption"
-              aria-label={`${failuresCount} in this period`}
+              aria-label={`${failuresCount} failed ${
+                failuresCount === 1 ? 'Session' : 'Sessions'
+              } not yet viewed`}
             >
               {badge}
             </span>
@@ -233,6 +275,7 @@ function Body({
   ranked,
   failures,
   failuresCount,
+  seenAt,
   timezone,
   params,
   open,
@@ -243,6 +286,8 @@ function Body({
   ranked: Breakdown | null
   failures: Failures | null
   failuresCount: number
+  /** When this page's reads began, for a mark made from it. */
+  seenAt: string
   timezone: string
   /** The current query, so every link keeps the period. */
   params: Query
@@ -256,7 +301,13 @@ function Body({
     return (
       <>
         <SectionBreak>Failed turns</SectionBreak>
-        <FailuresList failures={failures} timezone={timezone} />
+        <FailuresList
+          failures={failures}
+          unviewed={failuresCount}
+          seenAt={seenAt}
+          timezone={timezone}
+          params={params}
+        />
       </>
     )
   }
@@ -266,7 +317,12 @@ function Body({
       // One of the two is always present, decided by the view above: the read
       // the other view would need was never issued.
       return view === 'time' || !isDimension(view) || ranked === null ? (
-        <OverTime series={spend!} timezone={timezone} />
+        <OverTime
+          series={spend!}
+          timezone={timezone}
+          params={params}
+          open={open}
+        />
       ) : (
         <Ranked cut={ranked} dimension={view} params={params} open={open} />
       )
@@ -293,95 +349,6 @@ function Body({
         </EmptyState>
       )
   }
-}
-
-/**
- * Spend over time: the summary with a bar a day beside it, then the models
- * the money went to and the days that had any.
- *
- * The By model rows are the legend of ticket 52's stacked chart, as rows: the
- * five largest models and Other, from the same series. The By day rows are
- * what that chart's table carried — the numbers a phone reader and a screen
- * reader get instead of a tooltip. Days with nothing in them are left out:
- * the bars already show the gap.
- */
-function OverTime({
-  series,
-  timezone,
-}: {
-  series: SpendSeries
-  timezone: string
-}) {
-  if (series.turns === 0) {
-    // Not the onboarding state: Turns exist, this window has none of them.
-    return (
-      <EmptyState headline="Nothing in this period">
-        Turns have arrived, but none of them fall between these dates. Pick a
-        wider period above.
-      </EmptyState>
-    )
-  }
-
-  const peak = Math.max(...series.series.map((entry) => entry.costUsd), 0)
-  const used = series.days.filter((day) => day.turns > 0).toReversed()
-
-  return (
-    <>
-      <Summary
-        costUsd={series.costUsd}
-        tokens={series.tokens}
-        turns={series.turns}
-        unpricedTurns={series.unpricedTurns}
-      >
-        <Sparkline days={series.days} today={todayIn(timezone)} />
-      </Summary>
-
-      {series.series.length > 0 ? (
-        <>
-          <SectionBreak>By model</SectionBreak>
-          <ol>
-            {series.series.map((entry) => (
-              <li key={entry.label}>
-                <Row
-                  lead="none"
-                  value={usd(entry.costUsd)}
-                  meter={peak > 0 ? entry.costUsd / peak : 0}
-                >
-                  <span className="font-mono">{entry.label}</span>
-                </Row>
-              </li>
-            ))}
-          </ol>
-        </>
-      ) : null}
-
-      <SectionBreak>By day</SectionBreak>
-      <ol>
-        {used.map((day) => (
-          <li key={day.date}>
-            <Row
-              lead="none"
-              name={dayName(day.date)}
-              // A day whose every Turn is unpriced is unknown, not zero.
-              value={day.unpricedTurns === day.turns ? '—' : usd(day.costUsd)}
-              sub={`${compact.format(day.tokens)} tokens · ${count.format(
-                day.turns,
-              )} ${day.turns === 1 ? 'turn' : 'turns'}${
-                day.unpricedTurns > 0
-                  ? ` · ${count.format(day.unpricedTurns)} unpriced`
-                  : ''
-              }`}
-            />
-          </li>
-        ))}
-      </ol>
-
-      <p className="text-text-muted mt-4 text-caption">
-        Cost is an estimate, derived from the usage reported and the published
-        prices. Days are the Org&apos;s own.
-      </p>
-    </>
-  )
 }
 
 /** What each breakdown's rows are, as the break above them says it. */
@@ -411,7 +378,12 @@ function Ranked({
 }) {
   return (
     <>
-      <Summary {...cut.totals} />
+      <Summary
+        costUsd={cut.totals.costUsd}
+        tokens={cut.totals.tokens}
+        sessions={cut.totals.sessions}
+        unpricedTurns={cut.totals.unpricedTurns}
+      />
       <SectionBreak>{BY[dimension]}</SectionBreak>
       <RankedList
         rows={cut.rows}
@@ -443,8 +415,9 @@ function Waiting({
   params,
 }: {
   keyUsed: boolean
-  /** Failures in the current period: where a stalled Collector is first
-   * noticed, so the surface links to them when there are any (ticket 78). */
+  /** Failed Sessions in the current period the viewer has not marked
+   * viewed: where a stalled Collector is first noticed, so the surface links
+   * to them when there are any (ticket 78). */
   failuresCount: number
   /** The current query, so the link carries the period the count was read
    * for. */
@@ -470,8 +443,8 @@ function Waiting({
             className="underline"
           >
             {failuresCount === 1
-              ? '1 failure was recorded in this period'
-              : `${failuresCount} failures were recorded in this period`}
+              ? '1 failed Session not yet viewed'
+              : `${failuresCount} failed Sessions not yet viewed`}
           </Link>{' '}
           — a turn may be ending on an API error before any usage is written.
         </p>
