@@ -41,8 +41,10 @@ import { createHash } from 'node:crypto'
 import { basename, dirname, join } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
+import { createGzip } from 'node:zlib'
 
 import { NO_DEADLINE, expired, requestSignal } from './deadline.mjs'
+import { MAX_SEAL } from './shared/limits.ts'
 import { sessionFiles } from './transcripts.mjs'
 
 /**
@@ -96,6 +98,142 @@ export const hashFile = async (path, size) => {
     return null
   }
   return digest.digest('hex')
+}
+
+/** How much raw transcript a sealed chunk holds, at least (ADR 0008). */
+export const CHUNK_BYTES = 1024 * 1024
+
+/**
+ * Where the next chunks end, as exclusive raw offsets (ADR 0008). Pure.
+ *
+ * A chunk starting at `from` ends just after the first `\n` at or after
+ * `from + chunkBytes - 1`, so it holds at least `chunkBytes` and never splits a
+ * line: a line longer than that makes a longer chunk, and bytes after the last
+ * line end stay in the tail. At most `max` cuts.
+ *
+ * `bytes` may be one piece of a longer file, starting at raw offset `at`: the
+ * streaming read below plans each piece as it arrives, with `from` the start
+ * of a chunk that may have begun in an earlier piece.
+ *
+ * @param {Buffer} bytes
+ * @param {number} from
+ * @param {{ at?: number, chunkBytes?: number, max?: number }} [options]
+ * @returns {number[]}
+ */
+export const sealPlan = (
+  bytes,
+  from,
+  { at = 0, chunkBytes = CHUNK_BYTES, max = MAX_SEAL } = {},
+) => {
+  const ends = []
+  let start = from
+  while (ends.length < max) {
+    const newline = bytes.indexOf(
+      0x0a,
+      Math.max(0, start + chunkBytes - 1 - at),
+    )
+    if (newline === -1) break
+    start = at + newline + 1
+    ends.push(start)
+  }
+  return ends
+}
+
+/**
+ * Reads `[0, size)` once, checking the sealed prefix and planning what to seal
+ * after it (ADR 0008).
+ *
+ * `'mismatch'` when the file is shorter than the sealed bytes or its prefix
+ * hashes differently: rewritten or truncated, so the caller falls back to the
+ * whole file. Null when the file cannot be read. Otherwise the new chunks, in
+ * order from seq `sealed.chunks + 1`, and the SHA-256 of every raw byte up to
+ * the last of them. Streamed: only the piece being read is in memory.
+ *
+ * @param {string} path
+ * @param {number} size
+ * @param {{ bytes: number, sha256: string | null, chunks: number }} sealed
+ * @param {{ chunkBytes?: number }} [options]
+ */
+export const planSeals = async (path, size, sealed, { chunkBytes } = {}) => {
+  if (size < sealed.bytes) return 'mismatch'
+  const all = createHash('sha256')
+  let piece = createHash('sha256')
+  let matched = sealed.bytes === 0
+  let start = sealed.bytes
+  let sealedSha256 = sealed.sha256
+  /** @type {{ seq: number, rawOffset: number, rawLength: number, sha256: string }[]} */
+  const chunks = []
+  let position = 0
+  try {
+    if (size > 0) {
+      for await (const bytes of createReadStream(path, {
+        start: 0,
+        end: size - 1,
+      })) {
+        let used = 0
+        if (!matched) {
+          used = Math.min(bytes.length, sealed.bytes - position)
+          all.update(bytes.subarray(0, used))
+          if (position + used === sealed.bytes) {
+            if (all.copy().digest('hex') !== sealed.sha256) return 'mismatch'
+            matched = true
+          }
+        }
+        if (matched) {
+          const cuts = sealPlan(bytes, start, {
+            at: position,
+            chunkBytes,
+            max: MAX_SEAL - chunks.length,
+          })
+          for (const end of cuts) {
+            const part = bytes.subarray(used, end - position)
+            all.update(part)
+            piece.update(part)
+            chunks.push({
+              seq: sealed.chunks + chunks.length + 1,
+              rawOffset: start,
+              rawLength: end - start,
+              sha256: piece.digest('hex'),
+            })
+            sealedSha256 = all.copy().digest('hex')
+            piece = createHash('sha256')
+            start = end
+            used = end - position
+          }
+          if (chunks.length === MAX_SEAL) break
+          all.update(bytes.subarray(used))
+          piece.update(bytes.subarray(used))
+        }
+        position += bytes.length
+      }
+    }
+  } catch {
+    return null
+  }
+  // A file that shrank after its size was taken never reached the prefix.
+  if (!matched) return 'mismatch'
+  return { chunks, sealedSha256 }
+}
+
+/**
+ * Raw `[start, start + length)` gzipped, streamed through zlib; only the
+ * compressed result is collected, because a presigned PUT needs its length.
+ *
+ * @param {string} path
+ * @param {number} start
+ * @param {number} length
+ * @returns {Promise<Buffer>}
+ */
+export const gzipRange = async (path, start, length) => {
+  const parts = []
+  await pipeline(
+    createReadStream(path, { start, end: start + length - 1 }),
+    createGzip(),
+    async (source) => {
+      for await (const part of source) parts.push(part)
+    },
+  )
+  return Buffer.concat(parts)
 }
 
 /**

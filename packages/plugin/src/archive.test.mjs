@@ -1,4 +1,6 @@
 import { mkdtempSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { gunzipSync } from 'node:zlib'
 import { appendFile, mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -11,7 +13,10 @@ import {
   agentIdOf,
   archiveSession,
   archiveTranscript,
+  gzipRange,
   hashFile,
+  planSeals,
+  sealPlan,
 } from './archive.mjs'
 
 // Ticket 59. What matters here is the order and the refusals: nothing leaves
@@ -574,3 +579,82 @@ test('a server that does not echo the kind gets no sidecars, only transcripts', 
 function byText(a, b) {
   return a.localeCompare(b)
 }
+
+// Ticket 131 (ADR 0008): chunked archival. The pure pieces first.
+
+const MiB = 1024 * 1024
+const sha = (bytes) => createHash('sha256').update(bytes).digest('hex')
+/** `count` bytes of one line: `x` repeated, ending in a newline. */
+const line = (count) => Buffer.concat([Buffer.alloc(count - 1, 'x'), NL])
+const NL = Buffer.from('\n')
+
+test('a chunk is cut at the first line end at or after 1 MiB', () => {
+  // Exactly 1 MiB, the newline its last byte: cut right there.
+  const exact = Buffer.concat([line(MiB), line(10)])
+  expect(sealPlan(exact, 0)).toEqual([MiB])
+  // A line longer than 1 MiB is never split: the chunk runs to its end.
+  const long = Buffer.concat([line(10), line(MiB + 500), line(10)])
+  expect(sealPlan(long, 0)).toEqual([10 + MiB + 500])
+  // No line end at all: nothing seals, everything is tail.
+  expect(sealPlan(Buffer.alloc(2 * MiB, 'x'), 0)).toEqual([])
+  // A partial last line stays in the tail, even past 1 MiB.
+  const partial = Buffer.concat([line(MiB), Buffer.alloc(MiB + 1, 'y')])
+  expect(sealPlan(partial, 0)).toEqual([MiB])
+  // Planning counts from where the sealed prefix ends, so the first line end
+  // at or after 1 MiB from there is the next line's.
+  expect(sealPlan(exact, 5)).toEqual([MiB + 10])
+})
+
+test('one pass seals at most sixteen chunks', () => {
+  const many = Buffer.concat(Array.from({ length: 20 }, () => line(8)))
+  const cuts = sealPlan(many, 0, { chunkBytes: 8 })
+  expect(cuts).toHaveLength(16)
+  expect(cuts.at(-1)).toBe(16 * 8)
+})
+
+test('the plan checks the sealed prefix before continuing from it', async () => {
+  const prefix = line(64)
+  const file = await transcript(Buffer.concat([prefix, line(40), line(40)]))
+  const sealed = { bytes: 64, sha256: sha(prefix), chunks: 1 }
+  const size = 64 + 80
+
+  const plan = await planSeals(file, size, sealed, { chunkBytes: 40 })
+  expect(plan.chunks).toEqual([
+    { seq: 2, rawOffset: 64, rawLength: 40, sha256: sha(line(40)) },
+    { seq: 3, rawOffset: 104, rawLength: 40, sha256: sha(line(40)) },
+  ])
+  expect(plan.sealedSha256).toBe(
+    sha(Buffer.concat([prefix, line(40), line(40)])),
+  )
+
+  // Rewritten: same length, different bytes.
+  const rewritten = { ...sealed, sha256: sha(line(64).fill('z', 0, 1)) }
+  expect(await planSeals(file, size, rewritten)).toBe('mismatch')
+  // Truncated: the file is now shorter than what is sealed.
+  expect(await planSeals(file, 50, sealed)).toBe('mismatch')
+})
+
+test('a gzipped chunk inflates to exactly its raw bytes', async () => {
+  const raw = Buffer.concat([line(100), line(200), line(300)])
+  const file = await transcript(raw)
+  const packed = await gzipRange(file, 100, 200)
+  expect(gunzipSync(packed)).toEqual(raw.subarray(100, 300))
+})
+
+test('a plan read in many pieces cuts where one whole read would', async () => {
+  // The read streams in pieces far smaller than a chunk, so chunks and the
+  // sealed prefix both straddle piece boundaries.
+  const prefix = line(100_003)
+  const raw = Buffer.concat([prefix, line(MiB + 7), line(MiB), line(99)])
+  const file = await transcript(raw)
+  const sealed = { bytes: prefix.length, sha256: sha(prefix), chunks: 4 }
+  const plan = await planSeals(file, raw.length, sealed)
+  const ends = sealPlan(raw, prefix.length)
+  expect(ends).toEqual([prefix.length + MiB + 7, prefix.length + 2 * MiB + 7])
+  expect(plan.chunks.map((chunk) => chunk.rawOffset + chunk.rawLength)).toEqual(
+    ends,
+  )
+  expect(plan.chunks.map((chunk) => chunk.seq)).toEqual([5, 6])
+  expect(plan.chunks[1].sha256).toBe(sha(raw.subarray(ends[0], ends[1])))
+  expect(plan.sealedSha256).toBe(sha(raw.subarray(0, ends[1])))
+})
