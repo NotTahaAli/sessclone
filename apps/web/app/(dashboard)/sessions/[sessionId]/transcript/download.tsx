@@ -27,6 +27,30 @@ declare global {
   }
 }
 
+/**
+ * The most the Blob path assembles in memory. Past it the download stops with
+ * a message rather than exhausting the tab; Chromium's picker streams to disk
+ * and has no cap. ponytail: a service-worker stream lifts it if one is hit.
+ */
+export const BLOB_LIMIT_BYTES = 512 * 1024 * 1024
+
+/** `stream`, errored once more than `limit` bytes have passed through it. */
+export const capped = (stream: ReadableStream<Uint8Array>, limit: number) => {
+  let seen = 0
+  return stream.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        seen += chunk.byteLength
+        if (seen > limit)
+          throw new Error(
+            `This transcript is too large to assemble in this browser (over ${Math.round(limit / 1024 / 1024)} MB). Download it in Chrome or Edge, which save it straight to disk.`,
+          )
+        controller.enqueue(chunk)
+      },
+    }),
+  )
+}
+
 /** How long a Blob's URL outlives its click, so the browser can read it. */
 const REVOKE_AFTER_MS = 10_000
 
@@ -93,10 +117,11 @@ export function DownloadTranscript({
         // writable, which discards the partial file rather than keeping it.
         await stream.pipeTo(await handle.createWritable(), { signal })
       } else {
-        // ponytail: holds the whole raw transcript in memory (Taha accepted
-        // this for Firefox and Safari); a service-worker stream is the
-        // upgrade if a transcript is measured to be too big for it.
-        const url = URL.createObjectURL(await new Response(stream).blob())
+        // Holds the raw transcript in memory (Taha accepted this for Firefox
+        // and Safari), up to BLOB_LIMIT_BYTES.
+        const url = URL.createObjectURL(
+          await new Response(capped(stream, BLOB_LIMIT_BYTES)).blob(),
+        )
         const link = document.createElement('a')
         link.href = url
         link.download = name

@@ -328,5 +328,7 @@ append-only; the viewer's Range reads inside the tail still ask to reload.
 - The viewer's file list grows by one presigned URL per MiB of transcript,
   about 600 bytes each. A 500 MB transcript is about 300 KB of list. If that
   is measured to matter, the upgrade is paging the chunk list.
-- The Blob fallback holds the whole raw transcript in browser memory.
-  Chromium-based browsers stream through `showSaveFilePicker` and avoid this.
+- The Blob fallback holds the whole raw transcript in browser memory, so it
+  stops with a message past 512 MB (`BLOB_LIMIT_BYTES`) and points at Chrome
+  or Edge. Chromium-based browsers stream through `showSaveFilePicker` and
+  have no cap. A service-worker stream lifts the cap if it is ever hit.
