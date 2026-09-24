@@ -106,4 +106,6 @@ Claude Code's own `cleanupPeriodDays` sweep deletes transcripts after 30 days
 by default, so a transcript not collected within that window is gone, whatever
 SessClone does. That also bounds what turning archival on later can backfill.
 SessClone never changes the setting for you; raise it in your own Claude Code
-settings if you want a longer window.
+settings if you want a longer window. Managed settings take precedence over
+your own, so where your organisation sets `cleanupPeriodDays`, ask whoever
+manages them.

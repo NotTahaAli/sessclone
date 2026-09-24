@@ -19,19 +19,30 @@ export function SeatStepper({
   max: number | null
   initial: number
 }) {
-  const [seats, setSeats] = useState(initial)
+  // The typed text, so a cleared field stays empty while the next digit is
+  // typed; bounds apply on blur and on − and +.
+  const [text, setText] = useState(String(initial))
   const clamp = useCallback(
     (n: number) => Math.min(Math.max(n, min), max ?? Infinity),
     [min, max],
   )
-  const fewer = useCallback(() => setSeats((n) => clamp(n - 1)), [clamp])
-  const more = useCallback(() => setSeats((n) => clamp(n + 1)), [clamp])
-  const typed = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) =>
-      setSeats(Number(event.target.value) || min),
-    [min],
+  const seats = clamp(Number(text) || min)
+  const fewer = useCallback(
+    () => setText((t) => String(clamp((Number(t) || min) - 1))),
+    [clamp, min],
   )
-  const settle = useCallback(() => setSeats(clamp), [clamp])
+  const more = useCallback(
+    () => setText((t) => String(clamp((Number(t) || min) + 1))),
+    [clamp, min],
+  )
+  const typed = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => setText(event.target.value),
+    [],
+  )
+  const settle = useCallback(
+    () => setText((t) => String(clamp(Number(t) || min))),
+    [clamp, min],
+  )
 
   return (
     <span className="flex items-center gap-2">
@@ -51,7 +62,7 @@ export function SeatStepper({
         aria-label="Team size"
         min={min}
         max={max ?? undefined}
-        value={seats}
+        value={text}
         onChange={typed}
         onBlur={settle}
         className="text-text w-8 [appearance:textfield] bg-transparent text-center font-mono text-[14px] tabular-nums [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
