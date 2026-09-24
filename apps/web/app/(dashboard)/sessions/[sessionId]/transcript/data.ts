@@ -74,7 +74,9 @@ const RELOAD =
 /**
  * One GET, renewed once on a refusal. The links expire after a few minutes,
  * and a storage refusal of an expired link is a 403: `fresh` fetches a new
- * link once and the read is retried on it.
+ * link once and the read is retried on it. A 404 is renewed the same way: a
+ * seal deletes the tail it replaced (ADR 0008), so a list read before it
+ * names an object that is gone, and the fresh list names the one that is not.
  */
 const getRenewing = async (
   url: string,
@@ -89,7 +91,7 @@ const getRenewing = async (
     if (error instanceof TypeError) return null
     throw error
   })
-  if (!response || response.status === 403) {
+  if (!response || response.status === 403 || response.status === 404) {
     const link = await fresh()
     if (link) response = await get(link)
   }
@@ -217,26 +219,60 @@ export const readRaw = async (
     : { bytes, start: read.start }
 }
 
+/** A renewed list whose tail has moved on past the one being read. */
+class TailMoved extends Error {
+  constructor(readonly file: StoredFile) {
+    super(RELOAD)
+  }
+}
+
 /**
  * The whole raw transcript as one stream: each chunk in order, gunzipped and
  * checked, then the tail (tickets 132 and 133). A whole-file row is its one
  * object. Pulled a chunk at a time, so a reader that writes as it goes holds
  * about a chunk in memory.
+ *
+ * A transcript that sealed more while this was reading has a new list whose
+ * tail starts further on, and the old tail is gone. The file is append-only,
+ * so the new list's chunks from where the old tail started, then its tail,
+ * are exactly the bytes still to come.
  */
 export const wholeStream = (
   file: StoredFile,
   renew: () => Promise<StoredFile | null>,
   signal?: AbortSignal,
 ) => {
+  let current = file
   let next = 0
+  const renewTail = async () => {
+    const fresh = await renew()
+    if (fresh && fresh.tailOffset > current.tailOffset) {
+      throw new TailMoved(fresh)
+    }
+    return fresh
+  }
   return new ReadableStream<Uint8Array>({
     async pull(controller) {
-      if (next < file.chunks.length) {
-        controller.enqueue(await readChunk(file, next++, renew, signal))
-        return
+      for (;;) {
+        if (next < current.chunks.length) {
+          // oxlint-disable-next-line no-await-in-loop -- returns straight after
+          controller.enqueue(await readChunk(current, next++, renew, signal))
+          return
+        }
+        try {
+          // oxlint-disable-next-line no-await-in-loop -- at most once more per seal
+          const { bytes } = await readBytes(current, null, renewTail, signal)
+          controller.enqueue(bytes)
+          controller.close()
+          return
+        } catch (error) {
+          if (!(error instanceof TailMoved)) throw error
+          const from = current.tailOffset
+          next = error.file.chunks.findIndex((one) => one.rawOffset === from)
+          if (next === -1) throw new Error(RELOAD, { cause: error })
+          current = error.file
+        }
       }
-      controller.enqueue((await readBytes(file, null, renew, signal)).bytes)
-      controller.close()
     },
   })
 }

@@ -86,10 +86,10 @@ const chunked = (over: Partial<StoredFile> = {}): StoredFile => ({
   ],
   ...over,
 })
-const storage = (store = objects) =>
+const storage = (store = objects, missing = 403) =>
   vi.fn(async (url: string, init?: RequestInit) => {
     const body = store.get(url)
-    if (body === undefined) return new Response('', { status: 403 })
+    if (body === undefined) return new Response('', { status: missing })
     const range = new Headers(init?.headers).get('range')
     const bytes =
       typeof body === 'string' ? new TextEncoder().encode(body) : body
@@ -187,4 +187,35 @@ test('readRaw keeps what a server that ignores Range sent, up to the read', asyn
   )
   expect(read.start).toBe(tailOffset)
   expect(text(read.bytes)).toBe(lines[2]!.slice(0, 9))
+})
+
+// A seal deletes the tail it replaced once its confirm commits, so a link to
+// the old tail answers 404 rather than 403 (ADR 0008).
+
+test('a link to an object that is gone is renewed, like an expired one', async () => {
+  vi.stubGlobal('fetch', storage(objects, 404))
+  const read = await readBytes(
+    chunked({ url: 'https://gone' }),
+    null,
+    async () => chunked(),
+  )
+  expect(text(read.bytes)).toBe(lines[2])
+})
+
+test('wholeStream carries on through the new chunks when the tail moved on', async () => {
+  // Opened with one chunk; a pass then sealed the second and deleted the
+  // tail this list names. The file is append-only, so the new list's chunks
+  // from the old tail offset, then its tail, are exactly the rest.
+  vi.stubGlobal('fetch', storage(objects, 404))
+  const opened = chunked({
+    url: 'https://old-tail',
+    tailOffset: lines[0]!.length,
+    chunks: chunked().chunks.slice(0, 1),
+  })
+
+  const out = await new Response(
+    wholeStream(opened, async () => chunked()),
+  ).text()
+
+  expect(out).toBe(raw)
 })

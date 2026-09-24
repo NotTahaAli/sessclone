@@ -8,6 +8,7 @@
 - A chunked row on the Transcripts page and on Session detail renders a small client button instead. It reads the file list (ticket 132's route) and takes `wholeStream(file)`, which yields each chunk decompressed and then the tail.
   - Where `showSaveFilePicker` exists (Chromium), it pipes to the file, streamed with bounded memory.
   - Otherwise it builds `new Response(stream).blob()`, then an object URL, then a click on an `<a download>`, and revokes the URL afterwards. This holds the transcript in memory. The ceiling is stated in the code, and a service-worker stream is the upgrade if it bites.
+- Review fix: a pass that seals while the download runs deletes the tail the list named. `wholeStream` renews on that 404, and when the new list's tail starts further on it carries on with the new chunks from the old tail's offset, then the new tail, since the file is append-only.
 - The filename is the same as today's: `<session>.jsonl` or `<session>-agent-<id>.jsonl`.
 - Each chunk's raw SHA-256 is checked with `crypto.subtle` while streaming. A mismatch aborts with a visible error, never a silently corrupt file.
 - `/api/logs/download/<id>` answers 409 for a chunked row rather than a 302 to its tail, which would be the end of the file passed off as all of it (`artifact-download.test.ts`). The listings carry `chunked` so the pages pick the button.

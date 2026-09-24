@@ -206,7 +206,11 @@ header would make browsers and some providers decode the object in transit,
 and whether they do varies by provider. A Supabase bucket that restricts
 allowed MIME types must allow `application/gzip`. Chunk GETs send no `Range`
 header, so the CORS rule from ticket 104 covers them unchanged. Presigned URLs
-keep the existing TTL and the existing renew-on-403 in `readBytes`.
+keep the existing TTL and the existing renew-on-403 in `readBytes`, which
+renews on a 404 as well: a seal deletes the tail it replaced, so a list read
+before it names an object that is gone. The download's stream then carries
+on from the new list's chunks at the old tail's offset, because the file is
+append-only; the viewer's Range reads inside the tail still ask to reload.
 
 ## Alternatives rejected
 
