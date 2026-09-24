@@ -90,3 +90,21 @@ test('a confirm names its new chunks and the prefix hash only when chunked', () 
     }),
   ).toBe(false)
 })
+
+test('a chunk’s raw offset and length are bounded', () => {
+  const chunk = { seq: 1, rawOffset: 0, rawLength: 1_048_600, sha256 }
+  const confirm = (over: Record<string, unknown>) =>
+    ConfirmRequest.safeParse({
+      sessionId: 's',
+      sha256,
+      storageKey: 'k',
+      layout: 'chunked',
+      chunks: [{ ...chunk, ...over }],
+      sealedSha256: sha256,
+    }).success
+
+  expect(confirm({ rawLength: 256 * 1024 * 1024 })).toBe(true)
+  expect(confirm({ rawLength: 256 * 1024 * 1024 + 1 })).toBe(false)
+  expect(confirm({ rawOffset: 2 ** 50 - 1 })).toBe(true)
+  expect(confirm({ rawOffset: 2 ** 50 })).toBe(false)
+})

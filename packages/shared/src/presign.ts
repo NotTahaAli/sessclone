@@ -131,8 +131,20 @@ export const ConfirmRequest = z
       .array(
         z.object({
           seq: z.number().int().min(1),
-          rawOffset: z.number().int().min(0),
-          rawLength: z.number().int().min(1),
+          // Bounded, because both feed `size_bytes`: 2^50 is a petabyte of
+          // transcript, and a chunk is cut at about 1 MiB, so 256 MiB is a
+          // single line no transcript writes. The confirm also checks each
+          // length against the stored size it read back.
+          rawOffset: z
+            .number()
+            .int()
+            .min(0)
+            .lt(2 ** 50),
+          rawLength: z
+            .number()
+            .int()
+            .min(1)
+            .max(256 * 1024 * 1024),
           sha256,
         }),
       )

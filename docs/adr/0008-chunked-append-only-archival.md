@@ -144,7 +144,13 @@ reads each new chunk's stored size and the tail's raw size back from storage
 with a HEAD, at most 17 of them. It trusts no size the Collector reports, as
 ADR 0003 has it. The raw offsets and lengths are the Collector's word, as the
 SHA-256 already is: a Member who lies about them corrupts only their own
-transcript.
+transcript. They are bounded all the same, because they become `size_bytes`:
+the contract caps `rawLength` at 256 MiB and `rawOffset` below 2^50, and the
+confirm refuses a chunk whose `rawLength` exceeds its HEAD-read stored size
+times 1032, deflate's worst-case expansion. Within those bounds a lying
+Collector can still overstate its own `size_bytes`, and so the usage the
+transcripts page reports for it; that is left as is, since it misstates only
+that Member's own storage.
 
 ### The schema
 

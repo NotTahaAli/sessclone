@@ -50,6 +50,9 @@ import {
 // thing ADR 0003 exists to avoid. A Member who lies about it can only make
 // their own next upload be skipped as unchanged.
 
+/** Deflate's worst-case expansion: raw bytes per stored byte, at most. */
+const MAX_DEFLATE_RATIO = 1032
+
 const refused = (error: string, detail?: string) =>
   Response.json({ error, detail } satisfies ConfirmResponse, { status: 400 })
 
@@ -255,6 +258,22 @@ export async function POST(request: Request) {
         refused: 'not_uploaded',
         detail: 'no object is stored under this Session’s key yet',
       } satisfies ConfirmResponse),
+    )
+  }
+
+  // The raw lengths are the Collector's word, and they become `size_bytes`.
+  // Deflate cannot expand past about 1032 to 1, so a chunk claiming more raw
+  // bytes than its stored size could inflate to was never those bytes.
+  const inflated = chunks.findIndex(
+    (chunk, index) =>
+      chunk.rawLength > objects[index]!.sizeBytes * MAX_DEFLATE_RATIO,
+  )
+  if (inflated !== -1) {
+    return giveUp(
+      refused(
+        'not a confirm request',
+        `chunks.${inflated}.rawLength: more than its stored bytes inflate to`,
+      ),
     )
   }
 

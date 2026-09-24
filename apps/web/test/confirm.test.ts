@@ -832,7 +832,7 @@ test('a chunk is looked for under the key its SHA-256 addresses', async () => {
   await withArchival(fixture.acme.id)
   await seedSession()
   stored.size = null
-  stored.sizes = { [chunkAt(1, '1'.repeat(64))]: 300, [tailAt(1)]: 20 }
+  stored.sizes = { [chunkAt(1, '1'.repeat(64))]: 3000, [tailAt(1)]: 20 }
   const confirmWith = (sha256: string) =>
     ask({
       layout: 'chunked',
@@ -1138,4 +1138,28 @@ test('a confirm queues only its own Member’s pending keys', async () => {
 
   expect(await orphanKeys()).toEqual([])
   expect(await pendingKeys()).toEqual([tailAt(1, 'fedcba9876543210')])
+})
+
+test('a chunk whose raw length its stored bytes could not inflate to is refused', async () => {
+  // Deflate expands at most about 1032 to 1, so a raw length past that is
+  // a Collector overstating what it stored, and it would inflate size_bytes.
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  stored.sizes = { [chunkAt(1, SHA)]: 1000 }
+  const confirmWith = (rawLength: number) =>
+    ask({
+      layout: 'chunked',
+      storageKey: tailAt(1),
+      sealedSha256: '9'.repeat(64),
+      chunks: [{ seq: 1, rawOffset: 0, rawLength, sha256: SHA }],
+    })
+
+  const [status, body] = await answer(await confirmWith(1000 * 1032 + 1))
+  expect(status).toBe(400)
+  expect(body.detail).toMatch(/rawLength/)
+  expect(await artifacts()).toHaveLength(0)
+
+  expect((await answer(await confirmWith(1000 * 1032)))[1]).toMatchObject({
+    stored: true,
+  })
 })

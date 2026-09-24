@@ -14,6 +14,7 @@
 - The confirm serialises on the transcript's identity (a transaction-scoped advisory lock, since a first upload has no row to lock; ADR 0008 updated), checks that the new chunks follow on from `sealed_bytes` and the next seq, and HEADs every new chunk plus the tail in parallel (at most 17) for `stored_bytes` and the tail's raw size. Then, in one transaction, it inserts the chunk rows and updates `storage_key`, `size_bytes`, `sha256`, `sealed_bytes` and `sealed_sha256`. The old tail is deleted after commit through the existing replaced-key path, including its `storage_orphans` fallback.
 - `layout: 'whole'`, which includes every older Collector's confirm, deletes the row's chunk rows in the same statement as the upsert. Their objects go after commit, and a failed delete lands in `storage_orphans`.
 - Review fix: the presign records every key it signs in `log_upload_pending`; the confirm deletes the keys it records from it in its transaction (refusing `not_uploaded` when one is gone), and a stale, refused or `unchanged` confirm queues that pass's pending keys into `storage_orphans`.
+- Review fix: `rawLength` is capped at 256 MiB and `rawOffset` below 2^50 in the contract, and the confirm refuses (400) a chunk whose `rawLength` is more than 1032 times its HEAD-read stored size.
 - A Session that moved Project (`stale_key`) starts chunking again from zero under its new prefix. The old chunks go with the replaced row.
 
 **Blocked by:** 128
