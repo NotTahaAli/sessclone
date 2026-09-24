@@ -57,7 +57,7 @@ backfilled.
 ```
 
 **No key is reused for different bytes.** A key is deleted only once no
-row names it (the replaced-key cleanup, the orphan sweep), so a key that
+row names it (the orphan sweep, which every replaced key goes through), so a key that
 came back into use after it was queued for deletion would lose the bytes a
 row now points at. So a chunk key carries `<hash>`, the first 16 hex of the
 chunk's raw SHA-256: different bytes never share a key, and the same bytes
@@ -69,8 +69,9 @@ and a confirm takes the keys it records out of `storage_orphans`.
 
 The tail is keyed by how many chunks come before it, so sealing moves it to a
 new key. The confirm swaps the row's chunk set and its `storage_key` in one
-transaction, and the old tail is deleted only after that commits (the
-replaced-key cleanup ticket 59 already does). A reader therefore sees either
+transaction, and queues the old tail in `storage_orphans` in that same
+transaction; the sweep deletes it once no row or pending upload names it.
+The confirm deletes no object itself. A reader therefore sees either
 the old set or the new set, never a tail that overlaps or leaves a gap after
 the chunks. The confirm serialises on the transcript's identity with a
 transaction-scoped advisory lock rather than a row lock, because a first
@@ -83,17 +84,22 @@ would see a gap or a duplicate.
 `sealed_sha256`, the SHA-256 of the raw bytes `[0, sealed_bytes)`. The presign
 answer returns both. The Collector re-hashes that prefix locally, which reads
 local disk and sends nothing, and compares. If the prefix matches, it
-continues from `sealed_bytes`. If it does not, or the file is now shorter than
-`sealed_bytes`, the file was rewritten or truncated, so the Collector falls
-back to a whole-file upload. Any local state the Collector keeps is a cache,
+continues from `sealed_bytes`. If it does not, the file was rewritten, so the
+Collector falls back to a whole-file upload. If the file this pass read is
+shorter than `sealed_bytes`, another pass read it later and sealed more: this
+pass is behind, so it ends quietly (`'stale'`) and the next pass catches up.
+A whole file from it would drop the newer chunks, and the confirm refuses a
+whole file smaller than `sealed_bytes` as `stale_chunks` for the same reason.
+So a file truly truncated below what is sealed is not archived again until it
+grows past it. Any local state the Collector keeps is a cache,
 as `archived/` already is, because finding 74 shows local state is lost while
 the transcript continues.
 
 **Failsafe: whole-file.** The Collector falls back when the prefix does not
 match, when compression fails, or when the deployment does not answer
 `layout: 'chunked'`. It presigns with `layout: 'whole'` and PUTs the whole
-file to `…/<session>.jsonl`. The confirm then drops every chunk row, and the
-chunk objects and old tail go after the commit. A later pass may start
+file to `…/<session>.jsonl`. The confirm then drops every chunk row, and
+queues the chunk objects and the old tail for the sweep. A later pass may start
 chunking again from byte 0.
 
 **Only `kind = 'transcript'` chunks.** An `agent_meta` sidecar is small JSON
@@ -128,12 +134,20 @@ Every change is additive, and every new field is optional or defaulted.
   `{ seq, rawOffset, rawLength, sha256 }`, and `ConfirmRequest.sealedSha256?`
   is the new cumulative prefix hash. `storageKey` stays the tail key that was
   PUT to.
+- `pass`: 16 lowercase hex naming one Collector pass. The presign draws it,
+  or keeps one the request sends, and answers it; the pass echoes it on its
+  later presigns and on its confirm. Optional in both requests and additive
+  in the answer, so an older Collector sends none and is handled across all
+  of its Member's passes, as before.
 - New transient refusal: `stale_chunks`. The first new chunk does not start at
   the row's `sealed_bytes` or seq, the seqs are not contiguous, or the
   echoed tail key is not a tail after `chunks + seal` chunks. The Collector
   presigns again. The confirm looks each chunk up under the key its
   `sha256` addresses, so a chunk confirmed with other bytes than it was
   presigned for is `not_uploaded`.
+- A whole-file confirm smaller than the row's `sealed_bytes` is
+  `stale_chunks`: a pass behind another, whose file would roll the
+  transcript back.
 - A confirm with `layout: 'whole'`, including every older Collector's, clears
   the row's chunks. Without that, a downgraded Collector's whole file would be
   read after stale chunks as a duplicate.
@@ -173,10 +187,22 @@ statement, through data-modifying CTEs whose `returning` gathers every key.
 transcript, which is what a download yields and what the viewer's offsets
 count. What the bucket holds is `sum(stored_bytes)` plus the tail.
 
-A second table, `log_upload_pending (storage_key, member_id, session_id,
-agent_id, kind, project_id, expires_at)`, holds the keys a presign signed
-that no confirm has recorded yet (see Consequences). It has read and delete
-policies for `sessclone_own_member_ids()` and no insert or update policy.
+A second table, `log_upload_pending (storage_key, pass, member_id,
+session_id, agent_id, kind, project_id, expires_at)`, keyed by
+`(storage_key, pass)`, holds the keys a presign signed that no confirm has
+recorded yet (see Consequences). It has read and delete policies for
+`sessclone_own_member_ids()` and no insert or update policy.
+
+`storage_orphans` gains `not_before`: the sweep deletes an orphan only once
+it has passed. A key queued from the pending ledger gets its `expires_at`,
+so no PUT can land after its delete; every other orphan gets the time it was
+queued. A Member's own delete queues its pending keys through
+`sessclone_forget_pending(keys)`, a `security definer` function pinned to
+`search_path = public, pg_temp` that takes only named keys pending for the
+caller's own Members. A function rather than an insert grant and policy:
+`storage_orphans` stays unreadable and unwritable by `sessclone_app`, and a
+key already queued needs its `not_before` raised, which `on conflict do
+update` cannot do under RLS without a read policy.
 
 ### Readers
 
@@ -195,7 +221,14 @@ policies for `sessclone_own_member_ids()` and no insert or update policy.
   application.
 - **Retention, per-Session delete, per-Project delete, and confirm's
   replace/fallback** all delete the chunk rows in the same statement as their
-  artifact, and send the chunk keys to `deleteObjects` with the tail key.
+  artifact. The deletes send the chunk keys to `deleteObjects` with the tail
+  key; the confirm queues them in `storage_orphans`. A sealing confirm that
+  commits chunk rows while a delete waits on their artifact makes the
+  delete's statement fail on the `no action` key (23503), because its
+  snapshot predates them, so each delete statement runs once more under a
+  savepoint on that error and then takes them. A retry rather than the
+  confirm's advisory lock: a Project delete or a sweep covers hundreds of
+  transcripts, which would need a lock each.
 
 ### Storage quirks carried forward
 
@@ -207,8 +240,8 @@ and whether they do varies by provider. A Supabase bucket that restricts
 allowed MIME types must allow `application/gzip`. Chunk GETs send no `Range`
 header, so the CORS rule from ticket 104 covers them unchanged. Presigned URLs
 keep the existing TTL and the existing renew-on-403 in `readBytes`, which
-renews on a 404 as well: a seal deletes the tail it replaced, so a list read
-before it names an object that is gone. The download's stream then carries
+renews on a 404 as well: the sweep deletes the tail a seal replaced, so a
+list read before it can name an object that is gone. The download's stream then carries
 on from the new list's chunks at the old tail's offset, because the file is
 append-only; the viewer's Range reads inside the tail still ask to reload.
 
@@ -257,11 +290,28 @@ append-only; the viewer's Range reads inside the tail still ask to reload.
   it answers. The confirm deletes the keys it records from that ledger in
   its transaction, and refuses as `not_uploaded` if any is no longer there.
   A confirm that ends any other way moves that pass's pending keys into
-  `storage_orphans`. The retention sweep moves expired entries there too,
-  and deletes an orphan only while no artifact row, chunk row or pending
-  entry names its key. A Member's own per-Session and per-Project deletes
-  take the pending keys under what they destroy. The ledger has RLS: the
-  Member may read and delete their own rows, and only the presign writes.
+  `storage_orphans`, and one that records moves the pass's keys it did not
+  use. Each entry is tagged with the pass that signed it, so two passes
+  signed one key (the whole-file key, a chunk resealed with the same bytes)
+  never take each other's. The retention sweep moves expired entries into
+  `storage_orphans` too, and deletes an orphan only while no artifact row,
+  chunk row or pending entry names its key and its `not_before` has passed.
+  A Member's own per-Session and per-Project deletes take the pending keys
+  under what they destroy, delete what has landed, and queue each key until
+  its URL expires, because a PUT can still land after the delete. The
+  ledger has RLS: the Member may read and delete their own rows, and only
+  the presign writes.
+- **Every sealing pass signs one tail it does not use**, the tail of its
+  first presign, before it knows it will seal. Its confirm queues it; a
+  pass that never confirms leaves it to lapse. Either way it is swept after
+  its URL's life. Accepted: it costs a row, not an object, unless a stray
+  PUT lands.
+- **The cut rule and `CHUNK_BYTES` are a compatibility constraint.** The
+  deployment's `sealed_bytes` must be one of this Collector's cuts, so a
+  Collector that cuts differently finds no cut there and falls back to one
+  whole-file upload per transcript, after which it chunks from byte 0 by
+  its own rule. Changing either is a full re-upload of every transcript;
+  do not change them without a plan for that.
 - **A rollback is unsupported once any chunk row exists.** Code that
   predates this ADR writes the whole-file key and leaves `sealed_bytes` and
   the chunk rows behind. The readers therefore call a row chunked only when

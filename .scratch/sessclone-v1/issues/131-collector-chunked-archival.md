@@ -13,7 +13,9 @@
   5. Pick cut points with a pure `sealPlan(bytes, from)`: the first `\n` at or after 1 MiB, never inside a line. Seal at most 16 chunks per pass, still inside the deadline.
   6. Only when there is something to seal: presign again with `seal`: each planned chunk's `{ seq, sha256 }`, which the deployment builds the chunk keys from.
   7. PUT each chunk as `application/gzip` (`zlib` gzip, streamed), then PUT the tail raw, then confirm.
-- **Failsafe to whole-file** when the file is shorter than `sealed.bytes`, when the prefix hash differs, when compression throws, or when the deployment does not echo `layout: 'chunked'` (it predates 129). The whole-file path is today's code, with `layout: 'whole'`.
+- **Behind what is sealed** (second review): when `sealed.bytes` is more than this pass scanned, another pass read the file later and sealed more. `planFrom` answers `'stale'` and the pass ends unsettled; a whole file would roll the archive back. A file truly truncated below `sealed.bytes` is not archived again until it grows past it.
+- **Pass id** (second review): the Collector echoes the first presign's `pass` on its later presigns and its confirm.
+- **Failsafe to whole-file** when the prefix hash differs, or no cut ends at `sealed.bytes` within the scan, when compression throws, or when the deployment does not echo `layout: 'chunked'` (it predates 129). The whole-file path is today's code, with `layout: 'whole'`.
 - `stale_chunks` is transient, like `stale_key`: never settled, and asked again on the next pass. The per-Session lock from ticket 99 already stops two passes on one machine from racing.
 - Sidecars (`agent_meta`, `workflow_journal`) stay whole-file. Agent Run transcripts chunk like the main one.
 - Applies on every Device, not only in the cloud. A transcript under 1 MiB never seals, so it produces the same object and the same requests as today.
