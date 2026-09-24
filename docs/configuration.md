@@ -478,10 +478,11 @@ it at the first line end at or after each 1 MiB, never inside a line, and sends
 up to 16 such chunks gzipped (`application/gzip`, no `Content-Encoding`) after
 one extra presign, then the shorter tail. A transcript under 1 MiB never seals,
 so it is stored and sent exactly as before. The Collector falls back to sending
-the whole file when the file is shorter than the sealed bytes or its prefix
-hashes differently (rewritten or truncated), when compression fails, or when
-the deployment does not answer `layout: 'chunked'` (one that predates ADR
-0008); that confirm drops the old chunks. The first pass over a long transcript
+the whole file when its prefix hashes differently (rewritten), when compression
+fails, or when the deployment does not answer `layout: 'chunked'` (one that
+predates ADR 0008); that confirm drops the old chunks. A file shorter than the
+sealed bytes is not uploaded: the pass ends, and the file is archived again
+only once it grows past them. The first pass over a long transcript
 that has no chunks yet seals 16 MiB at most and sends the rest as the tail, so
 it converges over a few passes. Sidecars (`agent_meta`, `workflow_journal`)
 are always sent whole; Agent Run transcripts chunk like the main one.
