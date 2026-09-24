@@ -244,8 +244,17 @@ test('a chunked transcript is refused rather than redirected to its tail alone',
   })
   await sql`
     update log_artifacts
-       set sealed_bytes = 1024, sealed_sha256 = ${'c'.repeat(64)}
+       set sealed_bytes = 1024, sealed_sha256 = ${'c'.repeat(64)},
+           storage_key = storage_key || '/tail-1-0123456789abcdef.jsonl'
      where id = ${id}
+  `
+  await sql`
+    insert into log_artifact_chunks
+      (artifact_id, member_id, seq, raw_offset, raw_length, stored_bytes,
+       sha256, storage_key)
+    select id, member_id, 1, 0, 1024, 300, ${'c'.repeat(64)},
+           storage_key || '.chunk'
+      from log_artifacts where id = ${id}
   `
 
   const answer = await as('member', id)

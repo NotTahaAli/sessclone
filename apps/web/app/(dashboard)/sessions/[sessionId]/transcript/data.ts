@@ -60,13 +60,33 @@ export const listFiles = async (
     }
   }
   const body = Files.safeParse(await response.json())
-  return body.success
+  if (!body.success) {
+    return {
+      status: 'error',
+      message: 'The file list was not in a shape this page reads.',
+    }
+  }
+  return body.data.files.every(linedUp)
     ? { status: 'ready', files: body.data.files }
     : {
         status: 'error',
-        message: 'The file list was not in a shape this page reads.',
+        message:
+          'This transcript’s stored chunks do not line up with its tail, so ' +
+          'it cannot be shown without repeating or losing bytes.',
       }
 }
+
+/**
+ * Whether a file's chunks start at byte 0, run on from each other with no
+ * gap or overlap, and end where its tail starts (ADR 0008). A whole file,
+ * with no chunks and its tail at 0, trivially does.
+ */
+const linedUp = (file: StoredFile) =>
+  file.tailOffset ===
+  file.chunks.reduce<number>(
+    (end, chunk) => (chunk.rawOffset === end ? end + chunk.rawLength : NaN),
+    0,
+  )
 
 const RELOAD =
   'This transcript was archived further since it opened. Reload to read it.'

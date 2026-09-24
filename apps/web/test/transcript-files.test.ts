@@ -59,7 +59,7 @@ const seal = async (count: number) => {
   const [row] = await sql<{ id: string; member_id: string }[]>`
     update log_artifacts
        set sealed_bytes = ${count * 1024}, sealed_sha256 = ${'c'.repeat(64)},
-           storage_key = storage_key || ${`/tail-${count}.jsonl`}
+           storage_key = storage_key || ${`/tail-${count}-0123456789abcdef.jsonl`}
      where agent_id is null and kind = 'transcript'
     returning id, member_id
   `
@@ -227,4 +227,19 @@ test('a chunked transcript lists its chunks in seq order; a whole file has none'
   expect((await call(files, 's-1', fixture.globex.users.owner)).status).toBe(
     404,
   )
+})
+
+test('a row rolled back to a whole file lists no chunks and reads from byte 0', async () => {
+  // ADR 0008: code that predates chunks writes the whole-file key and
+  // leaves sealed_bytes and the chunk rows behind. Its object is the whole
+  // transcript, so the viewer must not read chunks before it.
+  await artifact(null)
+  await seal(2)
+  await sql`
+    update log_artifacts set storage_key = regexp_replace(storage_key,
+      '/tail-[^/]*$', '')
+  `
+
+  const body = await (await call(files, 's-1', fixture.acme.users.owner)).json()
+  expect(body.files[0]).toMatchObject({ tailOffset: 0, chunks: [] })
 })

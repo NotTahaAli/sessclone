@@ -21,6 +21,25 @@ import { deleteObjects } from './storage'
 // unchanged-hash refusal no longer applies.
 
 /**
+ * Whether the `log_artifacts` row under `alias` is stored as chunks plus a
+ * tail (ADR 0008): its key is a `tail-<n>-<nonce>` key and it has exactly
+ * `n` chunk rows. The same test `presignDecision` makes with `tailChunks`.
+ *
+ * Not `sealed_bytes > 0`: a rollback to code that predates chunks writes
+ * the whole-file key and leaves `sealed_bytes` and the chunk rows behind,
+ * and that row's object is the whole transcript. The count is the chunks'
+ * `(artifact_id, seq)` key, once per row of a bounded page.
+ */
+export const chunkedSql = (tx: TransactionSql, alias: string) => tx`
+  coalesce(
+    substring(${tx(alias)}.storage_key
+              from '/tail-([1-9][0-9]{0,8})-[0-9a-f]{16}\.jsonl$')::int
+      = (select count(*) from log_artifact_chunks chunk
+          where chunk.artifact_id = ${tx(alias)}.id),
+    false)
+`
+
+/**
  * Whose transcripts a listing is about (ticket 84).
  *
  * `own` is the signed-in person's, which is what `/settings/you` shows. `team`
@@ -232,7 +251,7 @@ export const storedSessions = async (
     }[]
   >`
     select id, member_id, project_id, session_id, agent_id, size_bytes,
-           uploaded_at, sealed_bytes > 0 as chunked
+           uploaded_at, ${chunkedSql(tx, 'log_artifacts')} as chunked
       from log_artifacts
      -- One Member by equality when a group is named, which is what lets
      -- log_artifacts_member_uploaded_idx answer the order as well as the
@@ -368,7 +387,8 @@ export const downloadableArtifact = async (
       chunked: boolean
     }[]
   >`
-    select member_id, storage_key, kind, sealed_bytes > 0 as chunked,
+    select member_id, storage_key, kind,
+           ${chunkedSql(tx, 'log_artifacts')} as chunked,
            case when agent_id is null then session_id
                 when kind = 'workflow_journal'
                   then session_id || '-workflow-' || agent_id

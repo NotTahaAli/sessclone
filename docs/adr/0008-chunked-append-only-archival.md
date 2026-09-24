@@ -256,6 +256,16 @@ append-only; the viewer's Range reads inside the tail still ask to reload.
   entry names its key. A Member's own per-Session and per-Project deletes
   take the pending keys under what they destroy. The ledger has RLS: the
   Member may read and delete their own rows, and only the presign writes.
+- **A rollback is unsupported once any chunk row exists.** Code that
+  predates this ADR writes the whole-file key and leaves `sealed_bytes` and
+  the chunk rows behind. The readers therefore call a row chunked only when
+  its key is a `tail-<n>-<nonce>` key with exactly `n` chunk rows, the test
+  the presign makes, and read any other row as the whole file; the viewer
+  refuses a chunk list that does not start at 0, run on without gaps and end
+  at the tail. Every delete path, the retention sweep included, removes a
+  row's chunks by `artifact_id` whatever its key, so none is stranded. Such a
+  row is repaired by its next upload after moving forward again, whose whole
+  or zero-chunk confirm drops the stale chunk rows.
 - A Session that moves Project changes its key prefix, so its chunks start
   again from zero under the new prefix. The old chunks go with the replaced
   row, through the existing `stale_key` and replaced-key path.

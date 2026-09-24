@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto'
 import { gzipSync } from 'node:zlib'
 
 import {
+  listFiles,
   readBytes,
   readChunk,
   readRaw,
@@ -218,4 +219,33 @@ test('wholeStream carries on through the new chunks when the tail moved on', asy
   ).text()
 
   expect(out).toBe(raw)
+})
+
+test('a file list whose chunks do not line up with the tail is a clear error', async () => {
+  // ADR 0008: chunks start at 0, run on with no gap or overlap, and end
+  // where the tail starts. Anything else would show repeated or missing
+  // bytes as though they were the transcript.
+  const [first, second] = chunked().chunks
+  const listed = (over: Partial<StoredFile>) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json({ files: [chunked(over)] })),
+    )
+    return listFiles('s', 'm')
+  }
+
+  expect((await listed({})).status).toBe('ready')
+  for (const bad of [
+    { chunks: [second!] },
+    { chunks: [first!] },
+    { chunks: [first!, first!, second!] },
+    { tailOffset: 0 },
+  ]) {
+    // oxlint-disable-next-line no-await-in-loop -- one at a time, so a failure names which.
+    const answer = await listed(bad)
+    expect(answer, JSON.stringify(bad)).toMatchObject({
+      status: 'error',
+      message: expect.stringMatching(/do not line up/),
+    })
+  }
 })

@@ -1,5 +1,7 @@
 import type { TransactionSql } from 'postgres'
 
+import { chunkedSql } from './artifacts'
+
 // Tickets 105-107: what the transcript viewer reads from the database.
 //
 // Nothing here names a Role: `log_artifacts_read` and `turns_read` decide.
@@ -59,9 +61,15 @@ export const transcriptFiles = async (
     }[]
   >`
     select artifact.id, artifact.kind, artifact.agent_id, artifact.size_bytes,
-           artifact.uploaded_at, artifact.storage_key, artifact.sealed_bytes,
-           coalesce(chunk.list, '[]') as chunks
+           artifact.uploaded_at, artifact.storage_key,
+           case when chunked then artifact.sealed_bytes else 0 end
+             as sealed_bytes,
+           case when chunked then coalesce(chunk.list, '[]') else '[]' end
+             as chunks
       from log_artifacts artifact
+      -- A row that is not chunked by ADR 0008's test — a rollback left its
+      -- chunk rows behind a whole-file key — is read as the whole file.
+      cross join lateral (select ${chunkedSql(tx, 'artifact')} as chunked) test
       left join lateral (
         select json_agg(json_build_object(
                  'rawOffset', raw_offset, 'rawLength', raw_length,

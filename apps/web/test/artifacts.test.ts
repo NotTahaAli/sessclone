@@ -3,6 +3,7 @@ import { beforeEach, expect, test, vi } from 'vitest'
 import {
   deleteStoredProject,
   deleteStoredSession,
+  downloadableArtifact,
   storedProjects,
   storedSessions,
 } from '../lib/artifacts'
@@ -806,11 +807,41 @@ test('a chunked transcript is marked so the page downloads it in the browser', a
   const main = await artifact({ projectId })
   await artifact({ projectId, agentId: 'agent-7' })
   await sealChunks(main.id, 1)
+  await sql`
+    update log_artifacts
+       set storage_key = storage_key || '/tail-1-0123456789abcdef.jsonl'
+     where id = ${main.id}
+  `
 
   const { sessions } = await asMember(storedSessions)
   expect(
     Object.fromEntries(sessions.map((s) => [s.agentId ?? 'main', s.chunked])),
   ).toEqual({ main: true, 'agent-7': false })
+})
+
+test('chunked means a tail key after exactly its chunk rows, not sealed bytes', async () => {
+  // ADR 0008, the test `presignDecision` makes. A rollback to code that
+  // predates chunks writes the whole-file key and leaves sealed_bytes and
+  // the chunk rows behind; that row's object is the whole transcript.
+  const projectId = await project('github.com/acme/api')
+  const rolledBack = await artifact({ projectId })
+  await sealChunks(rolledBack.id, 2)
+  // A tail key whose count disagrees with the rows is not a chunked row
+  // either: its chunks cannot be what came before that tail.
+  const miscounted = await artifact({ projectId, sessionId: 'session-2' })
+  await sealChunks(miscounted.id, 1)
+  await sql`
+    update log_artifacts
+       set storage_key = storage_key || '/tail-2-0123456789abcdef.jsonl'
+     where id = ${miscounted.id}
+  `
+
+  const { sessions } = await asMember(storedSessions)
+  expect(sessions.map((s) => s.chunked)).toEqual([false, false])
+  const download = await asMember((tx) =>
+    downloadableArtifact(tx, rolledBack.id),
+  )
+  expect(download?.chunked).toBe(false)
 })
 
 /** A key a presign signed for this Member and no confirm recorded yet. */

@@ -1,5 +1,6 @@
 import type { TransactionSql } from 'postgres'
 
+import { chunkedSql } from './artifacts'
 import type { SessionState } from './names'
 import type { LocalRange } from './series'
 
@@ -628,7 +629,8 @@ export const sessionTranscripts = async (
       chunked: boolean
     }[]
   >`
-    select id, agent_id, size_bytes, uploaded_at, sealed_bytes > 0 as chunked
+    select id, agent_id, size_bytes, uploaded_at,
+           ${chunkedSql(tx, 'log_artifacts')} as chunked
       from log_artifacts
      where member_id = ${memberId}
        and session_id = ${sessionId}
