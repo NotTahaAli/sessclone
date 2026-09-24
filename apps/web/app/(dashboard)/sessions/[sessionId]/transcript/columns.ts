@@ -129,6 +129,41 @@ export const earlierRead = (
 /** Room at the top that counts as "near the start" and triggers a load. */
 export const NEAR_TOP = 600
 
+/** What a reader does to move the column, as against the layout moving it. */
+const READER_MOVES = ['wheel', 'touchstart', 'pointerdown', 'keydown'] as const
+
+/**
+ * Hold a column at its end while its content settles, until the reader moves.
+ *
+ * Rows are `content-visibility: auto`, so a first scroll to the bottom
+ * measures placeholders; the rows then in view take their real height and the
+ * end moves away (2026-09-24: ~5,800 px on a long transcript). Every resize of
+ * `content` puts the column back at the end, and the first wheel, touch,
+ * press or key lets go — a `scroll` does not, since re-pinning fires one.
+ * Returns the release, which the caller runs on unmount too.
+ */
+export const stickToBottom = (
+  scroller: Pick<
+    HTMLElement,
+    'scrollTop' | 'scrollHeight' | 'addEventListener' | 'removeEventListener'
+  >,
+  content: Element,
+) => {
+  const pin = () => {
+    scroller.scrollTop = scroller.scrollHeight
+  }
+  const observer = new ResizeObserver(pin)
+  const release = () => {
+    observer.disconnect()
+    for (const type of READER_MOVES) scroller.removeEventListener(type, release)
+  }
+  for (const type of READER_MOVES)
+    scroller.addEventListener(type, release, { passive: true })
+  observer.observe(content)
+  pin()
+  return release
+}
+
 /**
  * Whether the main column should fetch the next earlier chunk without being
  * scrolled: there is more before `from`, and either nothing has parsed yet —
