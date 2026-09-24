@@ -154,7 +154,11 @@ export const sweepRetention = async (
     // expired — a pass cut off, crashed, or whose confirm never came. They
     // join the orphans below, which deletes each once no row names it. A
     // confirm arriving now waits on these rows and is then refused.
-    const lapsed = await tx`
+    //
+    // Counted by the ledger rows deleted, not the orphans inserted: a key
+    // already queued is skipped by the insert, and a full batch counted short
+    // would report no backlog.
+    const [lapsed] = await tx<{ count: number }[]>`
       with lapsed as (
         delete from log_upload_pending
          where storage_key in (
@@ -163,10 +167,12 @@ export const sweepRetention = async (
             order by expires_at limit ${limit}
          )
         returning storage_key
+      ), queued as (
+        insert into storage_orphans (storage_key)
+        select storage_key from lapsed
+        on conflict (storage_key) do nothing
       )
-      insert into storage_orphans (storage_key)
-      select storage_key from lapsed
-      on conflict (storage_key) do nothing
+      select count(*)::int as count from lapsed
     `
 
     // The objects nothing names any more (`storage_orphans`), taken in the
@@ -211,7 +217,9 @@ export const sweepRetention = async (
     return {
       removed,
       more:
-        expired === limit || orphans.length === limit || lapsed.count === limit,
+        expired === limit ||
+        orphans.length === limit ||
+        lapsed!.count === limit,
     }
   })
 

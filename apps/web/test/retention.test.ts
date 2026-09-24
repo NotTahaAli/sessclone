@@ -619,3 +619,15 @@ test('a queued orphan a presign has signed again is kept while that upload is pe
 
   expect(bucket.deleted).toEqual([])
 })
+
+test('lapsed keys already queued still count toward the limit', async () => {
+  // A lapsed key can already sit in storage_orphans; the insert then skips
+  // it, but the ledger row still went. Counting inserts read a full batch as
+  // the end of the backlog.
+  const live = await seedArtifact({ age: 1 })
+  await sql`insert into storage_orphans (storage_key) values (${live})`
+  await pendingAt(live, -2000)
+  await pendingAt('later/tail-1-0123456789abcdef.jsonl', -1000)
+
+  expect(await sweepRetention(sql, 1)).toEqual({ removed: 0, more: true })
+})
