@@ -31,14 +31,12 @@ vi.mock('../lib/storage', async (importOriginal) => ({
     return size === null ? null : { sizeBytes: size }
   },
   deleteObjects: async (keys: string[]) => {
-    if (failDelete) throw new Error('bucket refused')
     stored.deleted.push(keys)
   },
 }))
 
 let fixture: Fixture
 let key: string
-let failDelete = false
 
 const SHA = 'a'.repeat(64)
 
@@ -215,7 +213,6 @@ beforeEach(async () => {
   key = await issueKey(fixture.acme.members.member)
   stored.size = 4096
   stored.sizes = {}
-  failDelete = false
   stored.unreadable = false
   stored.configured = true
   stored.deleted = []
@@ -446,8 +443,10 @@ test('a Project change moves the row and destroys the object left behind', async
   expect(rows).toHaveLength(1)
   expect(rows[0]!.storage_key).toBe(moved)
   // The old object had no row naming it any more, and bytes no retention
-  // sweep can reach are a transcript kept forever.
-  expect(stored.deleted).toEqual([[first!.storage_key]])
+  // sweep can reach are a transcript kept forever. Queued for the sweep in
+  // the confirm's transaction, never deleted by the confirm itself.
+  expect(await orphanKeys()).toEqual([first!.storage_key])
+  expect(stored.deleted).toEqual([])
 })
 
 test('an upload to the same key deletes nothing', async () => {
@@ -458,6 +457,7 @@ test('an upload to the same key deletes nothing', async () => {
   await ask({ sha256: 'd'.repeat(64) })
 
   expect(stored.deleted).toEqual([])
+  expect(await orphanKeys()).toEqual([])
   expect(await artifacts()).toHaveLength(1)
 })
 
@@ -691,7 +691,7 @@ test('a steady-state chunked confirm moves the tail and touches no chunk', async
     sha256: SHA,
   })
   expect(await chunkRows()).toHaveLength(2)
-  expect(stored.deleted).toEqual([[tailAt(2)]])
+  expect(await orphanKeys()).toEqual([tailAt(2)])
 })
 
 test('a sealing confirm writes the chunk rows and moves the tail key', async () => {
@@ -759,7 +759,7 @@ test('a sealing confirm writes the chunk rows and moves the tail key', async () 
     sha256: 'f'.repeat(64),
   })
   // The old tail went after the commit, as any replaced key does.
-  expect(stored.deleted).toEqual([[`${base()}.jsonl`]])
+  expect(await orphanKeys()).toEqual([`${base()}.jsonl`])
 })
 
 test('chunks that do not follow on from what is sealed are stale_chunks, and write nothing', async () => {
@@ -887,18 +887,21 @@ test('a whole confirm from an older Collector clears the chunks and deletes thei
     sealed_sha256: null,
     size_bytes: '4096',
   })
-  expect(stored.deleted.flat().toSorted()).toEqual(
+  expect(await orphanKeys()).toEqual(
     [chunkAt(1), chunkAt(2), tailAt(2)].toSorted(),
   )
 })
 
-test('a chunk delete that fails after the commit lands in storage_orphans', async () => {
+test('replaced objects are queued in the transaction, never deleted by the confirm', async () => {
+  // The sweep deletes a queued key only while no row names it again, so a
+  // key a later pass reuses is kept; a direct delete after the commit had
+  // no such guard.
   await withArchival(fixture.acme.id)
   await seedSession()
   await seedChunked(1)
-  failDelete = true
 
   expect((await ask({ storageKey: `${base()}.jsonl` })).status).toBe(200)
+  expect(stored.deleted).toEqual([])
 
   const orphans = await sql<{ storage_key: string }[]>`
     select storage_key from storage_orphans order by storage_key
@@ -966,7 +969,7 @@ test('a Session that moved Project reseals from zero and its old chunks go', asy
   expect((await chunkRows()).map((row) => row.storage_key)).toEqual([
     chunkAt(1, SHA),
   ])
-  expect(stored.deleted.flat().toSorted()).toEqual(
+  expect(await orphanKeys()).toEqual(
     [
       chunkAt(1, 'd'.repeat(64), 'github.com-acme-old'),
       chunkAt(2, 'd'.repeat(64), 'github.com-acme-old'),

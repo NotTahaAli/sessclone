@@ -11,7 +11,6 @@ import { presignDecision, type Sealed } from '../../../../lib/presign'
 import {
   chunkKey,
   chunkKeysBeside,
-  deleteObjects,
   storageConfigured,
   storedObject,
   tailChunks,
@@ -288,9 +287,8 @@ export async function POST(request: Request) {
   // Raw bytes, chunks plus tail: what a download yields (ADR 0008).
   const sizeBytes = (chunked ? sealedBytes : 0) + tail.sizeBytes
 
-  let written
   try {
-    written = await sql.begin(async (tx) => {
+    await sql.begin(async (tx) => {
       // One confirm of this Session's object at a time. A row lock is not
       // enough: a first upload has no row to lock, and two first inserts
       // racing meet on `storage_key`'s unique index as a 23505 instead of on
@@ -337,7 +335,7 @@ export async function POST(request: Request) {
       // A whole-file pass — every older Collector's — clears the chunks: its
       // file would otherwise be read after them as a duplicate. So does a
       // chunked pass starting again from zero, whose old chunks sit under a
-      // Project the Session left. Their objects go after the commit.
+      // Project the Session left. Their objects are queued for the sweep below.
       const dropped =
         current && (!chunked || sealed.chunks === 0)
           ? await tx<{ storage_key: string }[]>`
@@ -405,15 +403,24 @@ export async function POST(request: Request) {
         `
       }
 
-      return {
-        // `previous` is the key the row held before: a moved tail, or a
-        // Session that moved Project, leaves an object no row names.
-        // Never a key this pass just wrote: the whole-file key every
-        // zero-chunk pass reuses, or a chunk resealed with the same bytes.
-        replaced: [
-          ...dropped.map((row) => row.storage_key),
-          ...(current ? [current.storage_key] : []),
-        ].filter((each) => !keys.includes(each)),
+      // `previous` is the key the row held before: a moved tail, or a
+      // Session that moved Project, leaves an object no row names. Never a
+      // key this pass just wrote: the whole-file key every zero-chunk pass
+      // reuses, or a chunk resealed with the same bytes.
+      //
+      // Queued for the sweep in this transaction rather than deleted after
+      // it: the sweep deletes a key only while no row or pending upload
+      // names it, so one a later pass names again is kept, and a failed
+      // delete cannot lose track of the object.
+      const replaced = [
+        ...dropped.map((row) => row.storage_key),
+        ...(current ? [current.storage_key] : []),
+      ].filter((each) => !keys.includes(each))
+      if (replaced.length > 0) {
+        await tx`
+          insert into storage_orphans ${tx(replaced.map((storage_key) => ({ storage_key })))}
+          on conflict (storage_key) do nothing
+        `
       }
     })
   } catch (error) {
@@ -434,28 +441,6 @@ export async function POST(request: Request) {
       )
     }
     return databaseFailure(error)
-  }
-
-  if (written.replaced.length > 0) {
-    // After the row, never before: an orphaned object costs storage, and a
-    // deleted object with a row still naming it costs the transcript.
-    //
-    // A failure here cannot fail a recorded upload, and it must not be
-    // swallowed either: the row has already moved on, so nothing names these
-    // objects and no sweep could ever reach them — a transcript, which is
-    // source code and sometimes a credential, kept forever. Recorded instead,
-    // and the retention sweep deletes them (ticket 61).
-    const { replaced } = written
-    await deleteObjects(replaced).catch(async () => {
-      await sql`
-        insert into storage_orphans ${sql(replaced.map((storage_key) => ({ storage_key })))}
-        on conflict (storage_key) do nothing
-      `.catch(() => {
-        // Nothing left to do: the objects stay, and the operator's bucket
-        // lifecycle is the only thing that will reach them. Not worth failing
-        // an upload that is recorded and complete.
-      })
-    })
   }
 
   return Response.json({
