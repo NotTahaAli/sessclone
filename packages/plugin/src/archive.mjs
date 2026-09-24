@@ -557,9 +557,11 @@ export const archiveTranscript = async ({
     const { chunks } = plan
     let tail = answer
     if (chunks.length > 0) {
+      // Each planned chunk's hash goes with it: the deployment builds the
+      // chunk's key from it, so different bytes never share a key.
       const sealing = await presignFor({
         layout: 'chunked',
-        seal: chunks.length,
+        seal: chunks.map(({ seq, sha256: hash }) => ({ seq, sha256: hash })),
       })
       const refused = await notIssued(sealing)
       if (refused) return refused

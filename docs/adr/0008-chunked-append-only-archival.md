@@ -48,13 +48,24 @@ backfilled.
 `agents/` and `workflows/` entries from ticket 104:
 
 ```
-…/<session>.jsonl                          tail with 0 chunks (= today)
-…/<session>/chunks/<seq>.jsonl.gz          chunk <seq>, zero-padded to 6
-…/<session>/tail-<seq>.jsonl               tail after <seq> chunks, seq ≥ 1
-…/<session>/agents/<agent>.jsonl           an Agent Run, same rules below it:
-…/<session>/agents/<agent>/chunks/<seq>.jsonl.gz
-…/<session>/agents/<agent>/tail-<seq>.jsonl
+…/<session>.jsonl                               tail with 0 chunks (= today)
+…/<session>/chunks/<seq>-<hash>.jsonl.gz        chunk <seq>, zero-padded to 6
+…/<session>/tail-<n>-<nonce>.jsonl              tail after <n> chunks, n ≥ 1
+…/<session>/agents/<agent>.jsonl                an Agent Run, same rules below it:
+…/<session>/agents/<agent>/chunks/<seq>-<hash>.jsonl.gz
+…/<session>/agents/<agent>/tail-<n>-<nonce>.jsonl
 ```
+
+**No key is reused for different bytes.** A key is deleted only once no
+row names it (the replaced-key cleanup, the orphan sweep), so a key that
+came back into use after it was queued for deletion would lose the bytes a
+row now points at. So a chunk key carries `<hash>`, the first 16 hex of the
+chunk's raw SHA-256: different bytes never share a key, and the same bytes
+resealed land on the same key harmlessly. A tail key carries `<nonce>`, 64
+random bits the presign draws for each pass, so no two passes share a tail
+key. Only the zero-chunk key `…/<session>.jsonl` is reused, as ADR 0003
+always reused it; the orphan sweep skips any queued key a row names again,
+and a confirm takes the keys it records out of `storage_orphans`.
 
 The tail is keyed by how many chunks come before it, so sealing moves it to a
 new key. The confirm swaps the row's chunk set and its `storage_key` in one
@@ -64,8 +75,9 @@ the old set or the new set, never a tail that overlaps or leaves a gap after
 the chunks. The confirm serialises on the transcript's identity with a
 transaction-scoped advisory lock rather than a row lock, because a first
 upload has no row to lock. A whole-file confirm deletes the chunk rows in
-that same transaction, just before its upsert. With one fixed tail key, the tail PUT would land before the
-confirm, and every reader in that window would see a gap or a duplicate.
+that same transaction, just before its upsert. With one fixed tail key, the
+tail PUT would land before the confirm, and every reader in that window
+would see a gap or a duplicate.
 
 **The server holds the cursor.** The artifact row records `sealed_bytes` and
 `sealed_sha256`, the SHA-256 of the raw bytes `[0, sealed_bytes)`. The presign
@@ -98,10 +110,12 @@ Every change is additive, and every new field is optional or defaulted.
 
 - `PresignRequest.layout`: `'whole' | 'chunked'`, defaulting to `'whole'`.
   Collectors that predate this send nothing and get today's behaviour.
-- `PresignRequest.seal`: an integer from 1 to 16, only with `chunked`. It asks
-  for that many chunk PUT URLs, starting at the next seq, and for the tail URL
-  after them. A presign without `seal` is the steady-state turn: one tail URL
-  at the current seq.
+- `PresignRequest.seal`: the chunks this pass will seal, as the Collector
+  planned them, 1 to 16 of `{ seq, sha256 }` (lowercase hex), only with
+  `chunked`. It asks for one chunk PUT URL each, starting at the next seq
+  and keyed by that chunk's hash, and for the tail URL after them. A presign
+  without `seal` is the steady-state turn: one tail URL at the current seq,
+  with a fresh nonce.
 - The allowed `PresignResponse`, when `layout` was `chunked`, gains
   `layout: 'chunked'`, `sealed: { bytes, sha256 | null, chunks }` and
   `seals?: { seq, url, storageKey }[]`. `url`/`storageKey` are the tail's.
@@ -116,8 +130,10 @@ Every change is additive, and every new field is optional or defaulted.
   PUT to.
 - New transient refusal: `stale_chunks`. The first new chunk does not start at
   the row's `sealed_bytes` or seq, the seqs are not contiguous, or the
-  echoed tail key is not the one derived for `chunks + seal`. The Collector
-  presigns again.
+  echoed tail key is not a tail after `chunks + seal` chunks. The Collector
+  presigns again. The confirm looks each chunk up under the key its
+  `sha256` addresses, so a chunk confirmed with other bytes than it was
+  presigned for is `not_uploaded`.
 - A confirm with `layout: 'whole'`, including every older Collector's, clears
   the row's chunks. Without that, a downgraded Collector's whole file would be
   read after stale chunks as a duplicate.
@@ -172,8 +188,8 @@ count. What the bucket holds is `sum(stored_bytes)` plus the tail.
 
 ### Storage quirks carried forward
 
-The chunk keys are built only from `segment()` output, digits and literal
-path text, so no `%` can appear in them (the Supabase `InvalidKey` trap). A
+The chunk and tail keys are built only from `segment()` output, digits,
+lowercase hex and literal path text, so no `%` can appear in them (the Supabase `InvalidKey` trap). A
 chunk is PUT as `application/gzip` with no `Content-Encoding`. Setting that
 header would make browsers and some providers decode the object in transit,
 and whether they do varies by provider. A Supabase bucket that restricts

@@ -436,6 +436,22 @@ test('an object no row names is deleted by the sweep', async () => {
   expect(await sql`select storage_key from storage_orphans`).toHaveLength(0)
 })
 
+test('an orphan whose key a row names again is not deleted', async () => {
+  // A key can come back: the whole-file key is reused by every pass, and a
+  // chunk resealed with the same bytes lands on the same key. Deleting it
+  // then would delete a transcript a row still points at.
+  const live = await seedArtifact({ age: 1 })
+  const [chunk] = await sealChunks(live, 1)
+  await sql`
+    insert into storage_orphans (storage_key)
+    values (${live}), (${chunk!}), ('gone.jsonl')
+  `
+
+  await sweepRetention(sql)
+
+  expect(bucket.deleted).toEqual(['gone.jsonl'])
+})
+
 test('a bucket that refuses keeps the orphan too', async () => {
   await sql`insert into storage_orphans (storage_key) values ('orphan.jsonl')`
   bucket.fails = true

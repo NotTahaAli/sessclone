@@ -11,7 +11,7 @@
   3. Presign with `layout: 'chunked'`.
   4. Re-read `[0, size)` once. Use `hash.copy()` to check the prefix at `sealed.bytes`, and take the cumulative hash at each new cut.
   5. Pick cut points with a pure `sealPlan(bytes, from)`: the first `\n` at or after 1 MiB, never inside a line. Seal at most 16 chunks per pass, still inside the deadline.
-  6. Only when there is something to seal: presign again with `seal: k`.
+  6. Only when there is something to seal: presign again with `seal`: each planned chunk's `{ seq, sha256 }`, which the deployment builds the chunk keys from.
   7. PUT each chunk as `application/gzip` (`zlib` gzip, streamed), then PUT the tail raw, then confirm.
 - **Failsafe to whole-file** when the file is shorter than `sealed.bytes`, when the prefix hash differs, when compression throws, or when the deployment does not echo `layout: 'chunked'` (it predates 129). The whole-file path is today's code, with `layout: 'whole'`.
 - `stale_chunks` is transient, like `stale_key`: never settled, and asked again on the next pass. The per-Session lock from ticket 99 already stops two passes on one machine from racing.

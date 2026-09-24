@@ -66,11 +66,16 @@ export const PresignRequest = z
     sha256,
     layout: Layout,
     /**
-     * How many chunks this pass seals (ADR 0008): that many chunk PUT URLs,
-     * from the next seq, and the tail URL after them. Absent is the
-     * steady-state turn — one tail URL at the current seq.
+     * The chunks this pass seals (ADR 0008), as the Collector planned them:
+     * one PUT URL each, from the next seq, and the tail URL after them. Each
+     * chunk's key is built from its raw SHA-256, so different bytes never
+     * share a key. Absent is the steady-state turn — one tail URL.
      */
-    seal: z.number().int().min(1).max(MAX_SEAL).optional(),
+    seal: z
+      .array(z.object({ seq: z.number().int().min(1), sha256 }))
+      .min(1)
+      .max(MAX_SEAL)
+      .optional(),
   })
   .refine(
     (request) => request.seal === undefined || request.layout === 'chunked',

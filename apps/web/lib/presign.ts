@@ -1,7 +1,7 @@
 import type { ArtifactKind, PresignRefusal } from '@sessclone/shared'
 import type postgres from 'postgres'
 
-import { artifactKey, type ArtifactPath } from './storage'
+import { artifactKey, type ArtifactPath, tailChunks } from './storage'
 
 // Ticket 58: what the presign route is allowed to say yes to.
 //
@@ -223,7 +223,9 @@ export const presignDecision = async (
   // prefix now, and its old chunks go with the replaced row (ADR 0008).
   const chunks = facts.chunks ?? 0
   const sealed: Sealed =
-    chunks > 0 && facts.stored_key === artifactKey({ ...path, chunks })
+    chunks > 0 &&
+    facts.stored_key !== null &&
+    tailChunks(path, facts.stored_key) === chunks
       ? {
           bytes: Number(facts.sealed_bytes),
           sha256: facts.sealed_sha256,

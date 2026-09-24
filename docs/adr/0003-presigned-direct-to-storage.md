@@ -87,8 +87,8 @@ an analysis agent, which partial copies only obstruct.
 
 [ADR 0008](0008-chunked-append-only-archival.md) refines this for a
 transcript that grows: sealed gzip chunks under
-`<session_id>/chunks/<seq>.jsonl.gz` plus a raw tail at
-`<session_id>/tail-<seq>.jsonl`. The key above is that layout's zero-chunk
+`<session_id>/chunks/<seq>-<hash>.jsonl.gz` plus a raw tail at
+`<session_id>/tail-<n>-<nonce>.jsonl`. The key above is that layout's zero-chunk
 case, so everything said here about it still holds.
 
 The key carries Member and Project rather than Session alone. Ticket 02

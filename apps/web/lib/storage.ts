@@ -6,6 +6,7 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { randomBytes } from 'node:crypto'
 import type { ArtifactKind } from '@sessclone/shared'
 
 // ADR 0003: the bytes never pass through this application. The Collector PUTs
@@ -107,11 +108,11 @@ const segment = (raw: string) => {
  *   …/<session>/agents/<agent>.jsonl             an Agent Run
  *   …/<session>/agents/<agent>.meta.json         its sidecar (ticket 104)
  *   …/<session>/workflows/<run>.journal.jsonl    a workflow's journal
- *   …/<session>/tail-<seq>.jsonl                 the tail after <seq> chunks
- *   …/<session>/chunks/<seq>.jsonl.gz            a sealed chunk (chunkKey)
+ *   …/<session>/tail-<n>-<nonce>.jsonl           the tail after <n> chunks (tailKey)
+ *   …/<session>/chunks/<seq>-<hash>.jsonl.gz     a sealed chunk (chunkKey)
  * ```
  *
- * A transcript's tail with zero chunks is the whole-file key, so every row
+ * A transcript's tail with zero chunks is this whole-file key, so every row
  * written before ADR 0008 is already the zero-chunk case. An Agent Run's
  * chunks and tails sit under `…/agents/<agent>/` by the same rules.
  *
@@ -120,40 +121,56 @@ const segment = (raw: string) => {
  * ids, which arrive from a machine we do not control — goes through
  * {@link segment}. Raw, they would break the prefix a per-Project sweep
  * depends on (ADR 0005) and let a key escape its own prefix. Everything else
- * in a key is digits and literal text, so no `%` can appear.
+ * in a key is digits, lowercase hex and literal text, so no `%` can appear.
  */
-export const artifactKey = (
-  artifact: ArtifactPath & {
-    /** ADR 0008: how many sealed chunks precede the transcript's tail. */
-    chunks?: number
-  },
-) => {
+export const artifactKey = (artifact: ArtifactPath) => {
   const dir = paths(artifact)
   if (artifact.kind === 'workflow_journal')
     return `${dir.workflow}.journal.jsonl`
   if (artifact.kind === 'agent_meta') return `${dir.agent}.meta.json`
-  return artifact.chunks
-    ? `${dir.transcript}/tail-${artifact.chunks}.jsonl`
-    : `${dir.transcript}.jsonl`
+  return `${dir.transcript}.jsonl`
 }
 
-/** The key of a transcript's sealed chunk `seq` (ADR 0008), zero-padded to 6. */
-export const chunkKey = (artifact: ArtifactPath, seq: number) =>
-  `${paths(artifact).transcript}/chunks/${String(seq).padStart(6, '0')}.jsonl.gz`
+/**
+ * The key of a transcript's tail after `chunks` sealed chunks (ADR 0008).
+ * Zero chunks is the whole-file key. Otherwise the key carries a nonce the
+ * presign draws for each pass, so no two passes ever PUT to one tail key: a
+ * key is deleted only when no row names it, and a reused key could be named
+ * again after it was queued for deletion.
+ */
+export const tailKey = (
+  artifact: ArtifactPath,
+  chunks: number,
+  nonce: string,
+) =>
+  chunks === 0
+    ? artifactKey(artifact)
+    : `${paths(artifact).transcript}/tail-${chunks}-${nonce}.jsonl`
+
+/** A fresh tail nonce: 64 random bits, lowercase hex. */
+export const tailNonce = () => randomBytes(8).toString('hex')
 
 /**
- * Whether `key` is one of this transcript's own tail keys — whole-file or
- * `tail-<n>` — which is how the confirm tells a stale seq (`stale_chunks`)
- * from a Session that moved Project (`stale_key`).
+ * The key of a transcript's sealed chunk (ADR 0008): the seq zero-padded to
+ * 6, then the first 16 hex of the chunk's raw SHA-256. Content-addressed, so
+ * different bytes never share a key and a resealed chunk lands on its own.
  */
-export const isTranscriptTail = (artifact: ArtifactPath, key: string) => {
+export const chunkKey = (artifact: ArtifactPath, seq: number, sha256: string) =>
+  `${paths(artifact).transcript}/chunks/${String(seq).padStart(6, '0')}-${sha256.slice(0, 16)}.jsonl.gz`
+
+/**
+ * How many chunks precede `key` if it is one of this transcript's own tail
+ * keys — 0 for the whole-file key, `n` for `tail-<n>-<nonce>` — or null. The
+ * confirm tells a stale seq (`stale_chunks`) from a Session that moved
+ * Project (`stale_key`) by it, and the presign whether a row's chunks count.
+ */
+export const tailChunks = (artifact: ArtifactPath, key: string) => {
   const dir = paths(artifact).transcript
-  return (
-    key === `${dir}.jsonl` ||
-    /^tail-[1-9][0-9]*\.jsonl$/.test(
-      key.startsWith(`${dir}/`) ? key.slice(dir.length + 1) : '',
-    )
+  if (key === `${dir}.jsonl`) return 0
+  const match = /^tail-([1-9][0-9]{0,8})-[0-9a-f]{16}\.jsonl$/.exec(
+    key.startsWith(`${dir}/`) ? key.slice(dir.length + 1) : '',
   )
+  return match ? Number(match[1]) : null
 }
 
 export type ArtifactPath = {

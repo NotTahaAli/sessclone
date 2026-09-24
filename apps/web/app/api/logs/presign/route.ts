@@ -9,11 +9,12 @@ import {
 } from '../../../../lib/collector-auth'
 import { presignDecision } from '../../../../lib/presign'
 import {
-  artifactKey,
   chunkKey,
   MAX_KEY_BYTES,
   presignUpload,
   storageConfigured,
+  tailKey,
+  tailNonce,
   ttl,
 } from '../../../../lib/storage'
 
@@ -119,15 +120,18 @@ export async function POST(request: Request) {
   // takes when the echo is missing.
   const chunked = parsed.data.layout === 'chunked' && kind === 'transcript'
   const { sealed } = decision
-  const seal = chunked ? (parsed.data.seal ?? 0) : 0
-  // The tail is keyed by how many chunks precede it, so a sealing pass moves
-  // it and a reader never sees a tail that overlaps or gaps the chunks.
+  const seal = chunked ? (parsed.data.seal ?? []) : []
+  // The tail is keyed by how many chunks precede it and by a nonce drawn for
+  // this pass, so a sealing pass moves it, a reader never sees a tail that
+  // overlaps or gaps the chunks, and no two passes share a tail key.
   const storageKey = chunked
-    ? artifactKey({ ...decision.path, chunks: sealed.chunks + seal })
+    ? tailKey(decision.path, sealed.chunks + seal.length, tailNonce())
     : decision.storageKey
-  const seals = Array.from({ length: seal }, (_, index) => {
+  // Seqs from what the row holds, hashes from the Collector's plan: a plan
+  // made against an older seal gets keys it will see are not its own.
+  const seals = seal.map((planned, index) => {
     const seq = sealed.chunks + 1 + index
-    return { seq, storageKey: chunkKey(decision.path, seq) }
+    return { seq, storageKey: chunkKey(decision.path, seq, planned.sha256) }
   })
 
   // Before the bytes move, not after: a key over the provider's limit is
@@ -176,7 +180,7 @@ export async function POST(request: Request) {
     ...(chunked && {
       layout: 'chunked' as const,
       sealed,
-      ...(seal > 0 && {
+      ...(seal.length > 0 && {
         seals: seals.map((each, index) => ({ ...each, url: sealUrls[index]! })),
       }),
     }),

@@ -9,12 +9,11 @@ import {
 } from '../../../../lib/collector-auth'
 import { presignDecision, type Sealed } from '../../../../lib/presign'
 import {
-  artifactKey,
   chunkKey,
   deleteObjects,
-  isTranscriptTail,
   storageConfigured,
   storedObject,
+  tailChunks,
 } from '../../../../lib/storage'
 
 // Ticket 59: the request that records an upload, after the bytes have landed.
@@ -159,21 +158,26 @@ export async function POST(request: Request) {
 
   // ADR 0008. What this pass sealed, if it chunks at all: the chunks follow
   // on from what the row holds, and the tail is keyed by how many chunks
-  // precede it — so the key the bytes went to says which pass this is.
+  // precede it — so the key the bytes went to says which pass this is. Its
+  // nonce is the presign's, and any nonce is this Member's own key.
   const chunks = chunked ? (parsed.data.chunks ?? []) : []
   const { sealed, path } = decision
-  const tailKey = chunked
-    ? artifactKey({ ...path, chunks: sealed.chunks + chunks.length })
-    : decision.storageKey
+  const tailKey = storageKey
+  const at = chunked
+    ? tailChunks(path, storageKey)
+    : storageKey === decision.storageKey
+      ? 0
+      : null
 
   // The bytes went to the key the presign issued; this Session now belongs
-  // under `tailKey`. When those differ the upload is stranded under the old
-  // key and the right answer is to presign again — recording it would file
-  // the wrong object and the hash guard would keep it forever. A key that is
-  // still this Session's own tail is a seq that moved on (`stale_chunks`);
-  // any other is a Session that moved Project (`stale_key`).
-  if (storageKey !== tailKey) {
-    return chunked && isTranscriptTail(path, storageKey)
+  // under a tail after `sealed.chunks + chunks.length` chunks. When those
+  // differ the upload is stranded and the right answer is to presign again —
+  // recording it would file the wrong object and the hash guard would keep
+  // it forever. A key that is still this Session's own tail is a seq that
+  // moved on (`stale_chunks`); any other is a Session that moved Project
+  // (`stale_key`).
+  if (at !== (chunked ? sealed.chunks + chunks.length : 0)) {
+    return chunked && at !== null
       ? staleChunks()
       : Response.json({
           refused: 'stale_key',
@@ -185,7 +189,12 @@ export async function POST(request: Request) {
 
   // Every size from storage, never from the request (ADR 0003): each new
   // chunk's stored size and the tail's raw size, at most 17 HEADs at once.
-  const keys = [...chunks.map((chunk) => chunkKey(path, chunk.seq)), tailKey]
+  // Content-addressed: a chunk confirmed with other bytes than it was
+  // presigned for names a key nothing was PUT to, and is `not_uploaded`.
+  const keys = [
+    ...chunks.map((chunk) => chunkKey(path, chunk.seq, chunk.sha256)),
+    tailKey,
+  ]
   let objects
   try {
     objects = await Promise.all(keys.map((each) => storedObject(each)))
@@ -258,8 +267,7 @@ export async function POST(request: Request) {
         const holds =
           current &&
           current.chunks > 0 &&
-          current.storage_key ===
-            artifactKey({ ...path, chunks: current.chunks })
+          tailChunks(path, current.storage_key) === current.chunks
         const still = holds
           ? current.chunks === sealed.chunks &&
             Number(current.sealed_bytes) === sealed.bytes
@@ -302,6 +310,12 @@ export async function POST(request: Request) {
         returning id
       `
 
+      // A key recorded here is live again, whatever an earlier replace
+      // queued: the sweep must not delete it (by its primary key).
+      await tx`
+        delete from storage_orphans where storage_key = any(${keys})
+      `
+
       if (chunks.length > 0) {
         await tx`
           insert into log_artifact_chunks ${tx(
@@ -322,8 +336,8 @@ export async function POST(request: Request) {
       return {
         // `previous` is the key the row held before: a moved tail, or a
         // Session that moved Project, leaves an object no row names.
-        // Never a key this pass just wrote: a chunk resealed to the key an
-        // unconfirmed earlier pass left (ADR 0008's known ceiling).
+        // Never a key this pass just wrote: the whole-file key every
+        // zero-chunk pass reuses, or a chunk resealed with the same bytes.
         replaced: [
           ...dropped.map((row) => row.storage_key),
           ...(current ? [current.storage_key] : []),

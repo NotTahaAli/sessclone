@@ -37,18 +37,25 @@ test('a request without a layout is whole-file', () => {
   ).toBe('whole')
 })
 
-test('seal asks for 1 to 16 chunks, and only on the chunked layout', () => {
+test('seal names 1 to 16 planned chunks, and only on the chunked layout', () => {
   const ask = (extra: Record<string, unknown>) =>
     PresignRequest.safeParse({ sessionId: 's', sha256, ...extra }).success
+  const planned = (count: number, over: Record<string, unknown> = {}) =>
+    Array.from({ length: count }, (_, i) => ({ seq: i + 1, sha256, ...over }))
 
-  expect(ask({ layout: 'chunked', seal: 1 })).toBe(true)
-  expect(ask({ layout: 'chunked', seal: 16 })).toBe(true)
+  expect(ask({ layout: 'chunked', seal: planned(1) })).toBe(true)
+  expect(ask({ layout: 'chunked', seal: planned(16) })).toBe(true)
   expect(ask({ layout: 'chunked' })).toBe(true)
-  expect(ask({ layout: 'chunked', seal: 17 })).toBe(false)
-  expect(ask({ layout: 'chunked', seal: 0 })).toBe(false)
-  expect(ask({ layout: 'chunked', seal: 1.5 })).toBe(false)
-  expect(ask({ seal: 1 })).toBe(false)
-  expect(ask({ layout: 'whole', seal: 1 })).toBe(false)
+  expect(ask({ layout: 'chunked', seal: planned(17) })).toBe(false)
+  expect(ask({ layout: 'chunked', seal: [] })).toBe(false)
+  // The old integer shape, and hashes that could not address a key.
+  expect(ask({ layout: 'chunked', seal: 1 })).toBe(false)
+  expect(
+    ask({ layout: 'chunked', seal: planned(1, { sha256: 'A'.repeat(64) }) }),
+  ).toBe(false)
+  expect(ask({ layout: 'chunked', seal: planned(1, { seq: 0 }) })).toBe(false)
+  expect(ask({ seal: planned(1) })).toBe(false)
+  expect(ask({ layout: 'whole', seal: planned(1) })).toBe(false)
 })
 
 test('a confirm names its new chunks and the prefix hash only when chunked', () => {

@@ -153,11 +153,20 @@ export const sweepRetention = async (
     // The objects nothing names any more (`storage_orphans`), taken in the
     // same batch: they are already paid for in one round trip, and they are
     // the one class of stored transcript no row can lead anybody to.
+    //
+    // Only while no row names the key again: the whole-file key is reused
+    // by every zero-chunk pass, so a key queued here can be live once more.
+    // Both lookups are the columns' unique indexes. Such a key stays queued,
+    // and goes once it is an orphan again.
     const orphans = await tx<{ storage_key: string }[]>`
       delete from storage_orphans
        where storage_key in (
-         select storage_key from storage_orphans
-          order by noticed_at limit ${limit}
+         select orphan.storage_key from storage_orphans orphan
+          where not exists (select 1 from log_artifacts artifact
+                             where artifact.storage_key = orphan.storage_key)
+            and not exists (select 1 from log_artifact_chunks chunk
+                             where chunk.storage_key = orphan.storage_key)
+          order by orphan.noticed_at limit ${limit}
        )
       returning storage_key
     `

@@ -347,6 +347,16 @@ const base = (projectKey = 'github.com-acme-api') =>
 
 /** A transcript row with `chunks` sealed chunks of 1 MiB each, as the
  * confirm route would have left it. */
+/** What a sealing ask names: each planned chunk's seq and raw SHA-256. */
+const planned = (...seqs: number[]) =>
+  seqs.map((seq) => ({ seq, sha256: String(seq % 10).repeat(64) }))
+
+/** A tail key after `chunks` chunks, with any per-pass nonce. */
+const tailPattern = (dir: string, chunks: number) =>
+  new RegExp(
+    `^${dir.replaceAll('.', '\\.')}/tail-${chunks}-[0-9a-f]{16}\\.jsonl$`,
+  )
+
 const seedChunked = async (chunks: number, projectKey?: string) => {
   const dir = base(projectKey)
   const [artifact] = await sql<{ id: string }[]>`
@@ -354,7 +364,7 @@ const seedChunked = async (chunks: number, projectKey?: string) => {
       (org_id, member_id, session_id, storage_key, sha256, size_bytes,
        sealed_bytes, sealed_sha256)
     values (${fixture.acme.id}, ${fixture.acme.members.member}, 'session-1',
-            ${`${dir}/tail-${chunks}.jsonl`}, ${'b'.repeat(64)},
+            ${`${dir}/tail-${chunks}-0123456789abcdef.jsonl`}, ${'b'.repeat(64)},
             ${chunks * 1_048_576 + 10}, ${chunks * 1_048_576}, ${'c'.repeat(64)})
     returning id
   `
@@ -366,7 +376,7 @@ const seedChunked = async (chunks: number, projectKey?: string) => {
          sha256, storage_key)
       values (${artifact!.id}, ${fixture.acme.members.member}, ${seq},
               ${(seq - 1) * 1_048_576}, 1048576, 200000, ${'d'.repeat(64)},
-              ${`${dir}/chunks/${String(seq).padStart(6, '0')}.jsonl.gz`})
+              ${`${dir}/chunks/${String(seq).padStart(6, '0')}-dddddddddddddddd.jsonl.gz`})
     `
   }
 }
@@ -402,42 +412,41 @@ test('a chunked ask with nothing sealed gets the whole-file key as its tail', as
   expect(body.seals).toBeUndefined()
 })
 
-test('a sealing ask gets its chunk URLs from the next seq, and the tail after them', async () => {
+test('a sealing ask gets content-addressed chunk URLs from the next seq, and a fresh tail after them', async () => {
   await withArchival(fixture.acme.id)
   await seedSession()
   await seedChunked(3)
 
-  const [, body] = await answer(await ask({ layout: 'chunked', seal: 2 }))
+  const [, body] = await answer(
+    await ask({ layout: 'chunked', seal: planned(4, 5) }),
+  )
 
+  const four = `${base()}/chunks/000004-${'4'.repeat(16)}.jsonl.gz`
+  const five = `${base()}/chunks/000005-${'5'.repeat(16)}.jsonl.gz`
   expect(body).toMatchObject({
     layout: 'chunked',
     sealed: { bytes: 3 * 1_048_576, sha256: 'c'.repeat(64), chunks: 3 },
-    storageKey: `${base()}/tail-5.jsonl`,
-    url: `https://storage.test/${base()}/tail-5.jsonl?signed`,
     seals: [
-      {
-        seq: 4,
-        storageKey: `${base()}/chunks/000004.jsonl.gz`,
-        url: `https://storage.test/${base()}/chunks/000004.jsonl.gz?signed`,
-      },
-      {
-        seq: 5,
-        storageKey: `${base()}/chunks/000005.jsonl.gz`,
-        url: `https://storage.test/${base()}/chunks/000005.jsonl.gz?signed`,
-      },
+      { seq: 4, storageKey: four, url: `https://storage.test/${four}?signed` },
+      { seq: 5, storageKey: five, url: `https://storage.test/${five}?signed` },
     ],
   })
+  expect(body.storageKey).toMatch(tailPattern(base(), 5))
+  expect(body.url).toBe(`https://storage.test/${body.storageKey}?signed`)
 })
 
-test('a steady-state chunked ask gets one tail URL at the current seq', async () => {
+test('a steady-state chunked ask gets one tail URL at the current seq, never the same key twice', async () => {
   await withArchival(fixture.acme.id)
   await seedSession()
   await seedChunked(2)
 
-  const [, body] = await answer(await ask({ layout: 'chunked' }))
+  const [, first] = await answer(await ask({ layout: 'chunked' }))
+  const [, second] = await answer(await ask({ layout: 'chunked' }))
 
-  expect(body.storageKey).toBe(`${base()}/tail-2.jsonl`)
-  expect(body.seals).toBeUndefined()
+  expect(first.storageKey).toMatch(tailPattern(base(), 2))
+  expect(second.storageKey).toMatch(tailPattern(base(), 2))
+  expect(second.storageKey).not.toBe(first.storageKey)
+  expect(first.seals).toBeUndefined()
 })
 
 test('an Agent Run chunks under its own directory', async () => {
@@ -445,13 +454,13 @@ test('an Agent Run chunks under its own directory', async () => {
   await seedSession({ agentId: 'agent-7' })
 
   const [, body] = await answer(
-    await ask({ agentId: 'agent-7', layout: 'chunked', seal: 1 }),
+    await ask({ agentId: 'agent-7', layout: 'chunked', seal: planned(1) }),
   )
 
   expect(body.seals[0].storageKey).toBe(
-    `${base()}/agents/agent-7/chunks/000001.jsonl.gz`,
+    `${base()}/agents/agent-7/chunks/000001-${'1'.repeat(16)}.jsonl.gz`,
   )
-  expect(body.storageKey).toBe(`${base()}/agents/agent-7/tail-1.jsonl`)
+  expect(body.storageKey).toMatch(tailPattern(`${base()}/agents/agent-7`, 1))
 })
 
 test('only a transcript chunks: a sidecar asking for it is answered whole', async () => {
@@ -463,7 +472,7 @@ test('only a transcript chunks: a sidecar asking for it is answered whole', asyn
       agentId: 'agent-7',
       kind: 'agent_meta',
       layout: 'chunked',
-      seal: 1,
+      seal: planned(1),
     }),
   )
 
@@ -479,7 +488,11 @@ test('the whole-file unchanged guard still comes first for a chunked ask', async
 
   expect(
     await answer(
-      await ask({ layout: 'chunked', seal: 1, sha256: 'b'.repeat(64) }),
+      await ask({
+        layout: 'chunked',
+        seal: planned(2),
+        sha256: 'b'.repeat(64),
+      }),
     ),
   ).toMatchObject([200, { refused: 'unchanged' }])
 })
@@ -489,11 +502,18 @@ test('a Session that moved Project starts sealing again from zero', async () => 
   await seedSession()
   await seedChunked(2, 'github.com-acme-old')
 
-  const [, body] = await answer(await ask({ layout: 'chunked', seal: 1 }))
+  const [, body] = await answer(
+    await ask({ layout: 'chunked', seal: planned(1) }),
+  )
 
   expect(body).toMatchObject({
     sealed: { bytes: 0, sha256: null, chunks: 0 },
-    storageKey: `${base()}/tail-1.jsonl`,
-    seals: [{ seq: 1, storageKey: `${base()}/chunks/000001.jsonl.gz` }],
+    seals: [
+      {
+        seq: 1,
+        storageKey: `${base()}/chunks/000001-${'1'.repeat(16)}.jsonl.gz`,
+      },
+    ],
   })
+  expect(body.storageKey).toMatch(tailPattern(base(), 1))
 })

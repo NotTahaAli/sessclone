@@ -692,7 +692,7 @@ const fakeDeployment = ({
       const body = JSON.parse(init.body)
       requests.push({
         step: body.seal
-          ? `presign seal ${body.seal}`
+          ? `presign seal ${body.seal.length}`
           : `presign ${body.layout}`,
         body,
       })
@@ -703,14 +703,17 @@ const fakeDeployment = ({
           ...(echo && { kind: body.kind }),
         })
       }
-      const seals = Array.from({ length: body.seal ?? 0 }, (_, index) => {
-        const seq = sealed.chunks + 1 + index
-        return {
-          seq,
-          url: `https://storage.test/chunk-${seq}?signed`,
-          storageKey: `p/session-a/chunks/${seq}`,
-        }
-      })
+      const seals = Array.from(
+        { length: body.seal?.length ?? 0 },
+        (_, index) => {
+          const seq = sealed.chunks + 1 + index
+          return {
+            seq,
+            url: `https://storage.test/chunk-${seq}?signed`,
+            storageKey: `p/session-a/chunks/${seq}`,
+          }
+        },
+      )
       const tail = sealed.chunks + seals.length
       return reply({
         url: `https://storage.test/tail-${tail}?signed`,
@@ -798,6 +801,11 @@ test('a sealing turn presigns the seals, PUTs gzip chunks, then the tail', async
   ])
   // Only the bytes after the sealed prefix, each exactly once.
   expect(sha(sentRaw(requests))).toBe(sha(raw.subarray(100)))
+  // The seal names each planned chunk's hash, which its key is built from.
+  expect(requests[1].body.seal).toEqual([
+    { seq: 2, sha256: sha(raw.subarray(100, 100 + MiB)) },
+    { seq: 3, sha256: sha(raw.subarray(100 + MiB, 100 + 2 * MiB)) },
+  ])
   for (const put of requests.filter((r) => r.step.startsWith('put chunk'))) {
     expect(put.headers['content-type']).toBe('application/gzip')
     expect(put.headers['content-encoding']).toBeUndefined()

@@ -75,7 +75,9 @@ comment on column log_artifact_chunks.stored_bytes is
 comment on column log_artifact_chunks.sha256 is
   'Lowercase hex SHA-256 of the chunk''s raw bytes.';
 comment on column log_artifact_chunks.storage_key is
-  'The object key, …/<session>/chunks/<seq>.jsonl.gz.';
+  'The object key, …/<session>/chunks/<seq>-<hash>.jsonl.gz: content-'
+  'addressed by the first 16 hex of sha256, so different bytes never share '
+  'a key.';
 
 create index log_artifact_chunks_member_idx on log_artifact_chunks (member_id);
 

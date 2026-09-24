@@ -5,7 +5,7 @@
 **Where the ask forks, and what was picked.**
 
 - Contract in `packages/shared/src/presign.ts`. Every addition is optional or defaulted, so older Collectors and older deployments keep the whole-file path:
-  - The request gains `layout` (`whole` by default) and `seal` (1 to 16, chunked only).
+  - The request gains `layout` (`whole` by default) and `seal` (1 to 16 planned `{ seq, sha256 }`, chunked only; review fix: the chunk keys are content-addressed from those hashes, and each pass's tail key carries a random nonce, so no key is reused for different bytes).
   - The allowed answer echoes `layout: 'chunked'` and adds `sealed: { bytes, sha256, chunks }` and `seals[]`.
   - The confirm gains `layout`, `chunks[] { seq, rawOffset, rawLength, sha256 }` and `sealedSha256`.
   - There is one new transient refusal, `stale_chunks`.
