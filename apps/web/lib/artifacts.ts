@@ -1,4 +1,4 @@
-import type { TransactionSql } from 'postgres'
+import postgres, { type TransactionSql } from 'postgres'
 
 import { deleteObjects } from './storage'
 
@@ -414,6 +414,30 @@ export const downloadableArtifact = async (
 }
 
 /**
+ * Runs one delete statement, and once more if it lost a race with 23503.
+ *
+ * A confirm that seals inserts chunk rows while a delete of their artifact
+ * waits on it. The delete's snapshot predates them, so it deletes the
+ * artifact but not them, and the `no action` key refuses the statement at
+ * its end. Run again, the statement sees the committed chunks and takes
+ * them. Under a savepoint, so the caller's transaction survives the first
+ * try. Once: a second loss in a row is left to fail, and the caller retries.
+ */
+export const onceMoreOnRace = async <T>(
+  tx: TransactionSql,
+  statement: (sql: TransactionSql) => Promise<T>,
+) => {
+  try {
+    return await tx.savepoint(statement)
+  } catch (error) {
+    if (!(error instanceof postgres.PostgresError && error.code === '23503')) {
+      throw error
+    }
+    return tx.savepoint(statement)
+  }
+}
+
+/**
  * Destroys one Session's stored transcript.
  *
  * The row and the object go together, and the order is what makes that true
@@ -439,7 +463,9 @@ export const deleteStoredSession = async (
   // ADR 0008: each doomed transcript's chunks go in the same statement, their
   // keys with them. The foreign key is `no action`, so a path that forgot
   // them would fail here rather than leave source code in the bucket.
-  const rows = await tx<{ storage_key: string; artifact: boolean }[]>`
+  const rows = await onceMoreOnRace(
+    tx,
+    (sp) => sp<{ storage_key: string; artifact: boolean }[]>`
     with transcript as (
       select member_id, session_id, agent_id from log_artifacts
        where id = ${artifactId}
@@ -486,7 +512,8 @@ export const deleteStoredSession = async (
     select storage_key, false from chunks
     union all
     select storage_key, false from pending
-  `
+  `,
+  )
   if (!rows.some((row) => row.artifact)) return false
 
   await deleteObjects(rows.map((row) => row.storage_key))
@@ -518,7 +545,9 @@ export const deleteStoredProject = async (
 ): Promise<number> => {
   // ADR 0008: the chunks of every doomed transcript in the same statement,
   // and the uploads still pending in the Project.
-  const rows = await tx<{ storage_key: string; kind: string | null }[]>`
+  const rows = await onceMoreOnRace(
+    tx,
+    (sp) => sp<{ storage_key: string; kind: string | null }[]>`
     with doomed as (
       select id from log_artifacts
        where member_id = ${memberId}
@@ -547,7 +576,8 @@ export const deleteStoredProject = async (
     select storage_key, null from chunks
     union all
     select storage_key, null from pending
-  `
+  `,
+  )
   if (rows.length === 0) return 0
 
   // The keys come from the rows the policy just handed back, never from the

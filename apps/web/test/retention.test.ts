@@ -632,3 +632,41 @@ test('lapsed keys already queued still count toward the limit', async () => {
 
   expect(await sweepRetention(sql, 1)).toEqual({ removed: 0, more: true })
 })
+
+test('a sweep racing a confirm that seals takes the new chunks too', async () => {
+  // As the Member's deletes: the chunk rows commit while the sweep waits on
+  // the artifact, and the statement runs once more on the 23503.
+  await sql`update orgs set retention_days = 1 where id = ${fixture.acme.id}`
+  const tail = await seedArtifact({ age: 10 })
+  const [artifact] = await sql<{ id: string }[]>`
+    select id from log_artifacts where storage_key = ${tail}
+  `
+  let sweeping: ReturnType<typeof sweepRetention> | undefined
+  await sql.begin(async (confirm) => {
+    await confirm`
+      insert into log_artifact_chunks ${confirm({
+        artifact_id: artifact!.id,
+        member_id: fixture.acme.members.member,
+        seq: 1,
+        raw_offset: 0,
+        raw_length: 1024,
+        stored_bytes: 300,
+        sha256: 'd'.repeat(64),
+        storage_key: `${tail}/chunks/000001-dddd.jsonl.gz`,
+      })}
+    `
+    sweeping = sweepRetention(sql)
+    for (;;) {
+      // eslint-disable-next-line no-await-in-loop -- polling until it waits
+      const [row] = await confirm<{ n: number }[]>`
+        select count(*)::int as n from pg_locks where not granted
+      `
+      if (row!.n > 0) break
+      // eslint-disable-next-line no-await-in-loop -- as above
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+  })
+
+  expect((await sweeping)?.removed).toBe(1)
+  expect(await chunkCount()).toBe(0)
+})

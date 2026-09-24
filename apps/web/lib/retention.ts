@@ -1,5 +1,6 @@
 import type postgres from 'postgres'
 
+import { onceMoreOnRace } from './artifacts'
 import { deleteObjects } from './storage'
 
 // Ticket 61: transcripts stop accumulating forever.
@@ -105,10 +106,14 @@ export const sweepRetention = async (
     // written after the transcript they describe and must not outlive it.
     // Found by the identity key's leading `(member_id, session_id)`, in the
     // same statement.
-    const rows = await tx<
-      { storage_key: string; expired: boolean; artifact: boolean }[]
-    >`
-      with cutoffs as (${CUTOFFS(tx)}), expired as (
+    // Once more on a 23503: a confirm sealing an expired transcript as it
+    // goes (see `onceMoreOnRace`).
+    const rows = await onceMoreOnRace(
+      tx,
+      (sp) => sp<
+        { storage_key: string; expired: boolean; artifact: boolean }[]
+      >`
+      with cutoffs as (${CUTOFFS(sp)}), expired as (
         select artifact.id, artifact.member_id, artifact.session_id,
                artifact.agent_id, artifact.kind
           from log_artifacts artifact
@@ -146,7 +151,8 @@ export const sweepRetention = async (
       select storage_key, expired, true as artifact from artifacts
       union all
       select storage_key, false, false from chunks
-    `
+    `,
+    )
     const expired = rows.filter((row) => row.expired).length
     const removed = rows.filter((row) => row.artifact).length
 

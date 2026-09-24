@@ -979,3 +979,45 @@ test('nobody queues or takes another Member’s pending keys', async () => {
   expect(await pendingLeft()).toEqual([theirs])
   expect(await sql`select 1 from storage_orphans`).toHaveLength(0)
 })
+
+/** Resolves once some statement is waiting on a lock another holds. */
+const blocked = async () => {
+  for (;;) {
+    // eslint-disable-next-line no-await-in-loop -- polling until it waits
+    const [row] = await sql<{ n: number }[]>`
+      select count(*)::int as n from pg_locks where not granted
+    `
+    if (row!.n > 0) return
+    // eslint-disable-next-line no-await-in-loop -- as above
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+}
+
+test('a delete racing a confirm that seals takes the new chunks too', async () => {
+  // The confirm's chunk rows commit while the delete waits on the artifact;
+  // the delete's snapshot did not see them, and the no action key refused
+  // it with 23503. It is tried once more, and then sees them.
+  const projectId = await project('github.com/acme/api')
+  const main = await artifact({ projectId })
+  let deleting: Promise<boolean> | undefined
+  await sql.begin(async (confirm) => {
+    await confirm`
+      insert into log_artifact_chunks ${confirm({
+        artifact_id: main.id,
+        member_id: fixture.acme.members.member,
+        seq: 1,
+        raw_offset: 0,
+        raw_length: 1024,
+        stored_bytes: 300,
+        sha256: 'd'.repeat(64),
+        storage_key: `${main.key}/chunks/000001-dddd.jsonl.gz`,
+      })}
+    `
+    deleting = asMember((tx) => deleteStoredSession(tx, main.id))
+    await blocked()
+  })
+
+  expect(await deleting).toBe(true)
+  expect(await chunkKeys()).toEqual([])
+  expect(deleted).toContain(`${main.key}/chunks/000001-dddd.jsonl.gz`)
+})
