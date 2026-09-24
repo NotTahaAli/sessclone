@@ -68,7 +68,8 @@ const SCRIPT = source(
  */
 export const applyAppearanceSource = (value: string) =>
   source(
-    JSON.stringify(value),
+    // `<` escaped, so no value can close the script tag it is written into.
+    JSON.stringify(value).replaceAll('<', '\\u003c'),
     `document.cookie="${APPEARANCE_COOKIE}="+encodeURIComponent(v)+` +
       `";path=/;max-age=${APPEARANCE_COOKIE_MAX_AGE};samesite=lax"+` +
       `(location.protocol==="https:"?";secure":"");`,
