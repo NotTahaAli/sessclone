@@ -39,6 +39,8 @@ let fixture: Fixture
 let key: string
 
 const SHA = 'a'.repeat(64)
+/** The pass `ask` records its keys under when the body names none. */
+const PASS = '0000000000000000'
 
 const issueKey = async (memberId: string) => {
   const { key: plaintext, prefix, hash } = generateApiKey()
@@ -150,13 +152,14 @@ const ask = async (
       insert into log_upload_pending ${sql(
         keysOf(sent as Parameters<typeof keysOf>[0]).map((storage_key) => ({
           storage_key,
+          pass: typeof body.pass === 'string' ? body.pass : PASS,
           member_id: fixture.acme.members.member,
           session_id: 'session-1',
           kind: 'transcript',
           expires_at: new Date(Date.now() + 3_600_000),
         })),
       )}
-      on conflict (storage_key) do nothing
+      on conflict (storage_key, pass) do nothing
     `
   }
   return POST(
@@ -1064,8 +1067,9 @@ test('a recorded confirm takes its keys out of the pending ledger', async () => 
   await seedSession()
   await sql`
     insert into log_upload_pending
-      (storage_key, member_id, session_id, kind, expires_at)
-    values ('another-pass', ${fixture.acme.members.member}, 'session-1',
+      (storage_key, pass, member_id, session_id, kind, expires_at)
+    values ('another-pass', '1111111111111111', ${fixture.acme.members.member},
+            'session-1',
             'transcript', now() + interval '1 hour')
   `
 
@@ -1128,8 +1132,9 @@ test('a confirm queues only its own Member’s pending keys', async () => {
   presigned = false
   await sql`
     insert into log_upload_pending
-      (storage_key, member_id, session_id, kind, expires_at)
-    values (${tailAt(1, 'fedcba9876543210')}, ${fixture.acme.members.admin},
+      (storage_key, pass, member_id, session_id, kind, expires_at)
+    values (${tailAt(1, 'fedcba9876543210')}, ${PASS},
+            ${fixture.acme.members.admin},
             'session-1', 'transcript', now() + interval '1 hour')
   `
 
@@ -1165,4 +1170,53 @@ test('a chunk whose raw length its stored bytes could not inflate to is refused'
   expect((await answer(await confirmWith(1000 * 1032)))[1]).toMatchObject({
     stored: true,
   })
+})
+
+test('two passes signed one key neither take nor cancel the other’s', async () => {
+  // Every zero-chunk pass is signed the whole-file key. A confirm or a
+  // refusal takes only its own pass's pending row.
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  const other = '2222222222222222'
+  await sql`
+    insert into log_upload_pending
+      (storage_key, pass, member_id, session_id, kind, expires_at)
+    values (${derivedKey()}, ${other}, ${fixture.acme.members.member},
+            'session-1', 'transcript', now() + interval '1 hour')
+  `
+
+  expect((await answer(await ask({ pass: PASS })))[1].stored).toBe(true)
+  expect(await pendingKeys()).toEqual([derivedKey()])
+  expect(await orphanKeys()).toEqual([])
+
+  presigned = false
+  const [, body] = await answer(
+    await ask({ pass: other, sha256: 'b'.repeat(64) }),
+  )
+  expect(body).toMatchObject({ stored: true })
+})
+
+test('after a sealing pass confirms, none of its pending keys remain', async () => {
+  // Its first presign signed a tail it never used once it went on to seal.
+  // That key is queued for the sweep, not before its URL is dead.
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  const unused = tailAt(0, 'aaaabbbbccccdddd')
+  await sql`
+    insert into log_upload_pending
+      (storage_key, pass, member_id, session_id, kind, expires_at)
+    values (${unused}, ${PASS}, ${fixture.acme.members.member},
+            'session-1', 'transcript', now() + interval '1 hour')
+  `
+
+  expect(
+    (await answer(await ask({ ...sealOne(), pass: PASS })))[1],
+  ).toMatchObject({ stored: true })
+
+  expect(await pendingKeys()).toEqual([])
+  const [queued] = await sql<{ storage_key: string; waits: boolean }[]>`
+    select storage_key, not_before > now() + interval '30 minutes' as waits
+      from storage_orphans
+  `
+  expect(queued).toEqual({ storage_key: unused, waits: true })
 })

@@ -862,6 +862,7 @@ const pendingUpload = async ({
   await sql`
     insert into log_upload_pending ${sql({
       storage_key: storageKey,
+      pass: '0000000000000000',
       member_id: fixture.acme.members.member,
       session_id: sessionId,
       agent_id: agentId,

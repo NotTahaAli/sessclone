@@ -469,14 +469,28 @@ export const archiveTranscript = async ({
     })
   }
 
+  /**
+   * This pass's id (ADR 0008), from the first presign that answers one: the
+   * later presigns and the confirm echo it, so the deployment takes only this
+   * pass's pending keys. An older deployment sends none.
+   *
+   * @type {string | undefined}
+   */
+  let pass
+
   /** @param {Record<string, unknown>} extra */
-  const presignFor = (extra) =>
-    ask({
+  const presignFor = async (extra) => {
+    const answer = await ask({
       configuration,
       path: '/api/logs/presign',
-      body: { sessionId, agentId, kind, sha256, ...extra },
+      body: { sessionId, agentId, kind, sha256, pass, ...extra },
       deadline,
     })
+    if (/^[0-9a-f]{16}$/.test(String(answer.body?.pass))) {
+      pass ??= answer.body.pass
+    }
+    return answer
+  }
 
   /**
    * What a presign answer means when it is not a URL to use: the result to
@@ -558,7 +572,7 @@ export const archiveTranscript = async ({
       // The key the bytes actually went to (in `extra`), echoed so the
       // deployment can refuse a Session that moved Project since the presign
       // rather than record one object under another's hash.
-      body: { sessionId, agentId, kind, sha256, ...extra },
+      body: { sessionId, agentId, kind, sha256, pass, ...extra },
       deadline,
     })
     if (!confirm.ok || !confirm.body?.stored) {

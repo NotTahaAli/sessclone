@@ -722,7 +722,7 @@ const fakeDeployment = ({
         return reply({
           url: 'https://storage.test/whole?signed',
           storageKey: 'p/session-a.jsonl',
-          ...(echo && { kind: body.kind }),
+          ...(echo && { kind: body.kind, pass: body.pass ?? PASS }),
         })
       }
       const seals = Array.from(
@@ -741,6 +741,7 @@ const fakeDeployment = ({
         url: `https://storage.test/tail-${tail}?signed`,
         storageKey: `p/session-a/tail-${tail}`,
         kind: body.kind,
+        pass: body.pass ?? PASS,
         layout: 'chunked',
         sealed,
         ...(seals.length > 0 && { seals }),
@@ -763,6 +764,9 @@ const fakeDeployment = ({
 }
 
 const steps = (requests) => requests.map((request) => request.step)
+
+/** The pass id the fake deployment draws when a presign names none. */
+const PASS = 'feedfacefeedface'
 
 /** The raw bytes that went to storage, chunks inflated, in request order. */
 const sentRaw = (requests) =>
@@ -997,4 +1001,25 @@ test('a sealing pass reads the transcript from disk in full once', async () => {
   // Even across a stale_chunks retry.
   expect(steps(requests).filter((step) => step === 'confirm')).toHaveLength(2)
   expect(fullReads(file, raw.length)).toBe(1)
+})
+
+test('a pass echoes its pass id on its later presigns and its confirm', async () => {
+  // ADR 0008: the deployment takes only this pass's pending keys, and
+  // queues the ones it signed and this pass did not use.
+  const prefix = line(MiB)
+  const raw = Buffer.concat([prefix, line(MiB), line(50)])
+  const { requests } = await archiveChunked(raw, {
+    sealed: { bytes: MiB, sha256: sha(prefix), chunks: 1 },
+  })
+
+  expect(steps(requests)).toEqual([
+    'presign chunked',
+    'presign seal 1',
+    'put chunk-2',
+    'put tail-2',
+    'confirm',
+  ])
+  expect(requests[0].body.pass).toBeUndefined()
+  expect(requests[1].body.pass).toBe(PASS)
+  expect(requests.at(-1).body.pass).toBe(PASS)
 })

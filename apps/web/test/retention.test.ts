@@ -580,8 +580,9 @@ test('a bucket that refuses keeps the chunk rows as well as the artifact', async
 
 const pendingAt = (storageKey: string, expiresIn: number) => sql`
   insert into log_upload_pending
-    (storage_key, member_id, session_id, kind, expires_at)
-  values (${storageKey}, ${fixture.acme.members.member}, 'session-1',
+    (storage_key, pass, member_id, session_id, kind, expires_at)
+  values (${storageKey}, '0000000000000000', ${fixture.acme.members.member},
+          'session-1',
           'transcript', ${new Date(Date.now() + expiresIn)})
 `
 

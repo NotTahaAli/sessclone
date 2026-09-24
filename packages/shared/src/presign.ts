@@ -53,6 +53,17 @@ export const Layout = z.enum(['whole', 'chunked']).default('whole')
 
 export type Layout = z.output<typeof Layout>
 
+/**
+ * One Collector pass (ADR 0008): the presign draws it, and the pass echoes it
+ * on its later presigns and its confirm, so the keys it was signed are taken
+ * only by its own confirm or refusal. Optional both ways, so a Collector that
+ * predates it keeps working.
+ */
+const pass = z
+  .string()
+  .regex(/^[0-9a-f]{16}$/, '16 lowercase hex')
+  .optional()
+
 /** Re-exported: the Collector reads it from the zod-free `limits.ts`. */
 export { MAX_SEAL }
 
@@ -76,6 +87,7 @@ export const PresignRequest = z
       .min(1)
       .max(MAX_SEAL)
       .optional(),
+    pass,
   })
   .refine(
     (request) => request.seal === undefined || request.layout === 'chunked',
@@ -152,6 +164,7 @@ export const ConfirmRequest = z
       .optional(),
     /** SHA-256 of the raw bytes `[0, sealed bytes)` once these chunks are in. */
     sealedSha256: sha256.optional(),
+    pass,
   })
   .refine(
     (request) =>
@@ -255,6 +268,9 @@ export type PresignResponse =
        * `url`/`storageKey` above are then the tail's after them.
        */
       seals?: { seq: number; url: string; storageKey: string }[]
+      /** The pass these URLs belong to: echo it on the pass's later
+       * presigns and its confirm. Absent from an older deployment. */
+      pass?: string
     }
   | { refused: PresignRefusal; detail: string }
   | { error: string; detail?: string }

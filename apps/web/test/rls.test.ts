@@ -1225,9 +1225,9 @@ describe('log_upload_pending', () => {
   beforeEach(async () => {
     await sql`
       insert into log_upload_pending
-        (storage_key, member_id, session_id, kind, expires_at)
-      select storage_key || '.pending', member_id, session_id, 'transcript',
-             now() + interval '1 hour'
+        (storage_key, pass, member_id, session_id, kind, expires_at)
+      select storage_key || '.pending', '0000000000000000', member_id,
+             session_id, 'transcript', now() + interval '1 hour'
         from log_artifacts where org_id = ${fixture.acme.id}
     `
   })

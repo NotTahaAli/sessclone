@@ -165,6 +165,8 @@ export async function POST(request: Request) {
   // delete waits on a sweep holding that row, so no sweep deletes it after
   // this answer goes out.
   const signed = [storageKey, ...seals.map((each) => each.storageKey)]
+  // The pass these keys belong to: the one the Collector echoes, or a new one.
+  const pass = parsed.data.pass ?? tailNonce()
   const expiresAt = new Date(
     Date.now() + (ttl() + PENDING_GRACE_SECONDS) * 1000,
   )
@@ -174,6 +176,7 @@ export async function POST(request: Request) {
         insert into log_upload_pending ${sql(
           signed.map((key) => ({
             storage_key: key,
+            pass,
             member_id: caller.memberId,
             session_id: sessionId,
             agent_id: agentId,
@@ -182,7 +185,7 @@ export async function POST(request: Request) {
             expires_at: expiresAt,
           })),
         )}
-        on conflict (storage_key) do update
+        on conflict (storage_key, pass) do update
            set expires_at = excluded.expires_at,
                project_id = excluded.project_id
         returning storage_key
@@ -220,6 +223,7 @@ export async function POST(request: Request) {
     // Echoed so a Collector can tell this deployment knows kinds: an older
     // one strips it and would file a sidecar as a transcript.
     kind,
+    pass,
     // ADR 0008, only when chunking: a deployment older than this omits all
     // three, and the Collector reads that as the whole-file path.
     ...(chunked && {

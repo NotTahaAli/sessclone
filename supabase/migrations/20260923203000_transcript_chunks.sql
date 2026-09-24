@@ -112,14 +112,19 @@ grant select, delete on log_artifact_chunks to sessclone_app;
 -- these objects, and `no action` would block removing the Member. The sweep
 -- reaches them by `expires_at` either way.
 create table log_upload_pending (
-  storage_key text primary key check (length(btrim(storage_key)) > 0),
+  storage_key text not null check (length(btrim(storage_key)) > 0),
+  -- The pass that signed it. Two passes can sign one key (the whole-file
+  -- key, a chunk resealed with the same bytes), and each confirm or refusal
+  -- takes only its own pass's rows, so neither cancels the other.
+  pass text not null check (pass ~ '^[0-9a-f]{16}$'),
   member_id uuid not null,
   session_id text not null,
   agent_id text,
   kind text not null
     check (kind in ('transcript', 'agent_meta', 'workflow_journal')),
   project_id uuid,
-  expires_at timestamptz not null
+  expires_at timestamptz not null,
+  primary key (storage_key, pass)
 );
 
 comment on table log_upload_pending is
@@ -128,6 +133,9 @@ comment on table log_upload_pending is
   '(once expired, through storage_orphans) and the Member''s own deletes.';
 comment on column log_upload_pending.storage_key is
   'The object key the presign signed a PUT URL for.';
+comment on column log_upload_pending.pass is
+  'Random id of the Collector pass that signed it: the presign draws it, '
+  'later presigns and the confirm of that pass echo it.';
 comment on column log_upload_pending.member_id is
   'The Member whose API key asked for it; the only one a confirm or a delete '
   'may take it for.';

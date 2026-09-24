@@ -388,9 +388,11 @@ test('an old-shape request is answered exactly as before', async () => {
   const [status, body] = await answer(await ask())
 
   expect(status).toBe(200)
+  // `pass` is additive: an older Collector ignores it.
   expect(Object.keys(body).toSorted()).toEqual([
     'expiresIn',
     'kind',
+    'pass',
     'storageKey',
     'url',
   ])
@@ -561,4 +563,30 @@ test('a refused presign records nothing as pending', async () => {
   await ask({ layout: 'chunked', sha256: 'b'.repeat(64) })
 
   expect(await pending()).toEqual([])
+})
+
+test('each presign draws a pass, and one the pass echoes is kept', async () => {
+  // ADR 0008: a pass's later presigns and its confirm echo the id, so the
+  // keys it was signed are its own and no other pass takes them.
+  await withArchival(fixture.acme.id)
+  await seedSession()
+
+  const [, first] = await answer(await ask({ layout: 'chunked' }))
+  const [, second] = await answer(await ask({ layout: 'chunked' }))
+  expect(first.pass).toMatch(/^[0-9a-f]{16}$/)
+  expect(second.pass).not.toBe(first.pass)
+
+  const [, echoed] = await answer(
+    await ask({ layout: 'chunked', pass: first.pass }),
+  )
+  expect(echoed.pass).toBe(first.pass)
+  // Three presigns of the whole-file key, two passes: two pending rows.
+  const passes = await sql<{ pass: string }[]>`
+    select pass from log_upload_pending
+     where storage_key = ${echoed.storageKey}
+  `
+  expect(passes).toHaveLength(2)
+  expect(passes.map((row) => row.pass)).toEqual(
+    expect.arrayContaining([first.pass, second.pass]),
+  )
 })

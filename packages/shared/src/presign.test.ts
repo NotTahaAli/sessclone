@@ -108,3 +108,16 @@ test('a chunk’s raw offset and length are bounded', () => {
   expect(confirm({ rawOffset: 2 ** 50 - 1 })).toBe(true)
   expect(confirm({ rawOffset: 2 ** 50 })).toBe(false)
 })
+
+test('a pass id is optional, and only 16 lowercase hex when sent', () => {
+  const base = { sessionId: 's', sha256, storageKey: 'k' }
+  expect(ConfirmRequest.parse(base).pass).toBeUndefined()
+  expect(PresignRequest.parse(base).pass).toBeUndefined()
+  const pass = '0123456789abcdef'
+  expect(ConfirmRequest.parse({ ...base, pass }).pass).toBe(pass)
+  expect(PresignRequest.parse({ ...base, pass }).pass).toBe(pass)
+  for (const bad of ['0123456789ABCDEF', '0123', `${pass}0`, 7]) {
+    expect(ConfirmRequest.safeParse({ ...base, pass: bad }).success).toBe(false)
+    expect(PresignRequest.safeParse({ ...base, pass: bad }).success).toBe(false)
+  }
+})

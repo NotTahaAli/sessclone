@@ -102,24 +102,37 @@ export async function POST(request: Request) {
   // ADR 0008: a pass that ends here without being recorded — refused, lost
   // a race, unchanged — leaves every key it PUT to unnamed. Those keys move
   // from the pending ledger into `storage_orphans` for the sweep, which
-  // deletes each once no row names it. Only this Member's pending keys: a
-  // key is a claim, and the ledger is what says this Member was issued it.
+  // deletes each once no row names it and its URL has expired. Only this
+  // Member's pending keys: a key is a claim, and the ledger is what says this
+  // Member was issued it. And only this pass's, when it names its pass: two
+  // passes can be signed one key, and neither may take the other's.
+  const pass = parsed.data.pass ?? null
+  const ofThisPass = (db: postgres.Sql | postgres.TransactionSql) =>
+    pass === null ? db`true` : db`pass = ${pass}`
   const named = [
     storageKey,
     ...(chunked ? chunkKeysBeside(storageKey, parsed.data.chunks ?? []) : []),
   ]
+  /** Queues this pass's pending keys: those named, or with null every one. */
+  const unrecorded = (
+    db: postgres.Sql | postgres.TransactionSql,
+    keys: string[] | null,
+  ) => db`
+    with gone as (
+      delete from log_upload_pending
+       where member_id = ${caller.memberId}
+         and ${keys === null ? db`true` : db`storage_key = any(${keys})`}
+         and ${ofThisPass(db)}
+      returning storage_key, expires_at
+    )
+    insert into storage_orphans (storage_key, not_before)
+    select storage_key, max(expires_at) from gone group by storage_key
+    on conflict (storage_key) do update
+       set not_before = greatest(storage_orphans.not_before,
+                                 excluded.not_before)
+  `
   const giveUp = async (response: Response) => {
-    await sql`
-      with gone as (
-        delete from log_upload_pending
-         where member_id = ${caller.memberId}
-           and storage_key = any(${named})
-        returning storage_key
-      )
-      insert into storage_orphans (storage_key)
-      select storage_key from gone
-      on conflict (storage_key) do nothing
-    `.catch(() => {
+    await unrecorded(sql, named).catch(() => {
       // The ledger still holds them, and the sweep takes them once they
       // expire; not worth turning a refusal into an error.
     })
@@ -372,13 +385,21 @@ export async function POST(request: Request) {
       // expired key in a transaction that holds its row until the object is
       // gone, so this waits for it and then finds nothing — rather than
       // recording a row whose object the sweep is deleting.
-      const taken = await tx`
+      const taken = await tx<{ storage_key: string }[]>`
         delete from log_upload_pending
          where member_id = ${caller.memberId}
            and storage_key = any(${keys})
+           and ${ofThisPass(tx)}
         returning storage_key
       `
-      if (taken.length !== keys.length) throw new NotPending()
+      if (new Set(taken.map((row) => row.storage_key)).size !== keys.length) {
+        throw new NotPending()
+      }
+
+      // What else this pass was signed and did not use — the tail of its
+      // first presign, when it went on to seal — is nobody's now. Queued, not
+      // left to pile up until it expires, and not before its URL is dead.
+      if (pass !== null) await unrecorded(tx, null)
 
       // A key recorded here is live again, whatever an earlier replace
       // queued: the sweep must not delete it (by its primary key).
