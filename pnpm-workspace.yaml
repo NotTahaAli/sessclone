@@ -26,3 +26,8 @@ catalog:
   zod: 4.6.2
 patchedDependencies:
   '@material/material-color-utilities@0.4.0': patches/@material__material-color-utilities@0.4.0.patch
+# @scalar/json-magic (via fumadocs-openapi) pins undici to exactly 7.24.4,
+# which has a security advisory fixed in 7.29.0; Dependabot cannot lift an
+# exact pin. Drop this once an upstream release moves past it.
+overrides:
+  undici: 7.29.1
