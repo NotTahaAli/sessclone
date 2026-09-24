@@ -1,6 +1,9 @@
+import Link from 'next/link'
+
 import { deleteProject, deleteSession } from './artifact-actions'
 import { DownloadTranscript } from '../sessions/[sessionId]/transcript/download'
 import { Row, SectionBreak } from '../../_ui/primitives'
+import type { ArchivalMembership } from '../../../lib/archival'
 import type { StoredProject, StoredSession } from '../../../lib/artifacts'
 
 // Ticket 73's surface. ADR 0005 keeps it apart from the archival switch on
@@ -54,6 +57,43 @@ const groupKey = (memberId: string, projectId: string | null) =>
   `${memberId}:${projectId ?? 'none'}`
 
 const LINK = 'text-text-muted hover:text-text underline'
+
+/**
+ * Where the viewer's archival switch stands, read from the switches the page
+ * already loaded. It said "off until you turn it on" whatever the switch was
+ * (2026-09-24). A person in several Orgs has a switch in each, so a mix is
+ * said as a mix rather than rounded to either.
+ */
+/** Where the switch is: Your settings. */
+const settings = (text: string) => (
+  <Link href="/settings/you" className="text-text underline">
+    {text}
+  </Link>
+)
+
+export function ArchivalNote({
+  memberships,
+}: {
+  memberships: ArchivalMembership[]
+}) {
+  const on = memberships.filter((m) => m.archival_enabled).length
+  if (on === 0)
+    return (
+      <>
+        {settings('Archival is a setting')}, and it is off until you turn it on.
+      </>
+    )
+  if (on === memberships.length)
+    return (
+      <>{settings('Archival is on')}, and it stays on until you turn it off.</>
+    )
+  return (
+    <>
+      {settings('Archival is on')} in {on} of your {memberships.length} Orgs,
+      and off in the rest.
+    </>
+  )
+}
 
 export function StoredTranscripts({
   projects,

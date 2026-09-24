@@ -1,7 +1,10 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { expect, test, vi } from 'vitest'
 
-import { StoredTranscripts } from '../app/(dashboard)/transcripts/stored-transcripts'
+import {
+  ArchivalNote,
+  StoredTranscripts,
+} from '../app/(dashboard)/transcripts/stored-transcripts'
 
 // 2026-09-24: `/transcripts` threw React error #418 on every load of a
 // production build. The Delete all disclosure (`<details>`, holding a `<form>`
@@ -57,4 +60,32 @@ test('no paragraph holds a block the parser would close it on', () => {
   // Every `<p>`'s content up to its own close, and none of it a block.
   for (const [, inside] of html.matchAll(/<p[\s>]((?:(?!<\/p>).)*)<\/p>/gs))
     expect(inside).not.toMatch(/<(details|form|p|div|ol|ul|section)[\s>]/)
+})
+
+// 2026-09-24: the "Yours" intro said archival "is off until you turn it on"
+// to a Member whose archival was on. It reads the switch the page already
+// loads, one per membership.
+/** The sentence, as text, for one switch per Org. */
+const note = (...enabled: boolean[]) =>
+  renderToStaticMarkup(
+    ArchivalNote({
+      memberships: enabled.map((archival_enabled, index) => ({
+        member_id: `m${index}`,
+        org_id: `o${index}`,
+        org_name: `Org ${index}`,
+        archival_enabled,
+      })),
+    }),
+  ).replace(/<[^>]+>/g, '')
+
+test('the archival sentence says what the switch actually is', () => {
+  expect(note(false)).toBe(
+    'Archival is a setting, and it is off until you turn it on.',
+  )
+  expect(note(true)).toBe(
+    'Archival is on, and it stays on until you turn it off.',
+  )
+  expect(note(true, false, true)).toBe(
+    'Archival is on in 2 of your 3 Orgs, and off in the rest.',
+  )
 })
