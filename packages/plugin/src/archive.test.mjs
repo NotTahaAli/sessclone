@@ -16,6 +16,7 @@ import {
   gzipRange,
   hashFile,
   planSeals,
+  scanFile,
   sealPlan,
 } from './archive.mjs'
 
@@ -1039,4 +1040,9 @@ test('a pass echoes its pass id on its later presigns and its confirm', async ()
   expect(requests[0].body.pass).toBeUndefined()
   expect(requests[1].body.pass).toBe(PASS)
   expect(requests.at(-1).body.pass).toBe(PASS)
+})
+
+test('a file that shrinks while it is scanned reads as unreadable, not as its old size', async () => {
+  const file = await transcript('{"a":1}\n{"b":2}\n')
+  expect(await scanFile(file, 16 + 40)).toBeNull()
 })

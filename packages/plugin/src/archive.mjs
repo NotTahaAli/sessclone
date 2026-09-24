@@ -199,6 +199,9 @@ export const scanFile = async (path, size, { chunkBytes } = {}) => {
   } catch {
     return null
   }
+  // Shrunk mid-read (truncated or rewritten): the stat size no longer
+  // describes these bytes, so nothing planned from it could be uploaded.
+  if (position !== size) return null
   return { sha256: all.digest('hex'), size, cuts }
 }
 
