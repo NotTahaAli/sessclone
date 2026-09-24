@@ -454,12 +454,31 @@ container without this one's files. So there a second `Stop` hook,
 (ticket 99). It is registered `async: true`, so the turn never waits on it and
 Claude Code enforces no timeout; its own budget is sixty seconds, and one
 upload may take fifty of them rather than the eight a synchronous hook allows.
-Each pass uploads the whole file and replaces the one stored object, so a
+Each pass uploads what has changed and confirms it before it ends, so a
 container reclaimed between turns loses nothing stored. Runs for one Session
 take a lock under `<state dir>/archived/`, so a quick next turn waits for the
 previous upload instead of racing it, and a presign refused `no_turns` (the
 first turn beating its own flush) is asked once more after three seconds. On
 any other machine the hook exits at once.
+
+**What goes up per turn is the new bytes, not the session (ticket 131, ADR
+0008).** A transcript is stored as sealed chunks followed by one raw tail. The
+presign answer says how many bytes are sealed and their SHA-256; the Collector
+re-hashes that prefix from local disk, which sends nothing, and uploads only
+what lies past it. A turn that seals nothing sends the tail alone: the bytes
+after the last chunk, under about 1 MiB and usually far less, plus the same two
+small requests as before. Once the unsealed part reaches 1 MiB, the pass cuts
+it at the first line end at or after each 1 MiB, never inside a line, and sends
+up to 16 such chunks gzipped (`application/gzip`, no `Content-Encoding`) after
+one extra presign, then the shorter tail. A transcript under 1 MiB never seals,
+so it is stored and sent exactly as before. The Collector falls back to sending
+the whole file when the file is shorter than the sealed bytes or its prefix
+hashes differently (rewritten or truncated), when compression fails, or when
+the deployment does not answer `layout: 'chunked'` (one that predates ADR
+0008); that confirm drops the old chunks. The first pass over a long transcript
+that has no chunks yet seals 16 MiB at most and sends the rest as the tail, so
+it converges over a few passes. Sidecars (`agent_meta`, `workflow_journal`)
+are always sent whole; Agent Run transcripts chunk like the main one.
 
 **When the deployment is unreachable, nothing is lost to a blip and little to
 an outage (ticket 39).** A failed report is retried three times over about two

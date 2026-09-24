@@ -22,15 +22,15 @@
 
 **Status:** todo
 
-- [ ] Unit tests, `node:test`, beside `archive.test.mjs`:
+- [x] Unit tests, in `archive.test.mjs` (vitest, as the rest of the plugin's tests are, rather than `node:test`):
   - `sealPlan`: exactly 1 MiB, a line longer than 1 MiB, no newline, the 16-chunk cap, a partial last line left in the tail
   - the prefix check: truncated, rewritten, and matching
   - gzip round-trip equals the raw bytes
-- [ ] `archive.test.mjs` against the fake deployment:
+- [x] `archive.test.mjs` against the fake deployment:
   - request order for a steady turn (presign, tail PUT, confirm) and for a sealing turn (presign, presign with `seal`, chunk PUTs, tail PUT, confirm)
   - bytes sent equal to the new bytes only
   - fallback to `whole` on each of the four triggers
   - an older deployment gets a whole file
-  - verified red with the prefix check removed
+  - verified red with the prefix check removed (two tests fail: the plan's prefix check and the truncated/rewritten fallback)
 - [ ] Checked from a cloud container on production: after sealing, a later turn's bytes on the wire are about the size of the tail, and the dashboard download is byte-identical to the local file (`sha256sum`)
-- [ ] `docs/configuration.md` § archival says what is sent per turn
+- [x] `docs/configuration.md` § archival says what is sent per turn
