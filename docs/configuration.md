@@ -287,6 +287,12 @@ Storage is optional as a whole. With any of the four "for archival" variables
 unset, archival is off — presign refuses, the retention sweep answers 503 —
 and everything else works.
 
+A growing transcript is stored as sealed gzip chunks plus a raw tail (ADR
+0008). Chunks are PUT as `application/gzip` with no `Content-Encoding`, so a
+bucket that restricts allowed MIME types (a Supabase Storage bucket setting)
+must allow `application/gzip` beside the JSONL and JSON types. The CORS rule
+for `GET` does not change: a chunk is read whole, with no `Range` header.
+
 | Variable                       | Required     | Default | What it is                                                                               |
 | ------------------------------ | ------------ | ------- | ---------------------------------------------------------------------------------------- |
 | `STORAGE_ENDPOINT`             | for archival | —       | S3 API endpoint URL. The provider's S3 endpoint, not its dashboard                       |

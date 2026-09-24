@@ -10,13 +10,14 @@
   - Otherwise it builds `new Response(stream).blob()`, then an object URL, then a click on an `<a download>`, and revokes the URL afterwards. This holds the transcript in memory. The ceiling is stated in the code, and a service-worker stream is the upgrade if it bites.
 - The filename is the same as today's: `<session>.jsonl` or `<session>-agent-<id>.jsonl`.
 - Each chunk's raw SHA-256 is checked with `crypto.subtle` while streaming. A mismatch aborts with a visible error, never a silently corrupt file.
+- `/api/logs/download/<id>` answers 409 for a chunked row rather than a 302 to its tail, which would be the end of the file passed off as all of it (`artifact-download.test.ts`). The listings carry `chunked` so the pages pick the button.
 - `docs/self-hosting.md` and `docs/configuration.md`: a bucket that restricts MIME types must allow `application/gzip`, and the CORS rule for GET is unchanged (ADR 0008).
 
 **Blocked by:** 132
 
-**Status:** todo
+**Status:** done
 
-- [ ] `wholeStream` and the checksum abort are unit-tested in Node (in 132's `data.test.ts`, not duplicated here)
-- [ ] The button's choice between picker and Blob is a small pure function with a unit test
+- [x] `wholeStream` and the checksum abort are unit-tested in Node (in 132's `data.test.ts`, not duplicated here)
+- [x] The button's choice between picker and Blob is a small pure function with a unit test
 - [ ] Downloaded in local Chromium and in a browser without `showSaveFilePicker` (Firefox or WebKit) from a seeded chunked transcript: the file is byte-identical to the source (`sha256sum`). Screenshots of the button in both themes.
 - [ ] Taha downloads a chunked cloud transcript on production

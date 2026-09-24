@@ -144,6 +144,11 @@ On Cloudflare R2 that rule is, under the bucket's **Settings → CORS Policy**:
 ]
 ```
 
+The same rule covers a chunked transcript (ADR 0008): the viewer and the
+download fetch each sealed chunk whole, with no `Range` header, and gunzip it
+in the browser. If your bucket restricts allowed MIME types, as a Supabase
+Storage bucket can, allow `application/gzip`: that is how chunks are stored.
+
 R2's endpoint is `https://<account-id>.r2.cloudflarestorage.com`, the region
 stays `auto`, and the key pair comes from an R2 API token with **Object Read &
 Write** scoped to the one bucket.
