@@ -98,6 +98,7 @@ describe('a git remote names one Project however it was cloned', () => {
     const run = 50_000
     for (const remote of [
       `${'.'.repeat(run)} x`,
+      `${'.'.repeat(run)}:x`,
       `a${'/'.repeat(run)}x`,
       `https://h/a${'/'.repeat(run)}b`,
     ]) {
