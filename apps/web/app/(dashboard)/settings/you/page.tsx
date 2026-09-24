@@ -195,6 +195,12 @@ function BeforeYouOptIn() {
         conversation, so the messages other members wrote there are in the
         transcript you upload.
       </p>
+      <p className="mt-1.5">
+        Turning it on archives the sessions Claude Code still keeps on your
+        machines, which is 30 days by default. To keep more for a later
+        backfill, raise <code>cleanupPeriodDays</code> in your Claude Code
+        settings.
+      </p>
     </div>
   )
 }

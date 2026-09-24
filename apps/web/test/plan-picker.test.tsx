@@ -44,3 +44,25 @@ test('"Talk to us" mails the deployment’s address, and is absent without one',
   expect(html).not.toMatch(/>Talk to us<\/a>/)
   expect(html).not.toContain('/issues')
 })
+
+// 2026-09-24: the pricing page's choice is already made, so "Join waitlist"
+// carries plan and size to sign-up's account step rather than asking again.
+const TEAM: Plan[] = [
+  {
+    ...enterprise,
+    key: 'team',
+    name: 'Team',
+    seatPriceUsd: 10,
+    minSeats: 2,
+    maxSeats: 10,
+  },
+]
+
+test('"Join waitlist" hands sign-up the plan and the team size', () => {
+  const html = renderToStaticMarkup(
+    <PlanPicker plans={TEAM} rows={ROWS}>
+      {null}
+    </PlanPicker>,
+  )
+  expect(html).toContain('href="/sign-up?plan=team&amp;seats=3"')
+})

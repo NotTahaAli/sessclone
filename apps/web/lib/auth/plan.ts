@@ -56,3 +56,55 @@ export const parsePlan = (source: Source, team?: Bounds): SignupPlan | null => {
 /** The same plan as query parameters, for the callback URL. */
 export const planQuery = (plan: SignupPlan | null): string =>
   plan ? `plan=${plan.tierKey}${plan.seats ? `&seats=${plan.seats}` : ''}` : ''
+
+type Offered = { key: string } & Bounds
+
+/** Where the sign-up page is: choosing a plan, or creating the account for
+ * one already chosen. */
+export type SignupStep =
+  | { step: 'plan'; chosen: string | null; seats: number }
+  | { step: 'account'; plan: SignupPlan }
+
+/**
+ * The sign-up step a query string lands on (Taha, 2026-09-24).
+ *
+ * A complete plan that is on offer goes straight to the account step, which
+ * is how the pricing page's "Join waitlist" skips the choice it already made.
+ * Anything short of that — no plan, one not on offer, a Team with no size —
+ * asks for the plan, keeping whatever part of it was valid. `edit` is the
+ * account step's way back.
+ */
+export const signupStep = (
+  query: Source,
+  offered: readonly Offered[],
+): SignupStep => {
+  const team = offered.find((tier) => tier.key === 'team')
+  const plan = parsePlan(query, team)
+  const onOffer = plan && offered.some((tier) => tier.key === plan.tierKey)
+  if (onOffer && plan.seats !== null && !query.get('edit')) {
+    return { step: 'account', plan }
+  }
+  const asked = query.get('plan')
+  return {
+    step: 'plan',
+    chosen:
+      offered.find((tier) => tier.key === asked)?.key ??
+      offered[0]?.key ??
+      null,
+    seats:
+      onOffer && plan.tierKey === 'team' && plan.seats !== null
+        ? plan.seats
+        : (team?.minSeats ?? 2),
+  }
+}
+
+/**
+ * Where a sign-in or sign-up form sends its visitor back to with a notice:
+ * the page it was posted from, and on the sign-up page with its plan, so a
+ * mistyped address does not cost the choice.
+ */
+export const returnPath = (formData: Source, notice: string): string => {
+  if (formData.get('from') !== 'sign-up') return `/sign-in?${notice}`
+  const plan = planQuery(parsePlan(formData))
+  return `/sign-up?${[plan, notice].filter(Boolean).join('&')}`
+}

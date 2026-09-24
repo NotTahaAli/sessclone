@@ -32,11 +32,13 @@ const VARIANTS = {
   header: {
     className: pillClass,
     signedOut: 'Sign in',
+    signedOutHref: '/sign-in',
     signedIn: 'Dashboard',
   },
   hero: {
     className: `${buttonClass('primary')} h-10 px-4 text-[14px]`,
     signedOut: 'Join the waitlist',
+    signedOutHref: '/sign-up',
     signedIn: 'Open the dashboard',
   },
 } as const
@@ -45,12 +47,18 @@ export type Variant = keyof typeof VARIANTS
 
 const FALLBACKS: Record<Variant, React.ReactElement> = {
   header: (
-    <Link href="/sign-in" className={VARIANTS.header.className}>
+    <Link
+      href={VARIANTS.header.signedOutHref}
+      className={VARIANTS.header.className}
+    >
       {VARIANTS.header.signedOut}
     </Link>
   ),
   hero: (
-    <Link href="/sign-in" className={VARIANTS.hero.className}>
+    <Link
+      href={VARIANTS.hero.signedOutHref}
+      className={VARIANTS.hero.className}
+    >
       {VARIANTS.hero.signedOut}
     </Link>
   ),
@@ -66,10 +74,10 @@ export function SignedInLink({ variant }: { variant: Variant }) {
 
 async function Resolved({ variant }: { variant: Variant }) {
   const user = await sessionUser()
-  const { className, signedOut, signedIn } = VARIANTS[variant]
+  const { className, signedOut, signedOutHref, signedIn } = VARIANTS[variant]
 
   return (
-    <Link href={user ? '/costs' : '/sign-in'} className={className}>
+    <Link href={user ? '/costs' : signedOutHref} className={className}>
       {user ? signedIn : signedOut}
     </Link>
   )

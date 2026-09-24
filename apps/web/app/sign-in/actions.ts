@@ -8,7 +8,7 @@ import { APPEARANCE_COOKIE } from '../../lib/appearance'
 
 import { appUrl } from '../../lib/auth/app-url'
 import { safeNext } from '../../lib/auth/next-path'
-import { parsePlan, planQuery } from '../../lib/auth/plan'
+import { parsePlan, planQuery, returnPath } from '../../lib/auth/plan'
 import { supabaseServer } from '../../lib/supabase/server'
 import { marketingTiers } from '../../lib/tiers'
 
@@ -58,7 +58,7 @@ export const signInWithGitHub = async (formData: FormData) => {
   })
 
   if (error || !data.url) {
-    redirect('/sign-in?error=github')
+    redirect(returnPath(formData, 'error=github'))
   }
 
   redirect(data.url)
@@ -69,7 +69,7 @@ export const sendMagicLink = async (formData: FormData) => {
   const email = Email.safeParse(formData.get('email'))
 
   if (!email.success) {
-    redirect('/sign-in?error=email')
+    redirect(returnPath(formData, 'error=email'))
   }
 
   const supabase = await supabaseServer()
@@ -86,10 +86,10 @@ export const sendMagicLink = async (formData: FormData) => {
   // account here, which is worth more to an attacker than it is to a person
   // who mistyped their own email.
   if (error) {
-    redirect('/sign-in?error=link')
+    redirect(returnPath(formData, 'error=link'))
   }
 
-  redirect('/sign-in?sent=1')
+  redirect(returnPath(formData, 'sent=1'))
 }
 
 export const signOut = async () => {

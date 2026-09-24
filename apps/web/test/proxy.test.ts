@@ -37,15 +37,19 @@ test('a signed-out visitor is sent to the sign-in page', async () => {
   )
 })
 
-test('a signed-in person is sent off the sign-in page', async () => {
+test('a signed-in person is sent off the sign-in and sign-up pages', async () => {
   claims = { sub: 'user-1' }
 
-  const response = await at('/sign-in')
-
-  expect(response.status).toBe(307)
-  expect(response.headers.get('location')).toBe(
-    'https://sessclone.example.com/costs',
+  const responses = await Promise.all(
+    ['/sign-in', '/sign-up?plan=team&seats=3'].map(at),
   )
+
+  for (const response of responses) {
+    expect(response.status).toBe(307)
+    expect(response.headers.get('location')).toBe(
+      'https://sessclone.example.com/costs',
+    )
+  }
 })
 
 test('an invitation followed while signed in lands on the invitation', async () => {
@@ -93,6 +97,7 @@ test('pages and files read before an account are public', async () => {
   // Signed out throughout: none of these may redirect to the sign-in page, or
   // crawlers index `/sign-in` and share cards come up blank.
   const paths = [
+    '/sign-up',
     '/pricing',
     '/privacy',
     '/terms',

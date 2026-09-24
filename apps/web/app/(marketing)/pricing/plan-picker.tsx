@@ -232,8 +232,9 @@ function PlanRow({
           ) : (
             // Until billing exists, sign-up is the waitlist: it records the
             // plan as an inactive subscription for the operator to approve.
+            // Plan and size both ride along, so sign-up skips its plan step.
             <Link
-              href={`/sign-in?plan=${encodeURIComponent(plan.key)}`}
+              href={`/sign-up?plan=${encodeURIComponent(plan.key)}&seats=${team}`}
               className={buttonClass('primary')}
             >
               Join waitlist
