@@ -69,6 +69,21 @@ export async function GET(
           row.storageKey.split('/').pop() ?? 'transcript.jsonl',
         ),
         expiresIn: ttl(),
+        // ADR 0008: one presigned GET per sealed chunk, fetched whole and
+        // gunzipped in the browser. A whole-file row has none.
+        tailOffset: row.tailOffset,
+        chunks: await Promise.all(
+          row.chunks.map(async (chunk) => ({
+            rawOffset: chunk.rawOffset,
+            rawLength: chunk.rawLength,
+            sha256: chunk.sha256,
+            url: await presignDownload(
+              chunk.storageKey,
+              chunk.storageKey.split('/').pop() ?? 'chunk.jsonl.gz',
+              'application/gzip',
+            ),
+          })),
+        ),
       })),
     )
   } catch {

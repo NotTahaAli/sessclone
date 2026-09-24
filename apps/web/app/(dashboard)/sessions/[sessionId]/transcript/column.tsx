@@ -23,9 +23,8 @@ import {
 import {
   NEAR_TOP,
   agentColumn,
-  earlierRange,
+  earlierRead,
   keepReading,
-  rangesToStart,
   splitEarlier,
 } from './columns'
 import {
@@ -35,7 +34,7 @@ import {
   TaskStatusContext,
   useViewer,
 } from './context'
-import { concat, readBytes, type StoredFile } from './data'
+import { concat, readRaw, type StoredFile } from './data'
 import { Badge, RowView, rowKey } from './rows'
 import { readHearth } from './hearth'
 import { groupSteps } from './steps'
@@ -123,11 +122,10 @@ export function MainColumn({
   const load = useCallback(
     async (toStart: boolean) => {
       const state = current.current
-      const next = earlierRange(state.from)
-      // "Jump to start" reads the whole remainder, but a chunk per request:
-      // one response of arbitrary size would hold it all in memory twice.
-      const ranges = toStart ? rangesToStart(state.from) : next ? [next] : []
-      if (ranges.length === 0 || loading.current) return
+      // `from` is a raw offset, which a transcript that sealed more chunks
+      // since keeps (it is append-only), so each read plans against the
+      // latest list of this file.
+      if (state.from <= 0 || loading.current) return
       loading.current = true
       setBusy(true)
       setError(null)
@@ -137,30 +135,25 @@ export function MainColumn({
         return fresh
       }
       try {
-        // Newest first, so each chunk's `head` completes the line the chunk
-        // before it (earlier in the file) began.
+        // Newest first, so each piece's `head` completes the line the piece
+        // before it (earlier in the file) began. "Jump to start" reads the
+        // whole remainder, but a piece per request: one response of arbitrary
+        // size would hold it all in memory twice. ADR 0008: a piece before the
+        // tail is one whole gunzipped chunk, which ends on a line end, so its
+        // head stitches onto nothing.
         const parts: Item[][] = [state.items]
         let from = state.from
         let head = state.head
-        for (const range of ranges) {
-          // oxlint-disable-next-line no-await-in-loop -- each chunk stitches onto the last; the signal aborts the loop
-          const { bytes, whole } = await readBytes(
-            latest.current,
-            range,
-            refresh,
-            signal,
-          )
-          if (whole) {
-            // A server that ignored Range sent the whole file.
-            parts.length = 0
-            parts.push(parseLines(splitEarlier(bytes, 0).lines))
-            from = 0
-            head = EMPTY
-            break
-          }
-          const split = splitEarlier(concat(bytes, head), range.start)
+        for (
+          let read = earlierRead(latest.current, from);
+          read;
+          read = toStart ? earlierRead(latest.current, from) : null
+        ) {
+          // oxlint-disable-next-line no-await-in-loop -- each piece stitches onto the last; the signal aborts the loop
+          const got = await readRaw(latest.current, read, refresh, signal)
+          const split = splitEarlier(concat(got.bytes, head), got.start)
           parts.push(parseLines(split.lines))
-          from = range.start
+          from = got.start
           head = split.head
         }
         const loadedNow: Loaded = {

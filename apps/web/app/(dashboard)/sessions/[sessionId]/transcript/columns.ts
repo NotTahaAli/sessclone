@@ -85,34 +85,45 @@ export const readWidths = (raw: string | null): SavedWidths => {
 /** How much of the main transcript one scroll-up fetches. */
 export const CHUNK_BYTES = 1024 * 1024
 
-/**
- * The next byte range to fetch, reading backwards from `loadedFrom` (the first
- * byte already loaded; the file size before anything is). Inclusive ends, as
- * an HTTP Range header writes them. Null once the start is loaded.
- */
-export const earlierRange = (
-  loadedFrom: number,
-  chunk = CHUNK_BYTES,
-): { start: number; end: number } | null =>
-  loadedFrom <= 0
-    ? null
-    : { start: Math.max(0, loadedFrom - chunk), end: loadedFrom - 1 }
+/** One earlier piece of the main transcript, in raw offsets, ends inclusive. */
+export type Read =
+  | { kind: 'range'; start: number; end: number }
+  /** Chunk `index`, fetched whole and kept up to `end`. */
+  | { kind: 'chunk'; index: number; start: number; end: number }
 
 /**
- * Every range "Jump to start" fetches, newest first: `earlierRange` repeated
- * down to byte 0, so the remainder arrives a chunk per request rather than as
- * one response of arbitrary size.
+ * The next earlier piece to fetch before raw byte `from` (the first byte
+ * already loaded; the file size before anything is), or null at byte 0.
+ *
+ * ADR 0008: past `tailOffset` it is a Range read inside the tail object, a
+ * chunk at most and clamped at the tail's start. Before it, the sealed chunk
+ * holding `from - 1`, read whole because a gzip stream cannot be Range-read.
+ * With zero chunks this is the backwards range walk tickets 105 and 108 read.
  */
-export const rangesToStart = (
-  loadedFrom: number,
-  chunk = CHUNK_BYTES,
-): { start: number; end: number }[] => {
-  const ranges = []
-  for (let range = earlierRange(loadedFrom, chunk); range;) {
-    ranges.push(range)
-    range = earlierRange(range.start, chunk)
+export const earlierRead = (
+  file: {
+    tailOffset: number
+    chunks: readonly { rawOffset: number; rawLength: number }[]
+  },
+  from: number,
+  size = CHUNK_BYTES,
+): Read | null => {
+  if (from <= 0) return null
+  if (from > file.tailOffset) {
+    return {
+      kind: 'range',
+      start: Math.max(file.tailOffset, from - size),
+      end: from - 1,
+    }
   }
-  return ranges
+  const index = file.chunks.findIndex(
+    (chunk) =>
+      chunk.rawOffset < from && from <= chunk.rawOffset + chunk.rawLength,
+  )
+  const chunk = file.chunks[index]
+  return chunk
+    ? { kind: 'chunk', index, start: chunk.rawOffset, end: from - 1 }
+    : null
 }
 
 /** Room at the top that counts as "near the start" and triggers a load. */
