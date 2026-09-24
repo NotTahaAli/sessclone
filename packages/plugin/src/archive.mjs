@@ -26,6 +26,11 @@
 // or `SessionStart` sweep asks again. An unchanged transcript is refused with
 // `unchanged` at the cost of one small request, which is the property that
 // keeps a sweep over a year of history from re-uploading all of it.
+//
+// Ticket 131 (ADR 0008): a transcript that grows is not re-sent whole. The
+// deployment says how much of it is sealed; the Collector checks that prefix
+// locally, seals about 1 MiB at a time as gzip chunks, and sends only the raw
+// tail past them. Anything unexpected falls back to the whole file.
 
 import { createReadStream } from 'node:fs'
 import {
@@ -424,86 +429,251 @@ export const archiveTranscript = async ({
     })
   }
 
-  const presign = await ask({
-    configuration,
-    path: '/api/logs/presign',
-    body: { sessionId, agentId, kind, sha256 },
-    deadline,
-  })
-
-  // Anything that is not an issued URL — a refusal, a 401, a deployment with
-  // no storage, an unreachable host — ends here without the file being opened.
-  if (!presign.ok) return { archived: false, refused: 'unavailable' }
-  if (presign.body?.refused) {
-    await settle(presign.body.refused)
-    return { archived: false, refused: presign.body.refused }
-  }
-  if (!presign.body?.url || !presign.body?.storageKey) {
-    return { archived: false, refused: 'unavailable' }
-  }
-  // A deployment older than ticket 104 strips `kind` and would file a sidecar
-  // as the run's transcript, overwriting it. Newer ones echo the kind they
-  // presigned for, so a sidecar goes only where the answer says so; otherwise
-  // it is skipped, unsettled, and asked about again once the server upgrades.
-  if (kind !== 'transcript' && presign.body.kind !== kind) {
-    return { archived: false, refused: 'kind_unsupported' }
-  }
-
-  try {
-    const answer = await fetch(presign.body.url, {
-      method: 'PUT',
-      headers: {
-        'content-type':
-          kind === 'agent_meta' ? 'application/json' : 'application/x-ndjson',
-        // Exactly the range that was hashed. A stream that yielded more or
-        // fewer bytes than this fails the request after sending them, which is
-        // what a transcript being appended to by a live session would do.
-        'content-length': String(size),
-      },
-      body: Readable.toWeb(
-        createReadStream(transcriptPath, { start: 0, end: size - 1 }),
-      ),
-      // Node requires this for a streamed request body.
-      duplex: 'half',
-      signal: requestSignal(uploadTimeoutMs, deadline),
+  /** @param {Record<string, unknown>} extra */
+  const presignFor = (extra) =>
+    ask({
+      configuration,
+      path: '/api/logs/presign',
+      body: { sessionId, agentId, kind, sha256, ...extra },
+      deadline,
     })
-    if (!answer.ok) return { archived: false, refused: 'upload_failed' }
-  } catch {
-    return { archived: false, refused: 'upload_failed' }
-  }
 
-  const confirm = await ask({
-    configuration,
-    path: '/api/logs/confirm',
-    // The key the bytes actually went to, echoed so the deployment can refuse
-    // a Session that moved Project since the presign rather than record one
-    // object under another's hash.
-    body: {
-      sessionId,
-      agentId,
-      kind,
-      sha256,
-      storageKey: presign.body.storageKey,
-    },
-    deadline,
-  })
-  if (!confirm.ok || !confirm.body?.stored) {
-    if (confirm.body?.refused) {
-      // A refusal here is transient by construction (`stale_key`,
-      // `not_uploaded`): remembered only so a status surface can say what
-      // happened, never treated as settled.
-      return { archived: false, refused: confirm.body.refused }
+  /**
+   * What a presign answer means when it is not a URL to use: the result to
+   * return, or null to go on.
+   *
+   * Anything that is not an issued URL — a refusal, a 401, a deployment with
+   * no storage, an unreachable host — ends here without the file being opened.
+   *
+   * @param {{ ok: boolean, body: any }} presign
+   */
+  const notIssued = async (presign) => {
+    if (!presign.ok) return { archived: false, refused: 'unavailable' }
+    if (presign.body?.refused) {
+      await settle(presign.body.refused)
+      return { archived: false, refused: presign.body.refused }
     }
-    // The bytes are in the bucket and no row names them. The next pass
-    // re-uploads and re-confirms, which is why the object is replaced in place
-    // rather than versioned: a repeat costs the upload again and never a
-    // second object.
-    return { archived: false, refused: 'unconfirmed' }
+    if (!presign.body?.url || !presign.body?.storageKey) {
+      return { archived: false, refused: 'unavailable' }
+    }
+    // A deployment older than ticket 104 strips `kind` and would file a
+    // sidecar as the run's transcript, overwriting it. Newer ones echo the
+    // kind they presigned for, so a sidecar goes only where the answer says
+    // so; otherwise it is skipped, unsettled, and asked about again once the
+    // server upgrades.
+    if (kind !== 'transcript' && presign.body.kind !== kind) {
+      return { archived: false, refused: 'kind_unsupported' }
+    }
+    return null
   }
 
-  await settle('archived')
-  return { archived: true, sizeBytes: confirm.body.sizeBytes }
+  /**
+   * One PUT straight to storage, true when it landed. `body` is a raw range
+   * `[start, end)` of the file, streamed, or bytes already in hand.
+   *
+   * @param {string} url
+   * @param {string} contentType
+   * @param {{ start: number, end: number } | Buffer} body
+   */
+  const put = async (url, contentType, body) => {
+    const length = Buffer.isBuffer(body) ? body.length : body.end - body.start
+    try {
+      const answer = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'content-type': contentType,
+          // Exactly the range that was hashed. A stream that yielded more or
+          // fewer bytes than this fails the request after sending them, which
+          // is what a transcript being appended to by a live session would do.
+          'content-length': String(length),
+        },
+        body:
+          Buffer.isBuffer(body) || length === 0
+            ? Buffer.isBuffer(body)
+              ? body
+              : Buffer.alloc(0)
+            : Readable.toWeb(
+                createReadStream(transcriptPath, {
+                  start: body.start,
+                  end: body.end - 1,
+                }),
+              ),
+        // Node requires this for a streamed request body.
+        duplex: 'half',
+        signal: requestSignal(uploadTimeoutMs, deadline),
+      })
+      // Storage's answer body is never read; release its connection.
+      await answer.body?.cancel().catch(() => {})
+      return answer.ok
+    } catch {
+      return false
+    }
+  }
+
+  /** @param {Record<string, unknown>} extra */
+  const confirmWith = async (extra) => {
+    const confirm = await ask({
+      configuration,
+      path: '/api/logs/confirm',
+      // The key the bytes actually went to (in `extra`), echoed so the
+      // deployment can refuse a Session that moved Project since the presign
+      // rather than record one object under another's hash.
+      body: { sessionId, agentId, kind, sha256, ...extra },
+      deadline,
+    })
+    if (!confirm.ok || !confirm.body?.stored) {
+      if (confirm.body?.refused) {
+        // A refusal here is transient by construction (`stale_key`,
+        // `stale_chunks`, `not_uploaded`): remembered only so a status surface
+        // can say what happened, never treated as settled.
+        return { archived: false, refused: confirm.body.refused }
+      }
+      // The bytes are in the bucket and no row names them. The next pass
+      // re-uploads and re-confirms, which is why the object is replaced in
+      // place rather than versioned: a repeat costs the upload again and never
+      // a second object.
+      return { archived: false, refused: 'unconfirmed' }
+    }
+    await settle('archived')
+    return { archived: true, sizeBytes: confirm.body.sizeBytes }
+  }
+
+  const uploadFailed = { archived: false, refused: 'upload_failed' }
+  const staleChunks = { archived: false, refused: 'stale_chunks' }
+
+  /**
+   * ADR 0008: seal what has grown past the deployment's sealed prefix, then
+   * send the tail. `'whole'` when this pass must fall back to the whole file.
+   *
+   * @param {any} answer A presign answer that echoed `layout: 'chunked'`.
+   */
+  const archiveChunks = async (answer) => {
+    const { sealed } = answer
+    if (!validSealed(sealed)) return 'whole'
+    const plan = await planSeals(transcriptPath, size, sealed)
+    if (plan === null) return { archived: false, refused: 'unreadable' }
+    if (plan === 'mismatch') return 'whole'
+
+    const { chunks } = plan
+    let tail = answer
+    if (chunks.length > 0) {
+      const sealing = await presignFor({
+        layout: 'chunked',
+        seal: chunks.length,
+      })
+      const refused = await notIssued(sealing)
+      if (refused) return refused
+      tail = sealing.body
+      // Another pass sealed in between, or the answer is not the one asked
+      // for: plan again from what the deployment now holds.
+      if (
+        tail.layout !== 'chunked' ||
+        !sameSealed(tail.sealed, sealed) ||
+        tail.seals?.length !== chunks.length ||
+        chunks.some((chunk, index) => tail.seals[index]?.seq !== chunk.seq)
+      ) {
+        return staleChunks
+      }
+      for (const [index, chunk] of chunks.entries()) {
+        if (expired(deadline)) return uploadFailed
+        let packed
+        try {
+          // eslint-disable-next-line no-await-in-loop -- one chunk in memory at a time
+          packed = await gzipRange(
+            transcriptPath,
+            chunk.rawOffset,
+            chunk.rawLength,
+          )
+        } catch {
+          return 'whole'
+        }
+        // No Content-Encoding: set, it makes browsers and some providers
+        // inflate the object in transit (ADR 0008).
+        // eslint-disable-next-line no-await-in-loop -- as above
+        if (!(await put(tail.seals[index].url, 'application/gzip', packed))) {
+          return uploadFailed
+        }
+      }
+    }
+
+    const newest = chunks.at(-1)
+    const start = newest ? newest.rawOffset + newest.rawLength : sealed.bytes
+    if (!(await put(tail.url, 'application/x-ndjson', { start, end: size }))) {
+      return uploadFailed
+    }
+    return confirmWith({
+      storageKey: tail.storageKey,
+      layout: 'chunked',
+      ...(chunks.length > 0 && { chunks, sealedSha256: plan.sealedSha256 }),
+    })
+  }
+
+  // Only a transcript chunks (ADR 0008): sidecars are small and rewritten.
+  let presign = await presignFor({
+    layout: kind === 'transcript' ? 'chunked' : 'whole',
+  })
+  const refused = await notIssued(presign)
+  if (refused) return refused
+
+  // A deployment that predates ADR 0008 does not echo `layout`; its `url` is
+  // then the whole file's, exactly as before.
+  if (presign.body.layout === 'chunked') {
+    for (let attempt = 1; ; attempt += 1) {
+      // eslint-disable-next-line no-await-in-loop -- each try depends on the last
+      const result = await archiveChunks(presign.body)
+      if (result === 'whole') break
+      // `stale_chunks` is transient: ask again, a few times, then leave it
+      // unsettled for the next pass.
+      if (result.refused !== 'stale_chunks' || attempt >= STALE_TRIES) {
+        return result
+      }
+      // eslint-disable-next-line no-await-in-loop -- as above
+      presign = await presignFor({ layout: 'chunked' })
+      // eslint-disable-next-line no-await-in-loop -- as above
+      const again = await notIssued(presign)
+      if (again) return again
+      if (presign.body.layout !== 'chunked') break
+    }
+    // The failsafe: rewritten, truncated, uncompressible, or no longer
+    // chunking. The whole file goes to the whole-file key, and that confirm
+    // drops every chunk.
+    if (presign.body.layout === 'chunked') {
+      presign = await presignFor({ layout: 'whole' })
+      const whole = await notIssued(presign)
+      if (whole) return whole
+    }
+  }
+
+  const contentType =
+    kind === 'agent_meta' ? 'application/json' : 'application/x-ndjson'
+  if (!(await put(presign.body.url, contentType, { start: 0, end: size }))) {
+    return uploadFailed
+  }
+  return confirmWith({ storageKey: presign.body.storageKey, layout: 'whole' })
 }
+
+/** How many times one pass presigns again after `stale_chunks`. */
+const STALE_TRIES = 3
+
+/**
+ * Whether a presign's `sealed` is shaped as ADR 0008 has it. The answer
+ * crosses a trust boundary and the Collector cannot import zod, so this is
+ * checked by hand; anything else falls back to the whole file.
+ *
+ * @param {any} sealed
+ */
+const validSealed = (sealed) =>
+  Number.isSafeInteger(sealed?.bytes) &&
+  sealed.bytes >= 0 &&
+  Number.isSafeInteger(sealed.chunks) &&
+  sealed.chunks >= 0 &&
+  (sealed.bytes === 0
+    ? sealed.sha256 === null || typeof sealed.sha256 === 'string'
+    : typeof sealed.sha256 === 'string')
+
+/** @param {any} a @param {any} b */
+const sameSealed = (a, b) =>
+  a?.bytes === b.bytes && a?.chunks === b.chunks && a?.sha256 === b.sha256
 
 /**
  * Archives every transcript one Session wrote: its own, and one per Agent Run.

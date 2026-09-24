@@ -25,6 +25,19 @@ import {
 
 afterEach(() => vi.unstubAllGlobals())
 
+// Lets a test make compression throw, which is one of the fallback triggers.
+const gzipFails = vi.hoisted(() => ({ value: false }))
+vi.mock('node:zlib', async (importOriginal) => {
+  const zlib = await importOriginal()
+  return {
+    ...zlib,
+    createGzip: (...args) => {
+      if (gzipFails.value) throw new Error('no zlib here')
+      return zlib.createGzip(...args)
+    },
+  }
+})
+
 const configuration = () => ({
   apiKey: 'sk_' + 'a'.repeat(43),
   url: 'https://collector.test',
@@ -657,4 +670,267 @@ test('a plan read in many pieces cuts where one whole read would', async () => {
   expect(plan.chunks.map((chunk) => chunk.seq)).toEqual([5, 6])
   expect(plan.chunks[1].sha256).toBe(sha(raw.subarray(ends[0], ends[1])))
   expect(plan.sealedSha256).toBe(sha(raw.subarray(0, ends[1])))
+})
+
+/** An answer as `fetch` resolves it. */
+const reply = (body) => ({ ok: true, status: 200, json: async () => body })
+
+/**
+ * A deployment that chunks (ADR 0008), or one that predates it (`echo:
+ * false`). It holds `sealed` as the row would, answers seals from the next
+ * seq, and records every request as a step plus what it carried.
+ */
+const fakeDeployment = ({
+  sealed = { bytes: 0, sha256: null, chunks: 0 },
+  echo = true,
+  confirms = [],
+} = {}) => {
+  const requests = []
+  vi.stubGlobal('fetch', async (url, init) => {
+    const target = String(url)
+    if (target.includes('/api/logs/presign')) {
+      const body = JSON.parse(init.body)
+      requests.push({
+        step: body.seal
+          ? `presign seal ${body.seal}`
+          : `presign ${body.layout}`,
+        body,
+      })
+      if (!echo || body.layout !== 'chunked') {
+        return reply({
+          url: 'https://storage.test/whole?signed',
+          storageKey: 'p/session-a.jsonl',
+          ...(echo && { kind: body.kind }),
+        })
+      }
+      const seals = Array.from({ length: body.seal ?? 0 }, (_, index) => {
+        const seq = sealed.chunks + 1 + index
+        return {
+          seq,
+          url: `https://storage.test/chunk-${seq}?signed`,
+          storageKey: `p/session-a/chunks/${seq}`,
+        }
+      })
+      const tail = sealed.chunks + seals.length
+      return reply({
+        url: `https://storage.test/tail-${tail}?signed`,
+        storageKey: `p/session-a/tail-${tail}`,
+        kind: body.kind,
+        layout: 'chunked',
+        sealed,
+        ...(seals.length > 0 && { seals }),
+      })
+    }
+    if (target.includes('/api/logs/confirm')) {
+      const body = JSON.parse(init.body)
+      requests.push({ step: 'confirm', body })
+      return reply(confirms.shift() ?? { stored: true, sizeBytes: 1 })
+    }
+    const bytes = Buffer.from(await new Response(init.body).arrayBuffer())
+    requests.push({
+      step: `put ${new URL(target).pathname.slice(1)}`,
+      headers: init.headers,
+      bytes,
+    })
+    return reply(null)
+  })
+  return requests
+}
+
+const steps = (requests) => requests.map((request) => request.step)
+
+/** The raw bytes that went to storage, chunks inflated, in request order. */
+const sentRaw = (requests) =>
+  Buffer.concat(
+    requests
+      .filter((request) => request.step.startsWith('put'))
+      .map((request) =>
+        request.headers['content-type'] === 'application/gzip'
+          ? gunzipSync(request.bytes)
+          : request.bytes,
+      ),
+  )
+
+const archiveChunked = async (contents, deployment) => {
+  const requests = fakeDeployment(deployment)
+  const result = await archiveTranscript({
+    configuration: configuration(),
+    transcriptPath: await transcript(contents),
+    sessionId: 'session-a',
+  })
+  return { result, requests }
+}
+
+test('a steady turn sends only the tail after the sealed prefix', async () => {
+  const prefix = line(100)
+  const raw = Buffer.concat([prefix, line(30)])
+  const { result, requests } = await archiveChunked(raw, {
+    sealed: { bytes: 100, sha256: sha(prefix), chunks: 1 },
+  })
+
+  expect(result).toMatchObject({ archived: true })
+  expect(steps(requests)).toEqual(['presign chunked', 'put tail-1', 'confirm'])
+  expect(sha(sentRaw(requests))).toBe(sha(raw.subarray(100)))
+  const confirm = requests.at(-1).body
+  expect(confirm).toMatchObject({
+    layout: 'chunked',
+    sha256: sha(raw),
+    storageKey: 'p/session-a/tail-1',
+  })
+  expect(confirm.chunks).toBeUndefined()
+})
+
+test('a sealing turn presigns the seals, PUTs gzip chunks, then the tail', async () => {
+  const prefix = line(100)
+  const raw = Buffer.concat([prefix, line(MiB), line(MiB), line(50)])
+  const { result, requests } = await archiveChunked(raw, {
+    sealed: { bytes: 100, sha256: sha(prefix), chunks: 1 },
+  })
+
+  expect(result).toMatchObject({ archived: true })
+  expect(steps(requests)).toEqual([
+    'presign chunked',
+    'presign seal 2',
+    'put chunk-2',
+    'put chunk-3',
+    'put tail-3',
+    'confirm',
+  ])
+  // Only the bytes after the sealed prefix, each exactly once.
+  expect(sha(sentRaw(requests))).toBe(sha(raw.subarray(100)))
+  for (const put of requests.filter((r) => r.step.startsWith('put chunk'))) {
+    expect(put.headers['content-type']).toBe('application/gzip')
+    expect(put.headers['content-encoding']).toBeUndefined()
+    expect(put.headers['content-length']).toBe(String(put.bytes.length))
+  }
+  const end = 100 + 2 * MiB
+  expect(requests.at(-1).body).toMatchObject({
+    layout: 'chunked',
+    sha256: sha(raw),
+    storageKey: 'p/session-a/tail-3',
+    sealedSha256: sha(raw.subarray(0, end)),
+    chunks: [
+      {
+        seq: 2,
+        rawOffset: 100,
+        rawLength: MiB,
+        sha256: sha(raw.subarray(100, 100 + MiB)),
+      },
+      {
+        seq: 3,
+        rawOffset: 100 + MiB,
+        rawLength: MiB,
+        sha256: sha(raw.subarray(100 + MiB, end)),
+      },
+    ],
+  })
+})
+
+test('a Session that moved Project reseals from the first chunk', async () => {
+  // Its new prefix holds nothing, so the deployment answers zeros.
+  const raw = Buffer.concat([line(MiB), line(20)])
+  const { requests } = await archiveChunked(raw, {})
+  expect(steps(requests)).toEqual([
+    'presign chunked',
+    'presign seal 1',
+    'put chunk-1',
+    'put tail-1',
+    'confirm',
+  ])
+  expect(sha(sentRaw(requests))).toBe(sha(raw))
+})
+
+test('a transcript under 1 MiB is archived as it always was', async () => {
+  const raw = line(30)
+  const { requests } = await archiveChunked(raw, {})
+  expect(steps(requests)).toEqual(['presign chunked', 'put tail-0', 'confirm'])
+  expect(sha(sentRaw(requests))).toBe(sha(raw))
+})
+
+test('a truncated or rewritten transcript falls back to the whole file', async () => {
+  const prefix = line(100)
+  const raw = Buffer.concat([prefix, line(30)])
+  for (const sealed of [
+    // Truncated: more is sealed than the file now holds.
+    { bytes: 500, sha256: sha(line(500)), chunks: 1 },
+    // Rewritten: the prefix hashes differently.
+    { bytes: 100, sha256: sha(line(100).fill('z', 0, 1)), chunks: 1 },
+  ]) {
+    // eslint-disable-next-line no-await-in-loop -- one trigger at a time, so a failure names which
+    const { result, requests } = await archiveChunked(raw, { sealed })
+    expect(result).toMatchObject({ archived: true })
+    expect(steps(requests)).toEqual([
+      'presign chunked',
+      'presign whole',
+      'put whole',
+      'confirm',
+    ])
+    expect(sha(sentRaw(requests))).toBe(sha(raw))
+    expect(requests.at(-1).body).toMatchObject({
+      layout: 'whole',
+      storageKey: 'p/session-a.jsonl',
+    })
+  }
+})
+
+test('a deployment that does not chunk gets the whole file, as today', async () => {
+  const raw = Buffer.concat([line(MiB), line(30)])
+  const { result, requests } = await archiveChunked(raw, { echo: false })
+  expect(result).toMatchObject({ archived: true })
+  expect(steps(requests)).toEqual(['presign chunked', 'put whole', 'confirm'])
+  expect(sha(sentRaw(requests))).toBe(sha(raw))
+  expect(requests.at(-1).body.chunks).toBeUndefined()
+})
+
+test('a compression failure falls back to the whole file', async () => {
+  gzipFails.value = true
+  try {
+    const raw = Buffer.concat([line(MiB), line(30)])
+    const { result, requests } = await archiveChunked(raw, {})
+    expect(result).toMatchObject({ archived: true })
+    expect(steps(requests)).toEqual([
+      'presign chunked',
+      'presign seal 1',
+      'presign whole',
+      'put whole',
+      'confirm',
+    ])
+    expect(sha(sentRaw(requests))).toBe(sha(raw))
+  } finally {
+    gzipFails.value = false
+  }
+})
+
+test('stale chunks are presigned again, and never settled', async () => {
+  const raw = line(30)
+  const stale = { refused: 'stale_chunks', detail: 'moved on' }
+  const { result, requests } = await archiveChunked(raw, {
+    confirms: [stale, stale, stale, stale],
+  })
+  // Bounded: a deployment that keeps refusing costs three tries, not a loop.
+  expect(result).toEqual({ archived: false, refused: 'stale_chunks' })
+  expect(steps(requests).filter((step) => step === 'confirm')).toHaveLength(3)
+
+  const again = await archiveChunked(raw, { confirms: [stale] })
+  expect(again.result).toMatchObject({ archived: true })
+  expect(steps(again.requests)).toEqual([
+    'presign chunked',
+    'put tail-0',
+    'confirm',
+    'presign chunked',
+    'put tail-0',
+    'confirm',
+  ])
+})
+
+test('sidecars never ask to be chunked', async () => {
+  const requests = fakeDeployment({})
+  await archiveTranscript({
+    configuration: configuration(),
+    transcriptPath: await transcript('{"spawnDepth":1}'),
+    sessionId: 'session-a',
+    agentId: '7',
+    kind: 'agent_meta',
+  })
+  expect(steps(requests)).toEqual(['presign whole', 'put whole', 'confirm'])
 })
