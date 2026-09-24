@@ -13,8 +13,8 @@ per Device.
 [![Collector: MIT](https://img.shields.io/badge/collector-MIT-green.svg)](packages/plugin/LICENSE)
 
 [Website](https://sessclone.com) ·
-[Docs](docs/) ·
-[Self-hosting](docs/self-hosting.md) ·
+[Docs](https://sessclone.com/docs) ·
+[Self-hosting](https://sessclone.com/docs/self-hosting) ·
 [Contributing](CONTRIBUTING.md)
 
 </div>
@@ -75,7 +75,7 @@ In Claude Code:
 
 Enabling the plugin asks for two things: the deployment URL and an API key from
 the dashboard under **Keys**. Then restart Claude Code, because hooks take
-effect only after a restart. [`docs/install.md`](docs/install.md) covers
+effect only after a restart. [The install guide](https://sessclone.com/docs/install) covers
 checking that it worked, exporting the settings as environment variables
 instead, and setting it up in Claude Code cloud environments.
 
@@ -83,10 +83,10 @@ instead, and setting it up in Claude Code cloud environments.
 
 Self-hosting is free at any size. You supply a Postgres 16+ cluster, an
 S3-compatible bucket (optional; without one, archival is off) and a Supabase
-project for sign-in. [`docs/self-hosting.md`](docs/self-hosting.md) goes from a
+project for sign-in. [The self-hosting guide](https://sessclone.com/docs/self-hosting) goes from a
 clone to the first collected Turn: the database roles, the migrations, a script
 that checks your bucket, `compose.yaml`, and scheduling the retention sweep.
-[`docs/configuration.md`](docs/configuration.md) lists every environment
+[Configuration](https://sessclone.com/docs/configuration) lists every environment
 variable, and [`.env.example`](.env.example) is the same list in copyable form.
 
 ## Development

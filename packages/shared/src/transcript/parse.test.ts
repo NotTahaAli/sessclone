@@ -134,6 +134,21 @@ describe('parseLines', () => {
       { id: 'u:1', toolUseId: 't2', isError: true },
     ])
   })
+
+  it('reads a hostile prompt in linear time', () => {
+    // An unclosed tag repeated across a prompt once cost a scan to the end
+    // from every one of them.
+    const text = '<command-name>'.repeat(20_000)
+    const started = performance.now()
+    const [item] = parseLines([
+      {
+        offset: 0,
+        text: JSON.stringify({ type: 'user', message: { content: text } }),
+      },
+    ])
+    expect(performance.now() - started).toBeLessThan(200)
+    expect(item?.kind).toBe('user')
+  })
 })
 
 describe('parseJournal', () => {

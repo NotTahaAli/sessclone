@@ -53,17 +53,25 @@ type DistOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
 type Draft = DistOmit<Item, 'id' | 'offset' | 'at' | 'raw'>
 
 const INTERRUPT = /^\[Request interrupted by user/
-const COMMAND = /<command-name>([\s\S]*?)<\/command-name>/
-const ARGS = /<command-args>([\s\S]*?)<\/command-args>/
+
+// The text inside the first `<tag>…</tag>`, found by `indexOf` rather than a
+// lazy regular expression, which rescans to the end from every unclosed tag.
+const inside = (text: string, tag: string): string | undefined => {
+  const open = `<${tag}>`
+  const start = text.indexOf(open)
+  if (start === -1) return undefined
+  const end = text.indexOf(`</${tag}>`, start + open.length)
+  return end === -1 ? undefined : text.slice(start + open.length, end)
+}
 
 function userText(line: Obj, text: string): Draft {
   if (INTERRUPT.test(text)) return { kind: 'interrupt', text }
-  const command = COMMAND.exec(text)
-  if (command)
+  const command = inside(text, 'command-name')
+  if (command !== undefined)
     return {
       kind: 'slash_command',
-      name: command[1]!.trim(),
-      args: ARGS.exec(text)?.[1]?.trim() ?? '',
+      name: command.trim(),
+      args: inside(text, 'command-args')?.trim() ?? '',
     }
   if (
     line.isMeta === true ||

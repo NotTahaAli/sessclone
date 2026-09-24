@@ -42,6 +42,7 @@ const PUBLIC_PATHS = [
   '/',
   '/pricing',
   '/sign-in',
+  '/sign-up',
   '/auth',
   '/api',
   '/join',
@@ -115,7 +116,7 @@ export async function proxy(request: NextRequest) {
   // followed while signed in lands on the invitation rather than on Costs.
   // Anything a browser would resolve to another origin is not a path this
   // will redirect to.
-  if (data?.claims && path === '/sign-in') {
+  if (data?.claims && (path === '/sign-in' || path === '/sign-up')) {
     // Resolved against the origin rather than assigned to `pathname`: a
     // `next` may carry its own query string, and a path assigned to
     // `pathname` has its `?` escaped into the path.

@@ -39,6 +39,8 @@ const SHELL = SHELLS[0]!
 const NOT_SIGNED_IN = new Set([
   '(marketing)',
   'sign-in',
+  // The waitlist, split from `sign-in` (2026-09-24): an arrival path too.
+  'sign-up',
   'auth',
   'api',
   // `join` is ticket 49's: whoever opens an invitation may have no account
@@ -156,6 +158,12 @@ describe('the panel credit', () => {
     const join = readFileSync(new URL('join/[token]/page.tsx', APP), 'utf8')
 
     expect(join).toContain('<PanelCredit />')
+  })
+
+  test('the sign-up page carries the credit itself, being outside the shell', () => {
+    const signUp = readFileSync(new URL('sign-up/page.tsx', APP), 'utf8')
+
+    expect(signUp).toContain('<PanelCredit />')
   })
 
   // 2026-09-23 review: sign-in rendered `PanelCredit` and no `LegalNotice`, so

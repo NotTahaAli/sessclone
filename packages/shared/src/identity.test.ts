@@ -90,6 +90,23 @@ describe('a git remote names one Project however it was cloned', () => {
       }).key,
     )
   })
+
+  test('a hostile remote is read in linear time', () => {
+    // Ingest runs this on request data. Each string once took a quadratic
+    // backtrack: a run of dots in the scp authority, a run of slashes before
+    // the end of the remote and of its path.
+    const run = 50_000
+    for (const remote of [
+      `${'.'.repeat(run)} x`,
+      `${'.'.repeat(run)}:x`,
+      `a${'/'.repeat(run)}x`,
+      `https://h/a${'/'.repeat(run)}b`,
+    ]) {
+      const started = performance.now()
+      normaliseRemote(remote)
+      expect(performance.now() - started).toBeLessThan(200)
+    }
+  })
 })
 
 describe('the Project key', () => {

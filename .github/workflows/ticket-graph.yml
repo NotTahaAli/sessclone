@@ -12,6 +12,9 @@ on:
       - '.scratch/sessclone-v1/issues/**'
       - 'scripts/ticket-graph.mjs'
 
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest

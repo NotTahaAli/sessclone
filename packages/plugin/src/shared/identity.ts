@@ -14,8 +14,40 @@ const URL_REMOTE = /^[a-z][a-z0-9+.-]*:\/\/(?<authority>[^/]+)\/(?<path>.+)$/i
 // empty) from being read as hosts — each of those is a remote no dashboard can
 // group by, so it falls through to the local key instead. The path rejects a
 // second colon, which would be a port in the wrong place.
-const SCP_REMOTE =
-  /^(?:[^@\s/]+@)?(?<authority>[^\s/:]*\.[^\s/:]+):(?<path>[^\s\\:][^\s:]*)$/
+//
+// Read by hand rather than with the one regular expression this used to be,
+// `^(?:[^@\s/]+@)?(?<authority>[^\s/:]*\.[^\s/:]+):(?<path>[^\s\\:][^\s:]*)$`,
+// whose authority backtracks quadratically on a run of dots — and ingest runs
+// this on request data. Each step below is that expression's, in linear time.
+const scpRemote = (remote: string) => {
+  // The path holds no colon, so the separator is the last one.
+  const colon = remote.lastIndexOf(':')
+  if (colon === -1 || /\s/.test(remote)) return undefined
+  const before = remote.slice(0, colon)
+  const path = remote.slice(colon + 1)
+  if (before.includes('/') || path === '' || path.startsWith('\\'))
+    return undefined
+
+  // With a user, the authority follows the first `@`; failing that, the
+  // expression retries with no user at all.
+  const at = before.indexOf('@')
+  const authority = (at > 0 ? [before.slice(at + 1), before] : [before]).find(
+    (candidate) => {
+      const dot = candidate.indexOf('.')
+      return (
+        !candidate.includes(':') && dot !== -1 && dot < candidate.length - 1
+      )
+    },
+  )
+  return authority === undefined ? undefined : { authority, path }
+}
+
+// `/\/+$/` is quadratic on a run of slashes that does not reach the end.
+const withoutTrailingSlashes = (value: string) => {
+  let end = value.length
+  while (end > 0 && value[end - 1] === '/') end -= 1
+  return value.slice(0, end)
+}
 
 const withoutCredentials = (authority: string) =>
   authority.slice(authority.lastIndexOf('@') + 1)
@@ -29,7 +61,7 @@ const withoutPort = (host: string) => host.replace(/:\d+$/, '')
  * which is a signal to fall back rather than an error.
  */
 export const normaliseRemote = (remote: string): string | null => {
-  const trimmed = remote.trim().replace(/\/+$/, '')
+  const trimmed = withoutTrailingSlashes(remote.trim())
   if (trimmed === '') return null
 
   // A string that names a scheme gets exactly one reading. Letting it fall
@@ -37,15 +69,14 @@ export const normaliseRemote = (remote: string): string | null => {
   // `file`, and every machine with a bare repo at that path would collapse
   // into one Project.
   const matched = SCHEME.test(trimmed)
-    ? URL_REMOTE.exec(trimmed)
-    : SCP_REMOTE.exec(trimmed)
-  if (matched?.groups === undefined) return null
+    ? URL_REMOTE.exec(trimmed)?.groups
+    : scpRemote(trimmed)
+  if (matched === undefined) return null
 
-  const host = withoutPort(withoutCredentials(matched.groups.authority ?? ''))
-  const path = (matched.groups.path ?? '')
-    .replace(/^\/+/, '')
-    .replace(/\.git$/i, '')
-    .replace(/\/+$/, '')
+  const host = withoutPort(withoutCredentials(matched.authority ?? ''))
+  const path = withoutTrailingSlashes(
+    (matched.path ?? '').replace(/^\/+/, '').replace(/\.git$/i, ''),
+  )
 
   if (host === '' || path === '') return null
 
