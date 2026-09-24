@@ -145,30 +145,28 @@ export const sealPlan = (
 }
 
 /**
- * Reads `[0, size)` once, checking the sealed prefix and planning what to seal
- * after it (ADR 0008).
+ * Reads `[0, size)` once: the SHA-256 of all of it, for the unchanged guard,
+ * and every place a chunk would be cut if the file were sealed from byte 0
+ * (ADR 0008), each with the SHA-256 of the prefix it ends and of its own
+ * bytes. Null when the file cannot be read. Streamed: only the piece being
+ * read is in memory, plus about a hundred bytes per MiB of transcript.
  *
- * `'mismatch'` when the file is shorter than the sealed bytes or its prefix
- * hashes differently: rewritten or truncated, so the caller falls back to the
- * whole file. Null when the file cannot be read. Otherwise the new chunks, in
- * order from seq `sealed.chunks + 1`, and the SHA-256 of every raw byte up to
- * the last of them. Streamed: only the piece being read is in memory.
+ * Cuts depend only on the bytes before them, and every pass seals from the
+ * last cut on, so the deployment's sealed bytes are always one of these —
+ * which is what lets one read serve the hash, the prefix check and the plan
+ * of every presign in the pass.
  *
  * @param {string} path
  * @param {number} size
- * @param {{ bytes: number, sha256: string | null, chunks: number }} sealed
  * @param {{ chunkBytes?: number }} [options]
  */
-export const planSeals = async (path, size, sealed, { chunkBytes } = {}) => {
-  if (size < sealed.bytes) return 'mismatch'
+export const scanFile = async (path, size, { chunkBytes } = {}) => {
   const all = createHash('sha256')
   let piece = createHash('sha256')
-  let matched = sealed.bytes === 0
-  let start = sealed.bytes
-  let sealedSha256 = sealed.sha256
-  /** @type {{ seq: number, rawOffset: number, rawLength: number, sha256: string }[]} */
-  const chunks = []
+  let start = 0
   let position = 0
+  /** @type {{ end: number, prefix: string, sha256: string }[]} */
+  const cuts = []
   try {
     if (size > 0) {
       for await (const bytes of createReadStream(path, {
@@ -176,48 +174,84 @@ export const planSeals = async (path, size, sealed, { chunkBytes } = {}) => {
         end: size - 1,
       })) {
         let used = 0
-        if (!matched) {
-          used = Math.min(bytes.length, sealed.bytes - position)
-          all.update(bytes.subarray(0, used))
-          if (position + used === sealed.bytes) {
-            if (all.copy().digest('hex') !== sealed.sha256) return 'mismatch'
-            matched = true
-          }
-        }
-        if (matched) {
-          const cuts = sealPlan(bytes, start, {
-            at: position,
-            chunkBytes,
-            max: MAX_SEAL - chunks.length,
+        for (const end of sealPlan(bytes, start, {
+          at: position,
+          chunkBytes,
+          max: Infinity,
+        })) {
+          const part = bytes.subarray(used, end - position)
+          all.update(part)
+          piece.update(part)
+          cuts.push({
+            end,
+            prefix: all.copy().digest('hex'),
+            sha256: piece.digest('hex'),
           })
-          for (const end of cuts) {
-            const part = bytes.subarray(used, end - position)
-            all.update(part)
-            piece.update(part)
-            chunks.push({
-              seq: sealed.chunks + chunks.length + 1,
-              rawOffset: start,
-              rawLength: end - start,
-              sha256: piece.digest('hex'),
-            })
-            sealedSha256 = all.copy().digest('hex')
-            piece = createHash('sha256')
-            start = end
-            used = end - position
-          }
-          if (chunks.length === MAX_SEAL) break
-          all.update(bytes.subarray(used))
-          piece.update(bytes.subarray(used))
+          piece = createHash('sha256')
+          start = end
+          used = end - position
         }
+        all.update(bytes.subarray(used))
+        piece.update(bytes.subarray(used))
         position += bytes.length
       }
     }
   } catch {
     return null
   }
-  // A file that shrank after its size was taken never reached the prefix.
-  if (!matched) return 'mismatch'
-  return { chunks, sealedSha256 }
+  return { sha256: all.digest('hex'), cuts }
+}
+
+/**
+ * What to seal after the deployment's sealed prefix, from a scan. Pure.
+ *
+ * `'mismatch'` when no cut ends at the sealed bytes or its prefix hashes
+ * differently: the file was rewritten or truncated (or sealed by rules other
+ * than these), so the caller falls back to the whole file. Otherwise at most
+ * `MAX_SEAL` new chunks, in order from seq `sealed.chunks + 1`, and the
+ * SHA-256 of every raw byte up to the last of them.
+ *
+ * @param {{ cuts: { end: number, prefix: string, sha256: string }[] }} scan
+ * @param {{ bytes: number, sha256: string | null, chunks: number }} sealed
+ */
+export const planFrom = (scan, sealed) => {
+  const from =
+    sealed.bytes === 0
+      ? 0
+      : scan.cuts.findIndex((cut) => cut.end === sealed.bytes) + 1
+  if (from === 0 && sealed.bytes !== 0) return 'mismatch'
+  if (from > 0 && scan.cuts[from - 1].prefix !== sealed.sha256) {
+    return 'mismatch'
+  }
+  const chunks = scan.cuts.slice(from, from + MAX_SEAL).map((cut, index) => {
+    const rawOffset =
+      index === 0 ? sealed.bytes : scan.cuts[from + index - 1].end
+    return {
+      seq: sealed.chunks + index + 1,
+      rawOffset,
+      rawLength: cut.end - rawOffset,
+      sha256: cut.sha256,
+    }
+  })
+  return {
+    chunks,
+    sealedSha256: chunks.length
+      ? scan.cuts[from + chunks.length - 1].prefix
+      : sealed.sha256,
+  }
+}
+
+/**
+ * `scanFile` then `planFrom`, for a caller with one prefix to check.
+ *
+ * @param {string} path
+ * @param {number} size
+ * @param {{ bytes: number, sha256: string | null, chunks: number }} sealed
+ * @param {{ chunkBytes?: number }} [options]
+ */
+export const planSeals = async (path, size, sealed, options) => {
+  const scan = await scanFile(path, size, options)
+  return scan && planFrom(scan, sealed)
 }
 
 /**
@@ -416,8 +450,14 @@ export const archiveTranscript = async ({
       : { archived: false, refused: last.outcome, skipped: true }
   }
 
-  const sha256 = await hashFile(transcriptPath, size)
-  if (!sha256) return { archived: false, refused: 'unreadable' }
+  // A transcript is scanned once for its hash and its chunk plan together
+  // (ADR 0008); a sidecar only needs the hash.
+  const scan =
+    kind === 'transcript' ? await scanFile(transcriptPath, size) : undefined
+  const sha256 =
+    scan === undefined ? await hashFile(transcriptPath, size) : scan?.sha256
+  if (!sha256 || scan === null)
+    return { archived: false, refused: 'unreadable' }
 
   /** Remembers what happened, keyed on the file as it was read. */
   const settle = async (outcome) => {
@@ -549,9 +589,8 @@ export const archiveTranscript = async ({
    */
   const archiveChunks = async (answer) => {
     const { sealed } = answer
-    if (!validSealed(sealed)) return 'whole'
-    const plan = await planSeals(transcriptPath, size, sealed)
-    if (plan === null) return { archived: false, refused: 'unreadable' }
+    if (!validSealed(sealed) || !scan) return 'whole'
+    const plan = planFrom(scan, sealed)
     if (plan === 'mismatch') return 'whole'
 
     const { chunks } = plan
@@ -624,8 +663,9 @@ export const archiveTranscript = async ({
       // eslint-disable-next-line no-await-in-loop -- each try depends on the last
       const result = await archiveChunks(presign.body)
       if (result === 'whole') break
-      // `stale_chunks` is transient: ask again, a few times, then leave it
-      // unsettled for the next pass.
+      // `stale_chunks` is transient: ask again once — the scan is reused,
+      // so that costs requests and no read — then leave it unsettled for the
+      // next pass.
       if (result.refused !== 'stale_chunks' || attempt >= STALE_TRIES) {
         return result
       }
@@ -654,8 +694,9 @@ export const archiveTranscript = async ({
   return confirmWith({ storageKey: presign.body.storageKey, layout: 'whole' })
 }
 
-/** How many times one pass presigns again after `stale_chunks`. */
-const STALE_TRIES = 3
+/** How many chunked attempts one pass makes: the first, and one after
+ * `stale_chunks`. */
+const STALE_TRIES = 2
 
 /**
  * Whether a presign's `sealed` is shaped as ADR 0008 has it. The answer

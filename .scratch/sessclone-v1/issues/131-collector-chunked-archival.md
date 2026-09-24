@@ -7,9 +7,9 @@
 - **The deployment holds the cursor.** The Collector reads `sealed.bytes` and `sealed.sha256` from the presign answer, not from local state, because finding 74 showed a container can lose its state directory while the transcript carries on. `archived/` stays a cache, as it is today.
 - **One pass, one read.**
   1. `stat` the file once.
-  2. Hash the whole file for the `unchanged` guard, as today.
+  2. Read `[0, size)` once (`scanFile`, a review fix): the whole-file hash for the `unchanged` guard, and every cut from byte 0 with `hash.copy()`'s prefix hash there and the chunk's own hash.
   3. Presign with `layout: 'chunked'`.
-  4. Re-read `[0, size)` once. Use `hash.copy()` to check the prefix at `sealed.bytes`, and take the cumulative hash at each new cut.
+  4. `planFrom`, pure: find the cut at `sealed.bytes` and compare its prefix hash; no such cut, or a different hash, is a mismatch. The next cuts are the new chunks. A `stale_chunks` confirm is retried once per pass from the same scan, then left to the next pass.
   5. Pick cut points with a pure `sealPlan(bytes, from)`: the first `\n` at or after 1 MiB, never inside a line. Seal at most 16 chunks per pass, still inside the deadline.
   6. Only when there is something to seal: presign again with `seal`: each planned chunk's `{ seq, sha256 }`, which the deployment builds the chunk keys from.
   7. PUT each chunk as `application/gzip` (`zlib` gzip, streamed), then PUT the tail raw, then confirm.

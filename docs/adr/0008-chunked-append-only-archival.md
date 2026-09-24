@@ -237,9 +237,15 @@ append-only; the viewer's Range reads inside the tail still ask to reload.
 - A steady-state cloud turn sends a tail of under about 1 MiB plus two small
   requests, not the whole session. Stored bytes shrink by roughly the gzip
   ratio of JSONL, which is several times.
-- Each pass hashes the file locally twice, once for the unchanged guard and
-  once for the prefix check. That is local disk reading at hundreds of MB/s.
-  It becomes worth optimising only if measured.
+- Each pass reads the transcript from its first byte once. That one read
+  yields the whole-file hash for the unchanged guard and every place a chunk
+  would be cut from byte 0, with the prefix hash at each cut. Cuts depend
+  only on the bytes before them, so the deployment's `sealed_bytes` is one
+  of them, and the prefix check and the plan are lookups; a `stale_chunks`
+  retry, made at most once per pass, reads nothing again. Past that only the
+  new chunks and the tail are read, to send them. A sealed prefix that is
+  not one of this Collector's cuts (other chunking rules) falls back to the
+  whole file, after which chunking starts again from byte 0.
 - **Unconfirmed uploads have a delete path.** A pass can PUT objects that no
   row ever names: one cut off by its deadline or a crash, one that loses a
   race (`stale_chunks`), one refused at the confirm, one whose Session is
