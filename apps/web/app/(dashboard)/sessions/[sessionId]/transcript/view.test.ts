@@ -9,7 +9,7 @@ import { sealed, writtenBefore } from './artifacts'
 import { decode, parseEnvelope } from './envelope'
 import { toolName } from './format'
 import { currentReactions, emojiOf, parseStatus, readHearth } from './hearth'
-import { MarkdownText } from './markdown'
+import { IDLE_BATCH, MarkdownText, watch } from './markdown'
 import { groupSteps, stepsLabel } from './steps'
 
 const base = (offset: number, at: string | null = null) => ({
@@ -379,5 +379,36 @@ describe('parseStatus', () => {
       header: 'Task',
       lines: [{ mark: 'done', text: 'Built it' }],
     })
+  })
+})
+
+describe('deferred markdown', () => {
+  it('turns every waiting message to markdown in idle batches, then stops', () => {
+    const slices: (() => void)[] = []
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        observe() {}
+        unobserve() {}
+      },
+    )
+    vi.stubGlobal('requestIdleCallback', (run: () => void) => slices.push(run))
+    vi.stubGlobal('cancelIdleCallback', () => {})
+    try {
+      const shown: number[] = []
+      const count = IDLE_BATCH + 5
+      for (let n = 0; n < count; n++) {
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- no DOM in these tests; the stub observer never reads it
+        watch({} as Element, () => shown.push(n))
+      }
+      expect(slices).toHaveLength(1)
+      slices.shift()?.()
+      expect(shown).toHaveLength(IDLE_BATCH)
+      slices.shift()?.()
+      expect(shown).toEqual([...Array.from({ length: count }).keys()])
+      expect(slices).toHaveLength(0)
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })

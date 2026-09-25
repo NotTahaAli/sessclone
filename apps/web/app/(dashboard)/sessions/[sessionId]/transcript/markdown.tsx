@@ -118,15 +118,47 @@ const COMPONENTS: Components = {
 // (2026-09-25). So a message is plain text until it first comes within a
 // screen of view, then markdown for good. One observer for every message;
 // `waiting` holds only mounted, unseen ones, so it never outgrows the page.
+//
+// The rest turn to markdown too, a batch at a time while the page is idle, so
+// a screen reader's list of headings and links is whole once the page
+// settles rather than only where someone has scrolled.
 const waiting = new Map<Element, () => void>()
 let observer: IntersectionObserver | null = null
+/** Messages parsed per idle slice: ~0.4 ms each, so a slice stays short. */
+export const IDLE_BATCH = 25
+let idle: number | null = null
 
 const unwatch = (element: Element) => {
   waiting.delete(element)
   observer?.unobserve(element)
+  if (waiting.size === 0 && idle !== null) {
+    cancelIdle(idle)
+    idle = null
+  }
 }
 
-const watch = (element: Element, show: () => void) => {
+const onIdle = (run: () => void) =>
+  typeof requestIdleCallback === 'function'
+    ? requestIdleCallback(run, { timeout: 1000 })
+    : window.setTimeout(run, 50)
+const cancelIdle = (handle: number) =>
+  typeof cancelIdleCallback === 'function'
+    ? cancelIdleCallback(handle)
+    : window.clearTimeout(handle)
+
+/** Turns the next batch of waiting messages to markdown, oldest first. */
+export const drain = () => {
+  idle = null
+  let left = IDLE_BATCH
+  for (const [element, show] of waiting) {
+    if (left-- === 0) break
+    show()
+    unwatch(element)
+  }
+  if (waiting.size > 0) idle = onIdle(drain)
+}
+
+export const watch = (element: Element, show: () => void) => {
   observer ??= new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
@@ -142,6 +174,7 @@ const watch = (element: Element, show: () => void) => {
   )
   waiting.set(element, show)
   observer.observe(element)
+  idle ??= onIdle(drain)
 }
 
 /** One message's markdown, parsed only when its text changes. */
