@@ -1,6 +1,10 @@
+import { cookies } from 'next/headers'
 import { cache } from 'react'
+import { z } from 'zod'
+
 import { approvalRequired, isLocked } from './approval'
 import { asViewer } from './db'
+import { ownInvitations, type InvitedRole } from './invitations'
 import { logoPath } from './org-logo'
 import type { SubscriptionStatus } from './tier'
 import { sessionUser } from './supabase/server'
@@ -74,13 +78,40 @@ type MembershipRow = {
 }
 
 /**
+ * The Org switcher's choice: a member id, remembered per device (Taha,
+ * 2026-09-25). A hint and never a claim — `sessionViewer` only prefers it
+ * among the viewer's own live memberships, so a stale, forged or somebody
+ * else's id matches nothing and the usual order decides. HttpOnly because no
+ * script needs it; a year because a choice should outlast a session.
+ */
+export const MEMBER_COOKIE = 'sessclone-member'
+
+export const MEMBER_COOKIE_OPTIONS = {
+  path: '/',
+  maxAge: 31_536_000,
+  sameSite: 'lax',
+  httpOnly: true,
+  // As `APPEARANCE_COOKIE_OPTIONS`: the deployment's URL, not the request's
+  // scheme, which is plain HTTP behind a TLS-terminating proxy.
+  secure: (process.env.NEXT_PUBLIC_APP_URL ?? '').startsWith('https://'),
+} as const
+
+/** The chosen member id from the request's cookie, or null when absent or
+ * not a uuid — which is then no preference at all. */
+export const chosenMember = async (): Promise<string | null> => {
+  const parsed = z.uuid().safeParse((await cookies()).get(MEMBER_COOKIE)?.value)
+  return parsed.success ? parsed.data : null
+}
+
+/**
  * The signed-in person and the Org they are in, or `null` when there is
  * neither — signed out, or signed in with no membership, which is what a
  * deployment with no database configured looks like from here.
  *
- * The *first* membership when they belong to several, matching
- * `ensureOrgForSigner`: v1 has one Org per person and no Org switcher, so the
- * ticket that adds a second Org is the one that decides which is current.
+ * With several memberships: the one the Org switcher chose on this device,
+ * when it is still one of theirs; otherwise an Org that works before one that
+ * is locked, then the oldest. One query either way — the choice is an `order
+ * by` term, not a second read.
  *
  * `cache` is what makes "read once per request" true rather than aspirational:
  * the layout and the page it wraps both call this while rendering the same
@@ -91,6 +122,7 @@ type MembershipRow = {
 export const sessionViewer = cache(async (): Promise<Viewer | null> => {
   const user = await sessionUser()
   if (!user) return null
+  const chosen = await chosenMember()
 
   const [membership] = await asViewer(
     user.id,
@@ -112,10 +144,13 @@ export const sessionViewer = cache(async (): Promise<Viewer | null> => {
         left join tiers tier on tier.id = subscription.tier_id
         left join org_logos logo on logo.org_id = member.org_id
        where member.id in (select sessclone_own_member_ids())
-       -- Ticket 119: an Org that works before one that is locked, so a
-       -- person who joined an Org while holding an unapproved one of their
-       -- own (every invitee before ticket 118) lands in the one they use.
-       order by subscription.status in ('active', 'past_due') is true desc,
+       -- The switcher's choice first, if it is one of theirs (the filter
+       -- above is what makes a forged id match nothing). Then ticket 119: an
+       -- Org that works before one that is locked, so a person who joined an
+       -- Org while holding an unapproved one of their own lands in the one
+       -- they use.
+       order by (member.id = ${chosen}::uuid) is true desc,
+                subscription.status in ('active', 'past_due') is true desc,
                 member.created_at
        limit 1
     `,
@@ -140,6 +175,85 @@ export const sessionViewer = cache(async (): Promise<Viewer | null> => {
   }
 })
 
+/** One of the viewer's Orgs, as the Org switcher lists it. */
+export type OrgChoice = {
+  memberId: string
+  orgName: string
+  role: Role
+  /** Waiting for approval or cancelled (ticket 119): still switchable, it
+   * opens on the waiting page (Taha, 2026-09-25). */
+  locked: boolean
+}
+
+/** An invitation addressed to the viewer, as the Org switcher lists it. */
+export type PendingInvite = {
+  id: string
+  orgName: string
+  role: InvitedRole
+  /** The inviting Member's name, or null when they have since left. */
+  invitedBy: string | null
+  /** ISO, so the server and the browser print the same figure. */
+  expiresAt: string
+}
+
+export type OrgSwitcherData = {
+  orgs: OrgChoice[]
+  invites: PendingInvite[]
+  /** The viewer is the current Org's only Owner, so cannot leave it. */
+  lastOwner: boolean
+  /** When this was read, ISO: what the expiry countdowns count from. */
+  now: string
+}
+
+/**
+ * What the Org switcher shows: every Org the viewer is in, the invitations
+ * addressed to their verified address, and whether they may leave the current
+ * Org. One transaction, three statements; read in the shell's Suspense
+ * boundary, so it never holds the frame back.
+ */
+export const orgSwitcherData = cache(
+  async (viewer: Viewer): Promise<OrgSwitcherData> =>
+    asViewer(viewer.userId, async (tx) => {
+      const [orgs, invites, [owners]] = await Promise.all([
+        tx<
+          {
+            member_id: string
+            org_name: string
+            role: Role
+            status: SubscriptionStatus | null
+          }[]
+        >`
+          select member.id as member_id, org.name as org_name, member.role,
+                 subscription.status
+            from members member
+            join orgs org on org.id = member.org_id
+            left join subscriptions subscription
+                   on subscription.org_id = member.org_id
+           where member.id in (select sessclone_own_member_ids())
+           order by member.created_at
+        `,
+        ownInvitations(tx, viewer.email),
+        tx<{ now: Date; owners: number }[]>`
+          select now(), sessclone_org_owners(${viewer.orgId}) as owners
+        `,
+      ])
+      return {
+        orgs: orgs.map((row) => ({
+          memberId: row.member_id,
+          orgName: row.org_name,
+          role: row.role,
+          locked: isLocked(row.status),
+        })),
+        invites: invites.map((invite) => ({
+          ...invite,
+          expiresAt: invite.expiresAt.toISOString(),
+        })),
+        lastOwner: viewer.role === 'owner' && owners!.owners <= 1,
+        now: owners!.now.toISOString(),
+      }
+    }),
+)
+
 /**
  * The viewer, or `null` while their Org is locked (ticket 119) — what a page
  * or a Server Action asks. `sessionViewer` is the same read without the lock,
@@ -150,6 +264,18 @@ export const currentViewer = cache(async (): Promise<Viewer | null> => {
   const viewer = await sessionViewer()
   return viewer && isLocked(viewer.subscriptionStatus) ? null : viewer
 })
+
+/**
+ * The viewer, when `orgId` — a form field, so untrusted — names the Org they
+ * are in now; otherwise `null`. What an Org settings action asks instead of
+ * `currentViewer()`: with the Org switcher a person may hold several Orgs,
+ * and the approval lock and the page they saw are the current Org's, so a
+ * form naming another one is refused before any statement runs.
+ */
+export const viewerOfOrg = async (orgId: unknown): Promise<Viewer | null> => {
+  const viewer = await currentViewer()
+  return viewer && viewer.orgId === orgId ? viewer : null
+}
 
 /**
  * Whether the signed-in viewer's Org is locked (ticket 119). What

@@ -11,8 +11,8 @@
 
 **Blocked by:** —
 
-**Status:** todo
+**Status:** done
 
-- [ ] `splitChunk`, `parseLines`, `buildTimeline`, `summarizeRun`, `parseJournal`, `parseMeta`, `visibleRows`
-- [ ] Synthetic fixtures modelled on real transcripts (a real main session, two Agent runs and a two-agent workflow captured 2026-09-23)
-- [ ] Unit tests, each case listed in the fixtures README
+- [x] `splitChunk`, `parseLines`, `buildTimeline`, `summarizeRun`, `parseJournal`, `parseMeta`, `visibleRows`
+- [x] Synthetic fixtures modelled on real transcripts (a real main session, two Agent runs and a two-agent workflow captured 2026-09-23)
+- [ ] Unit tests, each case listed in the fixtures README (tests exist in `packages/shared/src/transcript/*.test.ts`; `fixtures/transcript-viewer/` has no README listing its cases yet)

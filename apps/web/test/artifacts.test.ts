@@ -98,7 +98,9 @@ test('a Member destroys one Session, and the object goes with the row', async ()
   expect(await asMember((tx) => deleteStoredSession(tx, one.id))).toBe(true)
 
   expect(deleted).toEqual([one.key])
-  const { sessions } = await asMember(storedSessions)
+  const { sessions } = await asMember((tx) =>
+    storedSessions(tx, { orgId: fixture.acme.id }),
+  )
   expect(sessions.map((session) => session.id)).toEqual([other.id])
 })
 
@@ -127,7 +129,9 @@ test('a whole Project goes at once, swept by the key’s prefix', async () => {
   expect(deleted).not.toContain(untouched.key)
   expect(deleted).toHaveLength(3)
 
-  const { projects } = await asMember(storedProjects)
+  const { projects } = await asMember((tx) =>
+    storedProjects(tx, { orgId: fixture.acme.id }),
+  )
   expect(projects.map((row) => row.projectId)).toEqual([otherId])
 })
 
@@ -235,7 +239,9 @@ test('deleting is not an opt-out: the same Session may upload again', async () =
 
   const again = await artifact({ projectId })
   expect(
-    (await asMember(storedSessions)).sessions.map((session) => session.id),
+    (
+      await asMember((tx) => storedSessions(tx, { orgId: fixture.acme.id }))
+    ).sessions.map((session) => session.id),
   ).toEqual([again.id])
 })
 
@@ -290,7 +296,9 @@ test('a Member sees the repository their stored Sessions belong to', async () =>
   // branches `sessclone_visible_project_ids()` had before ticket 73. Without
   // the artifact branch the page groups a Member's own work under "No
   // repository" and the deletion buttons cannot tell one group from another.
-  const [row] = (await asMember(storedProjects)).projects
+  const [row] = (
+    await asMember((tx) => storedProjects(tx, { orgId: fixture.acme.id }))
+  ).projects
   expect(row).toMatchObject({
     projectId,
     projectKey: 'github.com/acme/api',
@@ -356,7 +364,11 @@ test('a team listing is what each Role may see, and never more', async () => {
   const listed = async (role: Parameters<typeof asRole>[1]) =>
     (
       await asRole(fixture.acme, role, (tx) =>
-        storedSessions(tx, { audience: 'team', limit: 100 }),
+        storedSessions(tx, {
+          orgId: fixture.acme.id,
+          audience: 'team',
+          limit: 100,
+        }),
       )
     ).sessions.map((session) => session.sessionId)
 
@@ -376,7 +388,7 @@ test('a team listing names who each project belongs to', async () => {
   await artifact({ projectId })
 
   const { projects } = await asRole(fixture.acme, 'owner', (tx) =>
-    storedProjects(tx, { audience: 'team' }),
+    storedProjects(tx, { orgId: fixture.acme.id, audience: 'team' }),
   )
   const [group] = projects
 
@@ -393,7 +405,7 @@ test('a team listing names who each project belongs to', async () => {
   // resolves through the Scope. If it regressed the page would say "A Member"
   // for every row.
   const asManager = await asRole(fixture.acme, 'manager', (tx) =>
-    storedProjects(tx, { audience: 'team' }),
+    storedProjects(tx, { orgId: fixture.acme.id, audience: 'team' }),
   )
   expect(asManager.projects.map((one) => one.memberEmail)).toEqual([
     'member@acme.test',
@@ -406,7 +418,11 @@ test('a removed Member’s transcripts stay in the Org’s listing', async () =>
   await artifact({ memberId: fixture.acme.members.removed, sessionId: 'left' })
 
   const { sessions } = await asRole(fixture.acme, 'owner', (tx) =>
-    storedSessions(tx, { audience: 'team', limit: 100 }),
+    storedSessions(tx, {
+      orgId: fixture.acme.id,
+      audience: 'team',
+      limit: 100,
+    }),
   )
   expect(sessions.map((session) => session.sessionId)).toEqual(['left'])
 })
@@ -421,11 +437,13 @@ test('Your settings stays your own, whatever Role you hold', async () => {
   // else's transcript would be refused by `log_artifacts_delete` after the
   // press.
   const { sessions } = await asRole(fixture.acme, 'owner', (tx) =>
-    storedSessions(tx),
+    storedSessions(tx, { orgId: fixture.acme.id }),
   )
   expect(sessions.map((session) => session.sessionId)).toEqual(['mine'])
 
-  const own = await asRole(fixture.acme, 'owner', (tx) => storedProjects(tx))
+  const own = await asRole(fixture.acme, 'owner', (tx) =>
+    storedProjects(tx, { orgId: fixture.acme.id }),
+  )
   expect(own.projects.map((group) => group.memberId)).toEqual([
     fixture.acme.members.owner,
   ])
@@ -454,7 +472,13 @@ test('a group’s Sessions page by a cursor, with no row repeated or skipped', a
   }
   const page = (before?: { uploadedAt: Date; id: string }) =>
     asRole(fixture.acme, 'owner', (tx) =>
-      storedSessions(tx, { audience: 'team', limit: 2, group, before }),
+      storedSessions(tx, {
+        orgId: fixture.acme.id,
+        audience: 'team',
+        limit: 2,
+        group,
+        before,
+      }),
     )
 
   const first = await page()
@@ -483,6 +507,7 @@ test('a group a Manager may not see is empty rather than refused', async () => {
   // the whole answer: the Owner is outside this Manager's Scope.
   const { sessions } = await asRole(fixture.acme, 'manager', (tx) =>
     storedSessions(tx, {
+      orgId: fixture.acme.id,
       audience: 'team',
       group: { memberId: fixture.acme.members.owner, projectId },
     }),
@@ -509,6 +534,7 @@ test('a group’s Sessions are read from the index, not sorted', async () => {
   // equality is the shape the index answers.
   const plan = await asRole(fixture.acme, 'owner', (tx) =>
     storedSessions(tx, {
+      orgId: fixture.acme.id,
       audience: 'team',
       group: { memberId: fixture.acme.members.member, projectId },
     }).then(
@@ -519,6 +545,7 @@ test('a group’s Sessions are read from the index, not sorted', async () => {
          where member_id = ${fixture.acme.members.member}
            and member_id in (select sessclone_visible_member_ids())
            and project_id is not distinct from ${projectId}
+           and org_id = ${fixture.acme.id}
          order by uploaded_at desc, id desc
          limit 101
       `,
@@ -528,37 +555,6 @@ test('a group’s Sessions are read from the index, not sorted', async () => {
   const text = plan.map((row) => row['QUERY PLAN']).join('\n')
   expect(text).toContain('log_artifacts_member_uploaded_idx')
   expect(text).not.toContain('Sort Key')
-})
-
-test('a viewer in two Orgs sees both, and each group says which', async () => {
-  // `sessclone_visible_member_ids()` unions every Org the caller owns or
-  // administers *and* their own memberships elsewhere, so a team listing can
-  // legitimately carry rows from a second Org. The page must not claim they
-  // are all one Org's.
-  const [second] = await sql<{ id: string }[]>`
-    insert into orgs (name) values ('Second') returning id
-  `
-  const [elsewhere] = await sql<{ user_id: string; member_id: string }[]>`
-    insert into members (org_id, user_id, role)
-    values (${second!.id}, ${fixture.acme.users.owner}, 'member')
-    returning user_id, id as member_id
-  `
-  await sql`
-    insert into log_artifacts (org_id, member_id, session_id, storage_key,
-                               sha256, size_bytes)
-    values (${second!.id}, ${elsewhere!.member_id}, 'elsewhere',
-            'orgs/second/session.jsonl', ${'a'.repeat(64)}, 1024)
-  `
-  await artifact({ sessionId: 'at-acme' })
-
-  const { projects } = await asRole(fixture.acme, 'owner', (tx) =>
-    storedProjects(tx, { audience: 'team' }),
-  )
-
-  expect(projects).toHaveLength(2)
-  expect(
-    projects.map((one) => one.orgName).toSorted((a, b) => (a! < b! ? -1 : 1)),
-  ).toEqual(['Acme', 'Second'])
 })
 
 // Taha asked for the last message rather than the upload (2026-09-22). The
@@ -592,7 +588,9 @@ test('a stored session carries its last Turn, not its upload', async () => {
   await turn({ at: '2026-09-20T08:00:00Z', messageId: 'msg_1' })
   await turn({ at: '2026-09-20T09:30:00Z', messageId: 'msg_2' })
 
-  const { sessions } = await asMember(storedSessions)
+  const { sessions } = await asMember((tx) =>
+    storedSessions(tx, { orgId: fixture.acme.id }),
+  )
 
   expect(sessions).toHaveLength(1)
   expect(sessions[0]!.lastTurnAt?.toISOString()).toBe(
@@ -615,7 +613,9 @@ test('an Agent Run’s transcript carries its own last Turn', async () => {
   })
   await turn({ at: '2026-09-20T11:00:00Z', messageId: 'msg_parent' })
 
-  const { sessions } = await asMember(storedSessions)
+  const { sessions } = await asMember((tx) =>
+    storedSessions(tx, { orgId: fixture.acme.id }),
+  )
   const byAgent = new Map(
     sessions.map((session) => [
       session.agentId ?? 'main',
@@ -631,7 +631,9 @@ test('a transcript whose Turns never arrived reports null, not the upload', asyn
   const projectId = await project('github.com/acme/api')
   await artifact({ projectId })
 
-  const { sessions } = await asMember(storedSessions)
+  const { sessions } = await asMember((tx) =>
+    storedSessions(tx, { orgId: fixture.acme.id }),
+  )
 
   expect(sessions[0]!.lastTurnAt).toBeNull()
 })
@@ -665,11 +667,15 @@ test('sidecars are not listed as transcripts, and go with the transcript they be
     kind: 'workflow_journal',
   })
 
-  const { sessions } = await asMember(storedSessions)
+  const { sessions } = await asMember((tx) =>
+    storedSessions(tx, { orgId: fixture.acme.id }),
+  )
   expect(sessions.map((session) => session.id).toSorted()).toEqual(
     [main.id, run.id].toSorted(),
   )
-  const { projects } = await asMember(storedProjects)
+  const { projects } = await asMember((tx) =>
+    storedProjects(tx, { orgId: fixture.acme.id }),
+  )
   expect(projects.map((row) => row.sessions)).toEqual([2])
 
   expect(await asMember((tx) => deleteStoredSession(tx, run.id))).toBe(true)
@@ -814,7 +820,9 @@ test('a chunked transcript is marked so the page downloads it in the browser', a
      where id = ${main.id}
   `
 
-  const { sessions } = await asMember(storedSessions)
+  const { sessions } = await asMember((tx) =>
+    storedSessions(tx, { orgId: fixture.acme.id }),
+  )
   expect(
     Object.fromEntries(sessions.map((s) => [s.agentId ?? 'main', s.chunked])),
   ).toEqual({ main: true, 'agent-7': false })
@@ -837,7 +845,9 @@ test('chunked means a tail key after exactly its chunk rows, not sealed bytes', 
      where id = ${miscounted.id}
   `
 
-  const { sessions } = await asMember(storedSessions)
+  const { sessions } = await asMember((tx) =>
+    storedSessions(tx, { orgId: fixture.acme.id }),
+  )
   expect(sessions.map((s) => s.chunked)).toEqual([false, false])
   const download = await asMember((tx) =>
     downloadableArtifact(tx, rolledBack.id),

@@ -196,7 +196,10 @@ test('the viewer is read once per request, not once per component', () => {
 // lock (ticket 119). The shell never renders a locked Org's page, so nothing
 // leaked, but a page asking the lock-blind read is one refactor from showing a
 // waiting Org its account. Only the shell, which draws the waiting page, asks
-// it; every page asks `currentViewer()`.
+// it; every page asks `currentViewer()`. The Org switcher's Leave is the
+// other caller: a person must be able to leave an Org that is waiting for
+// approval, and the action only compares the form's membership with the
+// current one, never shows anything from it.
 const APP_DIR = new URL('../app/', import.meta.url)
 const sessionViewerCallers = (dir: URL, prefix = ''): string[] =>
   readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
@@ -214,7 +217,10 @@ const sessionViewerCallers = (dir: URL, prefix = ''): string[] =>
   )
 
 test('only the dashboard shell reads the viewer without the lock', () => {
-  expect(sessionViewerCallers(APP_DIR)).toEqual(['(dashboard)/layout.tsx'])
+  expect(sessionViewerCallers(APP_DIR).toSorted()).toEqual([
+    '(dashboard)/layout.tsx',
+    '(dashboard)/org-actions.ts',
+  ])
 })
 
 // Ticket 62: the operator's area, which is not reached from any of the four

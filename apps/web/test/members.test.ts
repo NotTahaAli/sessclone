@@ -37,7 +37,12 @@ const turn = async (memberId: string, messageId: string) =>
 test('a Role change takes effect at once', async () => {
   expect(
     await asRole(fixture.acme, 'admin', (tx) =>
-      setMemberRole(tx, fixture.acme.members.member, 'manager'),
+      setMemberRole(
+        tx,
+        fixture.acme.id,
+        fixture.acme.members.member,
+        'manager',
+      ),
     ),
   ).toBe(true)
 
@@ -50,7 +55,7 @@ test('a Role change takes effect at once', async () => {
 test('a Manager cannot change anybody’s Role, including their own', async () => {
   await expect(
     asRole(fixture.acme, 'manager', (tx) =>
-      setMemberRole(tx, fixture.acme.members.manager, 'admin'),
+      setMemberRole(tx, fixture.acme.id, fixture.acme.members.manager, 'admin'),
     ),
   ).rejects.toThrow(/only an owner or admin may change a role/)
 })
@@ -61,7 +66,7 @@ test('removing a Member frees the Seat and keeps the history', async () => {
 
   expect(
     await asRole(fixture.acme, 'owner', (tx) =>
-      setMemberRemoved(tx, fixture.acme.members.member, true),
+      setMemberRemoved(tx, fixture.acme.id, fixture.acme.members.member, true),
     ),
   ).toBe(true)
   expect(await seats(fixture.acme.id)).toBe(before - 1)
@@ -85,7 +90,12 @@ test('removing a Member frees the Seat and keeps the history', async () => {
 test('an Admin can re-admit somebody they removed', async () => {
   expect(
     await asRole(fixture.acme, 'admin', (tx) =>
-      setMemberRemoved(tx, fixture.acme.members.removed, false),
+      setMemberRemoved(
+        tx,
+        fixture.acme.id,
+        fixture.acme.members.removed,
+        false,
+      ),
     ),
   ).toBe(true)
 
@@ -98,13 +108,13 @@ test('an Admin can re-admit somebody they removed', async () => {
 test('the last Owner cannot be demoted or removed', async () => {
   await expect(
     asRole(fixture.acme, 'owner', (tx) =>
-      setMemberRole(tx, fixture.acme.members.owner, 'admin'),
+      setMemberRole(tx, fixture.acme.id, fixture.acme.members.owner, 'admin'),
     ),
   ).rejects.toThrow(/an org keeps at least one owner/)
 
   await expect(
     asRole(fixture.acme, 'admin', (tx) =>
-      setMemberRemoved(tx, fixture.acme.members.owner, true),
+      setMemberRemoved(tx, fixture.acme.id, fixture.acme.members.owner, true),
     ),
   ).rejects.toThrow(/an org keeps at least one owner/)
 
@@ -144,12 +154,22 @@ test('a write refused by the policy reports it rather than looking done', async 
   // written and nothing is raised.
   expect(
     await asRole(fixture.acme, 'owner', (tx) =>
-      setMemberRole(tx, fixture.globex.members.member, 'admin'),
+      setMemberRole(
+        tx,
+        fixture.globex.id,
+        fixture.globex.members.member,
+        'admin',
+      ),
     ),
   ).toBe(false)
   expect(
     await asRole(fixture.acme, 'owner', (tx) =>
-      setMemberRemoved(tx, fixture.globex.members.member, true),
+      setMemberRemoved(
+        tx,
+        fixture.globex.id,
+        fixture.globex.members.member,
+        true,
+      ),
     ),
   ).toBe(false)
 })
@@ -170,17 +190,27 @@ test('re-admitting a Member cannot take the Org over its Tier’s ceiling', asyn
 
   await expect(
     asRole(fixture.acme, 'owner', (tx) =>
-      setMemberRemoved(tx, fixture.acme.members.removed, false),
+      setMemberRemoved(
+        tx,
+        fixture.acme.id,
+        fixture.acme.members.removed,
+        false,
+      ),
     ),
   ).rejects.toThrow(/no seat free/)
 
   // Freeing one makes room, and the same write then goes through.
   await asRole(fixture.acme, 'owner', (tx) =>
-    setMemberRemoved(tx, fixture.acme.members.manager, true),
+    setMemberRemoved(tx, fixture.acme.id, fixture.acme.members.manager, true),
   )
   expect(
     await asRole(fixture.acme, 'owner', (tx) =>
-      setMemberRemoved(tx, fixture.acme.members.removed, false),
+      setMemberRemoved(
+        tx,
+        fixture.acme.id,
+        fixture.acme.members.removed,
+        false,
+      ),
     ),
   ).toBe(true)
 })
@@ -200,7 +230,12 @@ test('a plan nobody approved sets no ceiling', async () => {
 
   expect(
     await asRole(fixture.acme, 'owner', (tx) =>
-      setMemberRemoved(tx, fixture.acme.members.removed, false),
+      setMemberRemoved(
+        tx,
+        fixture.acme.id,
+        fixture.acme.members.removed,
+        false,
+      ),
     ),
   ).toBe(true)
 })
@@ -221,7 +256,12 @@ test('a cancelled plan still caps the Org', async () => {
 
   await expect(
     asRole(fixture.acme, 'owner', (tx) =>
-      setMemberRemoved(tx, fixture.acme.members.removed, false),
+      setMemberRemoved(
+        tx,
+        fixture.acme.id,
+        fixture.acme.members.removed,
+        false,
+      ),
     ),
   ).rejects.toThrow(/no seat free/)
 })

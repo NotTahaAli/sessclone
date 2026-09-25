@@ -145,21 +145,20 @@ export const createApiKey = async (
 }
 
 /**
- * The viewer's own keys, newest first. No `where`: `api_keys_own` is the
- * where, and `members_read` is what keeps the join from widening it. Label
- * breaks the tie, because two keys created in one transaction share a
- * `created_at` and an unordered list is a list that reorders itself.
- *
- * The Org comes back with the row so a person in more than one can tell which
- * key reports where — the same reason creating a key now asks.
+ * The viewer's own keys in one membership — the current Org's — newest first.
+ * `api_keys_own` is the authorisation and the member id is the filter: the
+ * policy alone answers with every Org the person is in. Label breaks the tie,
+ * because two keys created in one transaction share a `created_at` and an
+ * unordered list is a list that reorders itself.
  */
-export const listApiKeys = (tx: postgres.TransactionSql) =>
+export const listApiKeys = (tx: postgres.TransactionSql, memberId: string) =>
   tx<ApiKeyRow[]>`
     select key.id, key.label, key.key_prefix, org.name as org_name,
            key.created_at, key.last_used_at, key.revoked_at
       from api_keys key
       join members member on member.id = key.member_id
       join orgs org on org.id = member.org_id
+     where key.member_id = ${memberId}
      order by key.created_at desc, key.label
   `
 

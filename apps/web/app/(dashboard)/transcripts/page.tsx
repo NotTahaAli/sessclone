@@ -65,14 +65,20 @@ export default async function Transcripts({
       />
     )
 
+  // Every listing is the current Org's: the policies answer with every Org
+  // the viewer is in, and a row from another Org links to a Session this
+  // Org's pages cannot open.
+  const orgId = viewer.orgId
   const [memberships, mine, mySessions, theirs] = await asViewer(
     viewer.userId,
     (tx) =>
       Promise.all([
-        listArchivalMemberships(tx),
-        storedProjects(tx),
-        storedSessions(tx),
-        team ? storedProjects(tx, { audience: 'team' }) : null,
+        listArchivalMemberships(tx).then((all) =>
+          all.filter((one) => one.member_id === viewer.memberId),
+        ),
+        storedProjects(tx, { orgId }),
+        storedSessions(tx, { orgId }),
+        team ? storedProjects(tx, { orgId, audience: 'team' }) : null,
       ]),
   )
 
@@ -97,18 +103,6 @@ export default async function Transcripts({
           // Either cap being reached means the page is not the whole picture.
           more={mySessions.more || mine.more}
           timezone={viewer.orgTimezone}
-          // Named only when there is more than one Org to tell apart, as the
-          // archival section on Your settings names them only then.
-          orgNames={
-            new Map(
-              memberships.length > 1
-                ? memberships.map((membership) => [
-                    membership.member_id,
-                    membership.org_name,
-                  ])
-                : [],
-            )
-          }
         />
       </section>
 
@@ -169,9 +163,9 @@ function Team({
                   project: project.projectId ?? 'none',
                 })}`}
                 meta={`${project.sessions} stored`}
-                sub={`${project.memberEmail ?? 'A Member'} · ${
-                  project.orgName ? `${project.orgName} · ` : ''
-                }last ${stamp.format(project.newest)}`}
+                sub={`${project.memberEmail ?? 'A Member'} · last ${stamp.format(
+                  project.newest,
+                )}`}
               >
                 <span className={project.projectKey ? 'font-mono' : ''}>
                   {name(project)}
@@ -205,6 +199,7 @@ async function Group({
   if (!viewer) return null
 
   const group = { memberId, projectId }
+  const orgId = viewer.orgId
 
   const [{ projects }, { sessions, more }] = await asViewer(
     viewer.userId,
@@ -213,8 +208,9 @@ async function Group({
         // The group's own summary, which is also what refuses a hand-typed
         // member id: a group the viewer may not see comes back empty, and the
         // policy decided that rather than anything on this page.
-        storedProjects(tx, { audience: 'team', group, limit: 1 }),
+        storedProjects(tx, { orgId, audience: 'team', group, limit: 1 }),
         storedSessions(tx, {
+          orgId,
           audience: 'team',
           group,
           before: cursorOf(before),
@@ -247,9 +243,7 @@ async function Group({
           <Link href="/transcripts" className="hover:text-text">
             ‹ All transcripts
           </Link>
-          {` · ${listed.memberEmail ?? 'A Member'}${
-            listed.orgName ? ` · ${listed.orgName}` : ''
-          } · ${listed.sessions} stored session${
+          {` · ${listed.memberEmail ?? 'A Member'} · ${listed.sessions} stored session${
             listed.sessions === 1 ? '' : 's'
           }. A transcript is the Member’s own to delete, so these can be read and not removed from here.`}
         </p>
@@ -261,7 +255,6 @@ async function Group({
         more={false}
         audience="team"
         timezone={viewer.orgTimezone}
-        orgNames={EMPTY_NAMES}
       />
 
       <div className="flex gap-4 text-body">
@@ -295,9 +288,6 @@ const when = (timezone: string) =>
 
 /** Whose transcripts a listing holds: the small label over each listing. */
 const GROUP_HEADING = 'text-text-muted text-label uppercase'
-
-/** One empty map, rather than a new one on every render of a group. */
-const EMPTY_NAMES = new Map<string, string>()
 
 const name = (project: StoredProject) =>
   project.projectKey ?? 'Sessions outside a repository'

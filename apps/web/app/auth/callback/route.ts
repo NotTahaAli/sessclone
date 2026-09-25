@@ -111,6 +111,7 @@ export async function GET(request: NextRequest) {
   // The session cookie is already written by this point, so an exception here
   // leaves somebody signed in with no Org and a 500 they can only repeat. A
   // refused sign-in they can read is the better end of that.
+  let memberId: string | undefined
   try {
     // Ticket 118: the plan they picked, for a sign-up. Ticket 119: none of
     // their own for somebody on the way to an invitation, who would otherwise
@@ -119,6 +120,7 @@ export async function GET(request: NextRequest) {
       plan: parsePlan(params),
       createOrg: !invitationToken(next),
     })
+    memberId = org?.memberId
     // Ticket 120: the platform admins hear about a new Org, when SMTP is
     // configured. After the response, so a slow mail server never slows a
     // sign-in; `notifySignup` never throws.
@@ -158,15 +160,23 @@ export async function GET(request: NextRequest) {
   //
   // Failure here is not a failed sign-in. The cookie is presentation: without
   // it the shell notices on the next load and applies it then.
-  try {
-    const appearance = await asViewer(claims.sub, viewerAppearance)
-    answer.cookies.set(
-      APPEARANCE_COOKIE,
-      encodeAppearance(appearance),
-      APPEARANCE_COOKIE_OPTIONS,
-    )
-  } catch (cause) {
-    console.error('sign-in: could not read the signer’s appearance', cause)
+  //
+  // The membership `ensureOrgForSigner` found. When the shell opens a
+  // different one (the Org switcher's cookie), `AppearanceSync` corrects it on
+  // the first page.
+  if (memberId) {
+    try {
+      const appearance = await asViewer(claims.sub, (tx) =>
+        viewerAppearance(tx, memberId),
+      )
+      answer.cookies.set(
+        APPEARANCE_COOKIE,
+        encodeAppearance(appearance),
+        APPEARANCE_COOKIE_OPTIONS,
+      )
+    } catch (cause) {
+      console.error('sign-in: could not read the signer’s appearance', cause)
+    }
   }
 
   return answer

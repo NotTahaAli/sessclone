@@ -46,7 +46,9 @@ test('a new Org and a new Member start on Clay, following the device', async () 
   // The default matters: it is what every deployment looks like before anybody
   // opens the setting, and `globals.css` declares the same values for a
   // signed-out visitor.
-  const appearance = await asRole(fixture.acme, 'member', viewerAppearance)
+  const appearance = await asRole(fixture.acme, 'member', (tx) =>
+    viewerAppearance(tx, fixture.acme.members.member),
+  )
   expect(appearance).toMatchObject({
     seed: CLAY_SEED,
     tones: CLAY,
@@ -75,23 +77,31 @@ test('a Member’s own seed wins over the Org’s, and clearing it goes back', a
     ),
   ).toBe(true)
 
-  const mine = await asRole(fixture.acme, 'member', viewerAppearance)
+  const mine = await asRole(fixture.acme, 'member', (tx) =>
+    viewerAppearance(tx, fixture.acme.members.member),
+  )
   expect(mine.seed).toBe(fig)
   expect(mine.tones).toEqual(resolveAccent(fig))
   expect(mine.orgSeed).toBe(BLUE)
 
   // Somebody else in the same Org is on the Org's, which is the point of the
   // Org's default existing at all.
-  expect((await asRole(fixture.acme, 'admin', viewerAppearance)).seed).toBe(
-    BLUE,
-  )
+  expect(
+    (
+      await asRole(fixture.acme, 'admin', (tx) =>
+        viewerAppearance(tx, fixture.acme.members.admin),
+      )
+    ).seed,
+  ).toBe(BLUE)
 
   expect(
     await asRole(fixture.acme, 'member', (tx) =>
       setMemberAccent(tx, fixture.acme.members.member, null),
     ),
   ).toBe(true)
-  const back = await asRole(fixture.acme, 'member', viewerAppearance)
+  const back = await asRole(fixture.acme, 'member', (tx) =>
+    viewerAppearance(tx, fixture.acme.members.member),
+  )
   expect(back.seed).toBe(BLUE)
   expect(back.ownSeed).toBeNull()
 })
@@ -108,7 +118,9 @@ test('an Org’s lock overrides a stored Member seed without destroying it', asy
     setOrgAccentLock(tx, fixture.acme.id, true),
   )
 
-  const locked = await asRole(fixture.acme, 'member', viewerAppearance)
+  const locked = await asRole(fixture.acme, 'member', (tx) =>
+    viewerAppearance(tx, fixture.acme.members.member),
+  )
   expect(locked.seed).toBe(CLAY_SEED)
   expect(locked.locked).toBe(true)
   // Kept, which is what makes unlocking give everybody their choice back
@@ -119,9 +131,13 @@ test('an Org’s lock overrides a stored Member seed without destroying it', asy
   await asRole(fixture.acme, 'owner', (tx) =>
     setOrgAccentLock(tx, fixture.acme.id, false),
   )
-  expect((await asRole(fixture.acme, 'member', viewerAppearance)).seed).toBe(
-    fig,
-  )
+  expect(
+    (
+      await asRole(fixture.acme, 'member', (tx) =>
+        viewerAppearance(tx, fixture.acme.members.member),
+      )
+    ).seed,
+  ).toBe(fig)
 })
 
 test('a locked Org refuses a Member’s seed, and never their theme', async () => {

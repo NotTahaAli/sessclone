@@ -23,7 +23,6 @@ const PROJECTS = [
   {
     memberId: MEMBER,
     memberEmail: null,
-    orgName: null,
     projectId: null,
     projectKey: 'local:vm:/work/e2e',
     sessions: 1,
@@ -44,15 +43,12 @@ const SESSIONS = [
     chunked: false,
   },
 ]
-const NAMES = new Map<string, string>()
-
 test('no paragraph holds a block the parser would close it on', () => {
   const html = renderToStaticMarkup(
     <StoredTranscripts
       projects={PROJECTS}
       sessions={SESSIONS}
       more={false}
-      orgNames={NAMES}
       timezone="UTC"
     />,
   )

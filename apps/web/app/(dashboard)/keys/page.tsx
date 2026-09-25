@@ -4,14 +4,10 @@ import { EmptyState } from '../empty-state'
 import { InstallCollector } from '../install-collector'
 import { PageHeader } from '../page-header'
 import { Row, SectionBreak } from '../../_ui/primitives'
-import {
-  listApiKeys,
-  listMemberships,
-  type ApiKeyRow,
-} from '../../../lib/api-keys'
+import { listApiKeys, type ApiKeyRow } from '../../../lib/api-keys'
 import { appUrl } from '../../../lib/auth/app-url'
 import { asViewer } from '../../../lib/db'
-import { signedInUser } from '../../../lib/supabase/server'
+import { currentViewer } from '../../../lib/viewer'
 
 // Ticket 28's surface: `/keys`, reachable by every Role, showing own keys only
 // (`docs/design/product-ia.md`, "Signed-in surfaces"). "Own keys only" is not
@@ -32,17 +28,16 @@ const when = (at: Date | null) =>
   at ? `${at.toISOString().slice(0, 16).replace('T', ' ')} UTC` : null
 
 export default async function Keys() {
-  const user = await signedInUser()
+  const viewer = await currentViewer()
 
   // The shell above has already said so for every page under it, so this is
   // narrowing for the type checker rather than a second message.
-  if (!user) return null
+  if (!viewer) return null
 
-  // One round trip: two statements on the one transaction `asViewer` opens.
-  const { memberships, keys } = await asViewer(user.id, async (tx) => ({
-    memberships: await listMemberships(tx),
-    keys: await listApiKeys(tx),
-  }))
+  // The current Org's keys: a person in two Orgs switches to see the other's.
+  const keys = await asViewer(viewer.userId, (tx) =>
+    listApiKeys(tx, viewer.memberId),
+  )
 
   return (
     <div className="flex max-w-3xl flex-col">
@@ -52,7 +47,7 @@ export default async function Keys() {
         machine its own, so losing one costs you that machine and no other.
       </p>
 
-      <NewKeyForm memberships={memberships} appUrl={appUrl()} />
+      <NewKeyForm appUrl={appUrl()} orgId={viewer.orgId} />
 
       <SectionBreak>Your keys</SectionBreak>
       {keys.length === 0 ? (

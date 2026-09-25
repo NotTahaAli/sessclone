@@ -3,7 +3,7 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "sessclone v1 — ticket status",
-    "subtitle": "133 tickets · 131 done · 2 ready to start · 0 blocked",
+    "subtitle": "134 tickets · 132 done · 2 ready to start · 0 blocked",
     "output": "docs/tickets/ticket-graph.html",
     "quality_profile": "showcase"
   },
@@ -180,7 +180,7 @@
       "id": "viewer",
       "type": "frontend",
       "label": "Transcripts (103-110)",
-      "sublabel": "7 done · 1 ready",
+      "sublabel": "8 done",
       "pos": [
         960,
         800
@@ -239,6 +239,20 @@
       "sublabel": "5 done · 1 ready",
       "pos": [
         960,
+        1000
+      ],
+      "size": [
+        165,
+        68
+      ]
+    },
+    {
+      "id": "orgs",
+      "type": "frontend",
+      "label": "Org Switcher (134-134)",
+      "sublabel": "1 ready",
+      "pos": [
+        1190,
         1000
       ],
       "size": [

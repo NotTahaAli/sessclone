@@ -14,6 +14,10 @@ import { asRole, seedFixture, type Fixture } from './harness'
 // the action's own code are real.
 
 const signedInUser = vi.hoisted(() => vi.fn())
+// No choice of Org on this request: `sessionViewer` reads the cookie.
+vi.mock('next/headers', () => ({
+  cookies: async () => ({ get: () => undefined }),
+}))
 vi.mock('../lib/supabase/server', () => ({
   signedInUser,
   sessionUser: signedInUser,

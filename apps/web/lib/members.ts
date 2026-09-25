@@ -31,12 +31,13 @@ const outcome = (rows: { length: number }) => rows.length > 0
  */
 export const setMemberRole = async (
   tx: TransactionSql,
+  orgId: string,
   memberId: string,
   role: Role,
 ): Promise<boolean> => {
   const rows = await tx`
     update members set role = ${role}
-     where id = ${memberId} and role <> ${role}
+     where id = ${memberId} and org_id = ${orgId} and role <> ${role}
      returning id
   `
   return outcome(rows)
@@ -50,14 +51,27 @@ export const setMemberRole = async (
  */
 export const setMemberRemoved = async (
   tx: TransactionSql,
+  orgId: string,
   memberId: string,
   removed: boolean,
 ): Promise<boolean> => {
   const rows = await tx`
     update members set removed_at = ${removed ? tx`now()` : null}
      where id = ${memberId}
+       and org_id = ${orgId}
        and removed_at is ${removed ? tx`null` : tx`not null`}
      returning id
   `
   return outcome(rows)
+}
+
+/**
+ * Leaves an Org: the viewer's own membership, removed by themselves.
+ *
+ * Through `sessclone_leave_org`, because `members_write` refuses a Member
+ * writing their own `removed_at`. The last Owner is refused with the same
+ * sentence the constraint trigger raises ("at least one owner").
+ */
+export const leaveOrg = async (tx: TransactionSql, memberId: string) => {
+  await tx`select sessclone_leave_org(${memberId})`
 }

@@ -14,7 +14,7 @@ import {
   viewerAppearance,
 } from '../../../../lib/appearance'
 import { asViewer } from '../../../../lib/db'
-import { signedInUser } from '../../../../lib/supabase/server'
+import { currentViewer } from '../../../../lib/viewer'
 
 // Ticket 77's two Member writes. A Server Action is a POST endpoint anybody
 // can reach whether or not the page rendered a form for them, so identity
@@ -30,6 +30,22 @@ import { signedInUser } from '../../../../lib/supabase/server'
 export type AppearanceResult = { error: string } | { saved: string } | null
 
 const Theme = z.enum(['light', 'dark', 'system'])
+
+const STALE =
+  'This page is for another of your Orgs. Reload it to change your appearance.'
+
+/**
+ * The viewer, when the form's `memberId` is the membership selected now.
+ *
+ * Appearance is per membership and the cookie carries one, so a tab left open
+ * across an Org switch must not write the old Org's appearance, nor put it in
+ * the cookie while another Org is on screen. The field is compared with the
+ * session's own membership id, which is all the validation it needs.
+ */
+const ownViewer = async (formData: FormData) => {
+  const viewer = await currentViewer()
+  return viewer && formData.get('memberId') === viewer.memberId ? viewer : null
+}
 
 /**
  * What the picker submitted: a swatch's own value when one was clicked,
@@ -52,8 +68,10 @@ const submitted = (formData: FormData) =>
  * cookie that disagreed with the database would show somebody the colour they
  * did not save until the next sign-in.
  */
-const remember = async (userId: string) => {
-  const appearance = await asViewer(userId, viewerAppearance)
+const remember = async (userId: string, memberId: string) => {
+  const appearance = await asViewer(userId, (tx) =>
+    viewerAppearance(tx, memberId),
+  )
   const store = await cookies()
   store.set(
     APPEARANCE_COOKIE,
@@ -74,11 +92,8 @@ export const setOwnAccent = async (
   _previous: unknown,
   formData: FormData,
 ): Promise<AppearanceResult> => {
-  const user = await signedInUser()
-  if (!user) return { error: 'Sign in again to change your appearance.' }
-
-  const memberId = z.uuid().safeParse(formData.get('memberId'))
-  if (!memberId.success) return { error: 'That is not a membership.' }
+  const viewer = await ownViewer(formData)
+  if (!viewer) return { error: STALE }
 
   // The empty field is "inherit", which is how somebody undoes a choice
   // without having to know what the Org's seed is.
@@ -93,10 +108,10 @@ export const setOwnAccent = async (
   if (read && 'refusal' in read) return { error: SEED_REFUSALS[read.refusal] }
 
   try {
-    const written = await asViewer(user.id, (tx) =>
+    const written = await asViewer(viewer.userId, (tx) =>
       setMemberAccent(
         tx,
-        memberId.data,
+        viewer.memberId,
         read ? { seed: read.seed, tones: resolveAccent(read.seed) } : null,
       ),
     )
@@ -112,7 +127,7 @@ export const setOwnAccent = async (
     }
   }
 
-  await remember(user.id)
+  await remember(viewer.userId, viewer.memberId)
   // Not this page alone: the accent paints the shell and every page under it,
   // and the cookie is only read on a full load.
   revalidatePath('/', 'layout')
@@ -129,21 +144,20 @@ export const setOwnTheme = async (
   _previous: unknown,
   formData: FormData,
 ): Promise<AppearanceResult> => {
-  const user = await signedInUser()
-  if (!user) return { error: 'Sign in again to change your appearance.' }
+  const viewer = await ownViewer(formData)
+  if (!viewer) return { error: STALE }
 
-  const memberId = z.uuid().safeParse(formData.get('memberId'))
   const theme = Theme.safeParse(formData.get('theme'))
-  if (!memberId.success || !theme.success) {
+  if (!theme.success) {
     return { error: 'That is not one of light, dark or system.' }
   }
 
-  const written = await asViewer(user.id, (tx) =>
-    setMemberTheme(tx, memberId.data, theme.data),
+  const written = await asViewer(viewer.userId, (tx) =>
+    setMemberTheme(tx, viewer.memberId, theme.data),
   )
   if (!written) return { error: 'That is not your membership to change.' }
 
-  await remember(user.id)
+  await remember(viewer.userId, viewer.memberId)
   revalidatePath('/', 'layout')
   return {
     saved:

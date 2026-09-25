@@ -16,6 +16,7 @@ import { orgLogoSrc } from '../../../../../lib/org-logo'
 import { setMemberRemoved, setMemberRole } from '../../../../../lib/members'
 import {
   currentViewer,
+  viewerOfOrg,
   reachesOrgSettings,
   type Role,
 } from '../../../../../lib/viewer'
@@ -60,7 +61,9 @@ export const sendInvite = async (
   _previous: unknown,
   formData: FormData,
 ): Promise<InviteResult> => {
-  const viewer = await currentViewer()
+  // The Org the page was rendered for, not whichever the cookie names now: a
+  // tab left open across an Org switch must not invite into the other Org.
+  const viewer = await viewerOfOrg(formData.get('orgId'))
   if (!viewer || !reachesOrgSettings(viewer.role)) {
     return { error: 'Only an Owner or an Admin may invite someone.' }
   }
@@ -111,13 +114,15 @@ export const sendInvite = async (
 }
 
 export const withdrawInvite = async (formData: FormData) => {
-  const viewer = await currentViewer()
+  const viewer = await viewerOfOrg(formData.get('orgId'))
   if (!viewer || !reachesOrgSettings(viewer.role)) return
 
   const id = Id.safeParse(formData.get('invitationId'))
   if (!id.success) return
 
-  await asViewer(viewer.userId, (tx) => revokeInvitation(tx, id.data))
+  await asViewer(viewer.userId, (tx) =>
+    revokeInvitation(tx, viewer.orgId, id.data),
+  )
   revalidatePath('/settings/org/members')
 }
 
@@ -144,9 +149,10 @@ export const changeRole = async (
     return { error: 'That is not a Role.' }
 
   try {
-    await asViewer(viewer.userId, (tx) =>
-      setMemberRole(tx, memberId.data, role.data),
+    const changed = await asViewer(viewer.userId, (tx) =>
+      setMemberRole(tx, viewer.orgId, memberId.data, role.data),
     )
+    if (!changed) return { error: STALE }
   } catch (error) {
     return { error: refusal(error) }
   }
@@ -168,9 +174,10 @@ export const changeMembership = async (
   if (!memberId.success || !to.success) return { error: 'Nothing to change.' }
 
   try {
-    await asViewer(viewer.userId, (tx) =>
-      setMemberRemoved(tx, memberId.data, to.data === 'removed'),
+    const changed = await asViewer(viewer.userId, (tx) =>
+      setMemberRemoved(tx, viewer.orgId, memberId.data, to.data === 'removed'),
     )
+    if (!changed) return { error: STALE }
   } catch (error) {
     return { error: refusal(error) }
   }
@@ -180,6 +187,10 @@ export const changeMembership = async (
   revalidatePath('/', 'layout')
   return null
 }
+
+/** No row matched: a tab left open across a switch, a change already made,
+ * or a person this viewer may not change. None of them is a success. */
+const STALE = 'Nothing changed. Reload the page: this list may be out of date.'
 
 /** The last-Owner rule's sentence, or a plain one for anything else. */
 const refusal = (error: unknown) => {
