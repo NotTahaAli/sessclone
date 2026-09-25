@@ -198,6 +198,30 @@ own verified address, and accepting it takes a deliberate press rather than a
 page load. Treat a link in a chat message the way you would treat a password
 reset link, and revoke one you think has been seen.
 
+### Live demo (optional)
+
+| Variable      | Required    | Default | What it is                                                                                      |
+| ------------- | ----------- | ------- | ----------------------------------------------------------------------------------------------- |
+| `DEMO`        | no          | off     | `on` runs a read-only demo at `/demo` and shows "Try the demo" on the landing and pricing pages |
+| `CRON_SECRET` | with `DEMO` | —       | Bearer secret for `/api/demo/refresh`. Unset means the route refuses every call                 |
+
+Off by default, so a self-hosted copy has no demo unless you opt in. With
+`DEMO=on`, `/demo` sets a cookie that shows a visitor with no session two
+made-up Orgs, as Owner of one and Member of the other; every save answers
+"This is a demo", because each of the visitor's database transactions is
+read-only. A signed-in person always sees their own Orgs.
+
+The data is generated, never copied from real usage: six invented people per
+Org over the last 60 days. `GET` or `POST /api/demo/refresh` with
+`Authorization: Bearer <CRON_SECRET>` creates the demo Orgs when missing,
+deletes what is older than 60 days, and fills any missing day, so the first
+call backfills the whole window. It is idempotent. On Vercel,
+`apps/web/vercel.json` calls it daily at 23:00 UTC; elsewhere, schedule it
+yourself once a day, after 23:00 UTC. It writes as `INGEST_DATABASE_URL`, and
+stores a few hundred kilobytes of made-up transcripts when storage is
+configured. `DEMO` is read when the public pages are built, so changing it
+needs a redeploy.
+
 ### Retention sweep
 
 Retention is a window per Org, in days, set by an Owner or an Admin under Org

@@ -22,6 +22,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   approval like a sign-up, or opens at once where approval is off. You can have one
   Org of your own waiting at a time. The waiting page carries the switcher
   too, so you can switch out of an Org that is waiting.
+- A read-only live demo, off unless `DEMO=on`: "Try the demo" beside sign-up
+  on the landing and pricing pages opens two made-up Orgs with six invented
+  people each and 60 days of generated usage and transcripts. Every page is
+  visible and every save answers "This is a demo". A daily
+  `/api/demo/refresh` keeps the window current.
 - `/.well-known/security.txt` (RFC 9116), pointing to GitHub private advisories
   and, when set, the deployment's contact address. Its expiry is always a
   year ahead.
