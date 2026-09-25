@@ -93,13 +93,18 @@ describe('the dashboard logo', () => {
 })
 
 describe('Try the demo', () => {
-  it('is there only where the demo runs', () => {
+  it('is there only where the demo runs', async () => {
     flags(true, true, false)
     expect(renderToStaticMarkup(<DemoLink />)).toBe('')
     flags(true, true, true)
-    expect(links(renderToStaticMarkup(<DemoLink />))).toEqual([
+    expect(links(renderToStaticMarkup(await DemoLinkResolved({})))).toEqual([
       'Try the demo /demo',
     ])
+  })
+
+  it('is not in the shell before the session is read', () => {
+    flags(true, true, true)
+    expect(renderToStaticMarkup(<DemoLink />)).not.toContain('/demo')
   })
 
   it('is hidden from someone signed in, whose session wins over the demo', async () => {

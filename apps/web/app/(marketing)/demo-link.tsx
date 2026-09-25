@@ -11,15 +11,15 @@ import { buttonClass } from '../_ui/primitives'
  *
  * Hidden from anyone signed in (Taha, 2026-09-25): a real session wins over
  * the demo cookie, so for them `/demo` only opened their own dashboard. The
- * prerendered shell carries the link, and the session read removes it.
+ * prerendered shell carries nothing, and the link appears once the session
+ * read finds nobody signed in: never a link a signed-in reader could click.
  * `block` puts it on its own line, as the pricing intro wants, without leaving
  * an empty line behind when it is hidden.
  */
 export function DemoLink({ block = false }: { block?: boolean }) {
   if (!demoEnabled()) return null
-  const link = block ? BLOCK : INLINE
   return (
-    <Suspense fallback={link}>
+    <Suspense fallback={null}>
       <DemoLinkResolved block={block} />
     </Suspense>
   )

@@ -84,6 +84,17 @@ const withCookies = (redirect: NextResponse, from: NextResponse) => {
   return redirect
 }
 
+// A redirect from `/` depends on who is asking, so no cache in between
+// (a CDN, a shared proxy) may keep one and hand it to somebody else. The
+// Location is relative (RFC 9110 allows it), as `/demo`'s is: behind a
+// reverse proxy `request.nextUrl.origin` is the server's own (`localhost`),
+// which the browser cannot reach.
+const uncached = (to: string) =>
+  new NextResponse(null, {
+    status: 307,
+    headers: { location: to, 'cache-control': 'private, no-store' },
+  })
+
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request })
 
@@ -98,14 +109,6 @@ export async function proxy(request: NextRequest) {
     return NextResponse.rewrite(new URL(NOT_SERVED, request.url), {
       status: 404,
     })
-  }
-
-  // A redirect from `/` depends on who is asking, so no cache in between
-  // (a CDN, a shared proxy) may keep one and hand it to somebody else.
-  const uncached = (to: string) => {
-    const redirect = NextResponse.redirect(new URL(to, request.nextUrl.origin))
-    redirect.headers.set('Cache-Control', 'private, no-store')
-    return redirect
   }
 
   // A sign-in code Supabase sent to the bare origin goes on to the callback,

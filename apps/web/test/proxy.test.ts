@@ -192,16 +192,12 @@ const visit = (path: string, headers: Record<string, string> = {}) =>
 
 test('with landing off, / goes to sign-in or, signed in, to the dashboard', async () => {
   vi.stubEnv('ENABLE_LANDING', 'false')
-  expect((await at('/')).headers.get('location')).toBe(
-    'https://sessclone.example.com/sign-in',
-  )
+  expect((await at('/')).headers.get('location')).toBe('/sign-in')
 
   claims = { sub: 'user-1' }
   // Even from a page of the site: there is no landing page to read.
   const response = await visit('/', { 'sec-fetch-site': 'same-origin' })
-  expect(response.headers.get('location')).toBe(
-    'https://sessclone.example.com/costs',
-  )
+  expect(response.headers.get('location')).toBe('/costs')
 })
 
 test('with landing on, a signed-in direct visit to / opens the dashboard', async () => {
@@ -213,10 +209,7 @@ test('with landing on, a signed-in direct visit to / opens the dashboard', async
       (await visit('/', headers)).headers.get('location'),
     ),
   )
-  expect(locations).toEqual([
-    'https://sessclone.example.com/costs',
-    'https://sessclone.example.com/costs',
-  ])
+  expect(locations).toEqual(['/costs', '/costs'])
   // The dashboard's logo is a link on this origin: no bounce.
   const logo = await visit('/', { 'sec-fetch-site': 'same-origin' })
   expect(logo.status).toBe(200)
@@ -226,9 +219,7 @@ test('with landing on, a signed-in direct visit to / opens the dashboard', async
 test('the demo visitor counts as signed in only where the demo runs', async () => {
   vi.stubEnv('ENABLE_DEMO', 'true')
   const demo = { cookie: 'sessclone-demo=1', 'sec-fetch-site': 'none' }
-  expect((await visit('/', demo)).headers.get('location')).toBe(
-    'https://sessclone.example.com/costs',
-  )
+  expect((await visit('/', demo)).headers.get('location')).toBe('/costs')
   // Never for sign-in and sign-up: the demo banner's "Sign up" must work.
   expect((await visit('/sign-up', demo)).headers.get('location')).toBeNull()
 
@@ -268,9 +259,7 @@ test('the / redirect keeps the session cookies getClaims rotated', async () => {
   rotated = [{ name: 'sb-example-auth-token', value: 'fresh' }]
 
   const response = await visit('/', { 'sec-fetch-site': 'none' })
-  expect(response.headers.get('location')).toBe(
-    'https://sessclone.example.com/costs',
-  )
+  expect(response.headers.get('location')).toBe('/costs')
   expect(response.headers.get('set-cookie')).toMatch(
     /^sb-example-auth-token=fresh;/,
   )
@@ -284,9 +273,7 @@ test('the / redirect is never cached: it depends on the session', async () => {
   vi.stubEnv('ENABLE_LANDING', 'false')
   claims = null
   const signedOut = await at('/')
-  expect(signedOut.headers.get('location')).toBe(
-    'https://sessclone.example.com/sign-in',
-  )
+  expect(signedOut.headers.get('location')).toBe('/sign-in')
   expect(signedOut.headers.get('cache-control')).toBe('private, no-store')
 })
 
@@ -297,7 +284,7 @@ test('a sign-in code that lands on / goes on to the callback, query and all', as
     // oxlint-disable-next-line no-await-in-loop -- one flag at a time.
     const response = await at('/?code=abc-123&next=%2Fjoin%2Ft')
     expect(response.headers.get('location'), landing).toBe(
-      'https://sessclone.example.com/auth/callback?code=abc-123&next=%2Fjoin%2Ft',
+      '/auth/callback?code=abc-123&next=%2Fjoin%2Ft',
     )
     expect(response.headers.get('cache-control')).toBe('private, no-store')
   }
@@ -311,7 +298,9 @@ test('behind a proxy, the Referer is compared with NEXT_PUBLIC_APP_URL', async (
     proxy(new NextRequest('http://localhost:3000/', { headers: { referer } }))
 
   expect((await behind('https://sessclone.com/costs')).status).toBe(200)
+  // And the redirect is relative, so the browser stays on its own host
+  // rather than being sent to the server's `localhost`.
   expect(
     (await behind('http://localhost:3000/costs')).headers.get('location'),
-  ).toBe('http://localhost:3000/costs')
+  ).toBe('/costs')
 })
