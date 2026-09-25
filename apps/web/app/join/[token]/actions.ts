@@ -27,7 +27,9 @@ export const acceptAction = async (
   if (!token.success) return { error: 'This invitation is not valid.' }
 
   try {
-    await asViewer(user.id, (tx) => acceptInvitation(tx, token.data))
+    await asViewer(user.id, (tx) =>
+      acceptInvitation(tx, token.data, user.email),
+    )
   } catch (error) {
     // Outside the transaction: a raise aborts it, so the error surfaces again
     // when the transaction ends however the statement was wrapped.

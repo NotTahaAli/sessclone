@@ -238,9 +238,11 @@ function InvitationRow({ invitation }: { invitation: Invitation }) {
     ? 'accepted'
     : invitation.revokedAt
       ? 'withdrawn'
-      : invitation.live
-        ? `waiting, until ${when.format(invitation.expiresAt)}`
-        : 'expired'
+      : invitation.declined
+        ? 'declined'
+        : invitation.live
+          ? `waiting, until ${when.format(invitation.expiresAt)}`
+          : 'expired'
 
   return (
     <li className="flex items-center gap-3">

@@ -31,7 +31,10 @@ export type Invitation = {
   expiresAt: Date
   acceptedAt: Date | null
   revokedAt: Date | null
-  /** Live: not accepted, not revoked, not yet expired. */
+  /** Turned down by the person invited, before it expired. A dismissed
+   * expired one reads as expired. */
+  declined: boolean
+  /** Live: not accepted, revoked or declined, and not yet expired. */
   live: boolean
 }
 
@@ -43,6 +46,7 @@ type InvitationRow = {
   expires_at: Date
   accepted_at: Date | null
   revoked_at: Date | null
+  declined: boolean
   live: boolean
 }
 
@@ -122,8 +126,9 @@ export const listInvitations = async (
 ): Promise<{ invitations: Invitation[]; more: boolean }> => {
   const rows = await tx<InvitationRow[]>`
     select id, email, role, created_at, expires_at, accepted_at, revoked_at,
-           (accepted_at is null and revoked_at is null and expires_at > now())
-             as live
+           coalesce(declined_at < expires_at, false) as declined,
+           (accepted_at is null and revoked_at is null and declined_at is null
+            and expires_at > now()) as live
       from invitations
      where org_id = ${orgId}
      order by created_at desc
@@ -139,6 +144,7 @@ export const listInvitations = async (
       expiresAt: row.expires_at,
       acceptedAt: row.accepted_at,
       revokedAt: row.revoked_at,
+      declined: row.declined,
       live: row.live,
     })),
     more: rows.length > limit,
@@ -164,6 +170,7 @@ export const revokeInvitation = async (
        and org_id = ${orgId}
        and accepted_at is null
        and revoked_at is null
+       and declined_at is null
      returning id
   `
   return rows.length > 0
@@ -176,15 +183,78 @@ export const revokeInvitation = async (
  * when it refuses — expired, replayed, addressed to somebody else, or a full
  * Org. The message is written for the person holding the link, so it is passed
  * through rather than replaced.
+ *
+ * `email` is the signed-in session's verified address (`sessionUser().email`),
+ * never `users.email`: the invitation is for an address, and the identity
+ * provider is what vouches for it (Taha, 2026-09-25).
  */
 export const acceptInvitation = async (
   tx: TransactionSql,
   token: string,
+  email: string,
 ): Promise<string> => {
   const rows = await tx<{ org: string }[]>`
-    select sessclone_accept_invitation(${hashToken(token)}) as org
+    select sessclone_accept_invitation(${hashToken(token)}, ${email}) as org
   `
   return rows[0]!.org
+}
+
+/** An invitation addressed to the viewer, as the Org switcher lists it. */
+export type OwnInvitation = {
+  id: string
+  orgName: string
+  role: InvitedRole
+  /** The inviting Member's name or address, or null once they have left. */
+  invitedBy: string | null
+  expiresAt: Date
+}
+
+/**
+ * The invitations addressed to the viewer's verified address: open ones, and
+ * expired ones for a week after, until dismissed. Through a definer function,
+ * because the invitee reads nothing of `invitations` directly.
+ */
+export const ownInvitations = async (
+  tx: TransactionSql,
+  email: string,
+): Promise<OwnInvitation[]> => {
+  const rows = await tx<
+    {
+      id: string
+      org_name: string
+      role: InvitedRole
+      invited_by: string | null
+      expires_at: Date
+    }[]
+  >`select * from sessclone_own_invitations(${email})`
+  return rows.map((row) => ({
+    id: row.id,
+    orgName: row.org_name,
+    role: row.role,
+    invitedBy: row.invited_by,
+    expiresAt: row.expires_at,
+  }))
+}
+
+/** Accepts one of the viewer's own invitations by id; returns the member id. */
+export const acceptOwnInvitation = async (
+  tx: TransactionSql,
+  invitationId: string,
+  email: string,
+): Promise<string> => {
+  const [row] = await tx<{ member: string }[]>`
+    select sessclone_accept_own_invitation(${invitationId}, ${email}) as member
+  `
+  return row!.member
+}
+
+/** Declines one of the viewer's own invitations, or dismisses an expired one. */
+export const declineOwnInvitation = async (
+  tx: TransactionSql,
+  invitationId: string,
+  email: string,
+) => {
+  await tx`select sessclone_decline_own_invitation(${invitationId}, ${email})`
 }
 
 /**

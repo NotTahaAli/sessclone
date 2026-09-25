@@ -64,3 +64,14 @@ export const setMemberRemoved = async (
   `
   return outcome(rows)
 }
+
+/**
+ * Leaves an Org: the viewer's own membership, removed by themselves.
+ *
+ * Through `sessclone_leave_org`, because `members_write` refuses a Member
+ * writing their own `removed_at`. The last Owner is refused with the same
+ * sentence the constraint trigger raises ("at least one owner").
+ */
+export const leaveOrg = async (tx: TransactionSql, memberId: string) => {
+  await tx`select sessclone_leave_org(${memberId})`
+}

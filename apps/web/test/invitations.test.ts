@@ -3,11 +3,15 @@ import { beforeEach, expect, test } from 'vitest'
 import {
   acceptFailure,
   acceptInvitation,
+  acceptOwnInvitation,
+  declineOwnInvitation,
   generateInviteToken,
   invite,
   listInvitations,
+  ownInvitations,
   revokeInvitation,
 } from '../lib/invitations'
+import { leaveOrg } from '../lib/members'
 import {
   asRole,
   asUser,
@@ -55,9 +59,19 @@ const invited = (email = STRANGER) =>
  * error surfaces again when the transaction ends however the statement was
  * wrapped. This is the shape every caller has to use.
  */
-const accept = async (userId: string, token: string) => {
+const accept = async (userId: string, token: string, email?: string) => {
+  // The session's verified address; the account's own, unless a test says
+  // the identity provider now reports another.
+  const [account] = await sql<{ email: string }[]>`
+    select email from users where id = ${userId}
+  `
+  const verified = email ?? account!.email
   try {
-    return { orgId: await asUser(userId, (tx) => acceptInvitation(tx, token)) }
+    return {
+      orgId: await asUser(userId, (tx) =>
+        acceptInvitation(tx, token, verified),
+      ),
+    }
   } catch (error) {
     return { error: acceptFailure(error) }
   }
@@ -430,4 +444,229 @@ test('a platform admin can correct somebody else’s address', async () => {
     select email from users where id = ${fixture.stranger.userId}
   `
   expect(account!.email).toBe('corrected@nowhere.test')
+})
+
+// The Org switcher (2026-09-25): the invitee answers an invitation from the
+// dashboard, by id, through definer functions keyed on the session's verified
+// address. They still read nothing of `invitations` directly.
+
+/** The refusal a definer function raised, or null when it did not. */
+const refusal = (run: Promise<unknown>) =>
+  run.then(
+    () => null,
+    (error: unknown) => (error instanceof Error ? error.message : 'raised'),
+  )
+
+/** Seeded expired: `expires_at` is pinned once an invitation is sent. */
+const lapsed = async (orgId: string, email: string, ago: string) => {
+  const [row] = await sql<{ id: string }[]>`
+    insert into invitations (org_id, email, role, token_hash, expires_at)
+    values (${orgId}, ${email}, 'member', ${generateInviteToken().hash},
+            now() - ${ago}::interval)
+    returning id
+  `
+  return row!.id
+}
+
+const mine = (userId: string, email: string) =>
+  asUser(userId, (tx) => ownInvitations(tx, email))
+
+test('the switcher lists what is addressed to the verified address alone', async () => {
+  const { id } = await invited('Stranger@Nowhere.test')
+  await invited('someone-else@nowhere.test')
+  // Addressed to Acme's Owner, but into the Org they are already in.
+  await invited('owner@acme.test')
+  // Expired more than a week ago.
+  await lapsed(fixture.globex.id, STRANGER, '8 days')
+
+  const listed = await mine(fixture.stranger.userId, STRANGER)
+  expect(listed).toEqual([
+    {
+      id,
+      orgName: 'Acme',
+      role: 'member',
+      invitedBy: 'owner@acme.test',
+      expiresAt: expect.any(Date),
+    },
+  ])
+
+  // Somebody else asking with their own address sees none of it, and an
+  // Owner of Acme sees their own inbox, not their Org's outbox.
+  expect(await mine(fixture.acme.users.owner, 'owner@acme.test')).toEqual([])
+  expect(await mine(fixture.globex.users.owner, 'owner@globex.test')).toEqual(
+    [],
+  )
+
+  // Nor can the invitee read the table itself.
+  expect(
+    await asUser(
+      fixture.stranger.userId,
+      (tx) => tx`select id from invitations`,
+    ),
+  ).toHaveLength(0)
+})
+
+test('an expired invitation is listed for a week, and dismissing it hides it', async () => {
+  const id = await lapsed(fixture.acme.id, STRANGER, '6 days')
+  expect(
+    (await mine(fixture.stranger.userId, STRANGER)).map((one) => one.id),
+  ).toEqual([id])
+
+  await asUser(fixture.stranger.userId, (tx) =>
+    declineOwnInvitation(tx, id, STRANGER),
+  )
+  expect(await mine(fixture.stranger.userId, STRANGER)).toEqual([])
+
+  // The Org reads it as expired, not declined: it lapsed before anyone said no.
+  const { invitations } = await asRole(fixture.acme, 'owner', (tx) =>
+    listInvitations(tx, fixture.acme.id),
+  )
+  expect(invitations[0]).toMatchObject({ id, declined: false, live: false })
+})
+
+test('accepting by id joins as the invited Role and returns the membership', async () => {
+  const { id } = await invited()
+
+  const member = await asUser(fixture.stranger.userId, (tx) =>
+    acceptOwnInvitation(tx, id, STRANGER),
+  )
+
+  const [row] = await sql<{ org_id: string; role: string }[]>`
+    select org_id, role from members where id = ${member}
+       and user_id = ${fixture.stranger.userId}
+  `
+  expect(row).toEqual({ org_id: fixture.acme.id, role: 'member' })
+})
+
+test('accepting by id refuses another address, and anything not live', async () => {
+  const { id } = await invited()
+  const other = await invited('other@nowhere.test')
+  const declined = await invited('declined@nowhere.test')
+  await sql`update invitations set declined_at = now() where id = ${declined.id}`
+  const expired = {
+    id: await lapsed(fixture.acme.id, 'late@nowhere.test', '1 day'),
+  }
+  const accepting = (invitationId: string, email: string) =>
+    refusal(
+      asUser(fixture.stranger.userId, (tx) =>
+        acceptOwnInvitation(tx, invitationId, email),
+      ),
+    )
+
+  expect(await accepting(other.id, STRANGER)).toMatch(/different address/)
+  expect(await accepting(declined.id, 'declined@nowhere.test')).toMatch(
+    /not valid/,
+  )
+  expect(await accepting(expired.id, 'late@nowhere.test')).toMatch(/expired/)
+  // And one that is theirs still works after all of that.
+  expect(await accepting(id, STRANGER)).toBeNull()
+})
+
+test('the verified address decides, not the one stored on the account', async () => {
+  // The identity provider now reports a new address; `users.email` still
+  // holds the one from the first sign-in and cannot be edited to follow.
+  const moved = 'moved@nowhere.test'
+  const toNew = await invited(moved)
+  const toOld = await invited(STRANGER)
+
+  expect(await accept(fixture.stranger.userId, toOld.token, moved)).toEqual({
+    error: 'This invitation was sent to a different address.',
+  })
+  expect(await accept(fixture.stranger.userId, toNew.token, moved)).toEqual({
+    orgId: fixture.acme.id,
+  })
+})
+
+test('declining hides it from the invitee, tells the Org, and frees a re-invite', async () => {
+  const { id } = await invited()
+
+  expect(
+    await refusal(
+      asUser(fixture.acme.users.member, (tx) =>
+        declineOwnInvitation(tx, id, 'member@acme.test'),
+      ),
+    ),
+  ).toMatch(/not valid/)
+
+  await asUser(fixture.stranger.userId, (tx) =>
+    declineOwnInvitation(tx, id, STRANGER),
+  )
+
+  expect(await mine(fixture.stranger.userId, STRANGER)).toEqual([])
+  const { invitations } = await asRole(fixture.acme, 'owner', (tx) =>
+    listInvitations(tx, fixture.acme.id),
+  )
+  expect(invitations[0]).toMatchObject({ id, declined: true, live: false })
+
+  // Declined is final, and the Admin may ask again.
+  expect(
+    await refusal(
+      asUser(fixture.stranger.userId, (tx) =>
+        declineOwnInvitation(tx, id, STRANGER),
+      ),
+    ),
+  ).toMatch(/not valid/)
+  await expect(invited()).resolves.toMatchObject({ id: expect.any(String) })
+})
+
+test('the dashboard role cannot mark an invitation declined', async () => {
+  const { id } = await invited()
+
+  await expect(
+    asRole(
+      fixture.acme,
+      'owner',
+      (tx) => tx`update invitations set declined_at = now() where id = ${id}`,
+    ),
+  ).rejects.toThrow(/only the person invited/)
+})
+
+test('a Member leaves an Org; the last Owner cannot, and nobody leaves for another', async () => {
+  await asRole(fixture.acme, 'member', (tx) =>
+    leaveOrg(tx, fixture.acme.members.member),
+  )
+  const [left] = await sql<{ removed_at: Date | null }[]>`
+    select removed_at from members where id = ${fixture.acme.members.member}
+  `
+  expect(left!.removed_at).toBeInstanceOf(Date)
+
+  expect(
+    await refusal(
+      asRole(fixture.acme, 'owner', (tx) =>
+        leaveOrg(tx, fixture.acme.members.owner),
+      ),
+    ),
+  ).toMatch(/at least one owner/)
+  expect(
+    await refusal(
+      asRole(fixture.acme, 'owner', (tx) =>
+        leaveOrg(tx, fixture.acme.members.admin),
+      ),
+    ),
+  ).toMatch(/not a member/)
+
+  // With a second Owner, the first may go.
+  await asRole(
+    fixture.acme,
+    'owner',
+    (tx) =>
+      tx`update members set role = 'owner' where id = ${fixture.acme.members.admin}`,
+  )
+  expect(
+    await refusal(
+      asRole(fixture.acme, 'owner', (tx) =>
+        leaveOrg(tx, fixture.acme.members.owner),
+      ),
+    ),
+  ).toBeNull()
+
+  // And leaving by hand, around the function, is still refused.
+  await expect(
+    asRole(
+      fixture.acme,
+      'manager',
+      (tx) =>
+        tx`update members set removed_at = now() where id = ${fixture.acme.members.manager}`,
+    ),
+  ).rejects.toThrow()
 })
