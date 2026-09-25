@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import type { Item, Row } from '@sessclone/shared'
 
@@ -251,6 +251,20 @@ describe('sealed', () => {
   })
 })
 
+// Counts how often rehype-highlight's attacher runs: each run registers every
+// grammar it knows, so once per message made "Jump to start" seconds slower.
+const highlighters = vi.hoisted(() => ({ built: 0 }))
+vi.mock('rehype-highlight', async (importOriginal) => {
+  const real = (await importOriginal<typeof import('rehype-highlight')>())
+    .default
+  return {
+    default: (...args: Parameters<typeof real>) => {
+      highlighters.built++
+      return real(...args)
+    },
+  }
+})
+
 const html = (text: string) =>
   renderToStaticMarkup(createElement(MarkdownText, { text }))
 
@@ -272,6 +286,12 @@ describe('MarkdownText', () => {
     const out = html('```ts\nconst a = 1\n```')
     expect(out).toContain('>ts<')
     expect(out).toContain('hljs-keyword')
+  })
+
+  it('builds its highlighter once, not once per message', () => {
+    const before = highlighters.built
+    for (let n = 0; n < 3; n++) html('```ts\nconst a = 1\n```')
+    expect(highlighters.built).toBe(before)
   })
 })
 
