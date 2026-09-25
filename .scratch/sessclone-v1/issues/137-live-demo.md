@@ -21,4 +21,4 @@
 - [x] A banner on every dashboard page ("You're viewing a demo with made-up data.", Sign up, Exit demo); dashboard pages `noindex`.
 - [x] Deterministic generator (`lib/demo-data.ts`) with unit tests; `/api/demo/refresh` (CRON_SECRET, idempotent, backfills, prunes rows and objects) scheduled daily in `apps/web/vercel.json`.
 - [x] Screenshots of landing, Costs, Sessions, a transcript, Settings, a refused save, both Orgs and the switcher at 1440x900 and 390x844 in light and dark. Kept in the build session's scratch directory, not in the repo; commit `0a803d4` fixed what they showed.
-- [ ] Migration `20260925160000_live_demo.sql` run on production (Taha).
+- [x] Migration `20260925160000_live_demo.sql` run on production (Taha, 2026-09-25).

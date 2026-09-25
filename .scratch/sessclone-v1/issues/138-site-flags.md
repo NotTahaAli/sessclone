@@ -33,3 +33,4 @@
 - [x] Landing header signed in and signed out, and the dashboard with landing off, at 1440x900 and 390x844 in light and dark.
 - [x] Render tests for the marketing header and footer, the dashboard logo and "Try the demo" (`test/site-flags-render.test.tsx`).
 - [x] Playwright: a typed `/` opens Costs, and the dashboard logo reaches the landing page and stays there, reload included (`e2e/site-flags.e2e.ts`).
+- [x] "Try the demo" is hidden from a signed-in visitor, whose real session wins over the demo cookie (Taha, 2026-09-25); `test/site-flags-render.test.tsx`.

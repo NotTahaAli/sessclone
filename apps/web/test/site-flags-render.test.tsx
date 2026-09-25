@@ -6,11 +6,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 // stubbed, since the question is which link a visitor is shown.
 
 let user: { id: string; email: string } | null = null
-vi.mock('../lib/supabase/server', () => ({ sessionUser: async () => user }))
+vi.mock('../lib/supabase/server', () => ({
+  sessionUser: async () => user,
+  realSessionUser: async () => user,
+}))
 
 const { default: MarketingLayout } = await import('../app/(marketing)/layout')
 const { SignedInResolved } = await import('../app/(marketing)/signed-in-link')
-const { DemoLink } = await import('../app/(marketing)/demo-link')
+const { DemoLink, DemoLinkResolved } =
+  await import('../app/(marketing)/demo-link')
 const { HomeLogo } = await import('../app/(dashboard)/home-logo')
 
 afterEach(() => {
@@ -96,5 +100,16 @@ describe('Try the demo', () => {
     expect(links(renderToStaticMarkup(<DemoLink />))).toEqual([
       'Try the demo /demo',
     ])
+  })
+
+  it('is hidden from someone signed in, whose session wins over the demo', async () => {
+    flags(true, true, true)
+    expect(links(renderToStaticMarkup(await DemoLinkResolved({})))).toEqual([
+      'Try the demo /demo',
+    ])
+    user = { id: 'user-1', email: 'a@example.test' }
+    expect(renderToStaticMarkup(await DemoLinkResolved({ block: true }))).toBe(
+      '',
+    )
   })
 })

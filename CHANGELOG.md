@@ -29,7 +29,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   people each and 60 days of generated usage and transcripts. Every page is
   visible and every save answers "This is a demo". A daily
   `/api/demo/refresh` keeps the window current. The demo's Costs and Sessions
-  pages are cached per day, for the demo visitor only.
+  pages are cached per day, for the demo visitor only. A signed-in visitor
+  doesn't see "Try the demo", since their own account opens instead.
 - Browser tests: the repo's first Playwright suite (`apps/web/e2e`, run with
   `pnpm --filter web e2e`) accepts an invitation from the Org switcher and
   starts a New Org from it. It signs in without a Supabase project and seeds
