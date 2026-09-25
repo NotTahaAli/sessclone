@@ -51,6 +51,11 @@ const NOT_SIGNED_IN = new Set([
   // Ticket 116: the public docs, read before anybody has an account. Public
   // like `(marketing)`, not a panel page, so the panel's notice is not theirs.
   'docs',
+  // Ticket 136: signed in, but outside the shell on purpose — the shell
+  // covers every page with the waiting page while the current Org waits, and
+  // New Org must be reachable from there. It renders `PanelCredit` itself,
+  // checked below.
+  'new-org',
 ])
 
 /** Every `page.tsx` under `app/`, as a path relative to it. */
@@ -158,6 +163,12 @@ describe('the panel credit', () => {
     const join = readFileSync(new URL('join/[token]/page.tsx', APP), 'utf8')
 
     expect(join).toContain('<PanelCredit />')
+  })
+
+  test('the New Org page carries the credit itself, being outside the shell', () => {
+    const newOrg = readFileSync(new URL('new-org/page.tsx', APP), 'utf8')
+
+    expect(newOrg).toContain('<PanelCredit />')
   })
 
   test('the sign-up page carries the credit itself, being outside the shell', () => {

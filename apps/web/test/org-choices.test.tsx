@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { expect, test, vi } from 'vitest'
 
-import { hasChoices, SwitcherBody } from '../app/(dashboard)/org-choices'
+import { SwitcherBody } from '../app/(dashboard)/org-choices'
 
 // The switcher's expiry line, counted in whole days from the server's clock.
 // An invitation that lapsed a few hours ago is -0 days by `Math.ceil`, and
@@ -54,19 +54,22 @@ const org = (memberId: string, orgName: string) => ({
   locked: false,
 })
 
-test('one Org offers nothing, and Leave needs another Org to go to', () => {
-  // Leaving the only Org lands on the no-Org page with no way back, so one
-  // Org and no invitations stays plain text (Taha, 2026-09-25).
+test('one Org still offers New Org, and Leave needs another Org to go to', () => {
+  // Ticket 136: the switcher always opens, because New Org is always there.
+  // Leaving the only Org lands on the no-Org page with no way back, so Leave
+  // still needs a second Org (Taha, 2026-09-25).
   const alone = { ...data('2026-09-30T09:00:00Z'), lastOwner: false }
   const one = [org('m', 'Acme')]
-  expect(hasChoices({ ...alone, orgs: one, invites: [] })).toBe(false)
-
-  const withOrgs = (orgs: ReturnType<typeof org>[]) => ({ ...alone, orgs })
+  const withOrgs = (orgs: ReturnType<typeof org>[]) => ({
+    ...alone,
+    orgs,
+    invites: [],
+  })
   const body = (orgs: ReturnType<typeof org>[]) =>
     renderToStaticMarkup(
       <SwitcherBody data={withOrgs(orgs)} current="m" orgName="Acme" />,
     )
-  expect(hasChoices({ ...alone, orgs: one })).toBe(true)
+  expect(body(one)).toContain('href="/new-org"')
   expect(body(one)).not.toContain('Leave Acme')
   expect(body([...one, org('n', 'Globex')])).toContain('Leave Acme')
 })

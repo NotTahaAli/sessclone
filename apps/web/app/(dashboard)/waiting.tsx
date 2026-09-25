@@ -1,7 +1,7 @@
 import Link from 'next/link'
+import type { ReactNode } from 'react'
 
 import { signOut } from '../sign-in/actions'
-import { LogoMark } from '../_ui/logo'
 import { Button, buttonClass } from '../_ui/primitives'
 
 /**
@@ -19,6 +19,7 @@ export function Waiting({
   orgName,
   planName,
   operator,
+  children,
 }: {
   cancelled: boolean
   orgName: string
@@ -27,11 +28,16 @@ export function Waiting({
   /** A platform admin whose own Org is locked — the first sign-in on a fresh
    * deployment — gets the way to approve it. */
   operator: boolean
+  /** The shell's brand line, whose Org name is the Org switcher: a person
+   * whose current Org waits can still switch out of it, answer an
+   * invitation or start another (ticket 136). The page covers the shell's
+   * own, so it carries one. */
+  children: ReactNode
 }) {
   return (
     <div className="bg-ground text-text fixed inset-0 z-50 overflow-y-auto">
       <main className="mx-auto flex max-w-md flex-col gap-4 px-4 py-16">
-        <LogoMark size={28} className="text-text" />
+        {children}
         <h1 className="text-heading-lg">
           {cancelled ? 'Cancelled' : 'You’re on the waitlist'}
         </h1>

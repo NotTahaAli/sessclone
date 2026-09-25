@@ -1,4 +1,5 @@
 import type { TransactionSql } from 'postgres'
+import { z } from 'zod'
 
 // Tickets 90 and 91: the three writes that give something a friendly name,
 // and ticket 92's fourth, which is not a name but shares a row with one.
@@ -15,6 +16,13 @@ import type { TransactionSql } from 'postgres'
 
 /** The longest a name may be, matching the check constraints in the schema. */
 export const NAME_LIMIT = 60
+
+/** An Org's name as a form posts it: renaming one (ticket 101) and making
+ * one (ticket 136). `orgs.name`'s check refuses a blank as well. */
+export const OrgNameInput = z.string().trim().min(1).max(NAME_LIMIT)
+
+/** What either form says when the name is not one. */
+export const ORG_NAME_RULE = `An Org needs a name of 1 to ${NAME_LIMIT} characters.`
 
 /**
  * Names a Project, or clears the name when given null.
