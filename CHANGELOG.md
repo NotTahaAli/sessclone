@@ -21,7 +21,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a name and, where sign-up asks for one, a plan; the new Org waits for
   approval like a sign-up, or opens at once where approval is off. You can have one
   Org of your own waiting at a time. The waiting page carries the switcher
-  too, so you can switch out of an Org that is waiting.
+  too, so you can switch out of an Org that is waiting. It emails the platform
+  admins the same way a sign-up does, and just as little: nothing with
+  approval off, nothing once the Org is active.
 - A read-only live demo, off unless `DEMO=on`: "Try the demo" beside sign-up
   on the landing and pricing pages opens two made-up Orgs with six invented
   people each and 60 days of generated usage and transcripts. Every page is

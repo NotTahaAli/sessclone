@@ -136,9 +136,11 @@ server is reported the same way, because the inviter's remedy is identical.
 The same two variables send the platform admins a note each time somebody
 signs up and creates an Org waiting for approval (ticket 120,
 `apps/web/lib/signup-notice.ts`), with a link to that Org under **/admin →
-Orgs**. A New Org started from the Org switcher sends no note; it shows in the
-same list. Unset, nothing is sent; the Admin panel lists waiting Orgs first and
-counts them on its navigation link either way.
+Orgs**. A New Org started from the Org switcher (ticket 136) sends the same
+note, the same way — after the transaction commits, and not at all with
+approval off or once the Org is active. Unset, nothing is sent; the Admin
+panel lists waiting Orgs first and counts them on its navigation link either
+way.
 
 `smtp://` uses STARTTLS when the server offers it; `smtps://` is TLS from the
 first byte. The credentials live in `SMTP_URL` and are read server-side only —
