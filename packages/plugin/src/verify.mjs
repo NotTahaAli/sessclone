@@ -303,11 +303,19 @@ const ingestProbe = async (url, apiKey) => {
       redirect: 'manual',
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     })
-    return { reached: true, status: response.status, error: null }
+    return {
+      reached: true,
+      status: response.status,
+      // Only the origin a redirect names: its path and query are not needed
+      // to say where the URL should point.
+      redirectsTo: redirectOrigin(response),
+      error: null,
+    }
   } catch (error) {
     return {
       reached: false,
       status: null,
+      redirectsTo: null,
       // The name, not the message: a message can carry a resolved URL with a
       // query string on it.
       error: error?.name ?? 'Error',
@@ -315,15 +323,33 @@ const ingestProbe = async (url, apiKey) => {
   }
 }
 
-/** What an ingest probe's status means, in words a person can act on. */
-export const probeVerdict = (status) =>
-  status === 400
-    ? 'key accepted'
-    : status === 401
-      ? '**key refused**'
-      : status === 404
-        ? '**no ingest route here** — wrong URL'
-        : 'unexpected answer'
+/** The origin a 3xx answer points at, or null. */
+const redirectOrigin = (response) => {
+  if (response.status < 300 || response.status > 399) return null
+  try {
+    return new URL(response.headers.get('location') ?? '').origin
+  } catch {
+    return null
+  }
+}
+
+/**
+ * What an ingest probe's status means, in words a person can act on.
+ *
+ * A redirect gets its own words: `fetch` follows it and turns the report's
+ * POST into a GET, which ingest refuses, so a URL that redirects (an old
+ * deployment address, http for https) loses every Turn.
+ */
+export const probeVerdict = (status, redirectsTo = null) =>
+  status >= 300 && status <= 399
+    ? `**redirects${redirectsTo ? ` to ${redirectsTo}` : ''}**, which loses every report — set the URL to ${redirectsTo ?? 'where it redirects'}`
+    : status === 400
+      ? 'key accepted'
+      : status === 401
+        ? '**key refused**'
+        : status === 404
+          ? '**no ingest route here** — wrong URL'
+          : 'unexpected answer'
 
 /**
  * Everything tickets 68 and 69 ask a person to observe, in one object.
@@ -638,7 +664,7 @@ export const format = (report) => {
   )
   if (report.deployment) {
     say(
-      `| Ingest | ${report.deployment.reached ? `answered ${report.deployment.status}, ${probeVerdict(report.deployment.status)}` : `**unreachable** (${report.deployment.error})`} |`,
+      `| Ingest | ${report.deployment.reached ? `answered ${report.deployment.status}, ${probeVerdict(report.deployment.status, report.deployment.redirectsTo)}` : `**unreachable** (${report.deployment.error})`} |`,
     )
   }
   say(

@@ -12,6 +12,7 @@ import {
   handCount,
   isWsl,
   keyEvidence,
+  probeVerdict,
   reconcile,
 } from './verify.mjs'
 
@@ -336,5 +337,19 @@ describe('collect', () => {
       },
     ])
     expect(format(report)).toContain('more than one project directory')
+  })
+})
+
+describe('probeVerdict', () => {
+  it('names where a redirecting URL should point, since a report cannot follow it', () => {
+    expect(probeVerdict(301, 'https://sessclone.com')).toMatch(
+      /redirects to https:\/\/sessclone\.com.*set the URL to https:\/\/sessclone\.com/,
+    )
+    expect(probeVerdict(308)).toMatch(/redirects\*\*.*where it redirects/)
+  })
+
+  it('keeps its words for the answers ingest gives', () => {
+    expect(probeVerdict(400)).toBe('key accepted')
+    expect(probeVerdict(404)).toMatch(/wrong URL/)
   })
 })
