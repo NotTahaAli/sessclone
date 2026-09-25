@@ -41,6 +41,7 @@ const SESSIONS = [
     bytes: 2048,
     uploadedAt: new Date('2026-09-24T12:00:00Z'),
     lastTurnAt: null,
+    chunked: false,
   },
 ]
 const NAMES = new Map<string, string>()
