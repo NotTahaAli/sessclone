@@ -236,7 +236,7 @@ test('the demo is off unless ENABLE_DEMO=true, and a real session always wins', 
   expect(await sessionUser()).toBeNull()
   // Ticket 138 renamed it: the old spelling turns nothing on.
   vi.stubEnv('ENABLE_DEMO', undefined)
-  vi.stubEnv('ENABLE_DEMO', 'true')
+  vi.stubEnv('DEMO', 'on')
   expect(await sessionUser()).toBeNull()
 })
 

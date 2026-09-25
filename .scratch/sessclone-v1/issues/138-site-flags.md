@@ -18,6 +18,10 @@
 - **404s live in the Proxy**, which reads the flags per request and rewrites to a path no route matches, so the app's not-found page renders. The pages read the flags while they prerender, so **changing a flag needs a rebuild and redeploy**; `Dockerfile` and `compose.yaml` pass the three as build arguments.
 - **Exit demo** leaves for `/` with landing on and `/sign-in` with it off.
 
+**Review fixes (2026-09-25).** The `/` redirect keeps the session cookies `getClaims` rotated and is sent `Cache-Control: private, no-store`; a `/?code=…` that Supabase sent to its Site URL goes on to `/auth/callback` with the query kept (self-hosting now says to allow-list `/auth/callback`); the Referer fallback compares with `NEXT_PUBLIC_APP_URL`'s origin, so it holds behind a reverse proxy; the header's Sign in / Dashboard button streams in behind a same-width placeholder instead of flashing "Sign in"; the logo is not prefetched; the sitemap and `llms.txt` wait for a request (`connection()`, since `dynamic` is refused under `cacheComponents`), so they follow the runtime flags.
+
+**Merge prerequisite.** Before deploying, set `ENABLE_LANDING`, `ENABLE_DOCS` and `ENABLE_DEMO` to `true` on Vercel for Production and Preview, and remove `DEMO`. Unset, sessclone.com would serve the dashboard alone.
+
 **Blocked by:** 137
 
 **Status:** done
@@ -27,4 +31,5 @@
 - [x] The marketing header and footer drop Pricing without landing and link hosted docs without docs; the dashboard's logo is a link at both widths and on the waiting page.
 - [x] `docs/configuration.md`, the configuration and self-hosting docs pages, `docs/self-hosting.md`, `.env.example` and the CHANGELOG; `DEMO` renamed to `ENABLE_DEMO` throughout.
 - [x] Landing header signed in and signed out, and the dashboard with landing off, at 1440x900 and 390x844 in light and dark.
-- [ ] Playwright flow for the logo round trip: ticket 135's setup is not on this base, so it is proven at the Proxy and by hand in Chromium.
+- [x] Render tests for the marketing header and footer, the dashboard logo and "Try the demo" (`test/site-flags-render.test.tsx`).
+- [x] Playwright: a typed `/` opens Costs, and the dashboard logo reaches the landing page and stays there, reload included (`e2e/site-flags.e2e.ts`).

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  callbackRedirect,
   fromSite,
   homeRedirect,
   servesPath,
@@ -218,6 +219,25 @@ describe('sitemapPaths', () => {
         expect(homeRedirect(flags, visit)).toBeNull()
       }
     }
+  })
+})
+
+describe('callbackRedirect', () => {
+  it.each([
+    ['/', '?code=abc', '/auth/callback?code=abc'],
+    [
+      '/',
+      '?code=abc&next=%2Fjoin%2Ft',
+      '/auth/callback?code=abc&next=%2Fjoin%2Ft',
+    ],
+    // Only a sign-in code, and only on `/`.
+    ['/', '', null],
+    ['/', '?ref=hn', null],
+    ['/', '?code=', null],
+    ['/pricing', '?code=abc', null],
+    ['/auth/callback', '?code=abc', null],
+  ])('%s%s → %s', (path, search, expected) => {
+    expect(callbackRedirect(path, new URLSearchParams(search))).toBe(expected)
   })
 })
 

@@ -1,3 +1,5 @@
+import { connection } from 'next/server'
+
 import { source, type DocsPage } from '../../lib/docs'
 import { SITE_DESCRIPTION, canonical } from '../../lib/site'
 import { siteFlags, siteLinks } from '../../lib/site-flags'
@@ -6,7 +8,10 @@ import { siteFlags, siteLinks } from '../../lib/site-flags'
 // instead of crawling the docs. Built from the same page tree as `/docs`.
 // Ticket 138: where this deployment serves no docs, the pages are linked on
 // sessclone.com, and with no landing page there is no pricing to list.
-export function GET() {
+// Per request (`connection()`), like the sitemap, so it follows the runtime
+// flags.
+export async function GET() {
+  await connection()
   const flags = siteFlags()
   const { docs, pricing } = siteLinks(flags)
   const href = (path: string) => (flags.docs ? canonical(path) : docs(path))

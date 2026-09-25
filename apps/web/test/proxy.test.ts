@@ -10,10 +10,30 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 // thing this file does with it is decide whether somebody is signed in.
 
 let claims: { sub: string } | null = null
+// What `getClaims()` rotates, when set: the real client writes a refreshed
+// session through the `setAll` it was handed.
+let rotated: { name: string; value: string }[] = []
+
+type SetAll = (
+  cookies: { name: string; value: string; options: object }[],
+) => void
 
 vi.mock('@supabase/ssr', () => ({
-  createServerClient: () => ({
-    auth: { getClaims: async () => ({ data: claims ? { claims } : null }) },
+  createServerClient: (
+    _url: string,
+    _key: string,
+    options: { cookies: { setAll: SetAll } },
+  ) => ({
+    auth: {
+      getClaims: async () => {
+        if (rotated.length > 0) {
+          options.cookies.setAll(
+            rotated.map((cookie) => ({ ...cookie, options: { path: '/' } })),
+          )
+        }
+        return { data: claims ? { claims } : null }
+      },
+    },
   }),
 }))
 
@@ -21,6 +41,7 @@ const { proxy } = await import('../proxy')
 
 beforeEach(() => {
   claims = null
+  rotated = []
   process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co'
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'anon'
   // The whole public site, as sessclone.com runs it; ticket 138's tests
@@ -238,4 +259,59 @@ test('a flag 404 holds on a deployment with Supabase unconfigured', async () => 
   vi.stubEnv('ENABLE_DOCS', 'false')
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', '')
   expect((await at('/docs')).status).toBe(404)
+})
+
+// The review of ticket 138 (2026-09-25).
+
+test('the / redirect keeps the session cookies getClaims rotated', async () => {
+  claims = { sub: 'user-1' }
+  rotated = [{ name: 'sb-example-auth-token', value: 'fresh' }]
+
+  const response = await visit('/', { 'sec-fetch-site': 'none' })
+  expect(response.headers.get('location')).toBe(
+    'https://sessclone.example.com/costs',
+  )
+  expect(response.headers.get('set-cookie')).toMatch(
+    /^sb-example-auth-token=fresh;/,
+  )
+})
+
+test('the / redirect is never cached: it depends on the session', async () => {
+  claims = { sub: 'user-1' }
+  const signedIn = await visit('/', { 'sec-fetch-site': 'none' })
+  expect(signedIn.headers.get('cache-control')).toBe('private, no-store')
+
+  vi.stubEnv('ENABLE_LANDING', 'false')
+  claims = null
+  const signedOut = await at('/')
+  expect(signedOut.headers.get('location')).toBe(
+    'https://sessclone.example.com/sign-in',
+  )
+  expect(signedOut.headers.get('cache-control')).toBe('private, no-store')
+})
+
+test('a sign-in code that lands on / goes on to the callback, query and all', async () => {
+  // Supabase falls back to the Site URL when a redirect is not allow-listed.
+  for (const landing of ['true', 'false']) {
+    vi.stubEnv('ENABLE_LANDING', landing)
+    // oxlint-disable-next-line no-await-in-loop -- one flag at a time.
+    const response = await at('/?code=abc-123&next=%2Fjoin%2Ft')
+    expect(response.headers.get('location'), landing).toBe(
+      'https://sessclone.example.com/auth/callback?code=abc-123&next=%2Fjoin%2Ft',
+    )
+    expect(response.headers.get('cache-control')).toBe('private, no-store')
+  }
+})
+
+test('behind a proxy, the Referer is compared with NEXT_PUBLIC_APP_URL', async () => {
+  // `next start` behind a reverse proxy sees its own host, not the browser's.
+  vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://sessclone.com')
+  claims = { sub: 'user-1' }
+  const behind = (referer: string) =>
+    proxy(new NextRequest('http://localhost:3000/', { headers: { referer } }))
+
+  expect((await behind('https://sessclone.com/costs')).status).toBe(200)
+  expect(
+    (await behind('http://localhost:3000/costs')).headers.get('location'),
+  ).toBe('http://localhost:3000/costs')
 })

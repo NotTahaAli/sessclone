@@ -3,7 +3,13 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 import { safeNext } from './lib/auth/next-path'
 import { DEMO_COOKIE } from './lib/demo'
-import { fromSite, homeRedirect, servesPath, siteFlags } from './lib/site-flags'
+import {
+  callbackRedirect,
+  fromSite,
+  homeRedirect,
+  servesPath,
+  siteFlags,
+} from './lib/site-flags'
 
 // Next 16 calls this Proxy; it is what earlier versions called Middleware.
 // Two jobs: refresh the Supabase session on every request, and send a
@@ -94,18 +100,37 @@ export async function proxy(request: NextRequest) {
     })
   }
 
+  // A redirect from `/` depends on who is asking, so no cache in between
+  // (a CDN, a shared proxy) may keep one and hand it to somebody else.
+  const uncached = (to: string) => {
+    const redirect = NextResponse.redirect(new URL(to, request.nextUrl.origin))
+    redirect.headers.set('Cache-Control', 'private, no-store')
+    return redirect
+  }
+
+  // A sign-in code Supabase sent to the bare origin goes on to the callback,
+  // whatever the flags: it is somebody part-way through signing in.
+  const callback = callbackRedirect(path, request.nextUrl.searchParams)
+  if (callback) return uncached(callback)
+
+  // The deployment's own origin, for the Referer fallback in `fromSite`:
+  // behind a reverse proxy the request's is the server's (`localhost`), not
+  // the one the browser was on.
+  const configured = process.env.NEXT_PUBLIC_APP_URL
+  const origin =
+    configured && URL.canParse(configured)
+      ? new URL(configured).origin
+      : request.nextUrl.origin
+
   // Where `/` sends this visitor, or null for the landing page (ticket 138).
-  // Relative to the origin, like the sign-in redirect below.
   const home = (session: boolean, demoCookie: boolean) => {
     if (path !== '/') return null
     const to = homeRedirect(flags, {
       session,
       demoCookie,
-      fromSite: fromSite(request.headers, request.nextUrl.origin),
+      fromSite: fromSite(request.headers, origin),
     })
-    return to
-      ? NextResponse.redirect(new URL(to, request.nextUrl.origin))
-      : null
+    return to ? uncached(to) : null
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL

@@ -103,6 +103,16 @@ export const homeRedirect = (flags: SiteFlags, visit: Visit): string | null => {
 }
 
 /**
+ * Where a sign-in code that arrived on `/` belongs: the callback, with the
+ * query string whole. Supabase sends a sign-in to its Site URL, the bare
+ * origin, when the `redirectTo` it was given is not on the project's Redirect
+ * URLs list, and `/` would otherwise drop the code (and, with landing off,
+ * bounce to sign-in). null for anything else.
+ */
+export const callbackRedirect = (path: string, query: URLSearchParams) =>
+  path === '/' && query.get('code') ? `/auth/callback?${query}` : null
+
+/**
  * Whether a request was a link followed from a page of this origin.
  *
  * Fetch Metadata's `Sec-Fetch-Site`, which the browser sets and a page cannot

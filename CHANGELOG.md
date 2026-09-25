@@ -40,7 +40,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a 404; the privacy and terms pages stay. With the docs off, `/docs` is a
   404 and docs links go to sessclone.com. A signed-in visit to `/` opens the
   dashboard, and the dashboard's logo links back to the landing page.
-  Changing a flag needs a rebuild.
+  Changing a flag needs a rebuild. **Before deploying:** set all three on
+  Vercel, for Production and Preview (`true` for sessclone.com), and remove
+  `DEMO`, which nothing reads any more; unset, the landing page, docs and demo
+  are all off.
+- A sign-in that Supabase sends to the bare site with `?code=` now continues
+  to `/auth/callback` instead of stopping on the home page.
 - `/.well-known/security.txt` (RFC 9116), pointing to GitHub private advisories
   and, when set, the deployment's contact address. Its expiry is always a
   year ahead.

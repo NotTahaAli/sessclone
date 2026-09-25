@@ -6,7 +6,6 @@ import Link from 'next/link'
 
 import { AccountBlock, Avatar } from './account'
 import { AppearanceSync } from './appearance-sync'
-import { LogoMark } from '../_ui/logo'
 import { Waiting } from './waiting'
 import { OrgMark } from '../org-mark'
 import { OrgSwitcher } from './org-switcher'
@@ -27,9 +26,9 @@ import {
 } from './navigation'
 import Loading from './loading'
 import { exitDemo } from '../demo/actions'
+import { HomeLogo } from './home-logo'
 import { isLocked } from '../../lib/approval'
 import { isDemoUser } from '../../lib/demo'
-import { siteFlags, siteLinks } from '../../lib/site-flags'
 import { asViewer } from '../../lib/db'
 import { currentOperator } from '../../lib/platform-admin'
 import { pendingOrgCount } from '../../lib/subscriptions'
@@ -323,24 +322,6 @@ async function AdminEntry() {
   // Ticket 120: how many Orgs are waiting for approval, beside the link.
   const pending = await asViewer(operator.userId, pendingOrgCount)
   return <SidebarLinks items={adminPanelEntry(pending)} />
-}
-
-/**
- * The sessclone mark, as the way to the landing page (ticket 138), or to
- * Costs where this deployment has none. The Proxy lets a click from here reach
- * the landing page, where a typed `/` would open the dashboard instead.
- */
-function HomeLogo() {
-  const { logo } = siteLinks(siteFlags())
-  return (
-    <Link
-      href={logo.href}
-      aria-label={logo.label}
-      className="hover:bg-surface-hover -m-1 shrink-0 rounded p-1"
-    >
-      <LogoMark className="text-text" />
-    </Link>
-  )
 }
 
 /** The brand line at both widths: the sessclone mark, then the Org's name in

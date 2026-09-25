@@ -14,6 +14,15 @@ vi.mock('../lib/docs', () => ({
   },
 }))
 
+// The indexes must follow the runtime flags rather than a build's, so each
+// waits for a request (`connection()`) before it reads them. Counted here;
+// the build's route table shows the same thing as ƒ rather than ○.
+const connection = vi.fn(async () => {})
+vi.mock('next/server', async (original) => ({
+  ...(await original<typeof import('next/server')>()),
+  connection,
+}))
+
 const { default: sitemap } = await import('../app/sitemap')
 const { GET: llms } = await import('../app/llms.txt/route')
 
@@ -23,6 +32,7 @@ const flags = (landing: boolean, docs: boolean) => {
 }
 
 beforeEach(() => {
+  connection.mockClear()
   vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://self.example')
 })
 afterEach(() => {
@@ -30,9 +40,14 @@ afterEach(() => {
 })
 
 describe('sitemap', () => {
-  it('lists the whole site with every flag on', () => {
+  it('is rendered per request', async () => {
+    await sitemap()
+    expect(connection).toHaveBeenCalledOnce()
+  })
+
+  it('lists the whole site with every flag on', async () => {
     flags(true, true)
-    expect(sitemap().map((entry) => entry.url)).toEqual([
+    expect((await sitemap()).map((entry) => entry.url)).toEqual([
       'https://self.example',
       'https://self.example/pricing',
       'https://self.example/privacy',
@@ -42,9 +57,9 @@ describe('sitemap', () => {
     ])
   })
 
-  it('lists only the legal pages on a dashboard-only deployment', () => {
+  it('lists only the legal pages on a dashboard-only deployment', async () => {
     flags(false, false)
-    expect(sitemap().map((entry) => entry.url)).toEqual([
+    expect((await sitemap()).map((entry) => entry.url)).toEqual([
       'https://self.example/privacy',
       'https://self.example/terms',
     ])
@@ -52,9 +67,14 @@ describe('sitemap', () => {
 })
 
 describe('llms.txt', () => {
+  it('is rendered per request', async () => {
+    await llms()
+    expect(connection).toHaveBeenCalledOnce()
+  })
+
   it('links this deployment’s docs and pricing when it serves them', async () => {
     flags(true, true)
-    const body = await llms().text()
+    const body = await (await llms()).text()
     expect(body).toContain('- [Docs](https://self.example/docs): Start here')
     expect(body).toContain('https://self.example/docs/self-hosting')
     expect(body).toContain('- [Pricing](https://self.example/pricing)')
@@ -62,7 +82,7 @@ describe('llms.txt', () => {
 
   it('links the hosted docs, and no pricing, when it serves neither', async () => {
     flags(false, false)
-    const body = await llms().text()
+    const body = await (await llms()).text()
     expect(body).toContain('- [Docs](https://sessclone.com/docs): Start here')
     expect(body).toContain('https://sessclone.com/docs/self-hosting')
     expect(body).not.toContain('self.example/docs')
