@@ -23,6 +23,11 @@ import { streamOf, zip } from '../../../../lib/zip'
 // authorisation. A GET, so the page's form is a plain download and the URL
 // is one a person can retry.
 
+// The zip streams for as long as the client takes to read it, and a cut
+// stream is a corrupt zip, so it gets the longest a function may run on every
+// plan. `ARCHIVE_ENTRIES` and `ARCHIVE_BYTES` keep it inside that.
+export const maxDuration = 300
+
 export async function GET(request: Request) {
   // Ticket 119: a locked Org downloads nothing, its own included.
   if (await viewerLocked()) {

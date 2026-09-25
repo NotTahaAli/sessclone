@@ -35,7 +35,12 @@ export function DownloadAll({ choices }: { choices: ArchiveChoices }) {
         className="mt-3 flex flex-col gap-4"
       >
         <fieldset className="flex flex-wrap gap-x-4 gap-y-2">
-          <legend className={`${HEADING} mb-1.5`}>Uploaded</legend>
+          <legend className={`${HEADING} mb-1.5`}>
+            Active{' '}
+            <span className="text-text-muted text-caption font-normal tracking-normal normal-case">
+              · a transcript with any Turn in range comes whole
+            </span>
+          </legend>
           <label className="text-text-muted flex items-center gap-2 text-caption">
             From
             <input type="date" name="from" className={`${inputClass} w-40`} />

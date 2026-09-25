@@ -16,14 +16,19 @@ import type { ZipEntry } from './zip'
 // the statement below asks for that same set. A filter can only narrow it: a
 // hand-typed Member id outside it matches no row, as it would on the page.
 
-/** Past this many transcripts the route refuses and asks for narrower filters. */
-export const ARCHIVE_ENTRIES = 1000
 /**
- * Past this many raw bytes, likewise. Half of what a zip without ZIP64 holds,
- * so a transcript that grew after it was listed cannot overflow the archive.
- * ponytail: ZIP64 lifts both caps if a real Org hits them.
+ * Past this many transcripts the route refuses and asks for narrower filters.
+ * Not a format limit (the zip goes ZIP64 as it needs to) but a time one: the
+ * whole zip has to stream inside one function's `maxDuration`, and each
+ * transcript costs a storage round trip or two, one after another.
+ * ponytail: fetching the next object while this one streams would raise it.
  */
-export const ARCHIVE_BYTES = 2 * 1024 ** 3
+export const ARCHIVE_ENTRIES = 2000
+/**
+ * Past this many raw bytes, likewise. Deflating runs near 190 MB/s here, so
+ * the bound is the client's download of what is left, several times smaller.
+ */
+export const ARCHIVE_BYTES = 8 * 1024 ** 3
 
 const one = (value: string | null) => value || undefined
 const Day = z.iso.date()
@@ -58,6 +63,8 @@ export type ArchiveItem = {
   sessionId: string
   agentId: string | null
   uploadedAt: Date
+  /** The transcript's last Turn, or its last upload when it has none. */
+  endedAt: Date
   sizeBytes: number
   storageKey: string
   /** ADR 0008: the gzip chunks before the tail at `storageKey`, in order. */
@@ -93,6 +100,7 @@ export const archiveList = async (
       session_id: string
       agent_id: string | null
       uploaded_at: Date
+      ended_at: Date
       size_bytes: string
       storage_key: string
       chunks: { storageKey: string; sha256: string }[]
@@ -100,6 +108,7 @@ export const archiveList = async (
   >`
     select artifact.member_id, artifact.session_id, artifact.agent_id,
            artifact.uploaded_at, artifact.size_bytes, artifact.storage_key,
+           coalesce(span.ended_at, artifact.uploaded_at) as ended_at,
            coalesce(person.email, artifact.member_id::text) as person,
            coalesce(project.nickname, project.key) as project,
            case when test.chunked then coalesce(chunk.list, '[]') else '[]' end
@@ -109,6 +118,10 @@ export const archiveList = async (
       left join members member on member.id = artifact.member_id
       left join users person on person.id = member.user_id
       cross join lateral (select ${chunkedSql(tx, 'artifact')} as chunked) test
+      -- Its first and last Turn and its Devices, read past the history
+      -- window: a stored transcript is downloadable whatever its age.
+      cross join lateral sessclone_transcript_span(
+        artifact.member_id, artifact.session_id, artifact.agent_id) span
       left join lateral (
         select json_agg(json_build_object(
                  'storageKey', storage_key, 'sha256', sha256
@@ -121,15 +134,18 @@ export const archiveList = async (
        and artifact.kind = 'transcript'
        ${
          // Calendar days in the Org's timezone, `to` counted, as the Costs
-         // range reads them. On the upload time, which is the indexed column
-         // and, for a transcript re-uploaded as it grows, its last activity.
+         // range reads them. A transcript whose span, first Turn to last,
+         // touches the range is in, whole. One with no Turns spans its
+         // upload time.
          filter.from
-           ? tx`and artifact.uploaded_at >= (${filter.from}::date)::timestamp at time zone ${timezone}`
+           ? tx`and coalesce(span.ended_at, artifact.uploaded_at)
+                    >= (${filter.from}::date)::timestamp at time zone ${timezone}`
            : tx``
        }
        ${
          filter.to
-           ? tx`and artifact.uploaded_at < (${filter.to}::date + 1)::timestamp at time zone ${timezone}`
+           ? tx`and coalesce(span.started_at, artifact.uploaded_at)
+                    < (${filter.to}::date + 1)::timestamp at time zone ${timezone}`
            : tx``
        }
        ${
@@ -145,13 +161,8 @@ export const archiveList = async (
        }
        ${
          // A transcript has no Device of its own; its Session's Turns do.
-         // `turns_identity_key` leads on (member_id, session_id).
          filter.devices.length
-           ? tx`and exists (
-               select 1 from turns turn
-                where turn.member_id = artifact.member_id
-                  and turn.session_id = artifact.session_id
-                  and turn.device_id = any(${filter.devices}::uuid[]))`
+           ? tx`and span.device_ids && ${filter.devices}::uuid[]`
            : tx``
        }
      order by person, project nulls last, artifact.uploaded_at desc,
@@ -165,6 +176,7 @@ export const archiveList = async (
     sessionId: row.session_id,
     agentId: row.agent_id,
     uploadedAt: row.uploaded_at,
+    endedAt: row.ended_at,
     sizeBytes: Number(row.size_bytes),
     storageKey: row.storage_key,
     chunks: row.chunks,
@@ -274,7 +286,7 @@ export async function* archiveEntries(
     try {
       yield {
         name: paths[index]!,
-        modified: item.uploadedAt,
+        modified: item.endedAt,
         body: (async function* () {
           started = true
           for (const [at, sealed] of item.chunks.entries()) {

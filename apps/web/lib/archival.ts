@@ -77,9 +77,9 @@ export const listArchivalProjects = (tx: postgres.TransactionSql) =>
     with seen as (
       -- union rather than union all: the pair is what matters, and a Member
       -- with a thousand Turns on one Project is one row either way.
-      select member_id, project_id from turns
-       where member_id in (select sessclone_own_member_ids())
-         and project_id is not null
+      -- Past the history window too (ticket 139): an old Project is still
+      -- one to opt out of.
+      select member_id, project_id from sessclone_own_turn_projects()
       union
       select member_id, project_id from log_artifacts
        where member_id in (select sessclone_own_member_ids())
