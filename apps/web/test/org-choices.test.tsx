@@ -73,3 +73,20 @@ test('one Org still offers New Org, and Leave needs another Org to go to', () =>
   expect(body(one)).not.toContain('Leave Acme')
   expect(body([...one, org('n', 'Globex')])).toContain('Leave Acme')
 })
+
+test('the last Owner of a locked Org is told of Members, not sent there', () => {
+  // The waiting page covers Members, so a link to it is a dead end.
+  const switcher = (locked: boolean) => ({
+    ...data('2026-09-30T09:00:00Z'),
+    invites: [],
+    lastOwner: true,
+    orgs: [{ ...org('m', 'Acme'), locked }, org('n', 'Globex')],
+  })
+  const body = (locked: boolean) =>
+    renderToStaticMarkup(
+      <SwitcherBody data={switcher(locked)} current="m" orgName="Acme" />,
+    )
+  expect(body(false)).toContain('href="/settings/org/members"')
+  expect(body(true)).not.toContain('href="/settings/org/members"')
+  expect(body(true)).toContain('Members')
+})

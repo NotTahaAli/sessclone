@@ -160,10 +160,14 @@ function Leave({
   memberId,
   orgName,
   lastOwner,
+  locked,
 }: {
   memberId: string
   orgName: string
   lastOwner: boolean
+  /** The current Org waits or is cancelled: Members is behind the waiting
+   * page, so it is named, not linked. */
+  locked: boolean
 }) {
   const [state, action, pending] = useActionState(leaveCurrentOrg, null)
   const [asked, setAsked] = useState(false)
@@ -175,9 +179,13 @@ function Leave({
       <p className="text-text-muted px-2 py-2 text-caption">
         You are {orgName}&apos;s only Owner, so you cannot leave it. Make
         somebody else an Owner in{' '}
-        <Link href="/settings/org/members" className="underline">
-          Members
-        </Link>{' '}
+        {locked ? (
+          'Members'
+        ) : (
+          <Link href="/settings/org/members" className="underline">
+            Members
+          </Link>
+        )}{' '}
         first.
       </p>
     )
@@ -255,7 +263,12 @@ export function SwitcherBody({
           (Taha, 2026-09-25). */}
       {orgs.length > 1 ? (
         <div className="border-rule mt-1.5 border-t">
-          <Leave memberId={current} orgName={orgName} lastOwner={lastOwner} />
+          <Leave
+            memberId={current}
+            orgName={orgName}
+            lastOwner={lastOwner}
+            locked={orgs.some((org) => org.memberId === current && org.locked)}
+          />
         </div>
       ) : null}
       <div className="border-rule mt-1.5 border-t pt-1.5">
