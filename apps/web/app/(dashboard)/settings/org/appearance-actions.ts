@@ -7,6 +7,7 @@ import { readSeed, SEED_REFUSALS, resolveAccent } from '../../../../lib/accent'
 import { setOrgAccent, setOrgAccentLock } from '../../../../lib/appearance'
 import { asViewer } from '../../../../lib/db'
 import { viewerOfOrg } from '../../../../lib/viewer'
+import { DEMO_REFUSAL, isDemoUser } from '../../../../lib/demo'
 
 // Ticket 77's two Org writes: the default accent seed, and whether Members may
 // override it. Owner or Admin, which is `orgs_write` — this file asserts
@@ -39,6 +40,7 @@ export const setOrgSeed = async (
 ): Promise<OrgAppearanceResult> => {
   const viewer = await viewerOfOrg(formData.get('orgId'))
   if (!viewer) return { error: 'Sign in again to change the Org’s colour.' }
+  if (isDemoUser(viewer.userId)) return { error: DEMO_REFUSAL }
 
   const orgId = z.uuid().safeParse(formData.get('orgId'))
   const typed = z.string().min(1).max(9).safeParse(submitted(formData))
@@ -69,6 +71,7 @@ export const setSeedLock = async (
 ): Promise<OrgAppearanceResult> => {
   const viewer = await viewerOfOrg(formData.get('orgId'))
   if (!viewer) return { error: 'Sign in again to change the Org’s colour.' }
+  if (isDemoUser(viewer.userId)) return { error: DEMO_REFUSAL }
 
   const orgId = z.uuid().safeParse(formData.get('orgId'))
   const locked = z.enum(['on', 'off']).safeParse(formData.get('locked'))

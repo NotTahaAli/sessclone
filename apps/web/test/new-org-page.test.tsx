@@ -6,7 +6,7 @@ import { PlanStep } from '../app/new-org/page'
 // The page's imports reach the session and the database; neither is read by
 // the part under test.
 vi.mock('../app/(dashboard)/org-actions', () => ({ createOrg: () => null }))
-vi.mock('../lib/supabase/server', () => ({ sessionUser: async () => null }))
+vi.mock('../lib/supabase/server', () => ({ realSessionUser: async () => null }))
 vi.mock('../app/sign-up/plan-choices', () => ({
   offeredPlans: async () => [],
   PlanChoices: () => null,

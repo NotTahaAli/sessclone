@@ -6,6 +6,7 @@ import { CATEGORIES } from '@sessclone/shared'
 import { asViewer } from '../../../../../lib/db'
 import { signedInUser } from '../../../../../lib/supabase/server'
 import * as presets from '../../../../../lib/view-presets'
+import { DEMO_REFUSAL, isDemoUser } from '../../../../../lib/demo'
 
 // Tickets 105-107: the transcript viewer's saved presets. Anybody can POST to
 // a Server Action, so every input is parsed here, and whose row it is comes
@@ -34,6 +35,7 @@ export const savePreset = async (
 ): Promise<Result<presets.SavedPreset>> => {
   const user = await signedInUser()
   if (!user) return SIGN_IN
+  if (isDemoUser(user.id)) return { ok: false, error: DEMO_REFUSAL }
   const parsed = Preset.safeParse(input)
   if (!parsed.success) return { ok: false, error: 'That is not a preset.' }
   const preset = {
@@ -49,6 +51,7 @@ export const savePreset = async (
 export const deletePreset = async (id: string): Promise<Result<null>> => {
   const user = await signedInUser()
   if (!user) return SIGN_IN
+  if (isDemoUser(user.id)) return { ok: false, error: DEMO_REFUSAL }
   const parsed = Id.safeParse(id)
   const deleted =
     parsed.success &&
@@ -63,6 +66,7 @@ export const setDefaultPreset = async (
 ): Promise<Result<null>> => {
   const user = await signedInUser()
   if (!user) return SIGN_IN
+  if (isDemoUser(user.id)) return { ok: false, error: DEMO_REFUSAL }
   const parsed = Id.nullable().safeParse(id)
   if (!parsed.success) return { ok: false, error: 'No such preset.' }
   // A refused id rolls back the cleared default too, so nothing half-changes.

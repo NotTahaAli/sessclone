@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
+import { DEMO_COOKIE, DEMO_EMAIL, DEMO_USER_ID, demoEnabled } from '../demo'
 import { viewerLocked } from '../viewer'
 
 // Supabase Auth owns sign-in and the session cookie, and nothing else (ADR
@@ -63,14 +64,49 @@ export const supabaseServer = async () => {
  * Everything else asks `signedInUser`.
  */
 export const sessionUser = async () => {
+  const claims = await verifiedClaims()
+
+  // Ticket 137: with no session at all, the demo cookie makes this the demo
+  // visitor. Only then, so a signed-in person always sees their own Orgs. A
+  // session `getClaims` refuses is no claims, and without the demo cookie
+  // that is null as it always was.
+  if (!claims) return demoVisitor()
+  return personOf(claims)
+}
+
+/**
+ * The signed-in person from a real Supabase session, never the demo visitor
+ * (ticket 137): for the pages that act on a real account — accepting an
+ * invitation, starting an Org — where the demo must read as signed out.
+ */
+export const realSessionUser = async () => {
+  const claims = await verifiedClaims()
+  return claims ? personOf(claims) : null
+}
+
+const verifiedClaims = async () => {
   const supabase = await supabaseServer()
   const { data } = await supabase.auth.getClaims()
-  const claims = data?.claims
-
-  if (!claims?.sub || typeof claims.email !== 'string') return null
-
-  return { id: claims.sub, email: claims.email }
+  return data?.claims ?? null
 }
+
+const personOf = (claims: { sub?: unknown; email?: unknown }) =>
+  typeof claims.sub === 'string' &&
+  claims.sub &&
+  typeof claims.email === 'string'
+    ? { id: claims.sub, email: claims.email }
+    : null
+
+/**
+ * The demo visitor, when the deployment runs the demo and this browser asked
+ * for it at `/demo`. Every read then runs as them under the same policies as
+ * anybody (ADR 0001), and `asViewer` makes each of their transactions
+ * read-only.
+ */
+const demoVisitor = async () =>
+  demoEnabled() && (await cookies()).get(DEMO_COOKIE)?.value === '1'
+    ? { id: DEMO_USER_ID, email: DEMO_EMAIL }
+    : null
 
 /**
  * The signed-in person, or null — and null too while their Org is locked

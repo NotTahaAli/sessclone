@@ -13,11 +13,11 @@ if the two ever disagree — a variable added to one and not the other, or a
 default written differently in each, is a test failure rather than a support
 ticket.
 
-Every variable in the tables below is read by code today, except `CRON_SECRET`,
-which is read by Vercel's scheduler rather than by this application (see
-[Retention sweep](#retention-sweep)). **Required** means the code throws, or
-the feature refuses to run, without it; **Default** is what the code falls back
-to when it is unset.
+Every variable in the tables below is read by code today. `CRON_SECRET` is
+read by Vercel's scheduler as well as by this application, which checks it on
+`/api/demo/refresh` when `DEMO=on` (see [Retention sweep](#retention-sweep)).
+**Required** means the code throws, or the feature refuses to run, without it;
+**Default** is what the code falls back to when it is unset.
 
 **Nothing here is a secret.** Every value below is an example or a default.
 Real credentials live in `.env`, which is gitignored, or in the deployment's
@@ -136,8 +136,11 @@ server is reported the same way, because the inviter's remedy is identical.
 The same two variables send the platform admins a note each time somebody
 signs up and creates an Org waiting for approval (ticket 120,
 `apps/web/lib/signup-notice.ts`), with a link to that Org under **/admin →
-Orgs**. Unset, nothing is sent; the Admin panel lists waiting Orgs first and
-counts them on its navigation link either way.
+Orgs**. A New Org started from the Org switcher (ticket 136) sends the same
+note, the same way — after the transaction commits, and not at all with
+approval off or once the Org is active. Unset, nothing is sent; the Admin
+panel lists waiting Orgs first and counts them on its navigation link either
+way.
 
 `smtp://` uses STARTTLS when the server offers it; `smtps://` is TLS from the
 first byte. The credentials live in `SMTP_URL` and are read server-side only —
@@ -153,11 +156,13 @@ On by default, self-hosted deployments included (ticket 119,
 `apps/web/lib/approval.ts`). An Org whose subscription is `inactive` — which is
 where every sign-up starts, on the plan it picked (ticket 118) — or which has
 no subscription row, or is `cancelled`, is locked: the dashboard shows only
-"Waiting for approval" (or "Cancelled") and Sign out, no key can be created,
+"You're on the waitlist" (or "Cancelled"), the Org switcher and Sign out, no key can be created,
 and ingest answers its existing keys with the same 401 as any unknown key.
 `past_due` is not locked; it keeps its banner and works. A platform admin
 approves an Org by setting it `active` under **/admin → Orgs**, where Orgs
-waiting for approval are listed first.
+waiting for approval are listed first. A New Org started from the Org switcher
+(ticket 136) waits in the same way, and a person may have only one Org of
+their own waiting at a time.
 
 Any value other than `off` (case-insensitive) leaves it on. With it off, every
 status behaves as before the lock: a notice on every page, collection working.
@@ -181,8 +186,9 @@ approves it.
 | `NEXT_PUBLIC_APP_URL` | yes      | —       | Origin this deployment answers on, e.g. `https://sessclone.example.com`. No trailing slash |
 
 Read by `apps/web/lib/auth/app-url.ts`, which throws when it is unset, and by
-`apps/web/lib/appearance.ts`, which marks its cookie `Secure` when the URL is
-`https://`. Used to build the sign-in redirect, invite links and the install instructions a
+`apps/web/lib/appearance.ts`, `apps/web/lib/viewer.ts` (the Org switcher's
+choice) and `apps/web/lib/demo.ts`, which mark their cookies `Secure` when the
+URL is `https://`. Used to build the sign-in redirect, invite links and the install instructions a
 Member is shown, so a
 self-hoster's team is told to report to the self-hoster's deployment. It is not
 derived from request headers: a forwarded `Host` is attacker-controllable, and
@@ -198,6 +204,35 @@ own verified address, and accepting it takes a deliberate press rather than a
 page load. Treat a link in a chat message the way you would treat a password
 reset link, and revoke one you think has been seen.
 
+### Live demo (optional)
+
+| Variable      | Required    | Default | What it is                                                                                      |
+| ------------- | ----------- | ------- | ----------------------------------------------------------------------------------------------- |
+| `DEMO`        | no          | off     | `on` runs a read-only demo at `/demo` and shows "Try the demo" on the landing and pricing pages |
+| `CRON_SECRET` | with `DEMO` | —       | Bearer secret for `/api/demo/refresh`. Unset means the route refuses every call                 |
+
+Off by default, so a self-hosted copy has no demo unless you opt in. With
+`DEMO=on`, `/demo` sets a cookie that shows a visitor with no session two
+made-up Orgs, as Owner of one and Member of the other; every save answers
+"This is a demo", because each of the visitor's database transactions is
+read-only. A signed-in person always sees their own Orgs.
+
+The data is generated, never copied from real usage: six invented people per
+Org over the last 60 days. `GET` or `POST /api/demo/refresh` with
+`Authorization: Bearer <CRON_SECRET>` creates the demo Orgs when missing,
+deletes what is older than 60 days, and fills any missing day, so the first
+call backfills the whole window. It is idempotent. On Vercel,
+`apps/web/vercel.json` calls it daily at 23:00 UTC; elsewhere, schedule it
+yourself once a day, after 23:00 UTC. It writes as `INGEST_DATABASE_URL`, and
+stores a few hundred kilobytes of made-up transcripts when storage is
+configured.
+
+**Toggling `DEMO` needs a redeploy.** The landing and pricing pages are
+prerendered at build time, so their "Try the demo" button appears or
+disappears only with the next build. `/demo`, the banner and the refresh read
+the variable per request and follow it at once, so turning it off without a
+redeploy leaves a button that leads to a 404.
+
 ### Retention sweep
 
 Retention is a window per Org, in days, set by an Owner or an Admin under Org
@@ -212,10 +247,10 @@ an object that is already gone succeeds.
 **Turns are never touched by it.** The spend history is append-only and
 survives every transcript it describes.
 
-| Variable                 | Required    | Default | What it is                                                                                |
-| ------------------------ | ----------- | ------- | ----------------------------------------------------------------------------------------- |
-| `RETENTION_SWEEP_SECRET` | no          | —       | Shared secret for `/api/retention/sweep`. Unset means the route refuses every call        |
-| `CRON_SECRET`            | Vercel only | —       | Read by Vercel Cron, not by the app. Set it to the same value as `RETENTION_SWEEP_SECRET` |
+| Variable                 | Required    | Default | What it is                                                                                                                                         |
+| ------------------------ | ----------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RETENTION_SWEEP_SECRET` | no          | —       | Shared secret for `/api/retention/sweep`. Unset means the route refuses every call                                                                 |
+| `CRON_SECRET`            | Vercel only | —       | Sent by Vercel Cron; the app reads it only for `/api/demo/refresh` when `DEMO=on`. On Vercel, set it to the same value as `RETENTION_SWEEP_SECRET` |
 
 **Who calls it.** On Vercel, `apps/web/vercel.json` schedules a daily
 `GET /api/retention/sweep`, and Vercel Cron sends

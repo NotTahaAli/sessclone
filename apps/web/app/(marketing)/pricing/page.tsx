@@ -1,4 +1,6 @@
 import { FRAME } from '../constants'
+import { DemoLink } from '../demo-link'
+import { demoEnabled } from '../../../lib/demo'
 import { canonical } from '../../../lib/site'
 import { TiersUnavailable } from '../tiers-unavailable'
 import { PlanPicker, type Plan } from './plan-picker'
@@ -71,5 +73,10 @@ const Intro = () => (
       Every laptop, cloud session and CI job a person runs counts once. Slide to
       your team size and the plan that fits is marked.
     </p>
+    {demoEnabled() ? (
+      <p className="mb-4">
+        <DemoLink />
+      </p>
+    ) : null}
   </>
 )

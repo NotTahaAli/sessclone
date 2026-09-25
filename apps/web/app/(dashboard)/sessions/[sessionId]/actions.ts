@@ -12,6 +12,7 @@ import {
   type SessionState,
 } from '../../../../lib/names'
 import { currentViewer } from '../../../../lib/viewer'
+import { DEMO_REFUSAL, isDemoUser } from '../../../../lib/demo'
 
 // Ticket 90's second write: a name for a Session.
 //
@@ -35,6 +36,7 @@ export const labelSessionAction = async (
 ): Promise<NameState> => {
   const viewer = await currentViewer()
   if (!viewer) return { error: 'Sign in again to name this Session.' }
+  if (isDemoUser(viewer.userId)) return { error: DEMO_REFUSAL }
 
   const memberId = MemberId.safeParse(formData.get('memberId'))
   const sessionId = SessionId.safeParse(formData.get('sessionId'))
@@ -91,6 +93,7 @@ export const setSessionStateAction = async (
 ): Promise<ShelfState> => {
   const viewer = await currentViewer()
   if (!viewer) return { error: 'Sign in again to move this Session.' }
+  if (isDemoUser(viewer.userId)) return { error: DEMO_REFUSAL }
 
   const memberId = MemberId.safeParse(formData.get('memberId'))
   const sessionId = SessionId.safeParse(formData.get('sessionId'))

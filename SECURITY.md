@@ -9,8 +9,9 @@
 | Older releases                      | no — upgrade first     |
 | The hosted service at sessclone.com | yes, always the latest |
 
-There are no tagged releases yet; until the first one, `main` is the only
-supported version.
+The latest tagged release is listed under
+[Releases](https://github.com/NotTahaAli/sessclone/releases); the first was
+`v0.1.0`.
 
 ## Reporting a vulnerability
 

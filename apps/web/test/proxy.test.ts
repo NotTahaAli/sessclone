@@ -135,3 +135,35 @@ test('a lookalike of a public file is not public', async () => {
   )
   expect(statuses).toEqual([307, 307, 307, 307])
 })
+
+// Ticket 137: the demo has no session, so the Proxy lets its cookie through
+// when the deployment runs the demo — and only then.
+const withCookie = (path: string, cookie: string) =>
+  proxy(
+    new NextRequest(`https://sessclone.example.com${path}`, {
+      headers: { cookie },
+    }),
+  )
+
+test('/demo is public, and the demo cookie reaches the dashboard only with DEMO=on', async () => {
+  vi.stubEnv('DEMO', 'on')
+  try {
+    expect((await at('/demo')).headers.get('location')).toBeNull()
+    expect(
+      (await withCookie('/costs', 'sessclone-demo=1')).headers.get('location'),
+    ).toBeNull()
+    // Any other value is no demo at all.
+    expect(
+      (await withCookie('/costs', 'sessclone-demo=yes')).headers.get(
+        'location',
+      ),
+    ).toBe('https://sessclone.example.com/sign-in')
+
+    vi.stubEnv('DEMO', 'off')
+    expect(
+      (await withCookie('/costs', 'sessclone-demo=1')).headers.get('location'),
+    ).toBe('https://sessclone.example.com/sign-in')
+  } finally {
+    vi.unstubAllEnvs()
+  }
+})

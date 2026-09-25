@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+import { after } from 'next/server'
 import { z } from 'zod'
 
 import { approvalRequired } from '../../lib/approval'
@@ -16,6 +17,7 @@ import {
 } from '../../lib/invitations'
 import { leaveOrg } from '../../lib/members'
 import { ORG_NAME_RULE, OrgNameInput } from '../../lib/names'
+import { notifySignup } from '../../lib/signup-notice'
 import { sessionUser } from '../../lib/supabase/server'
 import { marketingTiers } from '../../lib/tiers'
 import {
@@ -23,6 +25,7 @@ import {
   MEMBER_COOKIE_OPTIONS,
   sessionViewer,
 } from '../../lib/viewer'
+import { DEMO_REFUSAL, isDemoUser } from '../../lib/demo'
 
 // The Org switcher's five writes. Every one starts from `sessionUser()`, not
 // `signedInUser()`: somebody whose current Org is waiting for approval must
@@ -71,6 +74,7 @@ export const acceptInvite = async (
 ): Promise<OrgActionState> => {
   const user = await sessionUser()
   if (!user) return { error: 'Sign in again to accept.' }
+  if (isDemoUser(user.id)) return { error: DEMO_REFUSAL }
 
   const id = Id.safeParse(formData.get('invitationId'))
   if (!id.success) return { error: 'This invitation is not valid.' }
@@ -98,6 +102,7 @@ export const declineInvite = async (
 ): Promise<OrgActionState> => {
   const user = await sessionUser()
   if (!user) return { error: 'Sign in again to decline.' }
+  if (isDemoUser(user.id)) return { error: DEMO_REFUSAL }
 
   const id = Id.safeParse(formData.get('invitationId'))
   if (!id.success) return { error: 'This invitation is not valid.' }
@@ -127,6 +132,7 @@ export const leaveCurrentOrg = async (
 ): Promise<OrgActionState> => {
   const viewer = await sessionViewer()
   if (!viewer) return { error: 'Sign in again to leave.' }
+  if (isDemoUser(viewer.userId)) return { error: DEMO_REFUSAL }
 
   const memberId = Id.safeParse(formData.get('memberId'))
   if (!memberId.success || memberId.data !== viewer.memberId) {
@@ -164,6 +170,7 @@ export const createOrg = async (
 ): Promise<OrgActionState> => {
   const user = await sessionUser()
   if (!user) return { error: 'Sign in again to create an Org.' }
+  if (isDemoUser(user.id)) return { error: DEMO_REFUSAL }
 
   const name = OrgNameInput.safeParse(formData.get('name'))
   if (!name.success) return { error: ORG_NAME_RULE }
@@ -176,8 +183,9 @@ export const createOrg = async (
   }
 
   let memberId: string
+  let orgId: string
   try {
-    ;({ memberId } = await asViewer(user.id, (tx) =>
+    ;({ memberId, orgId } = await asViewer(user.id, (tx) =>
       createOwnOrg(tx, user.id, { name: name.data, plan }),
     ))
   } catch (error) {
@@ -186,6 +194,16 @@ export const createOrg = async (
       error:
         'You already have an Org waiting for approval. You can start another once it is approved.',
     }
+  }
+
+  // Ticket 120, reused for ticket 136: the platform admins hear about this
+  // Org too, exactly as they would about a sign-up — after the transaction
+  // above has committed, and never `throw`ing into it (`notifySignup` never
+  // throws). Only when it can be waiting on anybody: off with approval
+  // switched off, where nothing is ever pending, and `signupNotice` itself
+  // answers nobody once an Org is approved.
+  if (approvalRequired()) {
+    after(() => notifySignup(user.id, orgId))
   }
 
   // Lands in the new Org: the waiting page, while it waits.

@@ -57,10 +57,10 @@ export type Caller = { keyId: string; memberId: string; orgId: string }
  * become a scan over every key in the deployment on the hottest path in the
  * product.
  *
- * Four conditions, and all four are the database's rather than a route's.
+ * Five conditions, and all five are the database's rather than a route's.
  * `revoked_at is null` is what makes revocation immediate, and `removed_at is
  * null` keeps a removed Member's forgotten key from carrying on reporting into
- * an Org they left. The fourth is ticket 119's lock.
+ * an Org they left. The fourth is ticket 119's lock, the fifth ticket 137's demo.
  */
 export const resolveCaller = async (sql: postgres.Sql, presented: string) => {
   const [caller] = await sql<Caller[]>`
@@ -72,6 +72,10 @@ export const resolveCaller = async (sql: postgres.Sql, presented: string) => {
      where api_key.key_hash = ${hashApiKey(presented)}
        and api_key.revoked_at is null
        and member.removed_at is null
+       -- Ticket 137: a demo Org's data is generated, never reported. It has
+       -- no keys and its visitor cannot make one, and this refuses one anyway.
+       and not exists (select 1 from orgs org
+                        where org.id = member.org_id and org.is_demo)
        -- Ticket 119: a locked Org's key is no key at all, answered with the
        -- same 401 so the route cannot be asked whose keys are waiting. The
        -- statuses are UNLOCKED_STATUSES in lib/approval.ts.

@@ -22,24 +22,12 @@ import { hrefWith, one, type Query } from '../query'
 import { MenuItem, PillMenu } from '../../_ui/pill-menu'
 import { Row, SectionBreak } from '../../_ui/primitives'
 import { appUrl } from '../../../lib/auth/app-url'
-import { asViewer, pageSeenAt } from '../../../lib/db'
-import {
-  onboardingFacts,
-  onboardingState,
-  type OnboardingFacts,
-} from '../../../lib/onboarding'
-import {
-  breakdown,
-  type Breakdown,
-  type Dimension,
-} from '../../../lib/breakdown'
-import {
-  countFailures,
-  sessionFailures,
-  type Failures,
-} from '../../../lib/failures'
+import { onboardingState, type OnboardingFacts } from '../../../lib/onboarding'
+import { type Breakdown, type Dimension } from '../../../lib/breakdown'
+import type { Failures } from '../../../lib/failures'
 import { resolveRange, type RangeParams } from '../../../lib/range'
-import { dailySpend, spendSeries, type SpendSeries } from '../../../lib/series'
+import { costsReads } from '../../../lib/page-reads'
+import { spendSeries, type SpendSeries } from '../../../lib/series'
 import { currentViewer } from '../../../lib/viewer'
 
 // Costs. Ticket 45 owns the frame and the states before there is anything to
@@ -96,36 +84,16 @@ export default async function Costs({
   // than the app server's, so a "Mark viewed" posted from this page never
   // covers a failure received after what it showed — and never covers one
   // that only looks later because the two clocks disagree.
-  const [dbSeenAt, [facts, days, ranked, counted, failures]] = await asViewer(
+  const [dbSeenAt, [facts, days, ranked, counted, failures]] = await costsReads(
     viewer.userId,
-    async (tx) => {
-      const seenAt = await pageSeenAt(tx)
-      const reads = await Promise.all([
-        onboardingFacts(tx, viewer.orgId),
-        view === 'time'
-          ? dailySpend(tx, viewer.orgId, viewer.orgTimezone, range)
-          : null,
-        isDimension(view)
-          ? breakdown(tx, viewer.orgId, viewer.orgTimezone, range, view)
-          : null,
-        countFailures(
-          tx,
-          viewer.orgId,
-          viewer.memberId,
-          viewer.orgTimezone,
-          range,
-        ),
-        view === 'failures'
-          ? sessionFailures(
-              tx,
-              viewer.orgId,
-              viewer.memberId,
-              viewer.orgTimezone,
-              range,
-            )
-          : null,
-      ])
-      return [seenAt, reads] as const
+    {
+      orgId: viewer.orgId,
+      memberId: viewer.memberId,
+      timezone: viewer.orgTimezone,
+      range,
+      time: view === 'time',
+      dimension: isDimension(view) ? view : null,
+      failures: view === 'failures',
     },
   )
   const seenAt = dbSeenAt.toISOString()

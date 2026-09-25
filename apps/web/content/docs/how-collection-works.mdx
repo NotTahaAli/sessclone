@@ -102,6 +102,18 @@ newest sessions are archived first. In a Claude Code cloud container, which
 never runs `SessionEnd`, the transcript is uploaded in the background after
 every turn instead.
 
+Sealed bytes are never sent again, so a pass does not resend the whole
+transcript. A transcript is stored as sealed chunks of about 1 MiB, gzipped and
+cut at line ends, followed by one raw tail. The deployment says how much is
+already sealed; the Collector checks that prefix against its own copy on disk,
+which sends nothing, and uploads only what lies past it: any newly sealed
+chunks, then the whole raw tail from the last sealed boundary, which replaces
+the previous tail. So the tail's older bytes go up again on each pass. A
+typical turn sends the tail alone, under 1 MiB and usually far less. A transcript under 1 MiB never seals. If the local file no longer
+matches what is sealed, or the deployment predates chunking, the Collector
+sends the whole file instead. Sidecars (subagent metadata, workflow journals)
+are always sent whole.
+
 Claude Code's own `cleanupPeriodDays` sweep deletes transcripts after 30 days
 by default, so a transcript not collected within that window is gone, whatever
 SessClone does. That also bounds what turning archival on later can backfill.

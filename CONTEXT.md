@@ -7,6 +7,8 @@ Decisions live in `docs/superpowers/specs/` and `docs/adr/`.
 
 **Org** — a customer. The boundary for billing, data visibility, and settings.
 Every other record belongs to exactly one Org. A solo user is an Org of one.
+One person may be a Member of several Orgs, with a Role in each, and sees one
+Org at a time.
 
 **Member** — a person inside an Org who runs Claude Code and whose usage is
 collected. Members are the billable unit.

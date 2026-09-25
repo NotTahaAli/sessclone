@@ -85,6 +85,9 @@ export const listTiers = async (tx: TransactionSql): Promise<AdminTier[]> => {
       left join lateral (
         select count(*) from subscriptions
          where subscriptions.tier_id = tier.id
+           -- Ticket 137: the demo Orgs are not customers.
+           and not exists (select 1 from orgs
+                            where orgs.id = subscriptions.org_id and orgs.is_demo)
       ) orgs on true
      order by tier.sort_order, tier.name
   `

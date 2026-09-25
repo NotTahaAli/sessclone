@@ -13,9 +13,10 @@
 
 **Blocked by:** 134
 
-**Status:** todo
+**Status:** done
 
-- [ ] `createOwnOrg` in `lib/auth/bootstrap.ts`, sharing the Org-making statements with sign-in; a per-person advisory lock and the waiting-Org check. No migration. Proven by `new-org.test.ts` on two real connections.
-- [ ] `/new-org`, outside the dashboard shell so it is reachable while the current Org waits; the switcher on the waiting page, so a person can switch out of a waiting Org.
-- [ ] Switcher and form at 1440x900 and 390x844 in light and dark.
-- [ ] Playwright flow: create an Org from the switcher and land on the waiting page.
+- [x] `createOwnOrg` in `lib/auth/bootstrap.ts`, sharing the Org-making statements with sign-in; a per-person advisory lock and the waiting-Org check. No migration. Proven by `new-org.test.ts` on two real connections.
+- [x] `/new-org`, outside the dashboard shell so it is reachable while the current Org waits; the switcher on the waiting page, so a person can switch out of a waiting Org.
+- [x] Switcher and form at 1440x900 and 390x844 in light and dark.
+- [ ] Playwright flow: create an Org from the switcher and land on the waiting page. Moved to ticket 135.
+- [x] New Org waiting for approval emails the platform admins, like a sign-up.

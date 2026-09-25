@@ -22,7 +22,7 @@
 
 **Blocked by:** 129
 
-**Status:** todo
+**Status:** done
 
 - [x] Unit tests, in `archive.test.mjs` (vitest, as the rest of the plugin's tests are, rather than `node:test`):
   - `sealPlan`: exactly 1 MiB, a line longer than 1 MiB, no newline, the 16-chunk cap, a partial last line left in the tail

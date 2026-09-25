@@ -77,8 +77,10 @@ the email would carry. `smtp://` uses STARTTLS when the server offers it;
 
 The same two variables send the platform admins a note each time somebody signs
 up and creates an Org waiting for approval, with a link to that Org under
-**/admin → Orgs**. Unset, nothing is sent; the Admin panel lists waiting Orgs
-first and counts them on its navigation link either way.
+**/admin → Orgs**. A New Org started from the Org switcher sends the same
+note, the same way — never with approval off or once the Org is active.
+Unset, nothing is sent; the Admin panel lists waiting Orgs first and counts
+them on its navigation link either way.
 
 ### Sign-up approval
 
@@ -89,10 +91,12 @@ first and counts them on its navigation link either way.
 On by default, self-hosted deployments included. An Org whose subscription is
 `inactive` — where every sign-up starts, on the plan it picked — or which has
 no subscription row, or is `cancelled`, is locked: the dashboard shows only a
-waiting page and Sign out, no key can be created, and ingest answers its
+waiting page, the Org switcher and Sign out, no key can be created, and ingest answers its
 existing keys with the same 401 as any unknown key. `past_due` is not locked;
 it keeps its notice and works. A platform admin approves an Org by setting it
 `active` under **/admin → Orgs**, where waiting Orgs are listed first.
+A New Org started from the Org switcher waits in the same way, and a person
+may have only one Org of their own waiting at a time.
 
 Any value other than `off` (case-insensitive) leaves it on. With it off, every
 status behaves as it did before the lock: a notice on every page, collection
@@ -150,6 +154,35 @@ script that checks a bucket speaks every part of the S3 API this uses, and the
 CORS rule the transcript viewer needs. That script reads the same variables,
 plus `STORAGE_COMPAT_CREATE_BUCKET=true` to create the bucket before checking
 it.
+
+### Live demo (optional)
+
+| Variable      | Required    | Default | What it is                                                                                      |
+| ------------- | ----------- | ------- | ----------------------------------------------------------------------------------------------- |
+| `DEMO`        | no          | off     | `on` runs a read-only demo at `/demo` and shows "Try the demo" on the landing and pricing pages |
+| `CRON_SECRET` | with `DEMO` | —       | Bearer secret for `/api/demo/refresh`. Unset means the route refuses every call                 |
+
+Off by default, so a self-hosted copy has no demo unless you opt in. With
+`DEMO=on`, `/demo` sets a cookie that shows a visitor with no session two
+made-up Orgs, as Owner of one and Member of the other; every save answers
+"This is a demo", because each of the visitor's database transactions is
+read-only. A signed-in person always sees their own Orgs.
+
+The data is generated, never copied from real usage: six invented people per
+Org over the last 60 days. `GET` or `POST /api/demo/refresh` with
+`Authorization: Bearer <CRON_SECRET>` creates the demo Orgs when missing,
+deletes what is older than 60 days, and fills any missing day, so the first
+call backfills the whole window. It is idempotent. On Vercel,
+`apps/web/vercel.json` calls it daily at 23:00 UTC; elsewhere, schedule it
+yourself once a day, after 23:00 UTC. It writes as `INGEST_DATABASE_URL`, and
+stores a few hundred kilobytes of made-up transcripts when storage is
+configured.
+
+**Toggling `DEMO` needs a redeploy.** The landing and pricing pages are
+prerendered at build time, so their "Try the demo" button appears or
+disappears only with the next build. `/demo`, the banner and the refresh read
+the variable per request and follow it at once, so turning it off without a
+redeploy leaves a button that leads to a 404.
 
 ### Retention sweep
 

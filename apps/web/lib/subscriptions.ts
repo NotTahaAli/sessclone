@@ -131,10 +131,12 @@ export const listOrgs = async (
         select count(*) from members
          where members.org_id = org.id and members.removed_at is null
       ) seats on true
+     -- Ticket 137: the demo Orgs are not customers.
+     where not org.is_demo
      ${
        name
-         ? tx`where org.name ilike ${`%${name}%`}
-                 or operator.name ilike ${`%${name}%`}`
+         ? tx`and (org.name ilike ${`%${name}%`}
+                 or operator.name ilike ${`%${name}%`})`
          : tx``
      }
      -- Ticket 120: Orgs waiting for approval (inactive, or no row) first,
@@ -198,7 +200,8 @@ export const pendingOrgCount = async (tx: TransactionSql): Promise<number> => {
   const [row] = await tx<{ count: string }[]>`
     select count(*) from orgs org
       left join subscriptions subscription on subscription.org_id = org.id
-     where subscription.status is null or subscription.status = 'inactive'
+     where (subscription.status is null or subscription.status = 'inactive')
+       and not org.is_demo
   `
   return Number(row!.count)
 }

@@ -167,6 +167,13 @@ const PHASES = [
     pos: [1190, 1000],
     range: [134, 136],
   },
+  {
+    id: 'demo',
+    label: 'Live Demo',
+    type: 'frontend',
+    pos: [500, 1000],
+    range: [137, 137],
+  },
 ]
 
 const phaseOf = (n) =>

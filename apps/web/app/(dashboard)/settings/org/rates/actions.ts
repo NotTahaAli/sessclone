@@ -10,6 +10,7 @@ import {
   parseOrgRate,
 } from '../../../../../lib/org-rates'
 import { reachesOrgSettings, viewerOfOrg } from '../../../../../lib/viewer'
+import { DEMO_REFUSAL, isDemoUser } from '../../../../../lib/demo'
 
 // Ticket 121: an Enterprise Org's Owner or Admin sets its own rates.
 //
@@ -34,6 +35,7 @@ export const addOwnRateAction = async (
   if (!viewer) {
     return { error: 'Only an Owner or Admin may set this Org’s rates.' }
   }
+  if (isDemoUser(viewer.userId)) return { error: DEMO_REFUSAL }
 
   const parsed = parseOrgRate(formData)
   if (!parsed.success) {
@@ -70,6 +72,7 @@ export const deleteOwnRateAction = async (
   if (!viewer) {
     return { error: 'Only an Owner or Admin may delete this Org’s rates.' }
   }
+  if (isDemoUser(viewer.userId)) return { error: DEMO_REFUSAL }
 
   const rateId = z.uuid().safeParse(formData.get('rateId'))
   if (!rateId.success) return { error: 'That rate could not be found.' }

@@ -11,6 +11,7 @@ import { NAME_LIMIT, setDisplayName } from '../../../../lib/names'
 import type { NameState } from '../../inline-name'
 import { asViewer } from '../../../../lib/db'
 import { signedInUser } from '../../../../lib/supabase/server'
+import { DEMO_REFUSAL, isDemoUser } from '../../../../lib/demo'
 
 // Ticket 72's two writes. A Server Action is a POST endpoint anybody can
 // reach, whether or not the page rendered a form for them, so identity comes
@@ -85,6 +86,7 @@ export const setName = async (
 ): Promise<NameState> => {
   const user = await signedInUser()
   if (!user) return { error: 'Sign in again to set your name.' }
+  if (isDemoUser(user.id)) return { error: DEMO_REFUSAL }
 
   const name = Name.safeParse(formData.get('name'))
   if (!name.success) {

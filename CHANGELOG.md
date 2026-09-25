@@ -21,12 +21,33 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a name and, where sign-up asks for one, a plan; the new Org waits for
   approval like a sign-up, or opens at once where approval is off. You can have one
   Org of your own waiting at a time. The waiting page carries the switcher
-  too, so you can switch out of an Org that is waiting.
+  too, so you can switch out of an Org that is waiting. It emails the platform
+  admins the same way a sign-up does, and just as little: nothing with
+  approval off, nothing once the Org is active.
+- A read-only live demo, off unless `DEMO=on`: "Try the demo" beside sign-up
+  on the landing and pricing pages opens two made-up Orgs with six invented
+  people each and 60 days of generated usage and transcripts. Every page is
+  visible and every save answers "This is a demo". A daily
+  `/api/demo/refresh` keeps the window current. The demo's Costs and Sessions
+  pages are cached per day, for the demo visitor only.
+- Browser tests: the repo's first Playwright suite (`apps/web/e2e`, run with
+  `pnpm --filter web e2e`) accepts an invitation from the Org switcher and
+  starts a New Org from it. It signs in without a Supabase project and seeds
+  a `*_test` database directly.
 - `/.well-known/security.txt` (RFC 9116), pointing to GitHub private advisories
   and, when set, the deployment's contact address. Its expiry is always a
   year ahead.
 
+### Removed
+
+- The one-argument `sessclone_accept_invitation(text)`, kept only while the
+  Org switcher deployed. Migration `20260925170000_drop_one_argument_accept.sql`
+  drops it; nothing calls it.
+
 ### Fixed
+
+- A hydration error on every dashboard page and on the waiting page: the Org
+  switcher was nested inside the brand line's `<p>`.
 
 - Someone in more than one Org saw every Org's Devices, Keys and transcripts
   on each Org's pages, and the oldest Org's appearance; they now show the Org

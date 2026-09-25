@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 import { safeNext } from './lib/auth/next-path'
+import { DEMO_COOKIE, demoEnabled } from './lib/demo'
 
 // Next 16 calls this Proxy; it is what earlier versions called Middleware.
 // Two jobs, and no more than two: refresh the Supabase session on every
@@ -38,6 +39,7 @@ import { safeNext } from './lib/auth/next-path'
 // `/docs` is ticket 116's: the install and self-hosting guides are read before
 // anybody has an account. (`/api/search`, the docs search, is under `/api`.)
 // `/privacy` and `/terms` are the legal pages the marketing footer links to.
+// `/demo` is ticket 137's way into the demo, which 404s when it is off.
 const PUBLIC_PATHS = [
   '/',
   '/pricing',
@@ -49,6 +51,7 @@ const PUBLIC_PATHS = [
   '/docs',
   '/privacy',
   '/terms',
+  '/demo',
 ]
 
 // The files crawlers, browsers and link previews fetch with no cookie: the
@@ -96,7 +99,11 @@ export async function proxy(request: NextRequest) {
       (prefix) => path === prefix || path.startsWith(`${prefix}/`),
     )
 
-  if (!data?.claims && !isPublic) {
+  // Ticket 137: the demo visitor has no session and is let through; the
+  // pages resolve them in `sessionUser`, which honours the same cookie.
+  const demo = demoEnabled() && request.cookies.get(DEMO_COOKIE)?.value === '1'
+
+  if (!data?.claims && !isPublic && !demo) {
     const signIn = request.nextUrl.clone()
     signIn.pathname = '/sign-in'
     return NextResponse.redirect(signIn)

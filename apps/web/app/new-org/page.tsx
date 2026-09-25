@@ -3,7 +3,7 @@ import { Suspense, type ReactNode } from 'react'
 
 import { approvalRequired } from '../../lib/approval'
 import { signupStep } from '../../lib/auth/plan'
-import { sessionUser } from '../../lib/supabase/server'
+import { realSessionUser } from '../../lib/supabase/server'
 import type { MarketingTier } from '../../lib/tiers'
 import { PanelCredit } from '../(dashboard)/credit'
 import { LogoMark } from '../_ui/logo'
@@ -19,7 +19,8 @@ import { NewOrgForm } from './new-org-form'
 // action (`createOrg`) is what checks it.
 
 async function Form() {
-  if (!(await sessionUser())) redirect('/sign-in')
+  // Ticket 137: the demo visitor is signed out here, and signs in first.
+  if (!(await realSessionUser())) redirect('/sign-in')
 
   // As sign-up: with approval off nobody confirms a plan, so none is asked.
   const approval = approvalRequired()

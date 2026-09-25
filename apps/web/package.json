@@ -7,7 +7,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "catalog:",
@@ -40,6 +41,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@tailwindcss/postcss": "catalog:",
     "@types/mdx": "2.0.14",
     "@types/react": "catalog:",

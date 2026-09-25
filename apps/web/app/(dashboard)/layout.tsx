@@ -1,5 +1,7 @@
 import { Suspense, type ReactNode } from 'react'
 
+import type { Metadata } from 'next'
+
 import Link from 'next/link'
 
 import { AccountBlock, Avatar } from './account'
@@ -24,7 +26,9 @@ import {
   navGroups,
 } from './navigation'
 import Loading from './loading'
+import { exitDemo } from '../demo/actions'
 import { isLocked } from '../../lib/approval'
+import { isDemoUser } from '../../lib/demo'
 import { asViewer } from '../../lib/db'
 import { currentOperator } from '../../lib/platform-admin'
 import { pendingOrgCount } from '../../lib/subscriptions'
@@ -86,6 +90,43 @@ import { orgSwitcherData, sessionViewer } from '../../lib/viewer'
 // wireframes' own requirement: nothing appears on one and not the other. Six
 // do not fit a bottom bar, so the phone carries the first group and a More
 // entry onto the rest (ticket 85) — one tap further, not absent.
+
+/** Nothing behind sign-in is for a search engine, the demo included (ticket
+ * 137): its data is made up. */
+export const metadata: Metadata = { robots: { index: false, follow: false } }
+
+/**
+ * Ticket 137: on every page of the demo, one line saying the data is made up,
+ * and the two ways out of it.
+ */
+function DemoBanner() {
+  return (
+    <div
+      role="note"
+      className="border-rule bg-surface text-text-secondary mb-6 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border px-3 py-2 text-caption"
+    >
+      <span className="grow">
+        You&apos;re viewing a demo with made-up data.
+      </span>
+      <div className="flex items-center gap-4">
+        <Link
+          href="/sign-up"
+          className="text-accent-text font-medium hover:underline"
+        >
+          Sign up
+        </Link>
+        <form action={exitDemo}>
+          <button
+            type="submit"
+            className="text-text font-medium hover:underline"
+          >
+            Exit demo
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
 
 /**
  * What a signed-in person with no Org sees. Not a redirect: a redirect to the
@@ -231,16 +272,17 @@ async function Content({ children }: { children: ReactNode }) {
         planName={viewer.planName}
         operator={(await currentOperator()) !== null}
       >
-        <p className={BRAND}>
+        <div className={BRAND}>
           <LogoMark className="text-text" />
           <OrgName className="block truncate" />
-        </p>
+        </div>
       </Waiting>
     )
   }
 
   return (
     <>
+      {isDemoUser(viewer.userId) ? <DemoBanner /> : null}
       {/* Ticket 48: an Org whose subscription is not active is told so, on
           every page, rather than shown a dashboard that quietly means less
           than it looks like it does. Since ticket 119 that is `past_due`
@@ -284,6 +326,8 @@ async function AdminEntry() {
 
 /** The brand line at both widths: the sessclone mark, then the Org's name in
  * small capitals (Direction A, ticket 111). */
+// A `div`, not a `p`: the Org name is the switcher, whose popover holds
+// sections, lists and forms, none of which a paragraph may contain.
 const BRAND =
   'text-text-muted flex min-w-0 items-center gap-2 text-caption tracking-[0.1em] uppercase lg:mx-2 lg:mb-2'
 
@@ -325,12 +369,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         className="border-rule hidden w-[232px] shrink-0 flex-col justify-between overflow-y-auto border-r px-3.5 py-[18px] lg:sticky lg:top-0 lg:flex lg:h-dvh"
       >
         <div>
-          <p className={BRAND}>
+          <div className={BRAND}>
             <LogoMark className="text-text" />
             <Suspense fallback={PENDING_SIDEBAR}>
               <OrgName className="block truncate" />
             </Suspense>
-          </p>
+          </div>
           <nav aria-label="Main" className="mt-2">
             <Suspense fallback={PENDING_GROUPS}>
               <SidebarGroups groups={GROUPS}>
@@ -360,12 +404,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       {/* Phone: the header carries the Org name and the account control, and
           the four destinations are a bottom bar. */}
       <header className="border-rule bg-ground sticky top-0 z-10 flex items-center justify-between gap-3 border-b px-4 py-1.5 lg:hidden">
-        <p className={BRAND}>
+        <div className={BRAND}>
           <LogoMark className="text-text" />
           <Suspense fallback={PENDING_HEADER}>
             <OrgName className="block truncate" />
           </Suspense>
-        </p>
+        </div>
         <Suspense fallback={null}>
           <HeaderAccount />
         </Suspense>
