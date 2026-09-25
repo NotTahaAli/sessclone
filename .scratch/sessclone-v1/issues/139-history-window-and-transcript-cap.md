@@ -13,10 +13,10 @@
 
 **Blocked by:** none
 
-**Status:** todo
+**Status:** done
 
-- [ ] `tiers.history_days` (null = unlimited), seeded Personal 90, Team 365; Team `retention_max_days` 365 to 90
-- [ ] `subscriptions.retention_max_days`, the per-Org ceiling, edited on the Admin Org page; the retention guard reads it before the Tier's
-- [ ] Every dashboard Turn read bounded by the window; straddling Sessions note
-- [ ] Sweep deletes a non-archival Org's transcripts 7 days after the Tier change; banner on Transcripts
-- [ ] Pricing card states both limits
+- [x] `tiers.history_days` (null = unlimited), seeded Personal 90, Team 365; Team `retention_max_days` 365 to 90
+- [x] `subscriptions.retention_max_days`, the per-Org ceiling, edited on the Admin Org page; the retention guard reads it before the Tier's
+- [x] Every dashboard Turn read bounded by the window; straddling Sessions note
+- [x] Sweep deletes a non-archival Org's transcripts 7 days after the Tier change; banner on Transcripts
+- [x] Pricing card states both limits

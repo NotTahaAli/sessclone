@@ -13,11 +13,11 @@
 
 **Blocked by:** none
 
-**Status:** todo
+**Status:** done
 
-- [ ] Schedule, cancel and finalize in SQL; last-Owner rule
-- [ ] Ingest refuses a scheduled person's keys
-- [ ] Deletion-pending page on sign-in
-- [ ] Cron route finalizes, deletes `auth.users`, queues storage
-- [ ] Deleted person label wherever a name shows
-- [ ] Privacy and Terms updated
+- [x] Schedule, cancel and finalize in SQL; last-Owner rule
+- [x] Ingest refuses a scheduled person's keys
+- [x] Deletion-pending page on sign-in
+- [x] Cron route finalizes, deletes `auth.users`, queues storage
+- [x] Deleted person label wherever a name shows
+- [x] Privacy and Terms updated

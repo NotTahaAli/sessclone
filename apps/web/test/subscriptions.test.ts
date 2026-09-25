@@ -445,6 +445,23 @@ test('an Owner’s ask cannot carry an agreed price', async () => {
   expect((await ask(null, null)).count).toBe(1)
 })
 
+test('an Owner’s ask cannot carry a retention ceiling (ticket 139)', async () => {
+  const tierId = await seedSizedTier('team', 2, 10)
+  const ask = (ceiling: number | null) =>
+    asRole(
+      fixture.acme,
+      'owner',
+      (tx) => tx`
+        insert into subscriptions
+          (org_id, tier_id, status, requested_seats, retention_max_days)
+        values (${fixture.acme.id}, ${tierId}, 'inactive', 5, ${ceiling})
+      `,
+    )
+
+  await expect(ask(3650)).rejects.toThrow(/row-level security/)
+  expect((await ask(null)).count).toBe(1)
+})
+
 test('a price-only change is a change, and the history keeps the price', async () => {
   const tierId = await seedTier('enterprise')
   const set = (priceBaseCents: number | null, note: string) =>

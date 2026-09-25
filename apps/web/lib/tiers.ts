@@ -33,6 +33,8 @@ export type MarketingTier = {
   minSeats: number | null
   maxSeats: number | null
   retentionMaxDays: number | null
+  /** Days of Turns the dashboard shows (ticket 139), or null for all. */
+  historyDays: number | null
   archivalAvailable: boolean
   /** What the card lists. Prose, in the reader's terms. */
   includes: string[]
@@ -57,8 +59,8 @@ export const readMarketingTiers = async (
 ): Promise<MarketingTier[]> => {
   const rows = await tx<TierRow[]>`
     select key, name, description, base_price_usd, seat_price_usd,
-           included_seats, min_seats, max_seats, retention_max_days, archival_available,
-           features, sort_order
+           included_seats, min_seats, max_seats, retention_max_days, history_days,
+           archival_available, features, sort_order
       from tiers
      where available
      order by sort_order, name
@@ -78,6 +80,7 @@ export const readMarketingTiers = async (
     minSeats: row.min_seats,
     maxSeats: row.max_seats,
     retentionMaxDays: row.retention_max_days,
+    historyDays: row.history_days,
     archivalAvailable: row.archival_available,
     includes: includesOf(row.features),
     managerScopes: flagOf(row.features, 'manager_scopes') === true,
@@ -118,6 +121,7 @@ type TierRow = {
   min_seats: number | null
   max_seats: number | null
   retention_max_days: number | null
+  history_days: number | null
   archival_available: boolean
   features: unknown
   sort_order: number
@@ -193,18 +197,18 @@ export const tierPrice = (
 }
 
 /**
- * The retention ceiling, from the column rather than from prose.
+ * The history window, from the column rather than from prose (ticket 139).
+ * Until then this read `retention_max_days`, the transcript cap, and so
+ * promised Turn history the product never limited.
  *
  * Ticket 80's whole point: this used to be a hand-written line inside
  * `features.includes` ("A year of history"), which is a second source of truth
  * wearing a different hat — an operator who raises `retention_max_days` on
  * `/admin/tiers` changes what an Org may keep and does not change that line.
  */
-export const tierRetention = (
-  tier: Pick<MarketingTier, 'retentionMaxDays'>,
-) => {
-  const days = tier.retentionMaxDays
-  if (days === null) return 'History kept for as long as you keep it'
+export const tierHistory = (tier: Pick<MarketingTier, 'historyDays'>) => {
+  const days = tier.historyDays
+  if (days === null) return 'All of your history'
   if (days % 365 === 0) {
     const years = days / 365
     return years === 1 ? 'A year of history' : `${years} years of history`

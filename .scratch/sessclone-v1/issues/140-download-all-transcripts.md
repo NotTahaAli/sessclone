@@ -10,8 +10,8 @@
 
 **Blocked by:** none
 
-**Status:** todo
+**Status:** done
 
-- [ ] Zip route streams from storage without holding a file in memory
-- [ ] Same read rules as the single download; tested per Role
-- [ ] Filter form on the Transcripts page
+- [x] Zip route streams from storage without holding a file in memory
+- [x] Same read rules as the single download; tested per Role
+- [x] Filter form on the Transcripts page

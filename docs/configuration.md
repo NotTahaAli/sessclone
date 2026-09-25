@@ -98,11 +98,12 @@ The browser reads scoped rows directly, through the same policies the server
 uses. These two are that client's configuration, read by
 `apps/web/lib/supabase/server.ts` and `apps/web/proxy.ts`.
 
-There is no `SUPABASE_SERVICE_ROLE_KEY`. No code reads one, so a deployment
-should not hold one: it bypasses every policy, and ingest already writes as the
-owning role through `INGEST_DATABASE_URL`. ADR 0001 confines a service role key
-to ingest paths that have already verified an API key by hash, should one ever
-need it.
+`SUPABASE_SERVICE_ROLE_KEY` has one use: the daily retention sweep uses it to
+remove the sign-in of an account whose deletion grace has ended, through
+Supabase's Admin API (`apps/web/lib/supabase/admin.ts`). Nothing else reads it,
+and nothing the browser reaches does (ADR 0001). Without it, deletions still
+scrub every row on time, but the sign-in stays and the Admin panel lists the
+account until the key is set. Keep it server-side and Production-only.
 
 Sign-in is GitHub OAuth and a magic link, and no password is created or stored
 by either. Both are configured in the Supabase project: GitHub needs a client
@@ -110,10 +111,11 @@ id and secret under Authentication, and both need
 `<NEXT_PUBLIC_APP_URL>/auth/callback` in the project's list of allowed redirect
 URLs — that one route handles the OAuth code and the magic link's token alike.
 
-| Variable                        | Required | Default | What it is                                                              |
-| ------------------------------- | -------- | ------- | ----------------------------------------------------------------------- |
-| `NEXT_PUBLIC_SUPABASE_URL`      | yes      | —       | Project URL. `NEXT_PUBLIC_` because the browser needs it                |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes      | —       | Anon key. Public by design; RLS is what protects the rows, not this key |
+| Variable                        | Required | Default | What it is                                                               |
+| ------------------------------- | -------- | ------- | ------------------------------------------------------------------------ |
+| `NEXT_PUBLIC_SUPABASE_URL`      | yes      | —       | Project URL. `NEXT_PUBLIC_` because the browser needs it                 |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes      | —       | Anon key. Public by design; RLS is what protects the rows, not this key  |
+| `SUPABASE_SERVICE_ROLE_KEY`     | no       | —       | Server only. Lets the retention sweep remove a deleted account's sign-in |
 
 Sign-in email — the magic link — is sent by Supabase Auth and configured in
 the Supabase project's own SMTP settings, not here. The **invitation** email is

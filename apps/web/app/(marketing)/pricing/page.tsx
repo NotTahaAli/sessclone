@@ -6,7 +6,7 @@ import { PlanPicker, type Plan } from './plan-picker'
 import { comparison, isFree, planLines } from '../../../lib/plans'
 import {
   marketingTiers,
-  tierRetention,
+  tierHistory,
   type MarketingTier,
 } from '../../../lib/tiers'
 
@@ -60,7 +60,7 @@ const toPlan = (tier: MarketingTier): Plan => ({
   includedSeats: tier.includedSeats,
   minSeats: tier.minSeats,
   maxSeats: tier.maxSeats,
-  lines: planLines(tier, tierRetention(tier)),
+  lines: planLines(tier, tierHistory(tier)),
 })
 
 const Intro = () => (

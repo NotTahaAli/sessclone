@@ -84,6 +84,12 @@ export const realSessionUser = async () => {
   return claims ? personOf(claims) : null
 }
 
+/**
+ * The verified access token's claims, or null. For the one check that needs
+ * more than who: how recently they signed in (ticket 141's `amr` stamp).
+ */
+export const sessionClaims = () => verifiedClaims()
+
 const verifiedClaims = async () => {
   const supabase = await supabaseServer()
   const { data } = await supabase.auth.getClaims()

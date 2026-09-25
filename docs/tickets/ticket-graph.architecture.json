@@ -3,7 +3,7 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "sessclone v1 — ticket status",
-    "subtitle": "141 tickets · 138 done · 3 ready to start · 0 blocked",
+    "subtitle": "141 tickets · 141 done · 0 ready to start · 0 blocked",
     "output": "docs/tickets/ticket-graph.html",
     "quality_profile": "showcase"
   },
@@ -278,7 +278,7 @@
       "id": "privacy",
       "type": "backend",
       "label": "Data Lifecycle (139-141)",
-      "sublabel": "3 ready",
+      "sublabel": "3 done",
       "pos": [
         270,
         1000

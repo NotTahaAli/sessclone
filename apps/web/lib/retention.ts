@@ -32,6 +32,37 @@ import { deleteObjects } from './storage'
  */
 export const SWEEP_LIMIT = 500
 
+/**
+ * How long an Org that moved to a Tier without transcripts keeps the ones it
+ * has (ticket 139, Taha: seven days). Uploads stop at once.
+ */
+export const DOWNGRADE_GRACE_DAYS = 7
+
+/**
+ * When the sweep takes the active Org's stored transcripts because its Tier
+ * keeps none (ticket 139): the last Tier change plus the grace, the same
+ * reading `CUTOFFS` makes below. Null while the Tier keeps transcripts.
+ */
+export const transcriptsEndOn = async (
+  tx: postgres.TransactionSql,
+  orgId: string,
+): Promise<{ on: Date; passed: boolean } | null> => {
+  const [row] = await tx<{ ends: Date | null; passed: boolean }[]>`
+    select ends, ends <= now() as passed
+      from subscriptions subscription
+      join tiers tier on tier.id = subscription.tier_id
+     cross join lateral (
+       select max(event.occurred_at)
+              + ${`${DOWNGRADE_GRACE_DAYS} days`}::interval as ends
+         from subscription_events event
+        where event.org_id = subscription.org_id
+     ) grace
+     where subscription.org_id = ${orgId}
+       and tier.archival_available is false
+  `
+  return row?.ends ? { on: row.ends, passed: row.passed } : null
+}
+
 export type Swept = {
   /** Artifact rows removed. Their chunks (ADR 0008) went too, uncounted. */
   removed: number
@@ -50,8 +81,23 @@ export type Swept = {
  */
 const CUTOFFS = (tx: postgres.Sql | postgres.TransactionSql) => tx`
   select org.id as org_id,
-         -- least() ignores nulls, so a Tier with no ceiling needs no coalesce.
-         least(org.retention_days, tier.retention_max_days) as days
+         case
+           -- Ticket 139: a Tier with no transcripts (Personal) keeps an Org's
+           -- existing ones for DOWNGRADE_GRACE_DAYS after its last
+           -- subscription change, then all of them go. Zero days is "every
+           -- transcript stored before now".
+           when tier.archival_available is false
+            and coalesce((select max(event.occurred_at)
+                            from subscription_events event
+                           where event.org_id = org.id),
+                         '-infinity') < now() - ${`${DOWNGRADE_GRACE_DAYS} days`}::interval
+             then 0
+           -- least() ignores nulls, so no ceiling needs no coalesce. The
+           -- Org's own contract ceiling (ticket 139) comes before the Tier's.
+           else least(org.retention_days,
+                      coalesce(subscription.retention_max_days,
+                               tier.retention_max_days))
+         end as days
     from orgs org
     left join subscriptions subscription
            on subscription.org_id = org.id

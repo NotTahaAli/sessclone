@@ -20,7 +20,11 @@ export type OrgTier = TierPricing & {
   description: string | null
   status: SubscriptionStatus
   includedSeats: number
+  /** The transcript retention ceiling: the Org's contract ceiling when a
+   * Platform Admin set one (ticket 139), else the Tier's. Null is none. */
   retentionMaxDays: number | null
+  /** Days of Turns the dashboard shows (ticket 139), or null for all. */
+  historyDays: number | null
   archivalAvailable: boolean
   /** Every further gate, as ADR 0004 carries them: data, not a migration. */
   features: Record<string, unknown>
@@ -53,6 +57,7 @@ type TierRow = {
   min_seats: number | null
   max_seats: number | null
   retention_max_days: number | null
+  history_days: number | null
   archival_available: boolean
   features: Record<string, unknown>
   seats_used: string
@@ -95,7 +100,9 @@ export const orgTier = async (
            tier.included_seats,
            tier.min_seats,
            tier.max_seats,
-           tier.retention_max_days,
+           coalesce(subscription.retention_max_days, tier.retention_max_days)
+             as retention_max_days,
+           tier.history_days,
            tier.archival_available,
            tier.features,
            subscription.current_period_end,
@@ -128,6 +135,7 @@ export const orgTier = async (
     minSeats: row.min_seats,
     maxSeats: row.max_seats,
     retentionMaxDays: row.retention_max_days,
+    historyDays: row.history_days,
     archivalAvailable: row.archival_available,
     features: row.features,
     seatsUsed: Number(row.seats_used),
@@ -143,6 +151,12 @@ export const retentionCeiling = (tier: OrgTier): string =>
   tier.retentionMaxDays === null
     ? 'No ceiling — keep transcripts as long as you choose'
     : `Up to ${tier.retentionMaxDays} days`
+
+/** The history window in a sentence (ticket 139). */
+export const historyWindow = (tier: OrgTier): string =>
+  tier.historyDays === null
+    ? 'Every Turn, however old'
+    : `The last ${tier.historyDays} days`
 
 /**
  * Whether the Org is entitled right now.

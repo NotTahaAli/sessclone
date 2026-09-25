@@ -29,6 +29,10 @@ carries no authorisation branch of its own.
   the browser can reach, never in a page or a client component, and never as a
   convenience to work around a policy that is inconvenient. A policy that
   blocks a legitimate read is a policy to fix, not to bypass.
+  Amended 2026-09-25 (ticket 141): one more server-only use. Removing a
+  person's sign-in needs Supabase's Admin API, which takes nothing but this
+  key, so the secret-guarded retention cron uses it to finish an account
+  deletion (`apps/web/lib/supabase/admin.ts`) and for nothing else.
 - `is_platform_admin` is a flag on the user, not a Role. Policies that grant
   platform-wide access (Rates, Tiers, subscription activation) read the flag.
   An Org Owner must never reach global pricing.

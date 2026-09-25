@@ -17,6 +17,7 @@ import {
 import { EmptyState } from '../empty-state'
 import { Finder, FinderColumn, FinderList } from '../finder'
 import { InstallCollector } from '../install-collector'
+import { HistoryNote } from '../history-note'
 import { PageHeader } from '../page-header'
 import { hrefWith, one, type Query } from '../query'
 import { MenuItem, PillMenu } from '../../_ui/pill-menu'
@@ -134,6 +135,11 @@ export default async function Costs({
                 current={view}
                 params={params}
                 failuresCount={failuresCount}
+              />
+              <HistoryNote
+                range={range}
+                historyDays={viewer.historyDays}
+                timezone={viewer.orgTimezone}
               />
             </>
           ) : null

@@ -48,6 +48,9 @@ export type AdminOrg = {
   /** The price agreed with this Org, monthly US cents, or null for none. */
   priceBaseCents: number | null
   priceSeatCents: number | null
+  /** Ticket 139: the transcript retention ceiling agreed with this Org, or
+   * null for the Tier's. */
+  retentionMaxDays: number | null
 }
 
 type OrgRow = {
@@ -64,6 +67,7 @@ type OrgRow = {
   requested_seats: number | null
   price_base_cents: number | null
   price_seat_cents: number | null
+  retention_max_days: number | null
 }
 
 /** Ticket 120's "pending": never approved, as far as the row can say. */
@@ -85,6 +89,7 @@ const toAdminOrg = (row: OrgRow): AdminOrg => ({
   pending: isPending(row.status),
   priceBaseCents: row.price_base_cents,
   priceSeatCents: row.price_seat_cents,
+  retentionMaxDays: row.retention_max_days,
 })
 
 /**
@@ -122,7 +127,8 @@ export const listOrgs = async (
            subscription.current_period_end,
            subscription.requested_seats,
            subscription.price_base_cents,
-           subscription.price_seat_cents
+           subscription.price_seat_cents,
+           subscription.retention_max_days
       from orgs org
       left join org_operator_names operator on operator.org_id = org.id
       left join subscriptions subscription on subscription.org_id = org.id
@@ -176,7 +182,8 @@ export const adminOrg = async (
            subscription.current_period_end,
            subscription.requested_seats,
            subscription.price_base_cents,
-           subscription.price_seat_cents
+           subscription.price_seat_cents,
+           subscription.retention_max_days
       from orgs org
       left join org_operator_names operator on operator.org_id = org.id
       left join subscriptions subscription on subscription.org_id = org.id
@@ -342,6 +349,9 @@ export const setSubscription = async (
      * omitted keeps what is stored, so a status-only change cannot erase it. */
     priceBaseCents?: number | null
     priceSeatCents?: number | null
+    /** Ticket 139: the Org's contract ceiling on transcript retention, in
+     * days; null clears it, omitted keeps it. */
+    retentionMaxDays?: number | null
   },
 ): Promise<{ saved: boolean; recorded: boolean }> => {
   const [before] = await tx<
@@ -350,9 +360,11 @@ export const setSubscription = async (
       status: string
       price_base_cents: number | null
       price_seat_cents: number | null
+      retention_max_days: number | null
     }[]
   >`
-    select tier_id, status, price_base_cents, price_seat_cents
+    select tier_id, status, price_base_cents, price_seat_cents,
+           retention_max_days
       from subscriptions
      where org_id = ${subscription.orgId}
   `
@@ -366,6 +378,11 @@ export const setSubscription = async (
       ? (before?.price_seat_cents ?? null)
       : subscription.priceSeatCents
 
+  const ceiling =
+    subscription.retentionMaxDays === undefined
+      ? (before?.retention_max_days ?? null)
+      : subscription.retentionMaxDays
+
   await tx`
     select set_config('sessclone.subscription_note',
                       ${subscription.note ?? ''}, true)
@@ -373,16 +390,18 @@ export const setSubscription = async (
 
   const rows = await tx`
     insert into subscriptions
-      (org_id, tier_id, status, provider, price_base_cents, price_seat_cents)
+      (org_id, tier_id, status, provider, price_base_cents, price_seat_cents,
+       retention_max_days)
     values (${subscription.orgId}, ${subscription.tierId},
             ${subscription.status}, 'manual',
-            ${base}, ${seat})
+            ${base}, ${seat}, ${ceiling})
     on conflict (org_id) do update
        set tier_id = excluded.tier_id,
            status = excluded.status,
            provider = excluded.provider,
            price_base_cents = excluded.price_base_cents,
            price_seat_cents = excluded.price_seat_cents,
+           retention_max_days = excluded.retention_max_days,
            updated_at = now()
     returning id
   `

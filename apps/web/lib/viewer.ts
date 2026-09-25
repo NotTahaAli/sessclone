@@ -63,9 +63,22 @@ export type Viewer = {
    * for.
    */
   orgLogo: string | null
+  /**
+   * When this person asked for their account to be deleted (ticket 141), or
+   * null. While set they see only the Keep-my-account page, and every
+   * action that asks `currentViewer` or `signedInUser` is refused.
+   */
+  deletionRequestedAt: Date | null
+  /**
+   * How many days of Turns the Org's Tier shows (ticket 139), or null for
+   * all of them. Display only.
+   */
+  historyDays: number | null
 }
 
 type MembershipRow = {
+  deletion_requested_at: Date | null
+  history_days: number | null
   display_name: string | null
   member_id: string
   org_id: string
@@ -129,6 +142,9 @@ export const sessionViewer = cache(async (): Promise<Viewer | null> => {
     (tx) => tx<MembershipRow[]>`
       select member.id as member_id,
              account.display_name,
+             account.deletion_requested_at,
+             case when subscription.status in ('active', 'past_due')
+                  then tier.history_days end as history_days,
              member.org_id,
              org.name as org_name,
              org.timezone as org_timezone,
@@ -172,6 +188,8 @@ export const sessionViewer = cache(async (): Promise<Viewer | null> => {
     orgLogo: membership.logo_updated_at
       ? logoPath(membership.org_id, membership.logo_updated_at)
       : null,
+    deletionRequestedAt: membership.deletion_requested_at,
+    historyDays: membership.history_days,
   }
 })
 
@@ -262,7 +280,10 @@ export const orgSwitcherData = cache(
  */
 export const currentViewer = cache(async (): Promise<Viewer | null> => {
   const viewer = await sessionViewer()
-  return viewer && isLocked(viewer.subscriptionStatus) ? null : viewer
+  return viewer &&
+    (isLocked(viewer.subscriptionStatus) || viewer.deletionRequestedAt)
+    ? null
+    : viewer
 })
 
 /**
@@ -278,15 +299,17 @@ export const viewerOfOrg = async (orgId: unknown): Promise<Viewer | null> => {
 }
 
 /**
- * Whether the signed-in viewer's Org is locked (ticket 119). What
+ * Whether the signed-in viewer's Org is locked (ticket 119), or the viewer
+ * is in their deletion grace (ticket 141). What
  * `signedInUser` asks, and what the dashboard's own API routes ask beside
  * `sessionUser()` to answer a locked Org with a 403 rather than a 401. False
  * for somebody in no Org: the policies already answer them. Switched off, it
  * reads nothing.
  */
 export const viewerLocked = async (): Promise<boolean> => {
-  if (!approvalRequired()) return false
   const viewer = await sessionViewer()
+  if (viewer?.deletionRequestedAt) return true
+  if (!approvalRequired()) return false
   return viewer !== null && isLocked(viewer.subscriptionStatus)
 }
 

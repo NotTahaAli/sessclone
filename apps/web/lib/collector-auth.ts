@@ -57,10 +57,11 @@ export type Caller = { keyId: string; memberId: string; orgId: string }
  * become a scan over every key in the deployment on the hottest path in the
  * product.
  *
- * Five conditions, and all five are the database's rather than a route's.
+ * Six conditions, and all six are the database's rather than a route's.
  * `revoked_at is null` is what makes revocation immediate, and `removed_at is
  * null` keeps a removed Member's forgotten key from carrying on reporting into
- * an Org they left. The fourth is ticket 119's lock, the fifth ticket 137's demo.
+ * an Org they left. The fourth is ticket 119's lock, the fifth ticket 137's
+ * demo, the sixth ticket 141's deletion grace.
  */
 export const resolveCaller = async (sql: postgres.Sql, presented: string) => {
   const [caller] = await sql<Caller[]>`
@@ -83,6 +84,11 @@ export const resolveCaller = async (sql: postgres.Sql, presented: string) => {
             or exists (select 1 from subscriptions subscription
                         where subscription.org_id = member.org_id
                           and subscription.status in ('active', 'past_due')))
+       -- Ticket 141: a person who asked to be deleted is frozen for the
+       -- grace, and nothing new is recorded against them.
+       and not exists (select 1 from users account
+                        where account.id = member.user_id
+                          and account.deletion_requested_at is not null)
   `
   return caller
 }

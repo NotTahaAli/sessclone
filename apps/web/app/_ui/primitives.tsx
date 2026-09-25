@@ -245,6 +245,7 @@ export function Pill({
 const BUTTON = {
   primary: 'bg-text text-ground border-text hover:opacity-90',
   secondary: 'border-rule text-text hover:bg-surface-hover',
+  danger: 'border-bad-border text-bad-text hover:bg-bad-bg',
 } as const
 
 /** A button's look, for a `<Link>` that acts as one. */

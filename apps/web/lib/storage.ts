@@ -302,6 +302,13 @@ export const presignDownload = async (
   )
 }
 
+/** The HTTP status an S3 client error carries, or 0. */
+const httpStatus = (error: unknown) =>
+  typeof error === 'object' && error !== null
+    ? ((error as { $metadata?: { httpStatusCode?: number } }).$metadata
+        ?.httpStatusCode ?? 0)
+    : 0
+
 /**
  * The size of a stored object, or null when it is not there.
  *
@@ -325,11 +332,7 @@ export const storedObject = async (key: string) => {
     // 404 and 403 both mean "no object to record here" as far as this route is
     // concerned: some providers answer a HEAD on a missing key with 403 rather
     // than 404 when the credential cannot list the bucket.
-    const status =
-      typeof error === 'object' && error !== null
-        ? ((error as { $metadata?: { httpStatusCode?: number } }).$metadata
-            ?.httpStatusCode ?? 0)
-        : 0
+    const status = httpStatus(error)
     if (status === 404 || status === 403) return null
     throw error
   }
@@ -374,5 +377,33 @@ export const deleteObjects = async (keys: string[]) => {
         `${answer.Errors.length} object(s) were not deleted: ${first?.Code ?? 'unknown'}`,
       )
     }
+  }
+}
+
+/**
+ * One stored object's bytes, as a stream, or null when it is not there.
+ *
+ * Ticket 140 is the one path that reads bytes through the application: a zip
+ * of many transcripts has to be assembled somewhere, and a browser cannot
+ * write a zip of objects it fetches one at a time without holding them. So
+ * the bytes pass through as a stream and are never held whole. `signal`
+ * aborts the request when the person who asked for the zip goes away.
+ */
+export const objectStream = async (
+  key: string,
+  signal?: AbortSignal,
+): Promise<ReadableStream<Uint8Array<ArrayBuffer>> | null> => {
+  try {
+    const answer = await storage().send(
+      new GetObjectCommand({ Bucket: required('STORAGE_BUCKET'), Key: key }),
+      { abortSignal: signal },
+    )
+    if (!answer.Body) throw new Error(`storage sent no body for ${key}`)
+    return answer.Body.transformToWebStream()
+  } catch (error) {
+    // As `storedObject`: some providers answer a missing key with 403.
+    const status = httpStatus(error)
+    if (status === 404 || status === 403) return null
+    throw error
   }
 }

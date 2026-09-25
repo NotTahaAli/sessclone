@@ -84,8 +84,9 @@ State assumptions you do proceed on, in the message and in the code.
 **Security.** Validate at trust boundaries with zod — the ingest payload, every
 route input, every webhook body. Authorisation lives in RLS policies, so a new
 table ships with its policies in the same migration. The service role key runs
-only in ingest paths that have already verified an API key, never in anything
-the browser can reach. Secrets stay in env vars. Transcripts contain source
+only in ingest paths that have already verified an API key, and in the
+secret-guarded retention cron that finishes account deletions
+(`lib/supabase/admin.ts`), never in anything the browser can reach. Secrets stay in env vars. Transcripts contain source
 code and sometimes credentials: treat every log artifact path as sensitive, and
 keep transcript upload opt-in per member.
 

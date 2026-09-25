@@ -15,6 +15,7 @@ import { compact, count, usd } from '../../../../lib/money'
 import {
   archivalReason,
   sessionDetail,
+  sessionHasHiddenTurns,
   sessionModels,
   sessionTranscripts,
   type AgentRun,
@@ -92,7 +93,7 @@ export async function sessionDetailView({
     // The reads that depend on the Session existing, together rather than one
     // after another: they are independent of each other. The column shows no
     // Turn list, so it does not read one.
-    const [page, transcripts, archival, models] = await Promise.all([
+    const [page, transcripts, archival, models, hidden] = await Promise.all([
       column
         ? null
         : turnList(
@@ -108,14 +109,16 @@ export async function sessionDetailView({
       sessionTranscripts(tx, member, found.session.sessionId),
       transcriptReasonFor(tx, member, found.session),
       sessionModels(tx, viewer.orgId, member, found.session.sessionId),
+      sessionHasHiddenTurns(tx, member, found.session.sessionId),
     ])
 
-    return { ...found, page, transcripts, archival, models }
+    return { ...found, page, transcripts, archival, models, hidden }
   })
 
   if (!detail) return null
 
-  const { session, agentRuns, page, transcripts, archival, models } = detail
+  const { session, agentRuns, page, transcripts, archival, models, hidden } =
+    detail
   const when = clock(viewer.orgTimezone)
   const glyph = sessionGlyph(session)
   const pagePath = `/sessions/${encodeURIComponent(session.sessionId)}?member=${member}`
@@ -183,6 +186,13 @@ export async function sessionDetailView({
         turns={session.turns}
         unpricedTurns={session.unpricedTurns}
       />
+      {/* Ticket 139: the Session began before the plan's history window. */}
+      {hidden ? (
+        <p className="text-text-muted mt-1 text-caption">
+          Older Turns in this Session are hidden by your plan and not counted
+          here.
+        </p>
+      ) : null}
       {column ? null : (
         <p className="text-text-muted mt-1 text-caption">
           <Timing session={session} when={when} />

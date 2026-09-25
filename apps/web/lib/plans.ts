@@ -78,9 +78,9 @@ export const seatRange = (tier: TierPricing) => {
   return `${min ?? 1}–${max}`
 }
 
-/** The retention ceiling, compact. */
+/** A number of days, compact; null is unlimited. */
 export const historyShort = (days: number | null) => {
-  if (days === null) return 'Your policy'
+  if (days === null) return 'Unlimited'
   if (days % 365 === 0) {
     return days === 365 ? '1 year' : `${days / 365} years`
   }
@@ -109,9 +109,9 @@ export const comparison = (
   return [
     row('Seats', seatRange),
     row('Price', shortPrice),
-    row('History', (tier) => historyShort(tier.retentionMaxDays)),
+    row('History', (tier) => historyShort(tier.historyDays)),
     row('Roles and Manager Scopes', (t) => isFree(t) || t.managerScopes),
-    row('Transcript archival', (tier) => tier.archivalAvailable),
+    row('Transcript archival', (tier) => transcriptsShort(tier)),
     row('Per-model rates', (tier) =>
       isFree(tier) ? 'Yours' : ownRates(tier) ? OWN_RATES_LINE : 'Published',
     ),
@@ -125,11 +125,23 @@ export const comparison = (
 // flag alone decides; an absent key reads as published rates.
 const ownRates = (tier: MarketingTier) => tier.ownRates === true
 
-/** The lines a plan lists: its prose, then the two columns it reads. */
-export const planLines = (tier: MarketingTier, retention: string) => [
+/** How long transcripts are kept, compact (ticket 139): the Tier's cap,
+ * the contract's where there is none on a paid Tier, or none at all. */
+const transcriptsShort = (tier: MarketingTier): Cell => {
+  if (!tier.archivalAvailable) return false
+  if (tier.retentionMaxDays !== null) return historyShort(tier.retentionMaxDays)
+  return isFree(tier) ? 'Your policy' : 'Per contract'
+}
+
+/** The lines a plan lists: its prose, then the columns it reads. */
+export const planLines = (tier: MarketingTier, history: string) => [
   ...tier.includes,
   ...(tier.archivalAvailable && !isFree(tier)
-    ? ['Transcript archival, opt-in per Member']
+    ? [
+        tier.retentionMaxDays === null
+          ? 'Transcript archival, opt-in per Member, kept per contract'
+          : `Transcript archival, opt-in per Member, kept up to ${tier.retentionMaxDays} days`,
+      ]
     : []),
-  retention,
+  history,
 ]

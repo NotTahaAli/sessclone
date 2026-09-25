@@ -7,6 +7,8 @@ import Link from 'next/link'
 import { AccountBlock, Avatar } from './account'
 import { AppearanceSync } from './appearance-sync'
 import { Waiting } from './waiting'
+import { DeletionPending } from './deletion-pending'
+import { deletionDue } from '../../lib/account-deletion'
 import { OrgMark } from '../org-mark'
 import { OrgSwitcher } from './org-switcher'
 import { PanelCredit } from './credit'
@@ -261,6 +263,11 @@ async function HeaderAccount() {
 async function Content({ children }: { children: ReactNode }) {
   const viewer = await sessionViewer()
   if (!viewer) return <WithoutOrg />
+
+  // Ticket 141: in their deletion grace, a person sees only the way back.
+  if (viewer.deletionRequestedAt) {
+    return <DeletionPending due={deletionDue(viewer.deletionRequestedAt)} />
+  }
 
   // Ticket 119: an Org waiting for approval, or cancelled, sees only this.
   // The page is not rendered at all, so nothing it reads reaches the reader.

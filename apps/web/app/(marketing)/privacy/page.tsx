@@ -12,14 +12,17 @@ export const metadata = {
   alternates: { canonical: canonical('/privacy') },
 }
 
-// Facts here are the code's, checked 2026-09-23: Collector fields in
+// Facts here are the code's, checked 2026-09-25: Collector fields in
 // `packages/plugin/src/shared/turns.ts`, archival default in
 // `supabase/migrations/20260920120000_accounts.sql`, retention in
-// `lib/retention.ts`, cookies in `lib/appearance.ts` and the Supabase client.
+// `lib/retention.ts`, Tier limits in
+// `supabase/migrations/20260925190100_tier_limits.sql`, account deletion in
+// `lib/account-deletion.ts`, cookies in `lib/appearance.ts` and the Supabase
+// client.
 // Change the page when any of those change.
 export default function Privacy() {
   return (
-    <Legal title="Privacy" updated="23 September 2026">
+    <Legal title="Privacy" updated="25 September 2026">
       <p>
         This page covers the service at {siteHost()}. SessClone is open source:
         a copy you run yourself keeps your data on your own database and
@@ -71,11 +74,20 @@ export default function Privacy() {
 
       <h2>How long we keep it</h2>
       <p>
-        Transcripts are deleted after your Org&apos;s retention period (90 days
-        unless an Owner changes it, within your plan&apos;s limit). Usage
-        records are the Org&apos;s spend history and are kept while the Org
-        exists. To have an account or an Org deleted, email us; there is no
-        self-serve deletion yet.
+        Transcripts are deleted after your Org&apos;s retention period, which an
+        Owner sets within the plan&apos;s limit: 90 days on Team, the agreed
+        term on Enterprise. Personal stores no transcripts; after a move to
+        Personal, stored ones are kept 7 days and then deleted. Usage records
+        are the Org&apos;s spend history and are kept while the Org exists; a
+        plan may show only recent ones, but hides the rest rather than deleting
+        them.
+      </p>
+      <p>
+        You can delete your account from Settings. It is removed 14 days later,
+        and signing in before then keeps it. Deletion removes your name, email
+        address, memberships, API keys and stored transcripts. The usage records
+        of Turns you ran stay in each Org&apos;s spend history under a label
+        that no longer names you. To have an Org deleted, email us.
       </p>
 
       <h2>Services we use</h2>

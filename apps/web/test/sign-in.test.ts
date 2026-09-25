@@ -84,6 +84,9 @@ describe('the first time somebody signs in', () => {
       // person themselves under `users_write_self` and read by whoever may
       // already read their address.
       'display_name',
+      // Ticket 141. Timestamps of a deletion, not credentials.
+      'deletion_requested_at',
+      'deleted_at',
     ])
   })
 })
