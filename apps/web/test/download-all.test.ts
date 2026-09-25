@@ -39,15 +39,18 @@ vi.mock('../lib/storage', async (importOriginal) => ({
   objectStream: async (key: string) => {
     const bytes = objects.get(key)
     if (!bytes) return null
-    return new ReadableStream<Uint8Array>({
-      pull: (controller) => {
-        controller.enqueue(new Uint8Array(bytes))
-        controller.close()
+    return new ReadableStream<Uint8Array>(
+      {
+        pull: (controller) => {
+          controller.enqueue(new Uint8Array(bytes))
+          controller.close()
+        },
+        cancel: () => {
+          cancelled.add(key)
+        },
       },
-      cancel: () => {
-        cancelled.add(key)
-      },
-    })
+      { highWaterMark: 0 },
+    )
   },
 }))
 
