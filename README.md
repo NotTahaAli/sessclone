@@ -144,6 +144,14 @@ the migrations once per run and empties the database between tests. Its
 `seedFixture()` creates two Orgs with a person in every Role, including one
 Manager with a Scope and one without.
 
+The browser flows live in `apps/web/e2e/` and run with
+`pnpm --filter web e2e` against a database named `sessclone_e2e_test` (or the
+`DATABASE_URL`/`APP_DATABASE_URL` you pass). Install Chromium once with
+`pnpm --filter web exec playwright install chromium`. The run starts
+`next dev` itself, seeds through the database, and signs in without a Supabase
+project: `apps/web/e2e/global-setup.ts` serves the JWKS endpoint the app
+verifies against.
+
 ## Repository layout
 
 | Path                         | What lives there                                                      |

@@ -53,3 +53,7 @@ docs/findings/05-harness/hooks.log
 .vercel/
 playwright/.auth/
 *.pem
+
+# Playwright (apps/web/e2e): the signed session and each run's output
+apps/web/e2e/.auth/
+apps/web/test-results/

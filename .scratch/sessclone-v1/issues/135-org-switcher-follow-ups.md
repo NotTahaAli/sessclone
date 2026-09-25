@@ -7,9 +7,11 @@
 
 **Blocked by:** 134
 
-**Status:** todo
+**Status:** done
 
-- [ ] Migration drops `sessclone_accept_invitation(text)`; `invitations.test.ts` no longer exercises the one-argument form.
+- [x] Migration drops `sessclone_accept_invitation(text)`; `invitations.test.ts` no longer exercises the one-argument form.
 - [ ] Migration run on production (Taha).
-- [ ] Playwright: accept an invitation from the switcher.
-- [ ] Playwright: create an Org from the switcher and land on the waiting page (from ticket 136).
+- [x] Playwright: accept an invitation from the switcher.
+- [x] Playwright: create an Org from the switcher and land on the waiting page (from ticket 136).
+
+Migration: `20260925170000_drop_one_argument_accept.sql`. Flows: `apps/web/e2e/org-switcher.e2e.ts`, the first Playwright suite in the repo (`pnpm --filter web e2e`).
