@@ -48,6 +48,8 @@ export default defineConfig({
       NEXT_PUBLIC_SUPABASE_URL: AUTH_URL,
       NEXT_PUBLIC_SUPABASE_ANON_KEY: 'e2e',
       NEXT_PUBLIC_APP_URL: BASE_URL,
+      // Ticket 138: the landing page, for the dashboard logo's round trip.
+      ENABLE_LANDING: 'true',
       // SIGNUP_APPROVAL stays on, the default: a New Org lands on the
       // waiting page because of it.
     },

@@ -12,7 +12,7 @@ import { storageConfigured } from '../../../../lib/storage'
 //
 // Vercel Cron calls it with GET and `Authorization: Bearer $CRON_SECRET`
 // (`apps/web/vercel.json`); a self-hoster's own scheduler sends the same. It
-// no-ops unless `DEMO=on`, and the first call backfills the whole window.
+// no-ops unless `ENABLE_DEMO=true`, and the first call backfills the whole window.
 
 export async function GET(request: Request) {
   const expected = process.env.CRON_SECRET

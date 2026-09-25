@@ -10,15 +10,15 @@
 4. **Every save refuses with "This is a demo"**, so no reset of visitor edits is needed. The database enforces it: each of the visitor's transactions is read-only.
 5. **"Try the demo"** beside sign-up on the landing hero and on /pricing.
 6. **A daily cron job at end of day** seeds the new day and deletes demo data older than 60 days, for both Orgs.
-7. **Off by default** (`DEMO=on` opts in); demo Orgs never count as customers and ingest refuses them.
+7. **Off by default** (`DEMO=on` opts in; renamed `ENABLE_DEMO=true` by ticket 138); demo Orgs never count as customers and ingest refuses them.
 
 **Blocked by:** None
 
 **Status:** done
 
 - [x] `orgs.is_demo` (migration `20260925160000_live_demo.sql`), settable by the owning role alone; left out of the Admin panel's list, pending count and Tier counts; refused by ingest.
-- [x] `/demo` sets an HttpOnly cookie that `sessionUser` honours only with no Supabase session and `DEMO=on`; `asViewer` opens the visitor's transactions read-only; every action returns or shows "This is a demo".
+- [x] `/demo` sets an HttpOnly cookie that `sessionUser` honours only with no Supabase session and `ENABLE_DEMO=true` (was `DEMO=on`); `asViewer` opens the visitor's transactions read-only; every action returns or shows "This is a demo".
 - [x] A banner on every dashboard page ("You're viewing a demo with made-up data.", Sign up, Exit demo); dashboard pages `noindex`.
 - [x] Deterministic generator (`lib/demo-data.ts`) with unit tests; `/api/demo/refresh` (CRON_SECRET, idempotent, backfills, prunes rows and objects) scheduled daily in `apps/web/vercel.json`.
 - [x] Screenshots of landing, Costs, Sessions, a transcript, Settings, a refused save, both Orgs and the switcher at 1440x900 and 390x844 in light and dark. Kept in the build session's scratch directory, not in the repo; commit `0a803d4` fixed what they showed.
-- [ ] Migration `20260925160000_live_demo.sql` run on production (Taha).
+- [x] Migration `20260925160000_live_demo.sql` run on production (Taha, 2026-09-25).

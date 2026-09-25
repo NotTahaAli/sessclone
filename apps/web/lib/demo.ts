@@ -1,3 +1,5 @@
+import { siteFlags } from './site-flags'
+
 // Ticket 137: the read-only live demo.
 //
 // Taha's decisions (2026-09-25): generated data only, never real usage; the
@@ -5,12 +7,12 @@
 // second, so every page including Settings is visible; and every save
 // refuses with one sentence rather than being undone later.
 //
-// Off unless `DEMO=on`, like `SEARCH_INDEXING`: a self-hosted copy has no
-// demo, no /demo route and no "Try the demo" button unless its operator opts
-// in. Read per call so a test can flip it.
+// Off unless `ENABLE_DEMO=true` (ticket 138's flags): a self-hosted copy has
+// no demo, no /demo route and no "Try the demo" button unless its operator
+// opts in. Read per call so a test can flip it.
 
 /** Whether this deployment runs the demo. */
-export const demoEnabled = () => process.env.DEMO?.trim().toLowerCase() === 'on'
+export const demoEnabled = () => siteFlags().demo
 
 /**
  * The demo visitor's `users.id`. Fixed rather than looked up, so `asViewer`

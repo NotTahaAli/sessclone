@@ -15,7 +15,7 @@ ticket.
 
 Every variable in the tables below is read by code today. `CRON_SECRET` is
 read by Vercel's scheduler as well as by this application, which checks it on
-`/api/demo/refresh` when `DEMO=on` (see [Retention sweep](#retention-sweep)).
+`/api/demo/refresh` when `ENABLE_DEMO=true` (see [Retention sweep](#retention-sweep)).
 **Required** means the code throws, or the feature refuses to run, without it;
 **Default** is what the code falls back to when it is unset.
 
@@ -204,15 +204,44 @@ own verified address, and accepting it takes a deliberate press rather than a
 page load. Treat a link in a chat message the way you would treat a password
 reset link, and revoke one you think has been seen.
 
+### Public site (optional)
+
+| Variable         | Required | Default | What it is                                                                                |
+| ---------------- | -------- | ------- | ----------------------------------------------------------------------------------------- |
+| `ENABLE_LANDING` | no       | off     | `true` serves the landing page at `/` and `/pricing`                                      |
+| `ENABLE_DOCS`    | no       | off     | `true` serves these docs at `/docs` and their search at `/api/search`                     |
+| `ENABLE_DEMO`    | no       | off     | `true` runs the read-only demo at `/demo` (below) and shows "Try the demo" beside sign-up |
+
+Each is `true` or `false`, and unset is off, so a self-hosted copy is the
+dashboard alone unless you opt in. Only `true` (any case) turns one on.
+
+- **Landing off:** `/` sends a signed-out visitor to sign-in and a signed-in
+  one to the dashboard. `/pricing` returns 404; `/privacy` and `/terms` stay,
+  because sign-up and the dashboard's Legal notices link to them. Sign-up keeps
+  its plan step. The dashboard's logo opens Costs.
+- **Landing on:** a signed-in person who types `/` or follows a link to it from
+  elsewhere gets the dashboard. The dashboard's logo still opens the landing
+  page, whose header then offers Dashboard in place of Sign in.
+- **Docs off:** `/docs` and `/api/search` return 404, and every docs link on
+  the site points at the same page on https://sessclone.com/docs.
+- The sitemap and `llms.txt` list only what the deployment serves.
+
+The flags are read in two places. The Proxy reads them on every request, for
+the 404s and the redirect from `/`; the public pages read them when they are
+prerendered at build time, for their links and buttons. **Changing a flag
+needs a rebuild and redeploy**, not only a restart: on Vercel, redeploy after
+changing the variable; with Docker, rebuild the image (`compose.yaml` passes
+the three as build arguments).
+
 ### Live demo (optional)
 
-| Variable      | Required    | Default | What it is                                                                                      |
-| ------------- | ----------- | ------- | ----------------------------------------------------------------------------------------------- |
-| `DEMO`        | no          | off     | `on` runs a read-only demo at `/demo` and shows "Try the demo" on the landing and pricing pages |
-| `CRON_SECRET` | with `DEMO` | —       | Bearer secret for `/api/demo/refresh`. Unset means the route refuses every call                 |
+| Variable      | Required           | Default | What it is                                                                      |
+| ------------- | ------------------ | ------- | ------------------------------------------------------------------------------- |
+| `ENABLE_DEMO` | no                 | off     | `true` runs a read-only demo at `/demo` (see Public site above)                 |
+| `CRON_SECRET` | with `ENABLE_DEMO` | —       | Bearer secret for `/api/demo/refresh`. Unset means the route refuses every call |
 
 Off by default, so a self-hosted copy has no demo unless you opt in. With
-`DEMO=on`, `/demo` sets a cookie that shows a visitor with no session two
+`ENABLE_DEMO=true`, `/demo` sets a cookie that shows a visitor with no session two
 made-up Orgs, as Owner of one and Member of the other; every save answers
 "This is a demo", because each of the visitor's database transactions is
 read-only. A signed-in person always sees their own Orgs.
@@ -227,7 +256,7 @@ yourself once a day, after 23:00 UTC. It writes as `INGEST_DATABASE_URL`, and
 stores a few hundred kilobytes of made-up transcripts when storage is
 configured.
 
-**Toggling `DEMO` needs a redeploy.** The landing and pricing pages are
+**Toggling `ENABLE_DEMO` needs a redeploy.** The landing and pricing pages are
 prerendered at build time, so their "Try the demo" button appears or
 disappears only with the next build. `/demo`, the banner and the refresh read
 the variable per request and follow it at once, so turning it off without a
@@ -247,10 +276,10 @@ an object that is already gone succeeds.
 **Turns are never touched by it.** The spend history is append-only and
 survives every transcript it describes.
 
-| Variable                 | Required    | Default | What it is                                                                                                                                         |
-| ------------------------ | ----------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `RETENTION_SWEEP_SECRET` | no          | —       | Shared secret for `/api/retention/sweep`. Unset means the route refuses every call                                                                 |
-| `CRON_SECRET`            | Vercel only | —       | Sent by Vercel Cron; the app reads it only for `/api/demo/refresh` when `DEMO=on`. On Vercel, set it to the same value as `RETENTION_SWEEP_SECRET` |
+| Variable                 | Required    | Default | What it is                                                                                                                                                  |
+| ------------------------ | ----------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RETENTION_SWEEP_SECRET` | no          | —       | Shared secret for `/api/retention/sweep`. Unset means the route refuses every call                                                                          |
+| `CRON_SECRET`            | Vercel only | —       | Sent by Vercel Cron; the app reads it only for `/api/demo/refresh` when `ENABLE_DEMO=true`. On Vercel, set it to the same value as `RETENTION_SWEEP_SECRET` |
 
 **Who calls it.** On Vercel, `apps/web/vercel.json` schedules a daily
 `GET /api/retention/sweep`, and Vercel Cron sends

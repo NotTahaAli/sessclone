@@ -28,12 +28,21 @@ COPY . .
 # have to be here rather than only in the running container. The two Supabase
 # ones are the deployment's own project; the URL is where the browser will
 # reach this app.
+#
+# The site flags (ticket 138) are here too: the public pages read them when
+# they prerender, and the container reads them again per request.
 ARG NEXT_PUBLIC_SUPABASE_URL
 ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
 ARG NEXT_PUBLIC_APP_URL
+ARG ENABLE_LANDING
+ARG ENABLE_DOCS
+ARG ENABLE_DEMO
 ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL \
     NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY \
-    NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
+    NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL \
+    ENABLE_LANDING=$ENABLE_LANDING \
+    ENABLE_DOCS=$ENABLE_DOCS \
+    ENABLE_DEMO=$ENABLE_DEMO
 RUN pnpm --filter web build
 
 FROM node:22.23.2-trixie-slim AS run

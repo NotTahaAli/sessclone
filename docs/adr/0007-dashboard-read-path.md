@@ -88,7 +88,7 @@ aggregates. Neither is in v1.
 ## Later
 
 Ticket 137's live demo is the one identity that does not come from a verified
-session. With `DEMO=on` and no session, a cookie selects a fixed demo visitor
+session. With `ENABLE_DEMO=true` and no session, a cookie selects a fixed demo visitor
 who belongs only to the two demo Orgs, and every transaction opened for that
 visitor is `read only`, so Postgres refuses any write whatever the page does.
 The policies still apply to it as to any other viewer.

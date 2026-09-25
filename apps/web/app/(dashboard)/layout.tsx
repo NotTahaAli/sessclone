@@ -6,7 +6,6 @@ import Link from 'next/link'
 
 import { AccountBlock, Avatar } from './account'
 import { AppearanceSync } from './appearance-sync'
-import { LogoMark } from '../_ui/logo'
 import { Waiting } from './waiting'
 import { OrgMark } from '../org-mark'
 import { OrgSwitcher } from './org-switcher'
@@ -27,6 +26,7 @@ import {
 } from './navigation'
 import Loading from './loading'
 import { exitDemo } from '../demo/actions'
+import { HomeLogo } from './home-logo'
 import { isLocked } from '../../lib/approval'
 import { isDemoUser } from '../../lib/demo'
 import { asViewer } from '../../lib/db'
@@ -273,7 +273,7 @@ async function Content({ children }: { children: ReactNode }) {
         operator={(await currentOperator()) !== null}
       >
         <div className={BRAND}>
-          <LogoMark className="text-text" />
+          <HomeLogo />
           <OrgName className="block truncate" />
         </div>
       </Waiting>
@@ -370,7 +370,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       >
         <div>
           <div className={BRAND}>
-            <LogoMark className="text-text" />
+            <HomeLogo />
             <Suspense fallback={PENDING_SIDEBAR}>
               <OrgName className="block truncate" />
             </Suspense>
@@ -405,7 +405,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           the four destinations are a bottom bar. */}
       <header className="border-rule bg-ground sticky top-0 z-10 flex items-center justify-between gap-3 border-b px-4 py-1.5 lg:hidden">
         <div className={BRAND}>
-          <LogoMark className="text-text" />
+          <HomeLogo />
           <Suspense fallback={PENDING_HEADER}>
             <OrgName className="block truncate" />
           </Suspense>

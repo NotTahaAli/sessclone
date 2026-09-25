@@ -9,9 +9,10 @@ import { buttonClass, pillClass } from '../_ui/primitives'
 // pointed at `/sign-in` unconditionally, because the marketing pages are
 // prerendered and a prerender cannot know who is asking.
 //
-// So the link streams instead. The prerendered shell carries the signed-out
-// wording — right for almost every visitor, and what a crawler sees — and the
-// session read swaps it for the dashboard once it lands. Ticket 83's shells
+// So the link streams instead. The prerendered shell carries the hero's
+// signed-out wording, and a placeholder for the header's button (ticket 138),
+// and the session read fills both once it lands; a crawler gets the resolved
+// links in the same response. Ticket 83's shells
 // stay non-empty, which `scripts/check-shells.mjs` checks.
 //
 // The marketing page itself is not redirected away from: somebody signed in
@@ -30,7 +31,9 @@ import { buttonClass, pillClass } from '../_ui/primitives'
 const VARIANTS = {
   // The nav's is a pill: the hero's filled button is the page's one.
   header: {
-    className: pillClass,
+    // Wide enough for either label, so the pill keeps one width from the
+    // placeholder through "Sign in" or "Dashboard".
+    className: `${pillClass} min-w-[5.75rem] justify-center`,
     signedOut: 'Sign in',
     signedOutHref: '/sign-in',
     signedIn: 'Dashboard',
@@ -46,13 +49,14 @@ const VARIANTS = {
 export type Variant = keyof typeof VARIANTS
 
 const FALLBACKS: Record<Variant, React.ReactElement> = {
+  // The header's holds the place and says nothing (ticket 138's review): a
+  // signed-in reader saw "Sign in" flash before "Dashboard" replaced it. The
+  // same pill at the same width, so nothing beside it moves either; its hidden
+  // text is the longer label, in case the minimum is ever short of it.
   header: (
-    <Link
-      href={VARIANTS.header.signedOutHref}
-      className={VARIANTS.header.className}
-    >
-      {VARIANTS.header.signedOut}
-    </Link>
+    <span aria-hidden="true" className={VARIANTS.header.className}>
+      <span className="invisible">{VARIANTS.header.signedIn}</span>
+    </span>
   ),
   hero: (
     <Link
@@ -67,12 +71,13 @@ const FALLBACKS: Record<Variant, React.ReactElement> = {
 export function SignedInLink({ variant }: { variant: Variant }) {
   return (
     <Suspense fallback={FALLBACKS[variant]}>
-      <Resolved variant={variant} />
+      <SignedInResolved variant={variant} />
     </Suspense>
   )
 }
 
-async function Resolved({ variant }: { variant: Variant }) {
+/** The link once the session is read; exported for its test. */
+export async function SignedInResolved({ variant }: { variant: Variant }) {
   const user = await sessionUser()
   const { className, signedOut, signedOutHref, signedIn } = VARIANTS[variant]
 

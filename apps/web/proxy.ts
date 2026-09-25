@@ -2,11 +2,20 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 import { safeNext } from './lib/auth/next-path'
-import { DEMO_COOKIE, demoEnabled } from './lib/demo'
+import { DEMO_COOKIE } from './lib/demo'
+import {
+  callbackRedirect,
+  fromSite,
+  homeRedirect,
+  servesPath,
+  siteFlags,
+} from './lib/site-flags'
 
 // Next 16 calls this Proxy; it is what earlier versions called Middleware.
-// Two jobs, and no more than two: refresh the Supabase session on every
-// request, and send a signed-out visitor to the sign-in page.
+// Two jobs: refresh the Supabase session on every request, and send a
+// signed-out visitor to the sign-in page. Since ticket 138 it also applies the
+// site flags, because it is the one place that reads them per request: the
+// pages they switch off 404, and `/` goes where the flags and the visitor say.
 //
 // It is not the authorisation layer. Next's own documentation is explicit that
 // Proxy is for optimistic checks rather than session management or
@@ -63,15 +72,77 @@ const PUBLIC_PATHS = [
 const PUBLIC_FILE =
   /^\/(?:robots\.txt|sitemap\.xml|favicon\.ico|manifest\.webmanifest|llms\.txt|\.well-known\/security\.txt|(?:apple-)?icon[^/]*|(?:opengraph|twitter)-image[^/]*)$/
 
+// Ticket 138: a page a flag switches off. Rewritten to a path no route
+// matches, so the app's own not-found page renders, with a 404.
+const NOT_SERVED = '/_not-served'
+
+/** A redirect that keeps the session cookies `getClaims` just rotated: a
+ * signed-in visit to `/` is every visit to the site for someone who bookmarked
+ * it, and a dropped rotation there is a random sign-out. */
+const withCookies = (redirect: NextResponse, from: NextResponse) => {
+  for (const cookie of from.cookies.getAll()) redirect.cookies.set(cookie)
+  return redirect
+}
+
+// A redirect from `/` depends on who is asking, so no cache in between
+// (a CDN, a shared proxy) may keep one and hand it to somebody else. The
+// Location is relative (RFC 9110 allows it), as `/demo`'s is: behind a
+// reverse proxy `request.nextUrl.origin` is the server's own (`localhost`),
+// which the browser cannot reach.
+const uncached = (to: string) =>
+  new NextResponse(null, {
+    status: 307,
+    headers: { location: to, 'cache-control': 'private, no-store' },
+  })
+
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request })
+
+  const path = request.nextUrl.pathname
+  const flags = siteFlags()
+
+  // Ticket 138, first and whoever asks: a page the flags switch off (pricing
+  // without the landing page, the docs and their search without docs) is not
+  // there. Here rather than in the pages because those prerender, and this
+  // reads the flags on every request.
+  if (!servesPath(flags, path)) {
+    return NextResponse.rewrite(new URL(NOT_SERVED, request.url), {
+      status: 404,
+    })
+  }
+
+  // A sign-in code Supabase sent to the bare origin goes on to the callback,
+  // whatever the flags: it is somebody part-way through signing in.
+  const callback = callbackRedirect(path, request.nextUrl.searchParams)
+  if (callback) return uncached(callback)
+
+  // The deployment's own origin, for the Referer fallback in `fromSite`:
+  // behind a reverse proxy the request's is the server's (`localhost`), not
+  // the one the browser was on.
+  const configured = process.env.NEXT_PUBLIC_APP_URL
+  const origin =
+    configured && URL.canParse(configured)
+      ? new URL(configured).origin
+      : request.nextUrl.origin
+
+  // Where `/` sends this visitor, or null for the landing page (ticket 138).
+  const home = (session: boolean, demoCookie: boolean) => {
+    if (path !== '/') return null
+    const to = homeRedirect(flags, {
+      session,
+      demoCookie,
+      fromSite: fromSite(request.headers, origin),
+    })
+    return to ? uncached(to) : null
+  }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   // Unconfigured, every path is as far as this can take anybody: let the
   // request through and let the page say what is missing, rather than
-  // redirecting to a sign-in page that cannot work either.
-  if (!url || !key) return response
+  // redirecting to a sign-in page that cannot work either. With no landing
+  // page, `/` still goes to that page, which says it.
+  if (!url || !key) return home(false, false) ?? response
 
   const supabase = createServerClient(url, key, {
     cookies: {
@@ -92,7 +163,6 @@ export async function proxy(request: NextRequest) {
   // is what logs people out at random.
   const { data } = await supabase.auth.getClaims()
 
-  const path = request.nextUrl.pathname
   const isPublic =
     PUBLIC_FILE.test(path) ||
     PUBLIC_PATHS.some(
@@ -101,7 +171,14 @@ export async function proxy(request: NextRequest) {
 
   // Ticket 137: the demo visitor has no session and is let through; the
   // pages resolve them in `sessionUser`, which honours the same cookie.
-  const demo = demoEnabled() && request.cookies.get(DEMO_COOKIE)?.value === '1'
+  const demoCookie = request.cookies.get(DEMO_COOKIE)?.value === '1'
+  const demo = flags.demo && demoCookie
+
+  // Ticket 138: `/`. Signed in (the demo visitor too, where the demo runs), a
+  // direct visit opens the dashboard; with no landing page, so does every
+  // visit, and a signed-out one goes to sign-in.
+  const redirectHome = home(Boolean(data?.claims), demoCookie)
+  if (redirectHome) return withCookies(redirectHome, response)
 
   if (!data?.claims && !isPublic && !demo) {
     const signIn = request.nextUrl.clone()

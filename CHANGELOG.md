@@ -6,6 +6,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-25
+
+Upgrading a self-hosted copy from 0.1.0: set `ENABLE_LANDING`, `ENABLE_DOCS`
+and `ENABLE_DEMO` to `true` for whichever parts you serve, since unset now
+means off, and rebuild. Run the new migrations before deploying, except
+`20260925170000_drop_one_argument_accept.sql`, which runs after
+(`docs/self-hosting.md`).
+
 ### Added
 
 - An Org switcher: the Org name at the top of the sidebar, or of the phone
@@ -24,19 +32,40 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   too, so you can switch out of an Org that is waiting. It emails the platform
   admins the same way a sign-up does, and just as little: nothing with
   approval off, nothing once the Org is active.
-- A read-only live demo, off unless `DEMO=on`: "Try the demo" beside sign-up
+- A read-only live demo, off unless `ENABLE_DEMO=true`: "Try the demo" beside sign-up
   on the landing and pricing pages opens two made-up Orgs with six invented
   people each and 60 days of generated usage and transcripts. Every page is
   visible and every save answers "This is a demo". A daily
   `/api/demo/refresh` keeps the window current. The demo's Costs and Sessions
-  pages are cached per day, for the demo visitor only.
+  pages are cached per day, for the demo visitor only. A signed-in visitor
+  doesn't see "Try the demo", since their own account opens instead.
 - Browser tests: the repo's first Playwright suite (`apps/web/e2e`, run with
   `pnpm --filter web e2e`) accepts an invitation from the Org switcher and
   starts a New Org from it. It signs in without a Supabase project and seeds
   a `*_test` database directly.
+- `ENABLE_LANDING`, `ENABLE_DOCS` and `ENABLE_DEMO`, each `true` or `false`
+  and off when unset, so a self-hosted copy serves only the dashboard. With
+  the landing page off, `/` goes to sign-in or the dashboard and `/pricing` is
+  a 404; the privacy and terms pages stay. With the docs off, `/docs` is a
+  404 and docs links go to sessclone.com. A signed-in visit to `/` opens the
+  dashboard, and the dashboard's logo links back to the landing page.
+  Changing a flag needs a rebuild. **Before deploying:** set all three on
+  Vercel, for Production and Preview (`true` for sessclone.com), and remove
+  `DEMO`, which nothing reads any more; unset, the landing page, docs and demo
+  are all off.
+- A sign-in that Supabase sends to the bare site with `?code=` now continues
+  to `/auth/callback` instead of stopping on the home page.
 - `/.well-known/security.txt` (RFC 9116), pointing to GitHub private advisories
   and, when set, the deployment's contact address. Its expiry is always a
   year ahead.
+
+### Changed
+
+- The Collector plugin's version now follows the release, starting at
+  `0.2.0`. It was pinned at `0.0.0`, and Claude Code only updates a plugin
+  whose version changed, so `/plugin update` reported every install as
+  current and kept the code it was installed with. Update once to pick up
+  everything since.
 
 ### Removed
 
@@ -89,5 +118,6 @@ The first public release.
 - Self-hosting: a Dockerfile, `compose.yaml` and a guide, free at any size
   under AGPL-3.0-only with the additional term in `NOTICE.md`.
 
-[Unreleased]: https://github.com/NotTahaAli/sessclone/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/NotTahaAli/sessclone/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/NotTahaAli/sessclone/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/NotTahaAli/sessclone/releases/tag/v0.1.0

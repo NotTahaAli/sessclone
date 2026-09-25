@@ -23,6 +23,12 @@ Storage is optional to start with: with `STORAGE_*` unset, archival is off and
 everything else works. A deployment with no bucket collects Turns, prices them
 and shows them, and stores no transcripts at all.
 
+In the Supabase project, under Authentication, URL Configuration, add
+`<NEXT_PUBLIC_APP_URL>/auth/callback` to **Redirect URLs** and set **Site URL**
+to `NEXT_PUBLIC_APP_URL`. A sign-in whose callback is not on that list is sent
+to the Site URL instead; the app forwards a `/?code=…` it receives there on to
+`/auth/callback`, but only the list entry makes the redirect Supabase's own.
+
 ## 1. Clone, and write the environment
 
 ```bash
@@ -153,6 +159,15 @@ pnpm --filter web start
 
 The `NEXT_PUBLIC_*` variables are read into the browser bundle at build time,
 so changing one means rebuilding rather than restarting.
+
+### The dashboard alone, or the whole site
+
+A self-hosted copy serves the dashboard and nothing else: `/` goes to sign-in,
+or to Costs once you are signed in, and docs links point at
+https://sessclone.com/docs. `ENABLE_LANDING=true`, `ENABLE_DOCS=true` and
+`ENABLE_DEMO=true` add the landing and pricing pages, these docs, and the demo
+(configuration, "Public site"). The public pages read them at build time, so
+changing one means rebuilding as well.
 
 ## 5. Sign in, and collect the first Turn
 
