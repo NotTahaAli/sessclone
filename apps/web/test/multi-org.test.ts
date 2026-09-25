@@ -191,3 +191,33 @@ test('switching refuses a membership that is not the viewer’s', async () => {
   await expect(switchOrg(null, form)).rejects.toThrow(/NEXT_REDIRECT/)
   expect(jar.get(MEMBER_COOKIE)).toBe(elsewhere)
 })
+
+test('a tab left open across a switch cannot invite or issue a key in the new Org', async () => {
+  // The page was rendered for Globex; the cookie has since moved to Acme
+  // (here: no choice, so the oldest). The forms carry the Org they were
+  // drawn for, and a mismatch is refused before anything is written.
+  vi.stubEnv('NEXT_PUBLIC_APP_URL', 'http://127.0.0.1:3000')
+  const { sendInvite } =
+    await import('../app/(dashboard)/settings/org/members/invite-actions')
+  const { createKey } = await import('../app/(dashboard)/keys/actions')
+
+  const invitation = new FormData()
+  invitation.append('email', 'new@example.test')
+  invitation.append('role', 'member')
+  invitation.append('orgId', fixture.globex.id)
+  expect(await sendInvite(null, invitation)).toMatchObject({
+    error: expect.any(String),
+  })
+
+  const key = new FormData()
+  key.append('label', 'laptop')
+  key.append('orgId', fixture.globex.id)
+  expect(await createKey(null, key)).toMatchObject({
+    error: expect.any(String),
+  })
+
+  expect(await sql`select id from invitations`).toHaveLength(0)
+  expect(
+    await sql`select id from api_keys where label = 'laptop'`,
+  ).toHaveLength(0)
+})

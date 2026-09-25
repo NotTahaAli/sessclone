@@ -19,7 +19,10 @@ import { installCommand } from '../../../lib/install-command'
 
 export function NewKeyForm({
   appUrl,
+  orgId,
 }: {
+  /** The Org this page shows; the action refuses any other (a stale tab). */
+  orgId: string
   /** This deployment's own URL, so the command below is ready to run. */
   appUrl: string
 }) {
@@ -35,6 +38,7 @@ export function NewKeyForm({
           it. The key reports to the current Org; the Org switcher is how
           somebody in two makes one for the other. */}
       <form action={formAction} className="flex flex-wrap gap-1.5 py-1">
+        <input type="hidden" name="orgId" value={orgId} />
         <label htmlFor="label" className="sr-only">
           Label
         </label>

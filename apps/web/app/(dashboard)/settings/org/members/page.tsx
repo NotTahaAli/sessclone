@@ -65,7 +65,7 @@ export default async function Members() {
       <PageHeader title="Members" back="/settings" />
 
       <SectionBreak>Invite</SectionBreak>
-      <InviteForm origin={appUrl()} />
+      <InviteForm origin={appUrl()} orgId={viewer.orgId} />
       <p className="text-text-muted text-caption">
         An invitation is a link for one address. It works once, for seven days,
         and the Seat is taken when the person accepts rather than when you send
@@ -75,7 +75,11 @@ export default async function Members() {
       {invitations.invitations.length > 0 ? (
         <ol className="mt-1">
           {invitations.invitations.map((invitation) => (
-            <InvitationRow key={invitation.id} invitation={invitation} />
+            <InvitationRow
+              key={invitation.id}
+              invitation={invitation}
+              orgId={viewer.orgId}
+            />
           ))}
         </ol>
       ) : null}
@@ -233,7 +237,13 @@ function Scope({
 }
 
 /** One invitation, and the one thing that can still be done to it. */
-function InvitationRow({ invitation }: { invitation: Invitation }) {
+function InvitationRow({
+  invitation,
+  orgId,
+}: {
+  invitation: Invitation
+  orgId: string
+}) {
   const state = invitation.acceptedAt
     ? 'accepted'
     : invitation.revokedAt
@@ -259,6 +269,7 @@ function InvitationRow({ invitation }: { invitation: Invitation }) {
       {invitation.live ? (
         <form action={withdrawInvite}>
           <input type="hidden" name="invitationId" value={invitation.id} />
+          <input type="hidden" name="orgId" value={orgId} />
           <button type="submit" className={QUIET}>
             Withdraw
             <span className="sr-only">

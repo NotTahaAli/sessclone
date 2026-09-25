@@ -47,7 +47,7 @@ export default async function Keys() {
         machine its own, so losing one costs you that machine and no other.
       </p>
 
-      <NewKeyForm appUrl={appUrl()} />
+      <NewKeyForm appUrl={appUrl()} orgId={viewer.orgId} />
 
       <SectionBreak>Your keys</SectionBreak>
       {keys.length === 0 ? (

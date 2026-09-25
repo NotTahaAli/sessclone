@@ -6,7 +6,7 @@ import { z } from 'zod'
 import { createApiKey, revokeApiKey } from '../../../lib/api-keys'
 import { asViewer } from '../../../lib/db'
 import { signedInUser } from '../../../lib/supabase/server'
-import { currentViewer } from '../../../lib/viewer'
+import { viewerOfOrg } from '../../../lib/viewer'
 
 // A Server Action is a POST endpoint that anyone can reach, whether or not the
 // page rendered a form for them — so identity is taken from the session here
@@ -31,8 +31,12 @@ export const createKey = async (
   _previous: unknown,
   formData: FormData,
 ): Promise<{ key: string } | { error: string } | null> => {
-  const viewer = await currentViewer()
-  if (!viewer) return { error: 'Sign in again to create a key.' }
+  // The Org the page was rendered for: a tab left open across an Org switch
+  // must not issue a key that reports to the other Org.
+  const viewer = await viewerOfOrg(formData.get('orgId'))
+  if (!viewer) {
+    return { error: 'This page is for another Org now. Reload and try again.' }
+  }
 
   const label = Label.safeParse(formData.get('label'))
   if (!label.success) {

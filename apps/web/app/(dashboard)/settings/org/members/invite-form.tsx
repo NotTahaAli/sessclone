@@ -33,7 +33,14 @@ const ROLES: { value: string; label: string; said: string }[] = [
   { value: 'admin', label: 'Admin', said: 'the whole Org, except billing' },
 ]
 
-export function InviteForm({ origin }: { origin: string }) {
+export function InviteForm({
+  origin,
+  orgId,
+}: {
+  origin: string
+  /** The Org this page shows; the action refuses any other (a stale tab). */
+  orgId: string
+}) {
   const [state, formAction, pending] = useActionState(sendInvite, null)
 
   return (
@@ -41,6 +48,7 @@ export function InviteForm({ origin }: { origin: string }) {
       {/* Direction A's field (ticket 113): the address and the Role in round
           fields, the primary button beside them. */}
       <form action={formAction} className="flex flex-wrap gap-1.5 py-1">
+        <input type="hidden" name="orgId" value={orgId} />
         <label className="sr-only" htmlFor="invite-email">
           Email
         </label>
