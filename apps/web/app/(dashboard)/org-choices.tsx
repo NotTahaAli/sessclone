@@ -105,7 +105,10 @@ function InviteRow({ invite, now }: { invite: PendingInvite; now: string }) {
       </span>
       <span className="text-text-muted col-span-2 truncate text-caption">
         {invite.invitedBy ? `From ${invite.invitedBy} · ` : ''}
-        {expired ? (
+        {expired && days === 0 ? (
+          // `Math.ceil` of under a day past is -0: "0d ago" reads as a bug.
+          'expired today'
+        ) : expired ? (
           <>
             expired <span className="font-mono">{-days}d</span> ago
           </>
