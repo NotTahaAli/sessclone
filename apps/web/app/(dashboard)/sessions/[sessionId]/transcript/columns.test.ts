@@ -221,4 +221,11 @@ describe('stickToBottom', () => {
     resize(3000)
     expect(scroller.scrollTop).toBe(2000)
   })
+
+  it('lets go on a click alone, as a screen reader activates a control', () => {
+    const { scroller, resize } = column()
+    scroller.dispatchEvent(new Event('click'))
+    resize(3000)
+    expect(scroller.scrollTop).toBe(1000)
+  })
 })

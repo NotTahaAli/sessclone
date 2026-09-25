@@ -130,7 +130,14 @@ export const earlierRead = (
 export const NEAR_TOP = 600
 
 /** What a reader does to move the column, as against the layout moving it. */
-const READER_MOVES = ['wheel', 'touchstart', 'pointerdown', 'keydown'] as const
+const READER_MOVES = [
+  'wheel',
+  'touchstart',
+  'pointerdown',
+  'keydown',
+  // A screen reader activates a control with a click and no press before it.
+  'click',
+] as const
 
 /**
  * Hold a column at its end while its content settles, until the reader moves.
@@ -139,7 +146,7 @@ const READER_MOVES = ['wheel', 'touchstart', 'pointerdown', 'keydown'] as const
  * measures placeholders; the rows then in view take their real height and the
  * end moves away (2026-09-24: ~5,800 px on a long transcript). Every resize of
  * `content` puts the column back at the end, and the first wheel, touch,
- * press or key lets go — a `scroll` does not, since re-pinning fires one.
+ * press, key or click lets go — a `scroll` does not, since re-pinning fires one.
  * Returns the release, which the caller runs on unmount too.
  */
 export const stickToBottom = (
