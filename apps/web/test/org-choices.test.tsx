@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { expect, test, vi } from 'vitest'
 
-import { SwitcherBody } from '../app/(dashboard)/org-choices'
+import { hasChoices, SwitcherBody } from '../app/(dashboard)/org-choices'
 
 // The switcher's expiry line, counted in whole days from the server's clock.
 // An invitation that lapsed a few hours ago is -0 days by `Math.ceil`, and
@@ -45,4 +45,28 @@ test('an invitation that lapsed within the day says today, not 0d ago', () => {
   expect(expiring('2026-09-25T09:00:00Z')).not.toContain('0d')
   expect(expiring('2026-09-23T09:00:00Z')).toContain('expired 2d ago')
   expect(expiring('2026-09-30T09:00:00Z')).toContain('expires in 5d')
+})
+
+const org = (memberId: string, orgName: string) => ({
+  memberId,
+  orgName,
+  role: 'member' as const,
+  locked: false,
+})
+
+test('one Org offers nothing, and Leave needs another Org to go to', () => {
+  // Leaving the only Org lands on the no-Org page with no way back, so one
+  // Org and no invitations stays plain text (Taha, 2026-09-25).
+  const alone = { ...data('2026-09-30T09:00:00Z'), lastOwner: false }
+  const one = [org('m', 'Acme')]
+  expect(hasChoices({ ...alone, orgs: one, invites: [] })).toBe(false)
+
+  const withOrgs = (orgs: ReturnType<typeof org>[]) => ({ ...alone, orgs })
+  const body = (orgs: ReturnType<typeof org>[]) =>
+    renderToStaticMarkup(
+      <SwitcherBody data={withOrgs(orgs)} current="m" orgName="Acme" />,
+    )
+  expect(hasChoices({ ...alone, orgs: one })).toBe(true)
+  expect(body(one)).not.toContain('Leave Acme')
+  expect(body([...one, org('n', 'Globex')])).toContain('Leave Acme')
 })

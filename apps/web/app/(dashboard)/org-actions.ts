@@ -125,7 +125,9 @@ export const leaveCurrentOrg = async (
     return {
       error: /at least one owner/i.test(message)
         ? 'You are its only Owner. Make somebody else an Owner in Members first.'
-        : 'That Org could not be left.',
+        : /only org/i.test(message)
+          ? 'This is your only Org, so there is nowhere to go from it.'
+          : 'That Org could not be left.',
     }
   }
 

@@ -626,7 +626,35 @@ test('the dashboard role cannot mark an invitation declined', async () => {
   ).rejects.toThrow(/only the person invited/)
 })
 
+/** A live Globex membership for each person, so leaving Acme leaves them
+ * somewhere to be. */
+const alsoInGlobex = (...users: string[]) =>
+  sql`
+    insert into members (org_id, user_id, role)
+    select ${fixture.globex.id}, unnest(${sql.array(users)}::uuid[]), 'member'
+  `
+
+test('nobody leaves their only Org: there is nowhere to land', async () => {
+  expect(
+    await refusal(
+      asRole(fixture.acme, 'member', (tx) =>
+        leaveOrg(tx, fixture.acme.members.member),
+      ),
+    ),
+  ).toMatch(/only org/)
+
+  await alsoInGlobex(fixture.acme.users.member)
+  expect(
+    await refusal(
+      asRole(fixture.acme, 'member', (tx) =>
+        leaveOrg(tx, fixture.acme.members.member),
+      ),
+    ),
+  ).toBeNull()
+})
+
 test('a Member leaves an Org; the last Owner cannot, and nobody leaves for another', async () => {
+  await alsoInGlobex(fixture.acme.users.member, fixture.acme.users.owner)
   await asRole(fixture.acme, 'member', (tx) =>
     leaveOrg(tx, fixture.acme.members.member),
   )
@@ -709,6 +737,7 @@ test('the app deployed before this migration still accepts by link, re-admission
 })
 
 test('two Owners leaving at once cannot leave the Org with none', async () => {
+  await alsoInGlobex(fixture.acme.users.owner, fixture.acme.users.admin)
   await asRole(
     fixture.acme,
     'owner',

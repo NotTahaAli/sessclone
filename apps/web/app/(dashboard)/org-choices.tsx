@@ -251,23 +251,20 @@ export function SwitcherBody({
           </ul>
         </section>
       ) : null}
-      <div
-        className={
-          orgs.length > 1 || invites.length > 0
-            ? 'border-rule mt-1.5 border-t'
-            : ''
-        }
-      >
-        <Leave memberId={current} orgName={orgName} lastOwner={lastOwner} />
-      </div>
+      {orgs.length > 1 ? (
+        <div className="border-rule mt-1.5 border-t">
+          <Leave memberId={current} orgName={orgName} lastOwner={lastOwner} />
+        </div>
+      ) : null}
     </>
   )
 }
 
-/** Whether the switcher has anything to offer: another Org, an invitation,
- * or a way out. A sole Owner of their one Org sees the name as plain text. */
+/** Whether the switcher has anything to offer: another Org or an invitation.
+ * One Org and no invitations reads exactly as before the switcher, nothing
+ * clickable, and leaving the only Org is not offered (Taha, 2026-09-25). */
 export const hasChoices = (data: OrgSwitcherData) =>
-  data.orgs.length > 1 || data.invites.length > 0 || !data.lastOwner
+  data.orgs.length > 1 || data.invites.length > 0
 
 /** The invitations that can still be accepted: the one accent mark on the
  * closed control. */

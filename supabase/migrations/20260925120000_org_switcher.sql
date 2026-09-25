@@ -381,13 +381,21 @@ $$;
 --
 -- The caller's own live membership, and nothing else. The last Owner is
 -- refused with the same sentence the constraint trigger raises, before the
--- write rather than at commit.
+-- write rather than at commit. So is leaving the only live membership: that
+-- lands the person on the no-Org page with no way back (Taha, 2026-09-25).
+-- Every live membership of the caller is locked first, in id order, so two
+-- leaves from two tabs cannot each count the other and both go.
 create or replace function sessclone_leave_org(leaving uuid)
   returns void language plpgsql security definer
   set search_path = pg_catalog, public, pg_temp as $$
 declare
   mine members;
 begin
+  perform 1 from members
+   where user_id = sessclone_user_id() and removed_at is null
+   order by id
+   for update;
+
   select * into mine from members
    where id = leaving
      and user_id = sessclone_user_id()
@@ -401,6 +409,13 @@ begin
   if mine.role = 'owner' and sessclone_org_owners(mine.org_id) <= 1 then
     raise exception 'an org keeps at least one owner'
       using hint = 'make somebody else an owner first';
+  end if;
+
+  if not exists (
+    select 1 from members
+     where user_id = mine.user_id and removed_at is null and id <> mine.id
+  ) then
+    raise exception 'cannot leave your only org';
   end if;
 
   update members set removed_at = now() where id = mine.id;
