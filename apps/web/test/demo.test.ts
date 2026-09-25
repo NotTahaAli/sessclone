@@ -429,7 +429,9 @@ test('no gap between storage PUTs leaves the transaction idle past its limit', a
       const [row] = await sql<{ at: string }[]>`
         select state_change::text as at from pg_stat_activity
          where pid in (select pid from pg_locks
-                        where locktype = 'advisory' and granted)
+                        where locktype = 'advisory' and granted and objsubid = 1
+                          and (classid::bigint << 32 | objid::bigint)
+                            = hashtext('sessclone_demo_refresh'))
            and state = 'idle in transaction'
       `
       seen.push(row!.at)
