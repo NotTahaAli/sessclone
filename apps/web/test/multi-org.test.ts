@@ -1,9 +1,11 @@
-import { beforeEach, expect, test } from 'vitest'
+import { beforeEach, expect, test, vi } from 'vitest'
 
 import { listApiKeys } from '../lib/api-keys'
 import { viewerAppearance } from '../lib/appearance'
 import { storedProjects, storedSessions } from '../lib/artifacts'
 import { listOwnDevices } from '../lib/devices'
+import { revokeInvitation } from '../lib/invitations'
+import { setMemberRemoved, setMemberRole } from '../lib/members'
 import { asUser, owner as sql, seedFixture, type Fixture } from './harness'
 
 // The Org switcher: one person, two Orgs. The policies answer "what may this
@@ -13,13 +15,40 @@ import { asUser, owner as sql, seedFixture, type Fixture } from './harness'
 // below is asked for Acme by somebody who is also in Globex, with rows of
 // their own in both.
 
+// For the Server Actions: only Supabase's JWT check and the request's cookies
+// are stubbed; the viewer read and the writes are the real ones.
+let claims: { sub: string; email: string } | null = null
+const jar = new Map<string, string>()
+vi.mock('@supabase/ssr', () => ({
+  createServerClient: () => ({
+    auth: { getClaims: async () => ({ data: claims ? { claims } : null }) },
+  }),
+}))
+vi.mock('next/headers', () => ({
+  cookies: async () => ({
+    getAll: () => [],
+    get: (name: string) =>
+      jar.has(name) ? { name, value: jar.get(name) } : undefined,
+    set: (name: string, value: string) => jar.set(name, value),
+  }),
+}))
+vi.mock('next/cache', () => ({ revalidatePath: () => {} }))
+vi.mock('../lib/db', async () => {
+  const harness = await import('./harness')
+  return { asViewer: harness.asUser }
+})
+
 let fixture: Fixture
 /** Acme's Owner, as an Admin of Globex too. */
 let person: string
 let elsewhere: string
 
 beforeEach(async () => {
+  vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://example.supabase.co')
+  vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'anon')
+  jar.clear()
   fixture = await seedFixture()
+  claims = { sub: fixture.acme.users.owner, email: 'owner@acme.test' }
   person = fixture.acme.users.owner
   const [row] = await sql<{ id: string }[]>`
     insert into members (org_id, user_id, role)
@@ -87,4 +116,41 @@ test('the appearance is the current membership’s, not the oldest', async () =>
 
   expect(here.locked).toBe(false)
   expect(there.locked).toBe(true)
+})
+
+test('an Org settings form naming another of the viewer’s Orgs is refused', async () => {
+  // Acme is current (the oldest, with no choice made); the person is an
+  // Admin of Globex too, so only the current-Org rule stands in the way.
+  const { setRetention } =
+    await import('../app/(dashboard)/settings/org/actions')
+  const form = new FormData()
+  form.append('days', '30')
+  form.append('orgId', fixture.globex.id)
+
+  expect(await setRetention(null, form)).toEqual({
+    error: 'Sign in again to change retention.',
+  })
+  const [row] = await sql<{ retention_days: number }[]>`
+    select retention_days from orgs where id = ${fixture.globex.id}
+  `
+  expect(row!.retention_days).toBe(90)
+})
+
+test('Members writes touch only the Org they are made in', async () => {
+  const [invite] = await sql<{ id: string }[]>`
+    insert into invitations (org_id, email, token_hash)
+    values (${fixture.globex.id}, 'new@globex.test', ${'c'.repeat(64)})
+    returning id
+  `
+  const target = fixture.globex.members.member
+
+  const written = await asUser(person, (tx) =>
+    Promise.all([
+      setMemberRole(tx, fixture.acme.id, target, 'manager'),
+      setMemberRemoved(tx, fixture.acme.id, target, true),
+      revokeInvitation(tx, fixture.acme.id, invite!.id),
+    ]),
+  )
+
+  expect(written).toEqual([false, false, false])
 })

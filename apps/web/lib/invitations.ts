@@ -155,11 +155,13 @@ export const listInvitations = async (
  */
 export const revokeInvitation = async (
   tx: TransactionSql,
+  orgId: string,
   invitationId: string,
 ): Promise<boolean> => {
   const rows = await tx`
     update invitations set revoked_at = now()
      where id = ${invitationId}
+       and org_id = ${orgId}
        and accepted_at is null
        and revoked_at is null
      returning id

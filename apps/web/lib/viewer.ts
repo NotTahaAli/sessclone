@@ -152,6 +152,18 @@ export const currentViewer = cache(async (): Promise<Viewer | null> => {
 })
 
 /**
+ * The viewer, when `orgId` — a form field, so untrusted — names the Org they
+ * are in now; otherwise `null`. What an Org settings action asks instead of
+ * `currentViewer()`: with the Org switcher a person may hold several Orgs,
+ * and the approval lock and the page they saw are the current Org's, so a
+ * form naming another one is refused before any statement runs.
+ */
+export const viewerOfOrg = async (orgId: unknown): Promise<Viewer | null> => {
+  const viewer = await currentViewer()
+  return viewer && viewer.orgId === orgId ? viewer : null
+}
+
+/**
  * Whether the signed-in viewer's Org is locked (ticket 119). What
  * `signedInUser` asks, and what the dashboard's own API routes ask beside
  * `sessionUser()` to answer a locked Org with a 403 rather than a 401. False

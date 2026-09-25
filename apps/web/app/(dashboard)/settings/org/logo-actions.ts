@@ -11,7 +11,7 @@ import {
   readLogo,
   setOrgLogo,
 } from '../../../../lib/org-logo'
-import { signedInUser } from '../../../../lib/supabase/server'
+import { viewerOfOrg } from '../../../../lib/viewer'
 
 // Ticket 77: uploading and removing the Org logo. Owner or Admin, which is
 // what `org_logos_set`, `org_logos_replace` and `org_logos_remove` say — a
@@ -29,8 +29,8 @@ export const uploadOrgLogo = async (
   _previous: unknown,
   formData: FormData,
 ): Promise<LogoResult> => {
-  const user = await signedInUser()
-  if (!user) return { error: 'Sign in again to change the logo.' }
+  const viewer = await viewerOfOrg(formData.get('orgId'))
+  if (!viewer) return { error: 'Sign in again to change the logo.' }
 
   const orgId = z.uuid().safeParse(formData.get('orgId'))
   if (!orgId.success) return { error: 'That is not a setting.' }
@@ -50,7 +50,7 @@ export const uploadOrgLogo = async (
   const read = readLogo(bytes)
   if ('refusal' in read) return { error: LOGO_REFUSALS[read.refusal] }
 
-  const written = await asViewer(user.id, (tx) =>
+  const written = await asViewer(viewer.userId, (tx) =>
     setOrgLogo(tx, orgId.data, { ...read.logo, bytes }),
   )
   if (!written) {
@@ -66,13 +66,15 @@ export const removeOrgLogo = async (
   _previous: unknown,
   formData: FormData,
 ): Promise<LogoResult> => {
-  const user = await signedInUser()
-  if (!user) return { error: 'Sign in again to change the logo.' }
+  const viewer = await viewerOfOrg(formData.get('orgId'))
+  if (!viewer) return { error: 'Sign in again to change the logo.' }
 
   const orgId = z.uuid().safeParse(formData.get('orgId'))
   if (!orgId.success) return { error: 'That is not a setting.' }
 
-  const removed = await asViewer(user.id, (tx) => clearOrgLogo(tx, orgId.data))
+  const removed = await asViewer(viewer.userId, (tx) =>
+    clearOrgLogo(tx, orgId.data),
+  )
   // Nothing removed is either a Role that may not or a logo already gone. The
   // form is only rendered when there is one to remove, so the first is the
   // case worth naming.

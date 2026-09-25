@@ -6,7 +6,7 @@ import { z } from 'zod'
 import { readSeed, SEED_REFUSALS, resolveAccent } from '../../../../lib/accent'
 import { setOrgAccent, setOrgAccentLock } from '../../../../lib/appearance'
 import { asViewer } from '../../../../lib/db'
-import { signedInUser } from '../../../../lib/supabase/server'
+import { viewerOfOrg } from '../../../../lib/viewer'
 
 // Ticket 77's two Org writes: the default accent seed, and whether Members may
 // override it. Owner or Admin, which is `orgs_write` — this file asserts
@@ -37,8 +37,8 @@ export const setOrgSeed = async (
   _previous: unknown,
   formData: FormData,
 ): Promise<OrgAppearanceResult> => {
-  const user = await signedInUser()
-  if (!user) return { error: 'Sign in again to change the Org’s colour.' }
+  const viewer = await viewerOfOrg(formData.get('orgId'))
+  if (!viewer) return { error: 'Sign in again to change the Org’s colour.' }
 
   const orgId = z.uuid().safeParse(formData.get('orgId'))
   const typed = z.string().min(1).max(9).safeParse(submitted(formData))
@@ -49,7 +49,7 @@ export const setOrgSeed = async (
   const read = readSeed(typed.data)
   if ('refusal' in read) return { error: SEED_REFUSALS[read.refusal] }
 
-  const written = await asViewer(user.id, (tx) =>
+  const written = await asViewer(viewer.userId, (tx) =>
     setOrgAccent(tx, orgId.data, {
       seed: read.seed,
       tones: resolveAccent(read.seed),
@@ -67,8 +67,8 @@ export const setSeedLock = async (
   _previous: unknown,
   formData: FormData,
 ): Promise<OrgAppearanceResult> => {
-  const user = await signedInUser()
-  if (!user) return { error: 'Sign in again to change the Org’s colour.' }
+  const viewer = await viewerOfOrg(formData.get('orgId'))
+  if (!viewer) return { error: 'Sign in again to change the Org’s colour.' }
 
   const orgId = z.uuid().safeParse(formData.get('orgId'))
   const locked = z.enum(['on', 'off']).safeParse(formData.get('locked'))
@@ -76,7 +76,7 @@ export const setSeedLock = async (
     return { error: 'That is not a setting.' }
   }
 
-  const written = await asViewer(user.id, (tx) =>
+  const written = await asViewer(viewer.userId, (tx) =>
     setOrgAccentLock(tx, orgId.data, locked.data === 'on'),
   )
   if (!written) {

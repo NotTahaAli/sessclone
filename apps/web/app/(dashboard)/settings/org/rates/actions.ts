@@ -9,7 +9,7 @@ import {
   deleteOrgRate,
   parseOrgRate,
 } from '../../../../../lib/org-rates'
-import { currentViewer, reachesOrgSettings } from '../../../../../lib/viewer'
+import { reachesOrgSettings, viewerOfOrg } from '../../../../../lib/viewer'
 
 // Ticket 121: an Enterprise Org's Owner or Admin sets its own rates.
 //
@@ -22,9 +22,8 @@ import { currentViewer, reachesOrgSettings } from '../../../../../lib/viewer'
 /** The viewer's Org, when they may manage its settings and it is the one the
  * form names. */
 const ownOrg = async (orgId: unknown) => {
-  const viewer = await currentViewer()
-  if (!viewer || !reachesOrgSettings(viewer.role)) return null
-  return viewer.orgId === orgId ? viewer : null
+  const viewer = await viewerOfOrg(orgId)
+  return viewer && reachesOrgSettings(viewer.role) ? viewer : null
 }
 
 export const addOwnRateAction = async (

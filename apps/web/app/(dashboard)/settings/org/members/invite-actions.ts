@@ -117,7 +117,9 @@ export const withdrawInvite = async (formData: FormData) => {
   const id = Id.safeParse(formData.get('invitationId'))
   if (!id.success) return
 
-  await asViewer(viewer.userId, (tx) => revokeInvitation(tx, id.data))
+  await asViewer(viewer.userId, (tx) =>
+    revokeInvitation(tx, viewer.orgId, id.data),
+  )
   revalidatePath('/settings/org/members')
 }
 
@@ -145,7 +147,7 @@ export const changeRole = async (
 
   try {
     await asViewer(viewer.userId, (tx) =>
-      setMemberRole(tx, memberId.data, role.data),
+      setMemberRole(tx, viewer.orgId, memberId.data, role.data),
     )
   } catch (error) {
     return { error: refusal(error) }
@@ -169,7 +171,7 @@ export const changeMembership = async (
 
   try {
     await asViewer(viewer.userId, (tx) =>
-      setMemberRemoved(tx, memberId.data, to.data === 'removed'),
+      setMemberRemoved(tx, viewer.orgId, memberId.data, to.data === 'removed'),
     )
   } catch (error) {
     return { error: refusal(error) }

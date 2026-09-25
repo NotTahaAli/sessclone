@@ -9,6 +9,10 @@ import { owner as sql, seedFixture, type Fixture } from './harness'
 // for them.
 
 const signedInUser = vi.hoisted(() => vi.fn())
+// No choice of Org on this request: `sessionViewer` reads the cookie.
+vi.mock('next/headers', () => ({
+  cookies: async () => ({ get: () => undefined }),
+}))
 vi.mock('../lib/supabase/server', () => ({
   signedInUser,
   sessionUser: signedInUser,
@@ -95,11 +99,12 @@ test('a Member posting the form is refused, and changes nothing', async () => {
 test('another Org’s id in the form reaches nothing', async () => {
   const { setRetention } = await actAs(fixture.acme.users.owner)
 
-  // The id is a hidden field, so it is the browser's word. The policy is what
-  // refuses it, and the action reports the refusal rather than an error page.
+  // The id is a hidden field, so it is the browser's word. Anything but the
+  // current Org is refused before a statement (the Org switcher's rule), and
+  // the policy would refuse it after.
   expect(
     await setRetention(null, form({ days: '7', orgId: fixture.globex.id })),
-  ).toEqual({ error: 'You do not have permission to change this setting.' })
+  ).toEqual({ error: 'Sign in again to change retention.' })
 
   const [globex] = await sql<{ retention_days: number }[]>`
     select retention_days from orgs where id = ${fixture.globex.id}

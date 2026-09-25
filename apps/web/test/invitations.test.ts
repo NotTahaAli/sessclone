@@ -141,7 +141,9 @@ test('a withdrawn invitation is refused', async () => {
   const { token, id } = await invited()
 
   expect(
-    await asRole(fixture.acme, 'admin', (tx) => revokeInvitation(tx, id)),
+    await asRole(fixture.acme, 'admin', (tx) =>
+      revokeInvitation(tx, fixture.acme.id, id),
+    ),
   ).toBe(true)
 
   expect(await accept(fixture.stranger.userId, token)).toEqual({
@@ -236,14 +238,18 @@ test('another Org neither lists nor withdraws these invitations', async () => {
   expect(invitations).toEqual([])
 
   expect(
-    await asRole(fixture.globex, 'owner', (tx) => revokeInvitation(tx, id)),
+    await asRole(fixture.globex, 'owner', (tx) =>
+      revokeInvitation(tx, fixture.acme.id, id),
+    ),
   ).toBe(false)
 })
 
 test('the list marks what is live, and a Member cannot read it at all', async () => {
   const { id } = await invited()
   await invited('someone.else@nowhere.test')
-  await asRole(fixture.acme, 'owner', (tx) => revokeInvitation(tx, id))
+  await asRole(fixture.acme, 'owner', (tx) =>
+    revokeInvitation(tx, fixture.acme.id, id),
+  )
 
   const { invitations } = await asRole(fixture.acme, 'admin', (tx) =>
     listInvitations(tx, fixture.acme.id),
@@ -353,7 +359,9 @@ test('a spent invitation cannot be made live again', async () => {
   ).rejects.toThrow(/stays accepted/)
 
   const { id: withdrawn } = await invited('other@nowhere.test')
-  await asRole(fixture.acme, 'owner', (tx) => revokeInvitation(tx, withdrawn))
+  await asRole(fixture.acme, 'owner', (tx) =>
+    revokeInvitation(tx, fixture.acme.id, withdrawn),
+  )
   await expect(
     asRole(
       fixture.acme,
