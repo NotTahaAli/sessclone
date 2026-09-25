@@ -59,6 +59,14 @@ means off, and rebuild. Run the new migrations before deploying, except
   and, when set, the deployment's contact address. Its expiry is always a
   year ahead.
 
+### Changed
+
+- The Collector plugin's version now follows the release, starting at
+  `0.2.0`. It was pinned at `0.0.0`, and Claude Code only updates a plugin
+  whose version changed, so `/plugin update` reported every install as
+  current and kept the code it was installed with. Update once to pick up
+  everything since.
+
 ### Removed
 
 - The one-argument `sessclone_accept_invitation(text)`, kept only while the

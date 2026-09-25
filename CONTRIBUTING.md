@@ -95,6 +95,17 @@ The database suites and the browser flows need a local Postgres;
 [`README.md`](README.md#the-database) says how to get one, and how to install
 Chromium for the flows.
 
+## Cutting a release
+
+1. Rename `## [Unreleased]` in `CHANGELOG.md` to `## [x.y.z] - <date>`, add a
+   fresh empty `## [Unreleased]` above it, and update the compare links.
+2. Set `version` in `packages/plugin/.claude-plugin/plugin.json` to the same
+   `x.y.z`. Claude Code only updates a plugin whose version changed, so
+   without this no install picks the release up. `src/version.test.mjs`
+   fails until the two match.
+3. Merge, then tag `vx.y.z` on `main` and publish the GitHub release with the
+   CHANGELOG section as its notes.
+
 ## Running it yourself, and sending it back
 
 Self-hosting is free at any size, and you are under no licence obligation to
