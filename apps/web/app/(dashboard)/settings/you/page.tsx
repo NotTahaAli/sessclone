@@ -2,6 +2,7 @@ import Link from 'next/link'
 
 import { setArchival, setName, setProject } from './actions'
 import { setOwnAccent } from './appearance-actions'
+import { DeleteAccount } from './delete-account'
 import { ThemeForm } from './theme-form'
 import {
   listArchivalMemberships,
@@ -17,7 +18,12 @@ import { AccentPreview } from '../appearance-preview'
 import { SeedPicker } from '../seed-picker'
 import { SwitchForm } from '../switch-form'
 import { Field, Row, SectionBreak } from '../../../_ui/primitives'
+import {
+  GRACE_DAYS,
+  ownDeletionBlockers,
+} from '../../../../lib/account-deletion'
 import { viewerAppearance } from '../../../../lib/appearance'
+import { isDemoUser } from '../../../../lib/demo'
 import { asViewer } from '../../../../lib/db'
 import { currentViewer } from '../../../../lib/viewer'
 
@@ -48,7 +54,7 @@ export default async function YourSettings() {
 
   // One transaction, which is what `asViewer` opens and what carries the
   // viewer's claim. The statements are independent, so they go together.
-  const [memberships, projects, scopes, appearance, displayName] =
+  const [memberships, projects, scopes, appearance, displayName, blockers] =
     await asViewer(viewer.userId, (tx) =>
       Promise.all([
         listArchivalMemberships(tx),
@@ -56,6 +62,7 @@ export default async function YourSettings() {
         ownScopes(tx),
         viewerAppearance(tx, viewer.memberId),
         ownDisplayName(tx, viewer.userId),
+        ownDeletionBlockers(tx),
       ]),
     )
 
@@ -158,6 +165,19 @@ export default async function YourSettings() {
         </Link>
         .
       </p>
+
+      {/* Ticket 141. Last, and not for the demo visitor, whose account is
+          the deployment's. */}
+      {isDemoUser(viewer.userId) ? null : (
+        <>
+          <SectionBreak>Delete account</SectionBreak>
+          <DeleteAccount
+            email={viewer.email}
+            blockers={blockers}
+            graceDays={GRACE_DAYS}
+          />
+        </>
+      )}
     </div>
   )
 }

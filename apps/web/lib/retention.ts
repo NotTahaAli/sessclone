@@ -32,6 +32,23 @@ import { deleteObjects } from './storage'
  */
 export const SWEEP_LIMIT = 500
 
+/**
+ * When the sweep takes the active Org's stored transcripts because its Tier
+ * keeps none (ticket 139): `sessclone_transcripts_end`, the same reading
+ * `CUTOFFS` makes below. Null while the Tier keeps transcripts.
+ */
+export const transcriptsEndOn = async (
+  tx: postgres.TransactionSql,
+  orgId: string,
+): Promise<{ on: Date; passed: boolean } | null> => {
+  const [row] = await tx<{ ends: Date; passed: boolean }[]>`
+    select ends, ends <= now() as passed
+      from sessclone_transcripts_end(${orgId}) ends
+     where ends is not null
+  `
+  return row ? { on: row.ends, passed: row.passed } : null
+}
+
 export type Swept = {
   /** Artifact rows removed. Their chunks (ADR 0008) went too, uncounted. */
   removed: number
@@ -50,8 +67,19 @@ export type Swept = {
  */
 const CUTOFFS = (tx: postgres.Sql | postgres.TransactionSql) => tx`
   select org.id as org_id,
-         -- least() ignores nulls, so a Tier with no ceiling needs no coalesce.
-         least(org.retention_days, tier.retention_max_days) as days
+         case
+           -- Ticket 139: a Tier with no transcripts (Personal) keeps an Org's
+           -- existing ones for 7 days after the move to it, then all of them
+           -- go. Zero days is "every transcript stored before now".
+           when tier.archival_available is false
+            and sessclone_transcripts_end(org.id) <= now()
+             then 0
+           -- least() ignores nulls, so no ceiling needs no coalesce. The
+           -- Org's own contract ceiling (ticket 139) comes before the Tier's.
+           else least(org.retention_days,
+                      coalesce(subscription.retention_max_days,
+                               tier.retention_max_days))
+         end as days
     from orgs org
     left join subscriptions subscription
            on subscription.org_id = org.id

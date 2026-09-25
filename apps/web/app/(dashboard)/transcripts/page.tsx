@@ -1,5 +1,6 @@
 import Link from 'next/link'
 
+import { DownloadAll } from './download-all'
 import { ArchivalNote, StoredTranscripts } from './stored-transcripts'
 import { PageHeader } from '../page-header'
 import { Row } from '../../_ui/primitives'
@@ -10,6 +11,8 @@ import {
   type StoredProject,
 } from '../../../lib/artifacts'
 import { asViewer } from '../../../lib/db'
+import { transcriptsEndOn } from '../../../lib/retention'
+import { archiveChoices } from '../../../lib/transcript-archive'
 import { currentViewer, reachesTeamTranscripts } from '../../../lib/viewer'
 
 // Ticket 87: the transcripts, out of settings.
@@ -69,9 +72,8 @@ export default async function Transcripts({
   // the viewer is in, and a row from another Org links to a Session this
   // Org's pages cannot open.
   const orgId = viewer.orgId
-  const [memberships, mine, mySessions, theirs] = await asViewer(
-    viewer.userId,
-    (tx) =>
+  const [memberships, mine, mySessions, theirs, choices, endsOn] =
+    await asViewer(viewer.userId, (tx) =>
       Promise.all([
         listArchivalMemberships(tx).then((all) =>
           all.filter((one) => one.member_id === viewer.memberId),
@@ -79,12 +81,35 @@ export default async function Transcripts({
         storedProjects(tx, { orgId }),
         storedSessions(tx, { orgId }),
         team ? storedProjects(tx, { orgId, audience: 'team' }) : null,
+        archiveChoices(tx, orgId),
+        transcriptsEndOn(tx, orgId),
       ]),
-  )
+    )
+
+  const stored = mine.projects.length > 0 || Boolean(theirs?.projects.length)
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <PageHeader title="Transcripts" />
+
+      {/* Ticket 139: a move to a Tier that keeps no transcripts leaves the
+          stored ones for a week, and says so where they are. */}
+      {stored && endsOn ? (
+        <p role="status" className="text-caption">
+          Your plan keeps no transcripts. The stored ones are deleted{' '}
+          {!endsOn.passed
+            ? `on ${endsOn.on.toLocaleDateString('en-GB', {
+                day: 'numeric',
+                month: 'long',
+                timeZone: viewer.orgTimezone,
+              })}`
+            : 'at the next daily sweep'}
+          ; download what you need below first.
+        </p>
+      ) : null}
+
+      {/* Ticket 140. Offered only with something stored to put in it. */}
+      {stored ? <DownloadAll choices={choices} /> : null}
 
       <section aria-labelledby="yours">
         <h2 id="yours" className={GROUP_HEADING}>

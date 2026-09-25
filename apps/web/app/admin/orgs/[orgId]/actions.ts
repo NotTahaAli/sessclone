@@ -35,6 +35,15 @@ const Form = z.object({
   // clears it and the Tier's own price (or "Contact") shows again.
   priceBase: dollarsToCents,
   priceSeat: dollarsToCents,
+  // Ticket 139: Enterprise's transcript retention, per contract. Blank falls
+  // back to the Tier's ceiling. The database's upper bound on an Org's own
+  // window is 3650 days, so a ceiling above it would mean nothing.
+  retentionMaxDays: z
+    .string()
+    .trim()
+    .regex(/^\d{0,4}$/)
+    .transform((value) => (value === '' ? null : Number(value)))
+    .refine((value) => value === null || (value >= 1 && value <= 3650)),
 })
 
 export const activateAction = async (
@@ -52,19 +61,21 @@ export const activateAction = async (
     note: formData.get('note') ?? '',
     priceBase: formData.get('priceBase') ?? '',
     priceSeat: formData.get('priceSeat') ?? '',
+    retentionMaxDays: formData.get('retentionMaxDays') ?? '',
   })
   if (!parsed.success) {
     return {
       error:
-        'Pick a Tier and a status, and give a price as dollars (500 or 8.50), or leave it blank.',
+        'Pick a Tier and a status, give a price as dollars (500 or 8.50) and a retention cap as 1 to 3650 days, or leave them blank.',
     }
   }
 
-  const { orgId, priceBase, priceSeat, ...rest } = parsed.data
+  const { orgId, priceBase, priceSeat, retentionMaxDays, ...rest } = parsed.data
   const subscription = {
     ...rest,
     priceBaseCents: priceBase,
     priceSeatCents: priceSeat,
+    retentionMaxDays,
   }
   let result
   try {

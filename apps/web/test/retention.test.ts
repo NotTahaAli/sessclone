@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 import { orgRetention, setOrgRetention } from '../lib/org'
-import { expiredCount, sweepRetention } from '../lib/retention'
+import {
+  expiredCount,
+  sweepRetention,
+  transcriptsEndOn,
+} from '../lib/retention'
 import { asRole, owner as sql, seedFixture, type Fixture } from './harness'
 
 // Ticket 61: the window, its Tier ceiling, and the sweep — against a real
@@ -28,6 +32,9 @@ vi.mock('../lib/storage', async (importOriginal) => ({
 
 let fixture: Fixture
 let nth = 0
+
+/** Ticket 141's part of the answer, when nobody is due. */
+const NO_ACCOUNTS = { scrubbed: 0, signInsRemoved: 0, signInsFailed: 0 }
 
 const withTier = async (
   orgId: string,
@@ -336,7 +343,11 @@ test('the sweep endpoint is a secret, not a session', async () => {
 
   const answer = await sweep('a-real-secret')
   expect(answer.status).toBe(200)
-  expect(await answer.json()).toEqual({ removed: 1, remaining: 0 })
+  expect(await answer.json()).toEqual({
+    removed: 1,
+    remaining: 0,
+    accounts: NO_ACCOUNTS,
+  })
   expect(bucket.deleted).toHaveLength(1)
 
   delete process.env.RETENTION_SWEEP_SECRET
@@ -375,7 +386,11 @@ test('the endpoint answers the backlog, and removes nothing it cannot delete', a
   expect(await sql`select id from log_artifacts`).toHaveLength(1)
 
   bucket.configured = true
-  expect(await (await ask()).json()).toEqual({ removed: 1, remaining: 0 })
+  expect(await (await ask()).json()).toEqual({
+    removed: 1,
+    remaining: 0,
+    accounts: NO_ACCOUNTS,
+  })
 
   delete process.env.RETENTION_SWEEP_SECRET
 })
@@ -399,6 +414,7 @@ test('a scheduled GET sweeps like a POST', async () => {
   expect(await (await GET(cronRequest('a-real-secret'))).json()).toEqual({
     removed: 1,
     remaining: 0,
+    accounts: NO_ACCOUNTS,
   })
 
   delete process.env.RETENTION_SWEEP_SECRET
@@ -669,4 +685,116 @@ test('a sweep racing a confirm that seals takes the new chunks too', async () =>
 
   expect((await sweeping)?.removed).toBe(1)
   expect(await chunkCount()).toBe(0)
+})
+
+test('an Org’s contract ceiling (ticket 139) caps it before the Tier’s', async () => {
+  await withTier(fixture.acme.id, null)
+  await sql`
+    update subscriptions set retention_max_days = 30 where org_id = ${fixture.acme.id}
+  `
+  await expect(
+    sql`update orgs set retention_days = 31 where id = ${fixture.acme.id}`,
+  ).rejects.toThrow(/ceiling of 30 days/)
+
+  // An Org already past a ceiling agreed later is swept to it.
+  await sql`
+    update subscriptions set retention_max_days = null where org_id = ${fixture.acme.id}
+  `
+  await sql`update orgs set retention_days = 90 where id = ${fixture.acme.id}`
+  await sql`
+    update subscriptions set retention_max_days = 30 where org_id = ${fixture.acme.id}
+  `
+  const old = await seedArtifact({ age: 40 })
+  const young = await seedArtifact({ age: 10 })
+  await sweepRetention(sql)
+  expect(bucket.deleted).toContain(old)
+  expect(bucket.deleted).not.toContain(young)
+})
+
+test('moving to a Tier without transcripts keeps them seven days, then sweeps all', async () => {
+  const [tier] = await sql<{ id: string }[]>`
+    insert into tiers (key, name, base_price_usd, retention_max_days,
+                       archival_available, sort_order)
+    values ('no-transcripts', 'Personal', 5, 90, false, 1) returning id
+  `
+  await withTier(fixture.acme.id, 90)
+  await sql`
+    update subscriptions set tier_id = ${tier!.id} where org_id = ${fixture.acme.id}
+  `
+  const recent = await seedArtifact({ age: 1 })
+  await sweepRetention(sql)
+  expect(bucket.deleted).not.toContain(recent)
+  // The Transcripts page names the same day the sweep acts on.
+  const ends = await asRole(fixture.acme, 'member', (tx) =>
+    transcriptsEndOn(tx, fixture.acme.id),
+  )
+  expect(ends?.passed).toBe(false)
+  expect(ends!.on.getTime() - Date.now()).toBeGreaterThan(6.9 * 86_400_000)
+
+  // Eight days on from the change.
+  await sql`
+    update subscription_events set occurred_at = now() - interval '8 days'
+     where org_id = ${fixture.acme.id}
+  `
+  expect(
+    (
+      await asRole(fixture.acme, 'member', (tx) =>
+        transcriptsEndOn(tx, fixture.acme.id),
+      )
+    )?.passed,
+  ).toBe(true)
+  await sweepRetention(sql)
+  expect(bucket.deleted).toContain(recent)
+})
+
+test('an edit after the move to a Tier without transcripts does not restart the seven days', async () => {
+  const [tier] = await sql<{ id: string }[]>`
+    insert into tiers (key, name, base_price_usd, retention_max_days,
+                       archival_available, sort_order)
+    values ('no-transcripts-2', 'Personal', 5, 90, false, 1) returning id
+  `
+  await withTier(fixture.acme.id, 90)
+  await sql`
+    update subscriptions set tier_id = ${tier!.id} where org_id = ${fixture.acme.id}
+  `
+  const recent = await seedArtifact({ age: 1 })
+  await sql`
+    update subscription_events set occurred_at = now() - interval '8 days'
+     where org_id = ${fixture.acme.id}
+  `
+  // A price agreed today writes an event of its own.
+  await sql`
+    update subscriptions set price_base_cents = 500 where org_id = ${fixture.acme.id}
+  `
+  await sweepRetention(sql)
+  expect(bucket.deleted).toContain(recent)
+})
+
+test('a lower ceiling brings the Org’s own setting down with it', async () => {
+  await withTier(fixture.acme.id, 365)
+  await sql`update orgs set retention_days = 300 where id = ${fixture.acme.id}`
+  await sql`
+    update subscriptions set retention_max_days = 30 where org_id = ${fixture.acme.id}
+  `
+  const [org] =
+    await sql`select retention_days from orgs where id = ${fixture.acme.id}`
+  expect(org!.retention_days).toBe(30)
+})
+
+test('account deletions that cannot run never stop the sweep', async () => {
+  process.env.RETENTION_SWEEP_SECRET = 'a-real-secret'
+  await sql`update orgs set retention_days = 1 where id = ${fixture.acme.id}`
+  await seedArtifact({ age: 10 })
+  // The queue's first read fails.
+  await sql`alter function sessclone_deletion_blockers(uuid) rename to blockers_gone`
+  try {
+    expect(await (await sweep('a-real-secret')).json()).toEqual({
+      removed: 1,
+      remaining: 0,
+      accounts: { error: 'account deletions did not run' },
+    })
+  } finally {
+    await sql`alter function blockers_gone(uuid) rename to sessclone_deletion_blockers`
+    delete process.env.RETENTION_SWEEP_SECRET
+  }
 })

@@ -1,5 +1,6 @@
 import { PageHeader } from '../../(dashboard)/page-header'
 import { Row, SectionBreak } from '../../_ui/primitives'
+import { stuckDeletions } from '../../../lib/account-deletion'
 import { asOperator } from '../../../lib/platform-admin'
 import { listOrgs, ORG_PAGE, type AdminOrg } from '../../../lib/subscriptions'
 import { TextFilter } from '../text-filter'
@@ -18,8 +19,8 @@ export default async function Page({
 }) {
   const { name } = await searchParams
   const filter = name?.trim() ?? ''
-  const { orgs, more } = await asOperator((tx) =>
-    listOrgs(tx, { name: filter || null }),
+  const [{ orgs, more }, stuck] = await asOperator((tx) =>
+    Promise.all([listOrgs(tx, { name: filter || null }), stuckDeletions(tx)]),
   )
 
   // The statement already puts the waiting ones first (ticket 120); the page
@@ -39,6 +40,20 @@ export default async function Page({
           clearHref="/admin/orgs"
         />
       </div>
+
+      {/* Ticket 141: people scrubbed whose sign-in the Admin API has not
+          removed, which is every one of them on a deployment without
+          SUPABASE_SERVICE_ROLE_KEY. The daily sweep retries them. */}
+      {stuck.length > 0 ? (
+        <p role="alert" className="text-bad-text mt-3 text-caption">
+          {stuck.length} deleted{' '}
+          {stuck.length === 1
+            ? 'account still has its'
+            : 'accounts still have their'}{' '}
+          sign-in. Set SUPABASE_SERVICE_ROLE_KEY; the next retention sweep
+          removes {stuck.length === 1 ? 'it' : 'them'}.
+        </p>
+      ) : null}
 
       {orgs.length === 0 ? (
         <p className="text-text-muted py-3 text-body">No Org matches that.</p>

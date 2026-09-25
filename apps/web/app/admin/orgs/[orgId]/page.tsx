@@ -112,6 +112,7 @@ export default async function Page({
         status={org.status}
         priceBaseCents={org.priceBaseCents}
         priceSeatCents={org.priceSeatCents}
+        retentionMaxDays={org.retentionMaxDays}
       />
 
       {/* Ticket 64. An Org with negotiated pricing has to see estimates that

@@ -45,7 +45,8 @@ export const onboardingFacts = async (
         select 1 from api_keys
          where revoked_at is null and last_used_at is not null
       ) as key_used,
-      exists (select 1 from turns where org_id = ${orgId}) as any_turns
+      -- However old: ticket 139's window hides Turns, not the fact of them.
+      sessclone_org_has_turns(${orgId}) as any_turns
   `
   return facts!
 }

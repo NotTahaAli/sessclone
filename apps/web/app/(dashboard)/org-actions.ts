@@ -131,7 +131,10 @@ export const leaveCurrentOrg = async (
   formData: FormData,
 ): Promise<OrgActionState> => {
   const viewer = await sessionViewer()
-  if (!viewer) return { error: 'Sign in again to leave.' }
+  // Ticket 141: nobody leaves in their deletion grace; Keep comes first.
+  if (!viewer || viewer.deletionRequestedAt) {
+    return { error: 'Sign in again to leave.' }
+  }
   if (isDemoUser(viewer.userId)) return { error: DEMO_REFUSAL }
 
   const memberId = Id.safeParse(formData.get('memberId'))

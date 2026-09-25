@@ -2,6 +2,7 @@ import { Field, SectionBreak } from '../../../_ui/primitives'
 import {
   agreedPrice,
   isActive,
+  historyWindow,
   retentionCeiling,
   shownCapabilities,
   type OrgTier,
@@ -73,7 +74,14 @@ export function Tier({ tier }: { tier: OrgTier }) {
       {/* The ceiling bounds a setting the Owner controls (ticket 61), so
           reading one without the other is reading half a rule. */}
       <Field
-        label="Retention ceiling"
+        label="History shown"
+        hint="Older Turns are kept, not deleted, and show again on a larger plan."
+      >
+        {historyWindow(tier)}
+      </Field>
+
+      <Field
+        label="Transcript retention ceiling"
         hint="Your own retention setting, in Org settings, sits under it."
       >
         {retentionCeiling(tier)}

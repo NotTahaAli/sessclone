@@ -24,6 +24,7 @@ const tier = (key: string, over: Partial<MarketingTier>): MarketingTier => ({
   minSeats: null,
   maxSeats: null,
   retentionMaxDays: null,
+  historyDays: null,
   archivalAvailable: false,
   includes: [],
   managerScopes: false,
@@ -124,4 +125,32 @@ test('the own-rates line comes from features.own_rates', () => {
       { ...enterprise, ownRates: null },
     ]),
   ).toEqual([OWN_RATES_LINE, 'Published', 'Published'])
+})
+
+test('history and transcripts are separate rows (ticket 139)', () => {
+  const tiers = [
+    { ...selfHosted, archivalAvailable: true },
+    { ...personal, historyDays: 90, retentionMaxDays: 90 },
+    {
+      ...team,
+      historyDays: 365,
+      retentionMaxDays: 90,
+      archivalAvailable: true,
+    },
+    { ...enterprise, archivalAvailable: true },
+  ]
+  const cells = (label: string) =>
+    comparison(tiers).find((row) => row.label === label)!.cells
+  expect(cells('History')).toEqual([
+    'Unlimited',
+    '90 days',
+    '1 year',
+    'Unlimited',
+  ])
+  expect(cells('Transcript archival')).toEqual([
+    'Your policy',
+    false,
+    '90 days',
+    'Per contract',
+  ])
 })

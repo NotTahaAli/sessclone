@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 
 import { beforeEach, expect, test, vi } from 'vitest'
 
-import { readMarketingTiers, tierPrice, tierRetention } from '../lib/tiers'
+import { readMarketingTiers, tierHistory, tierPrice } from '../lib/tiers'
 import { anonymous, seedFixture, owner as sql, type Fixture } from './harness'
 
 // Ticket 80: the public pricing section reads Tier records, so a price change
@@ -21,6 +21,7 @@ import { anonymous, seedFixture, owner as sql, type Fixture } from './harness'
 const SEEDS = [
   '20260922050000_tier_seed.sql',
   '20260922070000_tier_retention_prose.sql',
+  '20260925190100_tier_limits.sql',
 ].map(
   (file) => new URL(`../../../supabase/migrations/${file}`, import.meta.url),
 )
@@ -54,7 +55,7 @@ test('the four Tiers on the pricing page are the rows in the table', async () =>
 
   const team = tiers.find((tier) => tier.key === 'team')!
   expect(tierPrice(team)).toEqual({ amount: '$10', unit: 'per seat / month' })
-  expect(team.retentionMaxDays).toBe(365)
+  expect(team.retentionMaxDays).toBe(90)
   expect(team.archivalAvailable).toBe(true)
   // The card's prose is `features.includes`, so a Tier that starts including
   // something new is an edit rather than a deployment (ADR 0004).
@@ -215,15 +216,26 @@ test('the `features` a card renders survive whatever is in the column', async ()
   /* oxlint-enable no-await-in-loop */
 })
 
-test('the retention ceiling on a card is the column, not prose', async () => {
-  await sql`update tiers set retention_max_days = 730 where key = 'team'`
+test('the history window on a card is the column, not prose', async () => {
+  await sql`update tiers set history_days = 730 where key = 'team'`
 
   const team = (await anonymous(readMarketingTiers)).find(
     (tier) => tier.key === 'team',
   )
-  expect(tierRetention(team!)).toBe('2 years of history')
+  expect(tierHistory(team!)).toBe('2 years of history')
   // And the prose that used to say it is gone, so the two cannot disagree.
   expect(team!.includes.join(' ')).not.toMatch(/of history/i)
+})
+
+test('as seeded, history and transcripts are two limits (ticket 139)', async () => {
+  const tiers = await anonymous(readMarketingTiers)
+  const pick = (key: string) => tiers.find((tier) => tier.key === key)!
+  expect(pick('personal').historyDays).toBe(90)
+  expect(pick('personal').archivalAvailable).toBe(false)
+  expect(pick('team').historyDays).toBe(365)
+  expect(pick('team').retentionMaxDays).toBe(90)
+  expect(pick('enterprise').historyDays).toBeNull()
+  expect(pick('enterprise').retentionMaxDays).toBeNull()
 })
 
 test('the seed never corrects a running deployment', () => {

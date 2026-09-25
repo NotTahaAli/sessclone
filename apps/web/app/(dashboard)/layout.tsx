@@ -7,6 +7,8 @@ import Link from 'next/link'
 import { AccountBlock, Avatar } from './account'
 import { AppearanceSync } from './appearance-sync'
 import { Waiting } from './waiting'
+import { DeletionPending } from './deletion-pending'
+import { deletionDue } from '../../lib/account-deletion'
 import { OrgMark } from '../org-mark'
 import { OrgSwitcher } from './org-switcher'
 import { PanelCredit } from './credit'
@@ -32,7 +34,12 @@ import { isDemoUser } from '../../lib/demo'
 import { asViewer } from '../../lib/db'
 import { currentOperator } from '../../lib/platform-admin'
 import { pendingOrgCount } from '../../lib/subscriptions'
-import { orgSwitcherData, sessionViewer } from '../../lib/viewer'
+import { accountUser } from '../../lib/supabase/server'
+import {
+  deletionRequestedAt,
+  orgSwitcherData,
+  sessionViewer,
+} from '../../lib/viewer'
 
 // Ticket 83: this layout prerenders a static shell.
 //
@@ -259,6 +266,12 @@ async function HeaderAccount() {
  * frame around it is what prerenders.
  */
 async function Content({ children }: { children: ReactNode }) {
+  // Ticket 141: in their deletion grace, a person sees only the way back,
+  // with or without a live membership.
+  const account = await accountUser()
+  const deleting = account ? await deletionRequestedAt(account.id) : null
+  if (deleting) return <DeletionPending due={deletionDue(deleting)} />
+
   const viewer = await sessionViewer()
   if (!viewer) return <WithoutOrg />
 

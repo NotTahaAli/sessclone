@@ -107,7 +107,8 @@ export const orgRetention = async (
     { days: number; ceiling: number | null; last_swept: Date | null }[]
   >`
     select org.retention_days as days,
-           tier.retention_max_days as ceiling,
+           coalesce(subscription.retention_max_days, tier.retention_max_days)
+             as ceiling,
            (select swept_at from retention_sweeps) as last_swept
       from orgs org
       left join subscriptions subscription

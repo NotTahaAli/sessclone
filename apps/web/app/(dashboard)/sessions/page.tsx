@@ -7,6 +7,7 @@ import { dayLabel, localDate, sessionGlyph, todayIn } from './status'
 import { RangeControl } from '../costs/range-control'
 import { EmptyState } from '../empty-state'
 import { Finder, FinderColumn, FinderList } from '../finder'
+import { HistoryNote } from '../history-note'
 import { PageHeader } from '../page-header'
 import { hrefWith, one, type Query } from '../query'
 import { Row, SectionBreak } from '../../_ui/primitives'
@@ -135,6 +136,11 @@ export default async function Sessions({
               search={search}
               failed={failed}
               params={params}
+            />
+            <HistoryNote
+              range={resolved.range}
+              historyDays={viewer.historyDays}
+              timezone={viewer.orgTimezone}
             />
             <RangeControl path="/sessions" resolved={resolved} query={params} />
           </>

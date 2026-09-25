@@ -30,6 +30,7 @@ export function ActivateForm({
   status,
   priceBaseCents,
   priceSeatCents,
+  retentionMaxDays,
 }: {
   orgId: string
   tiers: { id: string; name: string; available: boolean }[]
@@ -40,6 +41,8 @@ export function ActivateForm({
   /** The agreed price, monthly US cents, or null. */
   priceBaseCents: number | null
   priceSeatCents: number | null
+  /** Ticket 139: the contract's transcript retention ceiling, or null. */
+  retentionMaxDays: number | null
 }) {
   const [state, formAction, pending] = useActionState(activateAction, null)
 
@@ -98,6 +101,17 @@ export function ActivateForm({
             autoComplete="off"
             placeholder="none"
             defaultValue={dollarsOf(priceSeatCents)}
+            className={`${FIELD} w-32`}
+          />
+        </label>
+        <label className="text-text-muted flex flex-col gap-1 text-caption">
+          Transcript retention cap, days
+          <input
+            name="retentionMaxDays"
+            inputMode="numeric"
+            autoComplete="off"
+            placeholder="Tier's"
+            defaultValue={retentionMaxDays ?? ''}
             className={`${FIELD} w-32`}
           />
         </label>

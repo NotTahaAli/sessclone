@@ -724,3 +724,19 @@ export const sessionFilters = async (
 
   return { projects, people }
 }
+
+/**
+ * Whether a Session has Turns older than the plan's history window (ticket
+ * 139). The read policy hides them, so every total on the page already
+ * leaves them out; this is what says so.
+ */
+export const sessionHasHiddenTurns = async (
+  tx: TransactionSql,
+  memberId: string,
+  sessionId: string,
+): Promise<boolean> => {
+  const [row] = await tx<{ hidden: boolean }[]>`
+    select sessclone_session_has_hidden_turns(${memberId}, ${sessionId}) as hidden
+  `
+  return row?.hidden ?? false
+}

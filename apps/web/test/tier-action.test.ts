@@ -18,6 +18,7 @@ const signedInUser = vi.hoisted(() => vi.fn())
 vi.mock('../lib/supabase/server', () => ({
   signedInUser,
   sessionUser: signedInUser,
+  accountUser: signedInUser,
 }))
 vi.mock('next/cache', () => ({
   updateTag,

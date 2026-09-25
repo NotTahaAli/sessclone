@@ -1,7 +1,9 @@
+import { finalizeDueDeletions } from '../../../../lib/account-deletion'
 import { presentedBearer, secretMatches } from '../../../../lib/bearer'
 import { ingestDb } from '../../../../lib/collector-auth'
 import { expiredCount, sweepRetention } from '../../../../lib/retention'
 import { storageConfigured } from '../../../../lib/storage'
+import { removeSignIn } from '../../../../lib/supabase/admin'
 
 // Ticket 61: the endpoint that enforces Retention.
 //
@@ -35,6 +37,16 @@ export async function POST(request: Request) {
     return Response.json({ error: 'not authorised' }, { status: 401 })
   }
 
+  // Ticket 141: account deletions past their grace ride the same daily call
+  // rather than a second cron and a second secret. First, and before the
+  // storage check: the scrub queues a person's transcripts as orphans, which
+  // the sweep below then deletes, and a deployment without storage still
+  // owes its people their deletion. Its failure is reported, never allowed
+  // to stop the sweep: the transcripts past their window are owed too.
+  const accounts = await finalizeDueDeletions(ingestDb(), removeSignIn).catch(
+    () => null,
+  )
+
   // Storage first: the rows and the objects go together, so a sweep that
   // cannot reach the bucket must not delete rows — that is the one failure
   // that leaves a transcript nobody can find and nobody can delete.
@@ -51,6 +63,13 @@ export async function POST(request: Request) {
     const swept = await sweepRetention(sql)
     return Response.json({
       removed: swept.removed,
+      accounts: accounts
+        ? {
+            scrubbed: accounts.scrubbed,
+            signInsRemoved: accounts.signInsRemoved,
+            signInsFailed: accounts.failed.length,
+          }
+        : { error: 'account deletions did not run' },
       // What is still past the window after this call, so a caller draining a
       // backlog knows to call again rather than guessing from `more`.
       remaining: swept.more ? await expiredCount(sql) : 0,

@@ -12,7 +12,7 @@ export const metadata = {
 
 export default function Terms() {
   return (
-    <Legal title="Terms" updated="23 September 2026">
+    <Legal title="Terms" updated="25 September 2026">
       <p>
         These terms cover the service at {siteHost()}. By creating an account
         you agree to them. The source code is separate: it is licensed under the{' '}
@@ -62,9 +62,9 @@ export default function Terms() {
 
       <h2>Ending</h2>
       <p>
-        You can stop at any time, and email us to delete your account or Org. We
-        may end the service with notice to your email address, and a period
-        before anything is deleted.
+        You can stop at any time. Delete your account from Settings, or email us
+        to delete an Org. We may end the service with notice to your email
+        address, and a period before anything is deleted.
       </p>
 
       <h2>Changes</h2>

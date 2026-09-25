@@ -2,7 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
 import { DEMO_COOKIE, DEMO_EMAIL, DEMO_USER_ID, demoEnabled } from '../demo'
-import { viewerLocked } from '../viewer'
+import { deletionRequestedAt, viewerLocked } from '../viewer'
 
 // Supabase Auth owns sign-in and the session cookie, and nothing else (ADR
 // 0007). Every row this app reads comes through `lib/db.ts` as the signed-in
@@ -64,6 +64,17 @@ export const supabaseServer = async () => {
  * Everything else asks `signedInUser`.
  */
 export const sessionUser = async () => {
+  const user = await accountUser()
+  return user && !(await deletionRequestedAt(user.id)) ? user : null
+}
+
+/**
+ * The signed-in person even while their account is being deleted (ticket
+ * 141). Only for the shell that draws the deletion page, the viewer read
+ * under it, and Keep my account: a person in their grace is otherwise
+ * signed out everywhere, `sessionUser` and `realSessionUser` included.
+ */
+export const accountUser = async () => {
   const claims = await verifiedClaims()
 
   // Ticket 137: with no session at all, the demo cookie makes this the demo
@@ -81,8 +92,15 @@ export const sessionUser = async () => {
  */
 export const realSessionUser = async () => {
   const claims = await verifiedClaims()
-  return claims ? personOf(claims) : null
+  const user = claims ? personOf(claims) : null
+  return user && !(await deletionRequestedAt(user.id)) ? user : null
 }
+
+/**
+ * The verified access token's claims, or null. For the one check that needs
+ * more than who: how recently they signed in (ticket 141's `amr` stamp).
+ */
+export const sessionClaims = () => verifiedClaims()
 
 const verifiedClaims = async () => {
   const supabase = await supabaseServer()

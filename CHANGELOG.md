@@ -6,6 +6,32 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-25
+
+Upgrading from 0.2.1: run `20260925190000_history_and_deletion.sql`,
+`20260925190100_tier_limits.sql` and `20260925210000_unwindowed_facts.sql`
+before deploying, and set `SUPABASE_SERVICE_ROLE_KEY` (server-side only) so the
+retention sweep can remove a deleted account's sign-in.
+
+### Added
+
+- Delete your account from Settings > You. It needs a recent sign-in and your
+  email typed out, then waits 14 days, during which you can keep the account.
+  After that your name, email, memberships, keys and transcripts are removed;
+  your Turns stay as "Deleted person".
+- Download all transcripts as one zip from the Transcripts page, filtered by
+  dates, people, projects and devices. A transcript that was active on any day
+  in the range comes whole.
+- Each Tier now has a history window: Personal shows 90 days of Turns, Team
+  365, Enterprise and Self-Hosted everything. Older Turns are hidden from
+  Sessions and Costs, not deleted.
+
+### Changed
+
+- Transcript retention is capped per Tier: Personal keeps none, Team 90 days,
+  Enterprise a limit set per Org. Moving to a Tier without transcripts keeps
+  them 7 days, with a banner, then removes them.
+
 ## [0.2.1] - 2026-09-25
 
 ### Fixed
@@ -127,7 +153,8 @@ The first public release.
 - Self-hosting: a Dockerfile, `compose.yaml` and a guide, free at any size
   under AGPL-3.0-only with the additional term in `NOTICE.md`.
 
-[Unreleased]: https://github.com/NotTahaAli/sessclone/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/NotTahaAli/sessclone/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/NotTahaAli/sessclone/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/NotTahaAli/sessclone/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/NotTahaAli/sessclone/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/NotTahaAli/sessclone/releases/tag/v0.1.0
