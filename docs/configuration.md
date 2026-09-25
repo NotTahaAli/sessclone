@@ -278,6 +278,13 @@ an object that is already gone succeeds.
 **Turns are never touched by it.** The spend history is append-only and
 survives every transcript it describes.
 
+The same call does two more daily jobs (tickets 139 and 141): it sweeps the
+transcripts of an Org on a Tier without transcripts once its 7-day download
+window has passed (`sessclone_transcripts_end`), and it finishes account
+deletions whose 14-day grace has ended, removing the sign-in when
+`SUPABASE_SERVICE_ROLE_KEY` is set. An account-deletion failure never stops the
+transcript sweep; the answer then carries `accounts: { error }`.
+
 | Variable                 | Required    | Default | What it is                                                                                                                                                  |
 | ------------------------ | ----------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `RETENTION_SWEEP_SECRET` | no          | —       | Shared secret for `/api/retention/sweep`. Unset means the route refuses every call                                                                          |
@@ -294,7 +301,7 @@ last upload: a growing Session replaces its object and moves `uploaded_at`, so
 a window measured from that would be days since the last write and a busy
 Session would never age out.
 
-The route answers `200` with `{removed, remaining}`, `401` for a wrong secret,
+The route answers `200` with `{removed, remaining, accounts}`, `401` for a wrong secret,
 `503` when the secret is unset, `503` when storage is not configured — nothing
 is removed in that case, because the rows and the objects go together — and
 `503` when the sweep itself failed, which rolls the rows back. Two sweeps at

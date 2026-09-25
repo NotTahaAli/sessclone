@@ -6,6 +6,30 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+Upgrading: run `20260925190000_history_and_deletion.sql`,
+`20260925190100_tier_limits.sql` and `20260925210000_unwindowed_facts.sql`
+before deploying, and set `SUPABASE_SERVICE_ROLE_KEY` (server-side only) so the
+retention sweep can remove a deleted account's sign-in.
+
+### Added
+
+- Delete your account from Settings > You. It needs a recent sign-in and your
+  email typed out, then waits 14 days, during which you can keep the account.
+  After that your name, email, memberships, keys and transcripts are removed;
+  your Turns stay as "Deleted person".
+- Download all transcripts as one zip from the Transcripts page, filtered by
+  dates, people, projects and devices. A transcript that was active on any day
+  in the range comes whole.
+- Each Tier now has a history window: Personal shows 90 days of Turns, Team
+  365, Enterprise and Self-Hosted everything. Older Turns are hidden from
+  Sessions and Costs, not deleted.
+
+### Changed
+
+- Transcript retention is capped per Tier: Personal keeps none, Team 90 days,
+  Enterprise a limit set per Org. Moving to a Tier without transcripts keeps
+  them 7 days, with a banner, then removes them.
+
 ## [0.2.1] - 2026-09-25
 
 ### Fixed

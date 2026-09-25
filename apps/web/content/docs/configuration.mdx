@@ -48,6 +48,13 @@ work.
 | ------------------------------- | -------- | ------------------------------------------------------------------------------ |
 | `NEXT_PUBLIC_SUPABASE_URL`      | yes      | Project URL. `NEXT_PUBLIC_` because the browser needs it                       |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes      | Anon key. Public by design; row-level security protects the rows, not this key |
+| `SUPABASE_SERVICE_ROLE_KEY`     | no       | Server only. Lets the retention sweep remove a deleted account's sign-in       |
+
+`SUPABASE_SERVICE_ROLE_KEY` has one use: once an account's 14-day deletion
+grace ends, the daily retention sweep removes its sign-in through Supabase's
+Admin API. Nothing else reads it, and nothing the browser reaches does.
+Without it, deletions still scrub every row on time, but the sign-in stays and
+the Admin panel lists the account until the key is set. Keep it server-side.
 
 Sign-in is GitHub OAuth and a magic link; no password is created or stored.
 Both are configured in the Supabase project: GitHub needs a client id and
@@ -227,6 +234,11 @@ rows and the stored objects together, oldest first, at most 500 per call — and
 answers `{ removed, remaining }` so a backlog can be drained by calling again.
 **Turns are never touched**: the spend history survives every transcript it
 describes.
+
+The same call does two more daily jobs: it removes the transcripts of an Org
+that moved to a Tier without transcripts once its 7 days are up, and it
+finishes account deletions whose 14-day grace has ended. Its answer adds
+`accounts` with how many were scrubbed and how many sign-ins were removed.
 
 <Callout type="error" title="Set the windows before the first sweep">
   Upgrading an existing deployment sets every Org to 90 days, which no Org
