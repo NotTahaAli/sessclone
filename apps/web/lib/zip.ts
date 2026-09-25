@@ -15,9 +15,12 @@ import { crc32 } from 'node:zlib'
 // included; a stored one is not. Names are UTF-8 (flag bit 11).
 //
 // ZIP64 where the archive needs it: past 4 GiB of offsets or 65,535 entries
-// the central directory carries 64-bit offsets and a ZIP64 end record. One
-// entry still holds under 4 GiB either way, which a transcript does by far;
-// the writer throws rather than write one that does not.
+// the central directory carries 64-bit offsets and a ZIP64 end record. An
+// entry of 4 GiB or more gets 64-bit sizes in its descriptor and its central
+// record, as Go's archive/zip writes them. Its local header carries no ZIP64
+// extra, since the size is not known when it goes out; streaming readers
+// (Java's included) then take a descriptor as 64-bit exactly when the entry
+// ran past 4 GiB, which is when it is.
 
 export type ZipEntry = {
   /** The path inside the archive, `/`-separated. */
@@ -83,6 +86,7 @@ export async function* zip(
     compressed: number
     size: number
     offset: number
+    large: boolean
   }[] = []
   let offset = 0
 
@@ -108,26 +112,32 @@ export async function* zip(
       compressed += piece.byteLength
       yield piece
     }
-    if (count.size > LIMIT || compressed > LIMIT) {
-      throw new Error(`${entry.name} is 4 GiB or more, past one zip entry`)
-    }
+    const large = count.size >= zip64At || compressed >= zip64At
 
-    const descriptor = header(16)
+    const descriptor = header(large ? 24 : 16)
     descriptor.view.setUint32(0, 0x08074b50, true)
     descriptor.view.setUint32(4, count.crc, true)
-    descriptor.view.setUint32(8, compressed, true)
-    descriptor.view.setUint32(12, count.size, true)
+    if (large) {
+      descriptor.view.setBigUint64(8, BigInt(compressed), true)
+      descriptor.view.setBigUint64(16, BigInt(count.size), true)
+    } else {
+      descriptor.view.setUint32(8, compressed, true)
+      descriptor.view.setUint32(12, count.size, true)
+    }
     yield descriptor.bytes
 
-    written.push({ name, time, date, ...count, compressed, offset })
+    written.push({ name, time, date, ...count, compressed, offset, large })
     offset += local.bytes.length + compressed + descriptor.bytes.length
   }
 
   let directory = 0
   for (const entry of written) {
-    // Only the offset can outgrow 32 bits; its ZIP64 extra field says so.
-    const wide = entry.offset >= zip64At
-    const central = header(46 + entry.name.length + (wide ? 12 : 0))
+    // The ZIP64 extra holds, in this order, each field that outgrew 32 bits:
+    // both sizes for a large entry, then the offset.
+    const far = entry.offset >= zip64At
+    const extra = (entry.large ? 16 : 0) + (far ? 8 : 0)
+    const wide = extra > 0
+    const central = header(46 + entry.name.length + (wide ? 4 + extra : 0))
     central.view.setUint32(0, 0x02014b50, true)
     central.view.setUint16(4, wide ? VERSION_ZIP64 : VERSION, true)
     central.view.setUint16(6, wide ? VERSION_ZIP64 : VERSION, true)
@@ -136,17 +146,23 @@ export async function* zip(
     central.view.setUint16(12, entry.time, true)
     central.view.setUint16(14, entry.date, true)
     central.view.setUint32(16, entry.crc, true)
-    central.view.setUint32(20, entry.compressed, true)
-    central.view.setUint32(24, entry.size, true)
+    central.view.setUint32(20, entry.large ? LIMIT : entry.compressed, true)
+    central.view.setUint32(24, entry.large ? LIMIT : entry.size, true)
     central.view.setUint16(28, entry.name.length, true)
-    central.view.setUint16(30, wide ? 12 : 0, true)
-    central.view.setUint32(42, wide ? LIMIT : entry.offset, true)
+    central.view.setUint16(30, wide ? 4 + extra : 0, true)
+    central.view.setUint32(42, far ? LIMIT : entry.offset, true)
     central.bytes.set(entry.name, 46)
     if (wide) {
-      const extra = 46 + entry.name.length
-      central.view.setUint16(extra, 0x0001, true)
-      central.view.setUint16(extra + 2, 8, true)
-      central.view.setBigUint64(extra + 4, BigInt(entry.offset), true)
+      let at = 46 + entry.name.length
+      central.view.setUint16(at, 0x0001, true)
+      central.view.setUint16(at + 2, extra, true)
+      at += 4
+      if (entry.large) {
+        central.view.setBigUint64(at, BigInt(entry.size), true)
+        central.view.setBigUint64(at + 8, BigInt(entry.compressed), true)
+        at += 16
+      }
+      if (far) central.view.setBigUint64(at, BigInt(entry.offset), true)
     }
     directory += central.bytes.length
     yield central.bytes

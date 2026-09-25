@@ -92,3 +92,18 @@ test('past the 32-bit limits the archive goes ZIP64 and still opens', async () =
   const { entries: read } = await readBack(zip(entries(), { zip64At: 0 }))
   expect(read).toEqual(expected)
 })
+
+test('an entry past 4 GiB gets 64-bit sizes in its descriptor and directory', async () => {
+  const parts: Uint8Array[] = []
+  for await (const part of zip(entries().slice(0, 1), { zip64At: 0 })) {
+    parts.push(part)
+  }
+  const bytes = Buffer.concat(parts)
+  // The descriptor runs from its signature to the central directory's.
+  const descriptor = bytes.indexOf(Buffer.from([0x50, 0x4b, 0x07, 0x08]))
+  const central = bytes.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]))
+  expect(central - descriptor).toBe(24)
+  // Both 32-bit sizes say "see the ZIP64 extra".
+  expect(bytes.readUInt32LE(central + 20)).toBe(0xffff_ffff)
+  expect(bytes.readUInt32LE(central + 24)).toBe(0xffff_ffff)
+})

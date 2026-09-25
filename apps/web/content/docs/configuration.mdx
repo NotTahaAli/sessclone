@@ -61,11 +61,6 @@ Both are configured in the Supabase project: GitHub needs a client id and
 secret under Authentication, and both need `<NEXT_PUBLIC_APP_URL>/auth/callback`
 in the project's allowed redirect URLs.
 
-The Supabase service role key is **not needed**: no code reads it. Ingest
-writes through `INGEST_DATABASE_URL` instead, so leave the service role key out
-of the deployment's environment entirely — a key that bypasses every policy is
-safest where nothing can read it.
-
 The magic-link email is sent by Supabase and configured in the Supabase
 project's own SMTP settings. The invitation email and the sign-up note are the
 app's own, below.
