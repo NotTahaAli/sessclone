@@ -84,17 +84,6 @@ const withCookies = (redirect: NextResponse, from: NextResponse) => {
   return redirect
 }
 
-// A redirect from `/` depends on who is asking, so no cache in between
-// (a CDN, a shared proxy) may keep one and hand it to somebody else. The
-// Location is relative (RFC 9110 allows it), as `/demo`'s is: behind a
-// reverse proxy `request.nextUrl.origin` is the server's own (`localhost`),
-// which the browser cannot reach.
-const uncached = (to: string) =>
-  new NextResponse(null, {
-    status: 307,
-    headers: { location: to, 'cache-control': 'private, no-store' },
-  })
-
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request })
 
@@ -111,12 +100,8 @@ export async function proxy(request: NextRequest) {
     })
   }
 
-  // A sign-in code Supabase sent to the bare origin goes on to the callback,
-  // whatever the flags: it is somebody part-way through signing in.
-  const callback = callbackRedirect(path, request.nextUrl.searchParams)
-  if (callback) return uncached(callback)
-
-  // The deployment's own origin, for the Referer fallback in `fromSite`:
+  // The deployment's own origin, for the Referer fallback in `fromSite` and
+  // for the redirects below:
   // behind a reverse proxy the request's is the server's (`localhost`), not
   // the one the browser was on.
   const configured = process.env.NEXT_PUBLIC_APP_URL
@@ -124,6 +109,22 @@ export async function proxy(request: NextRequest) {
     configured && URL.canParse(configured)
       ? new URL(configured).origin
       : request.nextUrl.origin
+
+  // A redirect from `/` depends on who is asking, so no cache in between
+  // (a CDN, a shared proxy) may keep one and hand it to somebody else. It
+  // names the deployment's own origin: a relative Location is refused by the
+  // Proxy's runtime ("Invalid URL", a 500 on sessclone.com, 2026-09-25), and
+  // `request.nextUrl.origin` is the server's `localhost` behind a proxy.
+  const uncached = (to: string) => {
+    const redirect = NextResponse.redirect(new URL(to, origin))
+    redirect.headers.set('Cache-Control', 'private, no-store')
+    return redirect
+  }
+
+  // A sign-in code Supabase sent to the bare origin goes on to the callback,
+  // whatever the flags: it is somebody part-way through signing in.
+  const callback = callbackRedirect(path, request.nextUrl.searchParams)
+  if (callback) return uncached(callback)
 
   // Where `/` sends this visitor, or null for the landing page (ticket 138).
   const home = (session: boolean, demoCookie: boolean) => {

@@ -1,7 +1,7 @@
 {
   "name": "sessclone",
   "description": "Sends Claude Code usage to a SessClone deployment.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": {
     "name": "sessclone contributors"
   },
