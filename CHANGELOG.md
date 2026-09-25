@@ -6,6 +6,25 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- An Org switcher: the Org name at the top of the sidebar, or of the phone
+  header, opens a list of your Orgs, including one still waiting for approval.
+  The Org you pick is remembered on that device.
+- Invitations in the dashboard: the switcher lists the ones sent to your
+  signed-in address, with Accept and Decline, and keeps an expired one for a
+  week so you can dismiss it. An Admin sees a declined invitation as declined
+  and can invite the same person again.
+- Leave an Org from the switcher. The only Owner is asked to make somebody
+  else an Owner first.
+
+### Fixed
+
+- Someone in more than one Org saw every Org's Devices, Keys and transcripts
+  on each Org's pages, and the oldest Org's appearance; they now show the Org
+  you are in. Settings, Members, Keys and invitation forms refuse to act on an
+  Org other than the one the page was opened for.
+
 ## [0.1.0] - 2026-09-25
 
 The first public release.
