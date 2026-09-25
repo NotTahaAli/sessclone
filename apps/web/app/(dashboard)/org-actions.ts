@@ -13,7 +13,11 @@ import {
 } from '../../lib/invitations'
 import { leaveOrg } from '../../lib/members'
 import { sessionUser } from '../../lib/supabase/server'
-import { MEMBER_COOKIE, MEMBER_COOKIE_OPTIONS } from '../../lib/viewer'
+import {
+  MEMBER_COOKIE,
+  MEMBER_COOKIE_OPTIONS,
+  sessionViewer,
+} from '../../lib/viewer'
 
 // The Org switcher's four writes. Every one starts from `sessionUser()`, not
 // `signedInUser()`: somebody whose current Org is waiting for approval must
@@ -105,21 +109,26 @@ export const declineInvite = async (
 }
 
 /**
- * Leaves the Org named by one of the viewer's own memberships. The database
- * refuses anybody else's membership and the last Owner.
+ * Leaves the Org the viewer has open. The form names the membership it was
+ * drawn for, and a tab left open across a switch names one that is no longer
+ * current, so it is refused rather than leaving an Org the viewer is not
+ * looking at. The database refuses anybody else's membership and the last
+ * Owner.
  */
 export const leaveCurrentOrg = async (
   _previous: OrgActionState,
   formData: FormData,
 ): Promise<OrgActionState> => {
-  const user = await sessionUser()
-  if (!user) return { error: 'Sign in again to leave.' }
+  const viewer = await sessionViewer()
+  if (!viewer) return { error: 'Sign in again to leave.' }
 
   const memberId = Id.safeParse(formData.get('memberId'))
-  if (!memberId.success) return { error: 'That is not one of your Orgs.' }
+  if (!memberId.success || memberId.data !== viewer.memberId) {
+    return { error: 'Reload the page: this is not the Org you have open.' }
+  }
 
   try {
-    await asViewer(user.id, (tx) => leaveOrg(tx, memberId.data))
+    await asViewer(viewer.userId, (tx) => leaveOrg(tx, viewer.memberId))
   } catch (error) {
     const message = error instanceof Error ? error.message : ''
     return {

@@ -30,6 +30,7 @@ vi.mock('next/headers', () => ({
     get: (name: string) =>
       jar.has(name) ? { name, value: jar.get(name) } : undefined,
     set: (name: string, value: string) => jar.set(name, value),
+    delete: (name: string) => jar.delete(name),
   }),
 }))
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }))
@@ -190,6 +191,31 @@ test('switching refuses a membership that is not the viewer’s', async () => {
   form.set('memberId', elsewhere)
   await expect(switchOrg(null, form)).rejects.toThrow(/NEXT_REDIRECT/)
   expect(jar.get(MEMBER_COOKIE)).toBe(elsewhere)
+})
+
+test('a tab left open across a switch cannot leave an Org the viewer is not looking at', async () => {
+  const { leaveCurrentOrg } = await import('../app/(dashboard)/org-actions')
+  const { MEMBER_COOKIE } = await import('../lib/viewer')
+  const removed = async () =>
+    (
+      await sql<{ removed_at: Date | null }[]>`
+        select removed_at from members where id = ${elsewhere}
+      `
+    )[0]!.removed_at
+  const form = new FormData()
+  form.append('memberId', elsewhere)
+
+  // Acme is open (no choice, so the oldest); the form was drawn for Globex.
+  expect(await leaveCurrentOrg(null, form)).toEqual({
+    error: 'Reload the page: this is not the Org you have open.',
+  })
+  expect(await removed()).toBeNull()
+
+  // With Globex open, the same form leaves it.
+  jar.set(MEMBER_COOKIE, elsewhere)
+  await expect(leaveCurrentOrg(null, form)).rejects.toThrow(/NEXT_REDIRECT/)
+  expect(await removed()).not.toBeNull()
+  expect(jar.has(MEMBER_COOKIE)).toBe(false)
 })
 
 test('a tab left open across a switch cannot invite or issue a key in the new Org', async () => {
