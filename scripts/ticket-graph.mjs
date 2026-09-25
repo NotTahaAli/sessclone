@@ -174,6 +174,13 @@ const PHASES = [
     pos: [500, 1000],
     range: [137, 138],
   },
+  {
+    id: 'privacy',
+    label: 'Data Lifecycle',
+    type: 'backend',
+    pos: [270, 1000],
+    range: [139, 141],
+  },
 ]
 
 const phaseOf = (n) =>
