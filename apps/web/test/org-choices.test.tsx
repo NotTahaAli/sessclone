@@ -32,9 +32,13 @@ const data = (expiresAt: string) => ({
 })
 
 const expiring = (expiresAt: string) =>
+  // Text between the tags: what follows each tag's closing bracket.
   renderToStaticMarkup(
     <SwitcherBody data={data(expiresAt)} current="m" orgName="Acme" />,
-  ).replace(/<[^>]*>/g, '')
+  )
+    .split('<')
+    .map((part) => part.slice(part.indexOf('>') + 1))
+    .join('')
 
 test('an invitation that lapsed within the day says today, not 0d ago', () => {
   expect(expiring('2026-09-25T09:00:00Z')).toContain('expired today')
