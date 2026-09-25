@@ -1,3 +1,8 @@
+// Node's own classes: the DOM typings this app builds with lack `from`.
+import {
+  CompressionStream,
+  ReadableStream as NodeReadableStream,
+} from 'node:stream/web'
 import { crc32 } from 'node:zlib'
 
 // Ticket 140: a zip written as it is read, so a download of every transcript
@@ -49,7 +54,7 @@ async function* deflated(
   body: AsyncIterable<Uint8Array>,
   count: { crc: number; size: number },
 ) {
-  const raw = ReadableStream.from(
+  const raw = NodeReadableStream.from(
     (async function* () {
       for await (const piece of body) {
         count.crc = crc32(piece, count.crc)

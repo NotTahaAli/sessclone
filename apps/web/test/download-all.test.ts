@@ -291,6 +291,7 @@ test('an entry left before its body is read closes its storage stream', async ()
         sessionId: 'left',
         agentId: null,
         uploadedAt: new Date('2026-09-20T12:00:00Z'),
+        endedAt: new Date('2026-09-20T12:00:00Z'),
         sizeBytes: 2,
         storageKey: 'k/left.jsonl',
         chunks: [],
