@@ -340,11 +340,15 @@ export const demoDay = (org: DemoOrg, date: string): DemoSession[] => {
   const withTranscript = dayNumber(date) % TRANSCRIPT_EVERY === 0
   const projects = org.projects.map((p): [DemoProject, number] => [p, p.weight])
   const sessions: DemoSession[] = []
+  // Somebody works every day, weekends included: a day with no Turns reads
+  // as never seeded, and the refresh would generate it again on every run.
+  const onCall = org.team[Math.floor(random() * org.team.length)]!
 
   for (const person of org.team) {
     const mean = person.sessionsPerDay * (weekend ? 0.2 : 1)
     let count = Math.floor(mean + random())
     if (person.visitor && !weekend) count = Math.max(count, 1)
+    if (person === onCall) count = Math.max(count, 1)
 
     for (let k = 0; k < count; k++) {
       const label = `${org.spec.key}:${date}:${person.memberId}:${k}`

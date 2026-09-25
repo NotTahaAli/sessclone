@@ -48,8 +48,16 @@ const destination = async (formData: FormData) => {
   return query.length ? `?${query.join('&')}` : ''
 }
 
+/**
+ * Ticket 137: signing in ends the demo. A real session already outranks the
+ * demo cookie; dropping it here also keeps a failed or abandoned sign-in from
+ * leaving somebody who asked for their own account inside the demo.
+ */
+const leaveDemo = async () => (await cookies()).delete(DEMO_COOKIE)
+
 /** Sends the visitor to GitHub. Returns only by redirecting. */
 export const signInWithGitHub = async (formData: FormData) => {
+  await leaveDemo()
   const supabase = await supabaseServer()
   const next = await destination(formData)
 
@@ -67,6 +75,7 @@ export const signInWithGitHub = async (formData: FormData) => {
 
 /** Emails a magic link. Says so whether or not the address is known. */
 export const sendMagicLink = async (formData: FormData) => {
+  await leaveDemo()
   const email = Email.safeParse(formData.get('email'))
 
   if (!email.success) {

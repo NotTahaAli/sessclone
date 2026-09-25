@@ -145,3 +145,18 @@ test('a stored transcript is small, parses, and joins to its Turns', () => {
   // Nothing that looks like a key or a token.
   expect(jsonl).not.toMatch(/sk[_-][a-z0-9]{8}|AKIA|password|BEGIN [A-Z]+ KEY/i)
 })
+
+test('every Org has a Session on every day, weekends included', () => {
+  // The refresh counts a day as seeded when it has a Turn: an empty day would
+  // be generated again on every run, forever. Two years, so every weekday
+  // and weekend meets every seed a few times.
+  const days = Array.from({ length: 730 }, (_, back) =>
+    new Date(Date.UTC(2026, 8, 25) - back * 86_400_000)
+      .toISOString()
+      .slice(0, 10),
+  )
+  for (const org of [owned!, joined!]) {
+    const empty = days.filter((day) => demoDay(org, day).length === 0)
+    expect(empty).toEqual([])
+  }
+})

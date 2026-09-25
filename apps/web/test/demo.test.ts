@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server'
+import type postgres from 'postgres'
 import { afterAll, beforeAll, beforeEach, expect, test, vi } from 'vitest'
 
 import { resolveCaller } from '../lib/collector-auth'
@@ -25,7 +26,15 @@ let claims: { sub: string; email: string } | null = null
 const jar = new Map<string, string>()
 vi.mock('@supabase/ssr', () => ({
   createServerClient: () => ({
-    auth: { getClaims: async () => ({ data: claims ? { claims } : null }) },
+    auth: {
+      getClaims: async () => ({ data: claims ? { claims } : null }),
+      exchangeCodeForSession: async () => ({ error: null }),
+      signInWithOAuth: async () => ({
+        data: { url: 'https://github.test/login' },
+        error: null,
+      }),
+      signOut: async () => ({ error: null }),
+    },
   }),
 }))
 vi.mock('next/headers', () => ({
@@ -37,7 +46,7 @@ vi.mock('next/headers', () => ({
     delete: (name: string) => jar.delete(name),
   }),
 }))
-vi.mock('next/cache', () => ({ revalidatePath: () => {} }))
+vi.mock('next/cache', () => ({ revalidatePath: () => {}, cacheTag: () => {} }))
 
 // A backfill is 60 days of two Orgs: seconds, not the default five.
 vi.setConfig({ testTimeout: 60_000 })
@@ -78,6 +87,7 @@ beforeEach(async () => {
   vi.stubEnv('DEMO', 'on')
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://example.supabase.co')
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'anon')
+  vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://app.test')
   claims = null
   jar.clear()
   await sql`
@@ -119,9 +129,25 @@ test('the refresh backfills the window, is idempotent, and prunes past 60 days',
   const bytes = [...first.put.values()].reduce((n, b) => n + b.length, 0)
   expect(bytes).toBeLessThan(500_000)
 
-  // Again, same moment: nothing new, nothing lost.
+  // Again, same moment: nothing new, nothing lost, and no day generated a
+  // second time. The transaction is watched to read the limits it ran under.
   const again = recorder()
-  await refreshDemo(sql, again.store, NIGHT)
+  let limits: { statement: string; idle: string } | undefined
+  // Only `begin` is used by the refresh; the rest is the real client.
+  const watched: typeof sql = Object.assign(Object.create(sql), {
+    begin: (run: (tx: postgres.TransactionSql) => Promise<unknown>) =>
+      sql.begin(async (tx) => {
+        const out = await run(tx)
+        ;[limits] = await tx<{ statement: string; idle: string }[]>`
+          select current_setting('statement_timeout') as statement,
+                 current_setting('idle_in_transaction_session_timeout') as idle
+        `
+        return out
+      }),
+  })
+  expect((await refreshDemo(watched, again.store, NIGHT))!.seeded).toBe(0)
+  // A hung statement or a stalled PUT cannot hold the lock indefinitely.
+  expect(limits).toEqual({ statement: '1min', idle: '1min' })
   expect(await count('turns')).toBe(turns)
   expect(await count('log_artifacts')).toBe(artifacts)
   expect(again.removed).toEqual([])
@@ -338,6 +364,12 @@ test('the Admin panel does not count the demo Orgs as customers', async () => {
   expect(ids).toContain(fixture.acme.id)
   expect(ids).not.toContain(NORTHWIND)
   expect(ids).not.toContain(HARBOR)
+  // A search as well: an operator name only matches inside the demo filter.
+  await sql`insert into org_operator_names (org_id, name) values (${HARBOR}, 'Harbor Ops')`
+  const searched = await asUser(fixture.platformAdmin.userId, (tx) =>
+    listOrgs(tx, { name: 'Harbor' }),
+  )
+  expect(searched.orgs).toEqual([])
   // Acme and Globex have no subscription: they are the two waiting.
   expect(pending).toBe(2)
   expect(tiers.find((tier) => tier.key === 'team')!.orgs).toBe(0)
@@ -364,4 +396,123 @@ test('/demo sets the cookie and stays on the host it was asked on', async () => 
 
   vi.stubEnv('DEMO', 'off')
   expect(GET().status).toBe(404)
+})
+
+test('the refresh stops before touching an Org that holds a demo id but is not a demo', async () => {
+  // As if a real Org had been given the id: nothing of it may be pruned or
+  // seeded, and the refresh must say so rather than carry on.
+  await sql`insert into orgs (id, name) values (${NORTHWIND}, 'Somebody real')`
+  await expect(refreshDemo(sql, null, NIGHT)).rejects.toThrow(/not a demo/)
+  expect(await count('turns')).toBe(0)
+  const [org] = await sql<{ name: string; is_demo: boolean }[]>`
+    select name, is_demo from orgs where id = ${NORTHWIND}
+  `
+  expect(org).toEqual({ name: 'Somebody real', is_demo: false })
+})
+
+test('the storage PUT gives up rather than hanging the refresh', async () => {
+  const { presignedStore } = await import('../lib/demo-refresh')
+  vi.stubEnv('STORAGE_ENDPOINT', 'https://storage.test')
+  vi.stubEnv('STORAGE_BUCKET', 'b')
+  vi.stubEnv('STORAGE_ACCESS_KEY_ID', 'k')
+  vi.stubEnv('STORAGE_SECRET_ACCESS_KEY', 's')
+  let signal: AbortSignal | null | undefined
+  vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+    signal = init.signal
+    return new Response(null, { status: 200 })
+  })
+  try {
+    await presignedStore.put('demo/key', '{}')
+  } finally {
+    vi.unstubAllGlobals()
+  }
+  expect(signal).toBeInstanceOf(AbortSignal)
+})
+
+test('the refresh route: a secret, then DEMO, then one at a time', async () => {
+  const { GET } = await import('../app/api/demo/refresh/route')
+  const call = (bearer?: string) =>
+    GET(
+      new Request('https://app.test/api/demo/refresh', {
+        headers: bearer ? { authorization: `Bearer ${bearer}` } : {},
+      }),
+    )
+
+  vi.stubEnv('CRON_SECRET', '')
+  expect((await call('anything')).status).toBe(503)
+
+  vi.stubEnv('CRON_SECRET', 'the-secret')
+  expect((await call('wrong')).status).toBe(401)
+  expect((await call()).status).toBe(401)
+
+  vi.stubEnv('DEMO', 'off')
+  const off = await call('the-secret')
+  expect(off.status).toBe(200)
+  expect(await off.json()).toEqual({ demo: 'off' })
+
+  vi.stubEnv('DEMO', 'on')
+  const busy = await sql.begin(async (tx) => {
+    await tx`select pg_advisory_xact_lock(hashtext('sessclone_demo_refresh'))`
+    return call('the-secret')
+  })
+  expect(busy.status).toBe(409)
+})
+
+const form = (entries: Record<string, string>) => {
+  const data = new FormData()
+  for (const [key, value] of Object.entries(entries)) data.append(key, value)
+  return data
+}
+
+test('signing in, signing out and leaving all end the demo', async () => {
+  const fixture = await seedFixture()
+  const actions = await import('../app/sign-in/actions')
+  const { exitDemo } = await import('../app/demo/actions')
+  const { GET: callback } = await import('../app/auth/callback/route')
+  const ends = async (run: () => Promise<unknown>) => {
+    enterDemo()
+    await run().catch((error: unknown) => {
+      if (!String(error).includes('NEXT_REDIRECT')) throw error
+    })
+    return !jar.has(DEMO_COOKIE)
+  }
+
+  expect(await ends(() => actions.signInWithGitHub(form({})))).toBe(true)
+  expect(
+    await ends(() => actions.sendMagicLink(form({ email: 'not an email' }))),
+  ).toBe(true)
+  expect(await ends(() => actions.signOut())).toBe(true)
+  expect(await ends(() => exitDemo())).toBe(true)
+
+  // The callback answers with the session's cookies, so it clears the demo's
+  // on its own response.
+  claims = { sub: fixture.acme.users.owner, email: 'owner@acme.test' }
+  const response = await callback(
+    new NextRequest('https://app.test/auth/callback?code=abc'),
+  )
+  expect(response.headers.get('location')).toBe('https://app.test/costs')
+  expect(response.cookies.get(DEMO_COOKIE)?.value).toBe('')
+})
+
+test('the demo visitor is signed out wherever an account is the point', async () => {
+  await createDemo()
+  enterDemo()
+  const { realSessionUser, sessionUser } =
+    await import('../lib/supabase/server')
+  const { acceptAction } = await import('../app/join/[token]/actions')
+  const { default: Join } = await import('../app/join/[token]/page')
+
+  expect(await sessionUser()).toMatchObject({ id: DEMO_USER_ID })
+  expect(await realSessionUser()).toBeNull()
+  expect(await acceptAction(null, new FormData())).toEqual({
+    error: 'Sign in to accept this invitation.',
+  })
+  const page = await Join({ params: Promise.resolve({ token: 'abc' }) })
+  expect(page.props.headline).toBe('Sign in to accept this invitation')
+
+  // A real session whose claims cannot be read is signed out, never the
+  // demo visitor, unless the demo cookie is there.
+  jar.clear()
+  claims = null
+  expect(await sessionUser()).toBeNull()
 })

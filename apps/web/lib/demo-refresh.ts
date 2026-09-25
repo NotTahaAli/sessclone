@@ -13,7 +13,7 @@ import {
   demoWindow,
   type DemoOrg,
 } from './demo-data'
-import { artifactKey } from './storage'
+import { artifactKey, deleteObjects, presignUpload } from './storage'
 
 // Ticket 137: the daily job that keeps the demo fresh.
 //
@@ -32,6 +32,22 @@ import { artifactKey } from './storage'
 export type DemoStore = {
   put: (key: string, body: string) => Promise<void>
   remove: (keys: string[]) => Promise<void>
+}
+
+/** The server's own upload: presigned like a Collector's (ADR 0003), so no
+ * second storage code path exists. The objects are a few kilobytes each. */
+export const presignedStore: DemoStore = {
+  put: async (key, body) => {
+    const response = await fetch(await presignUpload(key), {
+      method: 'PUT',
+      headers: { 'content-type': 'application/x-ndjson' },
+      body,
+      // A stalled PUT fails the refresh (rolled back) rather than hanging it.
+      signal: AbortSignal.timeout(10_000),
+    })
+    if (!response.ok) throw new Error(`storage refused ${response.status}`)
+  },
+  remove: deleteObjects,
 }
 
 export type Refreshed = {
@@ -181,9 +197,28 @@ export const refreshDemo = async (
     `
     if (!held?.granted) return null
 
+    // Bounded: a hung statement or a stalled storage PUT between statements
+    // must not hold the lock and the rows open until the platform kills the
+    // function. A backfill's statements take seconds, a PUT at most 10.
+    await tx`set local statement_timeout = '60s'`
+    await tx`set local idle_in_transaction_session_timeout = '60s'`
+
     const all = orgs()
-    const ids = all.map((org) => org.id)
     await ensureDemo(tx, all)
+
+    // Every delete below names these ids, so they are read back with the
+    // flag rather than trusted from the generator: an id that is somehow a
+    // real Org's (`on conflict do nothing` would leave it untouched) stops
+    // the refresh before anything of theirs is pruned.
+    const ids = (
+      await tx<{ id: string }[]>`
+        select id from orgs
+         where id = any(${all.map((org) => org.id)}::uuid[]) and is_demo
+      `
+    ).map((row) => row.id)
+    if (ids.length !== all.length) {
+      throw new Error('a demo Org id belongs to an Org that is not a demo')
+    }
 
     // Prune. Transcripts first: their rows and objects go together, and the
     // objects are deleted before this commits, as the retention sweep does,

@@ -13,11 +13,11 @@ if the two ever disagree — a variable added to one and not the other, or a
 default written differently in each, is a test failure rather than a support
 ticket.
 
-Every variable in the tables below is read by code today, except `CRON_SECRET`,
-which is read by Vercel's scheduler rather than by this application (see
-[Retention sweep](#retention-sweep)). **Required** means the code throws, or
-the feature refuses to run, without it; **Default** is what the code falls back
-to when it is unset.
+Every variable in the tables below is read by code today. `CRON_SECRET` is
+read by Vercel's scheduler as well as by this application, which checks it on
+`/api/demo/refresh` when `DEMO=on` (see [Retention sweep](#retention-sweep)).
+**Required** means the code throws, or the feature refuses to run, without it;
+**Default** is what the code falls back to when it is unset.
 
 **Nothing here is a secret.** Every value below is an example or a default.
 Real credentials live in `.env`, which is gitignored, or in the deployment's
@@ -219,8 +219,13 @@ call backfills the whole window. It is idempotent. On Vercel,
 `apps/web/vercel.json` calls it daily at 23:00 UTC; elsewhere, schedule it
 yourself once a day, after 23:00 UTC. It writes as `INGEST_DATABASE_URL`, and
 stores a few hundred kilobytes of made-up transcripts when storage is
-configured. `DEMO` is read when the public pages are built, so changing it
-needs a redeploy.
+configured.
+
+**Toggling `DEMO` needs a redeploy.** The landing and pricing pages are
+prerendered at build time, so their "Try the demo" button appears or
+disappears only with the next build. `/demo`, the banner and the refresh read
+the variable per request and follow it at once, so turning it off without a
+redeploy leaves a button that leads to a 404.
 
 ### Retention sweep
 
@@ -236,10 +241,10 @@ an object that is already gone succeeds.
 **Turns are never touched by it.** The spend history is append-only and
 survives every transcript it describes.
 
-| Variable                 | Required    | Default | What it is                                                                                |
-| ------------------------ | ----------- | ------- | ----------------------------------------------------------------------------------------- |
-| `RETENTION_SWEEP_SECRET` | no          | —       | Shared secret for `/api/retention/sweep`. Unset means the route refuses every call        |
-| `CRON_SECRET`            | Vercel only | —       | Read by Vercel Cron, not by the app. Set it to the same value as `RETENTION_SWEEP_SECRET` |
+| Variable                 | Required    | Default | What it is                                                                                                                                         |
+| ------------------------ | ----------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RETENTION_SWEEP_SECRET` | no          | —       | Shared secret for `/api/retention/sweep`. Unset means the route refuses every call                                                                 |
+| `CRON_SECRET`            | Vercel only | —       | Sent by Vercel Cron; the app reads it only for `/api/demo/refresh` when `DEMO=on`. On Vercel, set it to the same value as `RETENTION_SWEEP_SECRET` |
 
 **Who calls it.** On Vercel, `apps/web/vercel.json` schedules a daily
 `GET /api/retention/sweep`, and Vercel Cron sends

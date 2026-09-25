@@ -1,12 +1,8 @@
 import { presentedBearer, secretMatches } from '../../../../lib/bearer'
 import { ingestDb } from '../../../../lib/collector-auth'
 import { demoEnabled } from '../../../../lib/demo'
-import { refreshDemo, type DemoStore } from '../../../../lib/demo-refresh'
-import {
-  deleteObjects,
-  presignUpload,
-  storageConfigured,
-} from '../../../../lib/storage'
+import { presignedStore, refreshDemo } from '../../../../lib/demo-refresh'
+import { storageConfigured } from '../../../../lib/storage'
 
 // Ticket 137: the daily job that keeps the demo's data inside its last 60
 // days. Guarded like the retention sweep beside it: a shared secret compared
@@ -15,20 +11,6 @@ import {
 // Vercel Cron calls it with GET and `Authorization: Bearer $CRON_SECRET`
 // (`apps/web/vercel.json`); a self-hoster's own scheduler sends the same. It
 // no-ops unless `DEMO=on`, and the first call backfills the whole window.
-
-/** The server's own upload: presigned like a Collector's (ADR 0003), so no
- * second storage code path exists. The objects are a few kilobytes each. */
-const store: DemoStore = {
-  put: async (key, body) => {
-    const response = await fetch(await presignUpload(key), {
-      method: 'PUT',
-      headers: { 'content-type': 'application/x-ndjson' },
-      body,
-    })
-    if (!response.ok) throw new Error(`storage refused ${response.status}`)
-  },
-  remove: deleteObjects,
-}
 
 export async function GET(request: Request) {
   const expected = process.env.CRON_SECRET
@@ -46,7 +28,7 @@ export async function GET(request: Request) {
   try {
     const refreshed = await refreshDemo(
       ingestDb(),
-      storageConfigured() ? store : null,
+      storageConfigured() ? presignedStore : null,
     )
     return refreshed
       ? Response.json(refreshed)

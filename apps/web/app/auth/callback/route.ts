@@ -15,6 +15,7 @@ import {
   viewerAppearance,
 } from '../../../lib/appearance'
 import { asViewer } from '../../../lib/db'
+import { DEMO_COOKIE } from '../../../lib/demo'
 import { notifySignup } from '../../../lib/signup-notice'
 import { supabaseServer } from '../../../lib/supabase/server'
 
@@ -178,6 +179,9 @@ export async function GET(request: NextRequest) {
       console.error('sign-in: could not read the signer’s appearance', cause)
     }
   }
+
+  // Ticket 137: a real session from here on, so the demo is over.
+  answer.cookies.delete(DEMO_COOKIE)
 
   return answer
 }

@@ -172,8 +172,13 @@ call backfills the whole window. It is idempotent. On Vercel,
 `apps/web/vercel.json` calls it daily at 23:00 UTC; elsewhere, schedule it
 yourself once a day, after 23:00 UTC. It writes as `INGEST_DATABASE_URL`, and
 stores a few hundred kilobytes of made-up transcripts when storage is
-configured. `DEMO` is read when the public pages are built, so changing it
-needs a redeploy.
+configured.
+
+**Toggling `DEMO` needs a redeploy.** The landing and pricing pages are
+prerendered at build time, so their "Try the demo" button appears or
+disappears only with the next build. `/demo`, the banner and the refresh read
+the variable per request and follow it at once, so turning it off without a
+redeploy leaves a button that leads to a 404.
 
 ### Retention sweep
 
