@@ -272,10 +272,10 @@ async function Content({ children }: { children: ReactNode }) {
         planName={viewer.planName}
         operator={(await currentOperator()) !== null}
       >
-        <p className={BRAND}>
+        <div className={BRAND}>
           <LogoMark className="text-text" />
           <OrgName className="block truncate" />
-        </p>
+        </div>
       </Waiting>
     )
   }
@@ -326,6 +326,8 @@ async function AdminEntry() {
 
 /** The brand line at both widths: the sessclone mark, then the Org's name in
  * small capitals (Direction A, ticket 111). */
+// A `div`, not a `p`: the Org name is the switcher, whose popover holds
+// sections, lists and forms, none of which a paragraph may contain.
 const BRAND =
   'text-text-muted flex min-w-0 items-center gap-2 text-caption tracking-[0.1em] uppercase lg:mx-2 lg:mb-2'
 
@@ -367,12 +369,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         className="border-rule hidden w-[232px] shrink-0 flex-col justify-between overflow-y-auto border-r px-3.5 py-[18px] lg:sticky lg:top-0 lg:flex lg:h-dvh"
       >
         <div>
-          <p className={BRAND}>
+          <div className={BRAND}>
             <LogoMark className="text-text" />
             <Suspense fallback={PENDING_SIDEBAR}>
               <OrgName className="block truncate" />
             </Suspense>
-          </p>
+          </div>
           <nav aria-label="Main" className="mt-2">
             <Suspense fallback={PENDING_GROUPS}>
               <SidebarGroups groups={GROUPS}>
@@ -402,12 +404,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       {/* Phone: the header carries the Org name and the account control, and
           the four destinations are a bottom bar. */}
       <header className="border-rule bg-ground sticky top-0 z-10 flex items-center justify-between gap-3 border-b px-4 py-1.5 lg:hidden">
-        <p className={BRAND}>
+        <div className={BRAND}>
           <LogoMark className="text-text" />
           <Suspense fallback={PENDING_HEADER}>
             <OrgName className="block truncate" />
           </Suspense>
-        </p>
+        </div>
         <Suspense fallback={null}>
           <HeaderAccount />
         </Suspense>

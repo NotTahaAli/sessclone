@@ -4,6 +4,26 @@ import { expect, test, type Page } from '@playwright/test'
 // `global-setup.ts`: the person owns Alpha, which is approved, and Bravo has
 // invited them.
 
+// React reports invalid nesting (the switcher's popover once sat inside the
+// brand line's `<p>`) and hydration mismatches as console errors, and the page
+// still works, so nothing else here would notice. Every page these flows visit
+// is checked.
+const HYDRATION = /hydrat|cannot be a descendant|cannot contain a nested/i
+let errors: string[] = []
+
+test.beforeEach(({ page }) => {
+  errors = []
+  page.on('console', (message) => {
+    if (message.type() === 'error' && HYDRATION.test(message.text())) {
+      errors.push(message.text())
+    }
+  })
+})
+
+test.afterEach(() => {
+  expect(errors).toEqual([])
+})
+
 const openSwitcher = async (page: Page) => {
   await page.goto('/costs')
   await page.getByRole('button', { name: /switch Org/ }).click()
