@@ -89,10 +89,12 @@ first and counts them on its navigation link either way.
 On by default, self-hosted deployments included. An Org whose subscription is
 `inactive` — where every sign-up starts, on the plan it picked — or which has
 no subscription row, or is `cancelled`, is locked: the dashboard shows only a
-waiting page and Sign out, no key can be created, and ingest answers its
+waiting page, the Org switcher and Sign out, no key can be created, and ingest answers its
 existing keys with the same 401 as any unknown key. `past_due` is not locked;
 it keeps its notice and works. A platform admin approves an Org by setting it
 `active` under **/admin → Orgs**, where waiting Orgs are listed first.
+A New Org started from the Org switcher waits in the same way, and a person
+may have only one Org of their own waiting at a time.
 
 Any value other than `off` (case-insensitive) leaves it on. With it off, every
 status behaves as it did before the lock: a notice on every page, collection

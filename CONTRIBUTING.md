@@ -87,10 +87,13 @@ pnpm lint        # oxlint, type-aware
 pnpm typecheck   # tsc across every package
 pnpm test        # vitest, every suite
 pnpm format      # prettier --check
+pnpm test:db     # routes, schema and policies, against Postgres
+pnpm --filter web e2e   # the Playwright browser flows
 ```
 
-The database suites need a local Postgres;
-[`README.md`](README.md#the-database) says how to get one.
+The database suites and the browser flows need a local Postgres;
+[`README.md`](README.md#the-database) says how to get one, and how to install
+Chromium for the flows.
 
 ## Running it yourself, and sending it back
 

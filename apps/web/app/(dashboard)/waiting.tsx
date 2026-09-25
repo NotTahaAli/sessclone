@@ -5,8 +5,8 @@ import { signOut } from '../sign-in/actions'
 import { Button, buttonClass } from '../_ui/primitives'
 
 /**
- * What a locked Org sees instead of the dashboard (ticket 119): one sentence
- * and Sign out. Until billing exists, sign-up is the waitlist: the plan picked
+ * What a locked Org sees instead of the dashboard (ticket 119): one sentence,
+ * the Org switcher (ticket 136) and Sign out. Until billing exists, sign-up is the waitlist: the plan picked
  * at sign-up is named here, and the operator lets Orgs in from the Admin panel. Nothing else — no keys, no pages.
  *
  * It covers the frame rather than replacing it, because the frame is the

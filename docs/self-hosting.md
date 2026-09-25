@@ -10,12 +10,12 @@ is the reference for every variable; this is the order to do them in.
 
 ## What you need first
 
-| Thing                   | Why                                                                        |
-| ----------------------- | -------------------------------------------------------------------------- |
-| Postgres 16 or newer    | Every table, and the policies that are the authorisation (ADR 0001)        |
-| An S3-compatible bucket | Transcripts, which never pass through the application (ADR 0003)           |
-| A Supabase project      | Sign-in only. Hosted or self-hosted; the migrations touch no `auth` schema |
-| Node 22.18+ and pnpm    | To build, and on each Member's machine for the Collector                   |
+| Thing                     | Why                                                                                             |
+| ------------------------- | ----------------------------------------------------------------------------------------------- |
+| Postgres 16 or newer      | Every table, and the policies that are the authorisation (ADR 0001)                             |
+| An S3-compatible bucket   | Transcripts, which never pass through the application (ADR 0003)                                |
+| A Supabase project        | Sign-in only. Hosted or self-hosted; the migrations touch no `auth` schema                      |
+| Node 22.23.2+ and pnpm 10 | To build (`.nvmrc`, `packageManager`). The Collector needs Node 22.18+ on each Member's machine |
 
 Storage is optional to start with: with `STORAGE_*` unset, archival is off and
 everything else works. A deployment with no bucket collects Turns, prices them
@@ -209,7 +209,7 @@ user profile from external provider`, because Supabase asks for the
    3), but a row nonetheless. If that is not what you want, restrict sign-ups
    in the Supabase project: an allow-list, or sign-ups disabled and accounts
    invited.
-3. Your Org now shows **Waiting for approval**: every new Org is locked until
+3. Your Org now shows **You're on the waitlist**: every new Org is locked until
    a platform admin approves it (ticket 119), and that includes the first one
    on a self-hosted deployment. Make yourself the platform admin (the SQL in
    [Rates](#rates-so-the-costs-are-not-zero) below), open **/admin → Orgs**,

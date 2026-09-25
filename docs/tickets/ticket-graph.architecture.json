@@ -3,7 +3,7 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "sessclone v1 — ticket status",
-    "subtitle": "137 tickets · 135 done · 2 ready to start · 0 blocked",
+    "subtitle": "137 tickets · 137 done · 0 ready to start · 0 blocked",
     "output": "docs/tickets/ticket-graph.html",
     "quality_profile": "showcase"
   },
@@ -236,7 +236,7 @@
       "id": "chunked",
       "type": "cloud",
       "label": "Chunked Archival (128-133)",
-      "sublabel": "5 done · 1 ready",
+      "sublabel": "6 done",
       "pos": [
         960,
         1000
@@ -264,7 +264,7 @@
       "id": "demo",
       "type": "frontend",
       "label": "Live Demo (137-137)",
-      "sublabel": "1 ready",
+      "sublabel": "1 done",
       "pos": [
         500,
         1000
@@ -304,7 +304,7 @@
       "id": "viewer_chunked",
       "from": "viewer",
       "to": "chunked",
-      "variant": "emphasis"
+      "variant": "default"
     },
     {
       "id": "foundation_design",

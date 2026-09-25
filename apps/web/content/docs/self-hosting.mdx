@@ -12,12 +12,12 @@ is the reference for every variable.
 
 ## What you need first
 
-| Thing                   | Why                                                                         |
-| ----------------------- | --------------------------------------------------------------------------- |
-| Postgres 16 or newer    | Every table, and the row-level security policies that are the authorisation |
-| An S3-compatible bucket | Transcripts, which never pass through the application                       |
-| A Supabase project      | Sign-in only. Hosted or self-hosted; the migrations touch no `auth` schema  |
-| Node 22.18+ and pnpm    | To build, and on each Member's machine for the Collector                    |
+| Thing                     | Why                                                                                             |
+| ------------------------- | ----------------------------------------------------------------------------------------------- |
+| Postgres 16 or newer      | Every table, and the row-level security policies that are the authorisation                     |
+| An S3-compatible bucket   | Transcripts, which never pass through the application                                           |
+| A Supabase project        | Sign-in only. Hosted or self-hosted; the migrations touch no `auth` schema                      |
+| Node 22.23.2+ and pnpm 10 | To build (`.nvmrc`, `packageManager`). The Collector needs Node 22.18+ on each Member's machine |
 
 Storage is optional to start with: with `STORAGE_*` unset, archival is off and
 everything else works. A deployment with no bucket collects Turns, prices them
@@ -113,6 +113,11 @@ The bucket must also answer CORS for the dashboard: the transcript viewer reads
 byte ranges straight from storage in the browser, so allow `GET` with the
 `Range` request header from your dashboard's origin. Supabase Storage allows
 this by default; on R2, AWS or MinIO add a CORS rule.
+
+A long transcript is stored as sealed gzip chunks plus a raw tail. The same
+rule covers the chunks, which are fetched whole and unpacked in the browser. If
+your bucket restricts MIME types, as a Supabase Storage bucket can, allow
+`application/gzip`.
 
 ## 4. Run it
 

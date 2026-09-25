@@ -1,6 +1,7 @@
 # 0008 — A growing transcript is archived as sealed gzip chunks plus a raw tail
 
-**Status:** proposed · 2026-09-24 · Taha's decision · tickets 128–133
+**Status:** accepted · 2026-09-24 · Taha's decision · tickets 128–133 (all
+shipped)
 
 Refines ADR 0003's "one object per Session, replaced as it grows". It keeps
 all of ADR 0003's other rules: the bytes never pass through the application,

@@ -37,7 +37,8 @@ per Device.
 - **Retention.** Each Org sets a window in days, and a sweep removes
   transcripts older than that. Spend history is never deleted.
 - **Orgs and Roles.** Owner, Admin, Manager (who sees only the Members in their
-  Scope) and Member (who sees only their own usage).
+  Scope) and Member (who sees only their own usage). One person can belong to
+  several Orgs, answer invitations and start a new Org from the Org switcher.
 - **Row-level security.** Authorisation lives in Postgres policies, so the
   same rules hold whether a query comes from the server or the browser.
 

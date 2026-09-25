@@ -136,7 +136,8 @@ server is reported the same way, because the inviter's remedy is identical.
 The same two variables send the platform admins a note each time somebody
 signs up and creates an Org waiting for approval (ticket 120,
 `apps/web/lib/signup-notice.ts`), with a link to that Org under **/admin →
-Orgs**. Unset, nothing is sent; the Admin panel lists waiting Orgs first and
+Orgs**. A New Org started from the Org switcher sends no note; it shows in the
+same list. Unset, nothing is sent; the Admin panel lists waiting Orgs first and
 counts them on its navigation link either way.
 
 `smtp://` uses STARTTLS when the server offers it; `smtps://` is TLS from the
@@ -153,11 +154,13 @@ On by default, self-hosted deployments included (ticket 119,
 `apps/web/lib/approval.ts`). An Org whose subscription is `inactive` — which is
 where every sign-up starts, on the plan it picked (ticket 118) — or which has
 no subscription row, or is `cancelled`, is locked: the dashboard shows only
-"Waiting for approval" (or "Cancelled") and Sign out, no key can be created,
+"You're on the waitlist" (or "Cancelled"), the Org switcher and Sign out, no key can be created,
 and ingest answers its existing keys with the same 401 as any unknown key.
 `past_due` is not locked; it keeps its banner and works. A platform admin
 approves an Org by setting it `active` under **/admin → Orgs**, where Orgs
-waiting for approval are listed first.
+waiting for approval are listed first. A New Org started from the Org switcher
+(ticket 136) waits in the same way, and a person may have only one Org of
+their own waiting at a time.
 
 Any value other than `off` (case-insensitive) leaves it on. With it off, every
 status behaves as before the lock: a notice on every page, collection working.
@@ -181,8 +184,9 @@ approves it.
 | `NEXT_PUBLIC_APP_URL` | yes      | —       | Origin this deployment answers on, e.g. `https://sessclone.example.com`. No trailing slash |
 
 Read by `apps/web/lib/auth/app-url.ts`, which throws when it is unset, and by
-`apps/web/lib/appearance.ts`, which marks its cookie `Secure` when the URL is
-`https://`. Used to build the sign-in redirect, invite links and the install instructions a
+`apps/web/lib/appearance.ts`, `apps/web/lib/viewer.ts` (the Org switcher's
+choice) and `apps/web/lib/demo.ts`, which mark their cookies `Secure` when the
+URL is `https://`. Used to build the sign-in redirect, invite links and the install instructions a
 Member is shown, so a
 self-hoster's team is told to report to the self-hoster's deployment. It is not
 derived from request headers: a forwarded `Host` is attacker-controllable, and
