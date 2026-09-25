@@ -33,10 +33,12 @@ export async function GET(request: Request) {
       storageConfigured() ? presignedStore : null,
     )
     // The demo's cached reads are keyed by day, but a day can be read before
-    // this has seeded it: expire them, stale-while-revalidate as the pricing
-    // route does, whenever the data changed.
+    // this has seeded it: expire them whenever the data changed. At once, not
+    // 'max' (stale-while-revalidate), or the first visitor after a refresh
+    // is served the old day. `updateTag` would, but throws outside a Server
+    // Action; `{ expire: 0 }` is the Route Handler form (Next.js 16 docs).
     if (refreshed && (refreshed.seeded > 0 || refreshed.pruned > 0)) {
-      revalidateTag(DEMO_CACHE_TAG, 'max')
+      revalidateTag(DEMO_CACHE_TAG, { expire: 0 })
     }
     return refreshed
       ? Response.json(refreshed)

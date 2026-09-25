@@ -3,7 +3,7 @@ import { defineConfig } from '@playwright/test'
 // The browser flows AGENTS.md names as worth their cost, and only those
 // (ticket 135). Anything a unit or database test proves stays there.
 //
-//   pnpm --filter web e2e     # starts `next dev` itself, unless one is up
+//   pnpm --filter web e2e     # starts its own `next dev`, always
 //
 // Two URLs, like `vitest.config.mts`: the owner applies the migrations and
 // seeds, and the app reads as `sessclone_app`. The harness empties the
@@ -37,7 +37,10 @@ export default defineConfig({
   webServer: {
     command: 'pnpm exec next dev --port 3135 --hostname 127.0.0.1',
     url: BASE_URL,
-    reuseExistingServer: !process.env.CI,
+    // Never reused: a server already on the port was started with somebody
+    // else's env, and would run these flows against whatever database that
+    // names rather than the `_test` one the harness empties.
+    reuseExistingServer: false,
     timeout: 180_000,
     env: {
       DATABASE_URL: APP_URL,

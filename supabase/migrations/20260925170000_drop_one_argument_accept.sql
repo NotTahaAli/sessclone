@@ -1,4 +1,12 @@
--- Ticket 135: drop the one-argument accept.
+-- Ticket 135: drop the one-argument accept. RUN THIS AFTER THE DEPLOY THAT
+-- SHIPS THE ORG SWITCHER (#42), never before it.
+--
+-- A self-hoster upgrading from an app older than the Org switcher release
+-- holds this file back from the pre-deploy batch (`docs/self-hosting.md`,
+-- "An upgrade is two steps"): deploy the app that calls the two-argument
+-- `sessclone_accept_invitation(text, text)` first, then apply this. Run
+-- before that deploy, the live app still calls the one-argument form and
+-- every invitation link fails until the new code is serving.
 --
 -- `20260925120000_org_switcher.sql` kept `sessclone_accept_invitation(text)`
 -- so invitation links kept working between that SQL reaching production and

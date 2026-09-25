@@ -199,7 +199,8 @@ export const refreshDemo = async (
 
     // Bounded: a hung statement or a stalled storage PUT between statements
     // must not hold the lock and the rows open until the platform kills the
-    // function. A backfill's statements take seconds, a PUT at most 10.
+    // function. A backfill's statements take seconds, a PUT at most 10, and
+    // a statement follows every PUT (below), so no idle gap is longer.
     await tx`set local statement_timeout = '60s'`
     await tx`set local idle_in_transaction_session_timeout = '60s'`
 
@@ -386,11 +387,19 @@ export const refreshDemo = async (
     if (turns.length > ANALYZE_AFTER) await tx`analyze turns, session_events`
 
     // Storage last, inside the transaction: a failure rolls the rows back.
-    // Keys are deterministic, so a retry overwrites what a failed call wrote.
+    // Keys are deterministic, so a retry overwrites what a failed call wrote,
+    // and the rolled-back days have no Turns, so the next call seeds them
+    // again: a failure here leaves nothing the next refresh trips on.
     if (store) {
       for (const object of objects) {
         // oxlint-disable-next-line no-await-in-loop -- a few small objects.
         await store.put(object.key, object.body)
+        // The idle timeout counts from the last statement, and a backfill is
+        // about thirty PUTs of up to 10s each: without a statement between
+        // them the gaps add up past 60s and the commit finds the session
+        // gone. One round trip per object keeps every gap to a single PUT.
+        // oxlint-disable-next-line no-await-in-loop -- see above.
+        await tx`select 1`
       }
       if (doomed.length > 0) {
         await store.remove(doomed.map((row) => row.storage_key))

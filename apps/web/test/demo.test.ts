@@ -417,6 +417,30 @@ test('the refresh stops before touching an Org that holds a demo id but is not a
   expect(org).toEqual({ name: 'Somebody real', is_demo: false })
 })
 
+test('no gap between storage PUTs leaves the transaction idle past its limit', async () => {
+  // `idle_in_transaction_session_timeout` counts from the last statement, so
+  // back-to-back PUTs of up to 10s each would add up past its 60s and kill
+  // the refresh after the bytes went up. Each PUT must start just after a
+  // statement: the refresh backend's `state_change` moves before every one.
+  // As text: microseconds, which a Date would round to the same millisecond.
+  const seen: string[] = []
+  const store: DemoStore = {
+    put: async () => {
+      const [row] = await sql<{ at: string }[]>`
+        select state_change::text as at from pg_stat_activity
+         where pid in (select pid from pg_locks
+                        where locktype = 'advisory' and granted)
+           and state = 'idle in transaction'
+      `
+      seen.push(row!.at)
+    },
+    remove: async () => {},
+  }
+  await refreshDemo(sql, store, NIGHT)
+  expect(seen.length).toBeGreaterThan(1)
+  expect(new Set(seen).size).toBe(seen.length)
+})
+
 test('the storage PUT gives up rather than hanging the refresh', async () => {
   const { presignedStore } = await import('../lib/demo-refresh')
   vi.stubEnv('STORAGE_ENDPOINT', 'https://storage.test')
@@ -466,10 +490,11 @@ test('the refresh route: a secret, then DEMO, then one at a time', async () => {
   expect(busy.status).toBe(409)
   expect(nextCache.revalidateTag).not.toHaveBeenCalled()
 
-  // A refresh that seeds expires the demo's cached reads.
+  // A refresh that seeds expires the demo's cached reads at once, not
+  // stale-while-revalidate: the next visitor must not get yesterday.
   const seeded = await call('the-secret')
   expect(seeded.status).toBe(200)
-  expect(nextCache.revalidateTag).toHaveBeenCalledWith('demo', 'max')
+  expect(nextCache.revalidateTag).toHaveBeenCalledWith('demo', { expire: 0 })
 })
 
 const form = (entries: Record<string, string>) => {
