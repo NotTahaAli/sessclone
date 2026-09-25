@@ -17,6 +17,6 @@
 
 **Status:** done
 
-- [ ] Chat rows, step groups, markdown and code boxes
-- [ ] Options sheet, info popup, long-press menu
-- [ ] Artifact card and preview; envelope cleanup
+- [x] Chat rows, step groups, markdown and code boxes
+- [x] Options sheet, info popup, long-press menu
+- [x] Artifact card and preview; envelope cleanup

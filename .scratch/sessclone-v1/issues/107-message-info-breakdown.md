@@ -11,5 +11,5 @@
 
 **Status:** done
 
-- [ ] `GET /api/transcripts/<sessionId>/costs`, one query
-- [ ] Info panel in the viewer
+- [x] `GET /api/transcripts/<sessionId>/costs`, one query
+- [x] Info panel in the viewer

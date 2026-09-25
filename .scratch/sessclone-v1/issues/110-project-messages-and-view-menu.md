@@ -17,5 +17,5 @@
 
 **Status:** done
 
-- [ ] Replies, edits, reactions, status and decision cards
-- [ ] Header icons and view menu; full width
+- [x] Replies, edits, reactions, status and decision cards
+- [x] Header icons and view menu; full width

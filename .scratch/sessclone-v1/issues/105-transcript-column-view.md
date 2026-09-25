@@ -17,7 +17,7 @@
 
 **Status:** done
 
-- [ ] `GET /api/transcripts/<sessionId>` returns short-lived storage links, 404 when nothing visible
-- [ ] Column view, chunked loading, phone layout, draggable widths
-- [ ] Screenshots at 1440x900 and 390x844, light and dark, from a fixture harness
-- [ ] Taha looks at it on production
+- [x] `GET /api/transcripts/<sessionId>` returns short-lived storage links, 404 when nothing visible
+- [x] Column view, chunked loading, phone layout, draggable widths
+- [ ] Screenshots at 1440x900 and 390x844, light and dark, from a fixture harness (not recorded here; PR #40 and #41 carry viewer shots)
+- [ ] Taha looks at it on production (open: Taha's check; code is merged, so Status is done)

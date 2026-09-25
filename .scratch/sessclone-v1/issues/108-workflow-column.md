@@ -11,5 +11,5 @@
 
 **Status:** done
 
-- [ ] Workflow block and column
-- [ ] Journal missing reads "not stored", not an empty list
+- [x] Workflow block and column
+- [x] Journal missing reads "not stored", not an empty list
