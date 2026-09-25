@@ -6,6 +6,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-25
+
+Upgrading a self-hosted copy from 0.1.0: set `ENABLE_LANDING`, `ENABLE_DOCS`
+and `ENABLE_DEMO` to `true` for whichever parts you serve, since unset now
+means off, and rebuild. Run the new migrations before deploying, except
+`20260925170000_drop_one_argument_accept.sql`, which runs after
+(`docs/self-hosting.md`).
+
 ### Added
 
 - An Org switcher: the Org name at the top of the sidebar, or of the phone
@@ -102,5 +110,6 @@ The first public release.
 - Self-hosting: a Dockerfile, `compose.yaml` and a guide, free at any size
   under AGPL-3.0-only with the additional term in `NOTICE.md`.
 
-[Unreleased]: https://github.com/NotTahaAli/sessclone/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/NotTahaAli/sessclone/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/NotTahaAli/sessclone/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/NotTahaAli/sessclone/releases/tag/v0.1.0
