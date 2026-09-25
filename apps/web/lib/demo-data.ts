@@ -219,7 +219,7 @@ export const demoOrg = (spec: DemoOrgSpec, visitorUserId: string): DemoOrg => {
         : `${name.toLowerCase().replace(/[^a-z]+/g, '.')}@${slug}.demo.invalid`,
       role,
       visitor,
-      sessionsPerDay: 1 + random() * 3,
+      sessionsPerDay: 1.5 + random() * 3,
       model: weighted(
         random,
         spec.models.map((model, rank): [string, number] => [model, 3 - rank]),
@@ -361,7 +361,7 @@ export const demoDay = (org: DemoOrg, date: string): DemoSession[] => {
       const model =
         random() < 0.75 ? person.model : pick(random, org.spec.models)
       // A stored transcript is kept short, so the objects stay small.
-      const length = transcript ? int(random, 8, 12) : int(random, 6, 55)
+      const length = transcript ? int(random, 8, 12) : int(random, 10, 80)
 
       const turns: DemoTurn[] = []
       let at = startedAt.getTime()
@@ -632,6 +632,39 @@ const SCENARIOS: readonly Scenario[] = [
 
 const iso = (at: number) => new Date(at).toISOString()
 
+/** The checks a careful Session runs before it says it is done, used when a
+ * Session has more Turns than its scenario has steps. */
+const CHECKS: readonly Step[] = [
+  {
+    tool: 'Bash',
+    input: { command: 'git diff --stat' },
+    result: ' 2 files changed, 31 insertions(+), 9 deletions(-)',
+  },
+  {
+    tool: 'Bash',
+    input: { command: 'pnpm lint' },
+    result: 'Found 0 warnings and 0 errors.',
+  },
+  {
+    tool: 'Bash',
+    input: { command: 'pnpm typecheck' },
+    result: 'Done in 6.2s',
+  },
+  {
+    text: 'Lint and types are clean. One more full test run before I wrap up.',
+  },
+  {
+    tool: 'Bash',
+    input: { command: 'pnpm test' },
+    result: 'Test Files  48 passed (48)\n     Tests  611 passed (611)',
+  },
+  {
+    tool: 'Bash',
+    input: { command: 'git status --short' },
+    result: ' M 2 files',
+  },
+]
+
 /**
  * A stored transcript for one Session, in the JSONL Claude Code writes and
  * `packages/shared/src/transcript` reads. Each Turn is one assistant message
@@ -669,12 +702,14 @@ export const demoTranscript = (session: DemoSession): string => {
   })
 
   const turns = session.turns.filter((turn) => turn.agentId === null)
+  // The scenario's work, then checks if there are Turns to spare, then its
+  // closing sentence on the last Turn.
+  const steps = [...scenario.steps.slice(0, -1), ...CHECKS]
+    .slice(0, turns.length - 1)
+    .concat(scenario.steps.at(-1)!)
   turns.forEach((turn, index) => {
     const lastTurn = index === turns.length - 1
-    // Walk the scenario, ending on its closing sentence whatever the length.
-    const step: Step = lastTurn
-      ? scenario.steps.at(-1)!
-      : scenario.steps[index % (scenario.steps.length - 1)]!
+    const step = steps[index]!
     const at = turn.occurredAt.getTime()
     const usage = {
       input_tokens: turn.inputTokens,

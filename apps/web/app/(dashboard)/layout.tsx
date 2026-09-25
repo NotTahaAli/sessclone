@@ -108,17 +108,22 @@ function DemoBanner() {
       <span className="grow">
         You&apos;re viewing a demo with made-up data.
       </span>
-      <Link
-        href="/sign-up"
-        className="text-accent-text font-medium hover:underline"
-      >
-        Sign up
-      </Link>
-      <form action={exitDemo}>
-        <button type="submit" className="text-text font-medium hover:underline">
-          Exit demo
-        </button>
-      </form>
+      <div className="flex items-center gap-4">
+        <Link
+          href="/sign-up"
+          className="text-accent-text font-medium hover:underline"
+        >
+          Sign up
+        </Link>
+        <form action={exitDemo}>
+          <button
+            type="submit"
+            className="text-text font-medium hover:underline"
+          >
+            Exit demo
+          </button>
+        </form>
+      </div>
     </div>
   )
 }

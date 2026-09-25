@@ -1,3 +1,4 @@
+import { NextRequest } from 'next/server'
 import { afterAll, beforeAll, beforeEach, expect, test, vi } from 'vitest'
 
 import { resolveCaller } from '../lib/collector-auth'
@@ -8,7 +9,7 @@ import {
   DemoRefusal,
 } from '../lib/demo'
 import { DEMO_ORGS, demoCutoff, demoId, demoWindow } from '../lib/demo-data'
-import { refreshDemo, type DemoStore } from '../lib/demo-refresh'
+import { ensureDemo, refreshDemo, type DemoStore } from '../lib/demo-refresh'
 import { hashApiKey } from '../lib/api-keys'
 import { listOrgs, pendingOrgCount } from '../lib/subscriptions'
 import { listTiers } from '../lib/tier-admin'
@@ -37,6 +38,9 @@ vi.mock('next/headers', () => ({
   }),
 }))
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }))
+
+// A backfill is 60 days of two Orgs: seconds, not the default five.
+vi.setConfig({ testTimeout: 60_000 })
 
 const NIGHT = new Date('2026-09-25T23:30:00Z')
 const NORTHWIND = demoId('org:northwind')
@@ -84,9 +88,26 @@ beforeEach(async () => {
 
 const enterDemo = () => jar.set(DEMO_COOKIE, '1')
 
+/** When `turns` was last analysed, as a number that only grows. */
+const analysed = async () =>
+  (
+    await sql<{ at: Date | null }[]>`
+      select last_analyze as at from pg_stat_user_tables
+       where relname = 'turns'
+    `
+  )[0]!.at?.getTime() ?? 0
+
+/** The demo's Orgs and people without 60 days of Turns: what every test but
+ * the two about seeded data needs, in milliseconds rather than seconds. */
+const createDemo = () => sql.begin((tx) => ensureDemo(tx))
+
 test('the refresh backfills the window, is idempotent, and prunes past 60 days', async () => {
+  const before = await analysed()
   const first = recorder()
   const done = await refreshDemo(sql, first.store, NIGHT)
+  // A backfill leaves the planner statistics for what it wrote: without
+  // them the Costs page took 99s until autovacuum caught up.
+  expect(await analysed()).toBeGreaterThan(before)
 
   expect(done!.seeded).toBe(DEMO_ORGS.length * 60)
   const turns = await count('turns')
@@ -168,7 +189,7 @@ test('the demo visitor sees the demo Orgs and nothing else, as Owner of one', as
 
 test('the demo is off unless DEMO=on, and a real session always wins', async () => {
   const fixture = await seedFixture()
-  await refreshDemo(sql, null, NIGHT)
+  await createDemo()
   enterDemo()
   const { sessionViewer } = await import('../lib/viewer')
   const { sessionUser } = await import('../lib/supabase/server')
@@ -183,7 +204,7 @@ test('the demo is off unless DEMO=on, and a real session always wins', async () 
 })
 
 test('switching between the two demo Orgs works, and lands as a Member', async () => {
-  await refreshDemo(sql, null, NIGHT)
+  await createDemo()
   enterDemo()
   const { switchOrg } = await import('../app/(dashboard)/org-actions')
   const { sessionViewer, MEMBER_COOKIE } = await import('../lib/viewer')
@@ -196,7 +217,7 @@ test('switching between the two demo Orgs works, and lands as a Member', async (
 })
 
 test('every write as the demo visitor is refused by the database', async () => {
-  await refreshDemo(sql, null, NIGHT)
+  await createDemo()
   const { asViewer } = await import('../lib/db')
   const member = demoId('member:northwind:0')
 
@@ -233,7 +254,7 @@ test('every write as the demo visitor is refused by the database', async () => {
 })
 
 test('the actions say "This is a demo" rather than their own refusals', async () => {
-  await refreshDemo(sql, null, NIGHT)
+  await createDemo()
   enterDemo()
   const { setTimezone } =
     await import('../app/(dashboard)/settings/org/actions')
@@ -264,7 +285,7 @@ test('the actions say "This is a demo" rather than their own refusals', async ()
 
 test('ingest refuses a demo Org’s key', async () => {
   const fixture = await seedFixture()
-  await refreshDemo(sql, null, NIGHT)
+  await createDemo()
   vi.stubEnv('SIGNUP_APPROVAL', 'off')
   await sql`
     insert into api_keys (member_id, label, key_hash, key_prefix) values
@@ -280,7 +301,7 @@ test('ingest refuses a demo Org’s key', async () => {
 
 test('the dashboard role can neither mark nor unmark a demo Org', async () => {
   const fixture = await seedFixture()
-  await refreshDemo(sql, null, NIGHT)
+  await createDemo()
 
   await expect(
     asUser(
@@ -305,7 +326,7 @@ test('the dashboard role can neither mark nor unmark a demo Org', async () => {
 
 test('the Admin panel does not count the demo Orgs as customers', async () => {
   const fixture = await seedFixture()
-  await refreshDemo(sql, null, NIGHT)
+  await createDemo()
   // Waiting for approval, as a demo Org would be if its row went missing.
   await sql`update subscriptions set status = 'inactive' where org_id = ${HARBOR}`
 
@@ -320,4 +341,27 @@ test('the Admin panel does not count the demo Orgs as customers', async () => {
   // Acme and Globex have no subscription: they are the two waiting.
   expect(pending).toBe(2)
   expect(tiers.find((tier) => tier.key === 'team')!.orgs).toBe(0)
+})
+
+test('/demo sets the cookie and stays on the host it was asked on', async () => {
+  const route = await import('../app/demo/route')
+  // As a request arrives behind a proxy: the server's own host, not the
+  // browser's.
+  const GET = () =>
+    (route.GET as (request: NextRequest) => Response)(
+      new NextRequest('http://localhost:3000/demo'),
+    )
+
+  const response = GET()
+  expect(response.status).toBe(307)
+  // Relative: behind a proxy the server's idea of its host is not the
+  // browser's, and a redirect there arrives without the cookie.
+  expect(response.headers.get('location')).toBe('/costs')
+  expect(response.headers.get('set-cookie')).toMatch(
+    /^sessclone-demo=1;.*HttpOnly/i,
+  )
+  expect(response.headers.get('x-robots-tag')).toBe('noindex, nofollow')
+
+  vi.stubEnv('DEMO', 'off')
+  expect(GET().status).toBe(404)
 })

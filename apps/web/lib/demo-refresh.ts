@@ -46,6 +46,9 @@ export type Refreshed = {
 /** Rows per insert: well under Postgres' 65,535 parameters at 18 columns. */
 const BATCH = 2_000
 
+/** More new Turns than a day's top-up: a backfill. */
+const ANALYZE_AFTER = 10_000
+
 const orgs = () => DEMO_ORGS.map((spec) => demoOrg(spec, DEMO_USER_ID))
 
 const inBatches = async <T>(
@@ -60,7 +63,10 @@ const inBatches = async <T>(
 }
 
 /** The demo Orgs and everybody in them, created when missing. */
-const ensure = async (tx: postgres.TransactionSql, all: DemoOrg[]) => {
+export const ensureDemo = async (
+  tx: postgres.TransactionSql,
+  all: DemoOrg[] = orgs(),
+) => {
   // The Team Tier: six seats, and the demo is a team. Any published Tier
   // otherwise, so a deployment that renamed its Tiers still gets a demo.
   const [tier] = await tx<{ id: string }[]>`
@@ -177,7 +183,7 @@ export const refreshDemo = async (
 
     const all = orgs()
     const ids = all.map((org) => org.id)
-    await ensure(tx, all)
+    await ensureDemo(tx, all)
 
     // Prune. Transcripts first: their rows and objects go together, and the
     // objects are deleted before this commits, as the retention sweep does,
@@ -337,6 +343,12 @@ export const refreshDemo = async (
          where project.id = latest.project_id
       `
     }
+
+    // A backfill is tens of thousands of Turns for Orgs the planner has no
+    // statistics on, and until autovacuum catches up the Costs page's plan
+    // was measured at 99s instead of about 1s. Only the owner may analyze,
+    // and it counts this transaction's own rows. A daily top-up skips it.
+    if (turns.length > ANALYZE_AFTER) await tx`analyze turns, session_events`
 
     // Storage last, inside the transaction: a failure rolls the rows back.
     // Keys are deterministic, so a retry overwrites what a failed call wrote.
