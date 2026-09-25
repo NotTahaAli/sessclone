@@ -149,9 +149,10 @@ export const changeRole = async (
     return { error: 'That is not a Role.' }
 
   try {
-    await asViewer(viewer.userId, (tx) =>
+    const changed = await asViewer(viewer.userId, (tx) =>
       setMemberRole(tx, viewer.orgId, memberId.data, role.data),
     )
+    if (!changed) return { error: STALE }
   } catch (error) {
     return { error: refusal(error) }
   }
@@ -173,9 +174,10 @@ export const changeMembership = async (
   if (!memberId.success || !to.success) return { error: 'Nothing to change.' }
 
   try {
-    await asViewer(viewer.userId, (tx) =>
+    const changed = await asViewer(viewer.userId, (tx) =>
       setMemberRemoved(tx, viewer.orgId, memberId.data, to.data === 'removed'),
     )
+    if (!changed) return { error: STALE }
   } catch (error) {
     return { error: refusal(error) }
   }
@@ -185,6 +187,10 @@ export const changeMembership = async (
   revalidatePath('/', 'layout')
   return null
 }
+
+/** No row matched: a tab left open across a switch, a change already made,
+ * or a person this viewer may not change. None of them is a success. */
+const STALE = 'Nothing changed. Reload the page: this list may be out of date.'
 
 /** The last-Owner rule's sentence, or a plain one for anything else. */
 const refusal = (error: unknown) => {

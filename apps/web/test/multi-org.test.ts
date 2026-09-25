@@ -221,3 +221,24 @@ test('a tab left open across a switch cannot invite or issue a key in the new Or
     await sql`select id from api_keys where label = 'laptop'`,
   ).toHaveLength(0)
 })
+
+test('a Role change or removal from a tab left open across a switch says nothing changed', async () => {
+  // The page listed Globex's people; the viewer is now in Acme. The write is
+  // scoped to Acme, matches no row, and must not read as a success.
+  const { changeRole, changeMembership } =
+    await import('../app/(dashboard)/settings/org/members/invite-actions')
+  const form = new FormData()
+  form.append('memberId', fixture.globex.members.member)
+  form.append('role', 'manager')
+  form.append('to', 'removed')
+
+  expect(await changeRole(form)).toMatchObject({ error: expect.any(String) })
+  expect(await changeMembership(form)).toMatchObject({
+    error: expect.any(String),
+  })
+  const [row] = await sql<{ role: string; removed_at: Date | null }[]>`
+    select role, removed_at from members
+     where id = ${fixture.globex.members.member}
+  `
+  expect(row).toEqual({ role: 'member', removed_at: null })
+})
