@@ -10,9 +10,9 @@
 
 **Blocked by:** 103
 
-**Status:** todo
+**Status:** done
 
-- [ ] `transcript_view_presets` table with its RLS policies in one migration
-- [ ] Server actions to list, save, delete and set default
-- [ ] Policy tests as the unprivileged role
-- [ ] Migration applied to production before the merge deploys
+- [x] `transcript_view_presets` table with its RLS policies in one migration
+- [x] Server actions to list, save, delete and set default
+- [x] Policy tests as the unprivileged role
+- [x] Migration applied to production before the merge deploys

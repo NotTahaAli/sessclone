@@ -7,6 +7,7 @@ import {
   isValidElement,
   memo,
   useCallback,
+  useEffect,
   useRef,
   useState,
   type ComponentProps,
@@ -36,9 +37,16 @@ const htmlAsText = () => walk
 const REMARK = [remarkGfm, htmlAsText]
 // Only fenced blocks that name a language are highlighted; guessing is slow
 // and often wrong on a short snippet.
-const REHYPE = [
-  [rehypeHighlight, { detect: false, plainText: ['text', 'txt'] }],
-] as ComponentProps<typeof Markdown>['rehypePlugins']
+//
+// Built once: react-markdown runs every attacher on every render, and
+// rehype-highlight's attacher registers all its grammars each time it runs
+// (7.0.2, `createLowlight(common)`), which was ~0.4 ms a message and about
+// 5.5 s of a 13,749-message "Jump to start". Its transformer does not use
+// `this`, so one instance serves every message.
+const highlight = rehypeHighlight({ detect: false, plainText: ['text', 'txt'] })
+const REHYPE = [() => highlight] as ComponentProps<
+  typeof Markdown
+>['rehypePlugins']
 
 const LANGUAGE = /language-([\w+#-]+)/
 
@@ -105,21 +113,101 @@ const COMPONENTS: Components = {
   ),
 }
 
+// Parsing is most of what a message row costs, and "Jump to start" mounts
+// every row of a long transcript at once: 13,749 of them spent ~5 s here
+// (2026-09-25). So a message is plain text until it first comes within a
+// screen of view, then markdown for good. One observer for every message;
+// `waiting` holds only mounted, unseen ones, so it never outgrows the page.
+//
+// The rest turn to markdown too, a batch at a time while the page is idle, so
+// a screen reader's list of headings and links is whole once the page
+// settles rather than only where someone has scrolled.
+const waiting = new Map<Element, () => void>()
+let observer: IntersectionObserver | null = null
+/** Messages parsed per idle slice: ~0.4 ms each, so a slice stays short. */
+export const IDLE_BATCH = 25
+let idle: number | null = null
+
+const unwatch = (element: Element) => {
+  waiting.delete(element)
+  observer?.unobserve(element)
+  if (waiting.size === 0 && idle !== null) {
+    cancelIdle(idle)
+    idle = null
+  }
+}
+
+const onIdle = (run: () => void) =>
+  typeof requestIdleCallback === 'function'
+    ? requestIdleCallback(run, { timeout: 1000 })
+    : window.setTimeout(run, 50)
+const cancelIdle = (handle: number) =>
+  typeof cancelIdleCallback === 'function'
+    ? cancelIdleCallback(handle)
+    : window.clearTimeout(handle)
+
+/** Turns the next batch of waiting messages to markdown, oldest first. */
+export const drain = () => {
+  idle = null
+  let left = IDLE_BATCH
+  for (const [element, show] of waiting) {
+    if (left-- === 0) break
+    show()
+    unwatch(element)
+  }
+  if (waiting.size > 0) idle = onIdle(drain)
+}
+
+export const watch = (element: Element, show: () => void) => {
+  observer ??= new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue
+        waiting.get(entry.target)?.()
+        unwatch(entry.target)
+      }
+    },
+    // `scrollMargin` widens the column's own scroll box, which clips a row
+    // before the viewport does; where it is unsupported a row turns to
+    // markdown as it scrolls into view rather than a screen before.
+    { rootMargin: '100% 0px', scrollMargin: '100% 0px' },
+  )
+  waiting.set(element, show)
+  observer.observe(element)
+  idle ??= onIdle(drain)
+}
+
 /** One message's markdown, parsed only when its text changes. */
 export const MarkdownText = memo(function MarkdownText({
   text,
 }: {
   text: string
 }) {
+  const box = useRef<HTMLDivElement>(null)
+  // No observer (the server, tests): markdown straight away. Rows are only
+  // ever rendered in the browser, after their bytes are fetched.
+  const [seen, setSeen] = useState(
+    () => typeof IntersectionObserver === 'undefined',
+  )
+  useEffect(() => {
+    const element = box.current
+    if (seen || !element) return undefined
+    watch(element, () => setSeen(true))
+    return () => unwatch(element)
+  }, [seen])
   return (
-    <div className="md">
-      <Markdown
-        remarkPlugins={REMARK}
-        rehypePlugins={REHYPE}
-        components={COMPONENTS}
-      >
-        {text}
-      </Markdown>
+    <div ref={box} className="md">
+      {seen ? (
+        <Markdown
+          remarkPlugins={REMARK}
+          rehypePlugins={REHYPE}
+          components={COMPONENTS}
+        >
+          {text}
+        </Markdown>
+      ) : (
+        <p className="whitespace-pre-wrap">{text}</p>
+      )}
     </div>
   )
 })

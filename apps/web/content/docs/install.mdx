@@ -112,6 +112,12 @@ Start a session, send one turn, and look at **Costs** in the dashboard.
 - **The page still says it is waiting, and the key has never been used.** The
   Collector has not reached the deployment at all: wrong `SESSCLONE_URL`, no
   network route to it, or the restart has not happened yet.
+- **Turns stopped arriving after the deployment moved.** A URL that
+  redirects, such as an old address now forwarding to a new domain, loses
+  every report: a 301 or 302 turns the report into a GET that ingest refuses,
+  and a redirect to another origin drops the key. Set the Collector's URL, and
+  in a cloud environment the credential's allowed website, to the new https
+  address. Turns still on disk are sent on the next turn.
 - **The key has been used and no Turn has arrived.** A Collector reached the
   deployment with the key, so the key is not the problem. Usually no turn has
   ended since the restart, or the cursor is already at the end of every

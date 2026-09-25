@@ -9,10 +9,10 @@
 
 **Blocked by:** —
 
-**Status:** todo
+**Status:** done
 
-- [ ] `kind` on the presign and confirm wire contracts, defaulting to `transcript` so older Collectors keep working
-- [ ] Migration adding `log_artifacts.kind`, unique key including it
-- [ ] Collector enumerates and archives sidecars and journals
-- [ ] Lists filter by kind; delete and retention sweep remove sidecars
-- [ ] Self-hosting docs: the bucket must allow CORS GET with `Range`
+- [x] `kind` on the presign and confirm wire contracts, defaulting to `transcript` so older Collectors keep working
+- [x] Migration adding `log_artifacts.kind`, unique key including it
+- [x] Collector enumerates and archives sidecars and journals
+- [x] Lists filter by kind; delete and retention sweep remove sidecars
+- [x] Self-hosting docs: the bucket must allow CORS GET with `Range`

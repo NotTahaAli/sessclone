@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import type { Item, Row } from '@sessclone/shared'
 
@@ -9,7 +9,7 @@ import { sealed, writtenBefore } from './artifacts'
 import { decode, parseEnvelope } from './envelope'
 import { toolName } from './format'
 import { currentReactions, emojiOf, parseStatus, readHearth } from './hearth'
-import { MarkdownText } from './markdown'
+import { IDLE_BATCH, MarkdownText, watch } from './markdown'
 import { groupSteps, stepsLabel } from './steps'
 
 const base = (offset: number, at: string | null = null) => ({
@@ -251,6 +251,20 @@ describe('sealed', () => {
   })
 })
 
+// Counts how often rehype-highlight's attacher runs: each run registers every
+// grammar it knows, so once per message made "Jump to start" seconds slower.
+const highlighters = vi.hoisted(() => ({ built: 0 }))
+vi.mock('rehype-highlight', async (importOriginal) => {
+  const real = (await importOriginal<typeof import('rehype-highlight')>())
+    .default
+  return {
+    default: (...args: Parameters<typeof real>) => {
+      highlighters.built++
+      return real(...args)
+    },
+  }
+})
+
 const html = (text: string) =>
   renderToStaticMarkup(createElement(MarkdownText, { text }))
 
@@ -272,6 +286,12 @@ describe('MarkdownText', () => {
     const out = html('```ts\nconst a = 1\n```')
     expect(out).toContain('>ts<')
     expect(out).toContain('hljs-keyword')
+  })
+
+  it('builds its highlighter once, not once per message', () => {
+    const before = highlighters.built
+    for (let n = 0; n < 3; n++) html('```ts\nconst a = 1\n```')
+    expect(highlighters.built).toBe(before)
   })
 })
 
@@ -359,5 +379,36 @@ describe('parseStatus', () => {
       header: 'Task',
       lines: [{ mark: 'done', text: 'Built it' }],
     })
+  })
+})
+
+describe('deferred markdown', () => {
+  it('turns every waiting message to markdown in idle batches, then stops', () => {
+    const slices: (() => void)[] = []
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        observe() {}
+        unobserve() {}
+      },
+    )
+    vi.stubGlobal('requestIdleCallback', (run: () => void) => slices.push(run))
+    vi.stubGlobal('cancelIdleCallback', () => {})
+    try {
+      const shown: number[] = []
+      const count = IDLE_BATCH + 5
+      for (let n = 0; n < count; n++) {
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- no DOM in these tests; the stub observer never reads it
+        watch({} as Element, () => shown.push(n))
+      }
+      expect(slices).toHaveLength(1)
+      slices.shift()?.()
+      expect(shown).toHaveLength(IDLE_BATCH)
+      slices.shift()?.()
+      expect(shown).toEqual([...Array.from({ length: count }).keys()])
+      expect(slices).toHaveLength(0)
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })

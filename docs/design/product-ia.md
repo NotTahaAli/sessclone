@@ -437,15 +437,16 @@ document's settings decision exists to avoid.
 
 ## Signed-out surfaces
 
-| Surface               | Path                         | Ticket         | Note                                                                                          |
-| --------------------- | ---------------------------- | -------------- | --------------------------------------------------------------------------------------------- |
-| Landing               | `/`                          | 26             | The problem and the collection-everywhere claim; the install command is in the hero           |
-| Pricing               | `/pricing`                   | 26             | Tiers, per-seat pricing, and what each Tier includes                                          |
-| Self-hosting          | link out from `/pricing`     | 26, 67         | Presented as the free path, linking to the repository                                         |
-| Install documentation | repository, linked from both | 66, 67, 68, 69 | Includes the restart requirement, the backfill sentence, and the no-shell environments        |
-| Sign-in               | `/sign-in`                   | 27             | GitHub and magic link side by side. Carries the Org logo when reached from an invitation (77) |
-| Magic link sent       | `/sign-in`, as state         | 27             | Confirms the address and offers to send again                                                 |
-| Invitation acceptance | `/invite/<token>`            | 49             | Accepted by a new or existing user; expiry, replay and seat-limit refusals are distinct       |
+| Surface               | Path                         | Ticket         | Note                                                                                            |
+| --------------------- | ---------------------------- | -------------- | ----------------------------------------------------------------------------------------------- |
+| Landing               | `/`                          | 26             | The problem and the collection-everywhere claim; the install command is in the hero             |
+| Pricing               | `/pricing`                   | 26             | Tiers, per-seat pricing, and what each Tier includes                                            |
+| Self-hosting          | link out from `/pricing`     | 26, 67         | Presented as the free path, linking to the repository                                           |
+| Install documentation | repository, linked from both | 66, 67, 68, 69 | Includes the restart requirement, the backfill sentence, and the no-shell environments          |
+| Sign-in               | `/sign-in`                   | 27             | GitHub and magic link side by side. Carries the Org logo when reached from an invitation (77)   |
+| Sign-up               | `/sign-up`                   | PR #38         | Two steps: choose a plan, then create the account. Arriving from `/pricing` skips the plan step |
+| Magic link sent       | `/sign-in`, as state         | 27             | Confirms the address and offers to send again                                                   |
+| Invitation acceptance | `/invite/<token>`            | 49             | Accepted by a new or existing user; expiry, replay and seat-limit refusals are distinct         |
 
 A signed-out visitor gets the theme applied on first paint with no flash
 (ticket 77), which is why appearance is a property of these pages and not only
