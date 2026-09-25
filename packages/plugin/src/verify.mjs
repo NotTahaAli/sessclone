@@ -339,6 +339,9 @@ const redirectOrigin = (response) => {
  * A redirect gets its own words: `fetch` follows it and turns the report's
  * POST into a GET, which ingest refuses, so a URL that redirects (an old
  * deployment address, http for https) loses every Turn.
+ *
+ * @param {number} status
+ * @param {string | null} [redirectsTo] the origin a redirect names
  */
 export const probeVerdict = (status, redirectsTo = null) =>
   status >= 300 && status <= 399
