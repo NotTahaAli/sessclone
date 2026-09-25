@@ -165,7 +165,7 @@ const PHASES = [
     label: 'Org Switcher',
     type: 'frontend',
     pos: [1190, 1000],
-    range: [134, 134],
+    range: [134, 135],
   },
 ]
 
