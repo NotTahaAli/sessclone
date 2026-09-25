@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+
 import { beforeEach, expect, test } from 'vitest'
 
 import {
@@ -25,6 +27,9 @@ import {
 // the withdrawn one, and the one that would buy a Seat the Tier does not sell.
 
 let fixture: Fixture
+
+const hashOf = (token: string) =>
+  createHash('sha256').update(token).digest('hex')
 
 beforeEach(async () => {
   fixture = await seedFixture()
@@ -669,4 +674,82 @@ test('a Member leaves an Org; the last Owner cannot, and nobody leaves for anoth
         tx`update members set removed_at = now() where id = ${fixture.acme.members.manager}`,
     ),
   ).rejects.toThrow()
+})
+
+test('the app deployed before this migration still accepts by link, re-admission included', async () => {
+  // The SQL reaches production before the new app does, and the app already
+  // there calls the one-argument form. It must keep working in between.
+  const [account] = await sql<{ email: string }[]>`
+    select email from users where id = ${fixture.acme.users.removed}
+  `
+  const back = await invited(account!.email)
+  const fresh = await invited()
+  const oldCall = (userId: string, token: string) =>
+    asUser(
+      userId,
+      (tx) => tx<{ org: string }[]>`
+        select sessclone_accept_invitation(
+          ${hashOf(token)}
+        ) as org
+      `,
+    ).then(([row]) => row!.org)
+
+  expect(await oldCall(fixture.acme.users.removed, back.token)).toBe(
+    fixture.acme.id,
+  )
+  expect(await oldCall(fixture.stranger.userId, fresh.token)).toBe(
+    fixture.acme.id,
+  )
+  const rows = await sql<{ user_id: string }[]>`
+    select user_id from members
+     where org_id = ${fixture.acme.id} and removed_at is null
+       and user_id in (${fixture.acme.users.removed}, ${fixture.stranger.userId})
+  `
+  expect(rows).toHaveLength(2)
+})
+
+test('two Owners leaving at once cannot leave the Org with none', async () => {
+  await asRole(
+    fixture.acme,
+    'owner',
+    (tx) =>
+      tx`update members set role = 'owner' where id = ${fixture.acme.members.admin}`,
+  )
+  // Both statements run before either commits: the rule is checked at
+  // commit, so this is the interleaving that matters.
+  let release!: () => void
+  const both = new Promise<void>((resolve) => (release = resolve))
+  let ran = 0
+  const leaving = (role: 'owner' | 'admin') =>
+    refusal(
+      asRole(fixture.acme, role, async (tx) => {
+        await leaveOrg(tx, fixture.acme.members[role])
+        if (++ran === 2) release()
+        await both
+      }),
+    )
+
+  const results = await Promise.all([leaving('owner'), leaving('admin')])
+
+  expect(results.filter((result) => result === null)).toHaveLength(1)
+  expect(results.find((result) => result !== null)).toMatch(
+    /at least one owner/,
+  )
+  const [left] = await sql<{ owners: number }[]>`
+    select sessclone_org_owners(${fixture.acme.id}) as owners
+  `
+  expect(left!.owners).toBe(1)
+})
+
+test('accepting takes no Org lock of its own: the seat trigger is the one copy', async () => {
+  // `20260922040000_admin_review.sql` removed a second copy of the seat rule
+  // from the acceptance because it took the Org lock before the row lock, the
+  // reverse of `members_guard_seat_ceiling`, and could deadlock. The seat
+  // behaviour is proven above; this pins that the copy stays gone.
+  const [row] = await sql<{ body: string }[]>`
+    select pg_get_functiondef(
+      'sessclone_accept_own_invitation(uuid, text)'::regprocedure
+    ) as body
+  `
+  expect(row!.body).not.toMatch(/advisory|max_seats/)
 })

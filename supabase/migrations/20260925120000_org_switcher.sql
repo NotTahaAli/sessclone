@@ -178,12 +178,44 @@ begin
   return new;
 end $$;
 
+-- 3b. The last Owner, under a lock.
+--
+-- `members_guard_last_owner` runs at commit and counted the Owners in its own
+-- snapshot, so two Owners leaving (or demoting each other) at once each saw
+-- the other still there and both committed, leaving an Org with none. The
+-- Org's advisory lock — the key `members_guard_seat_ceiling` already uses —
+-- makes the second wait for the first to commit; its count, a new statement
+-- under read committed, then sees the first one gone and refuses.
+--
+-- Lock order: this runs at commit, after the statement has locked its member
+-- rows, so it takes row then Org, as the seat trigger does. Only when an
+-- Owner stops being one, so no other write pays for it.
+create or replace function sessclone_guard_last_owner() returns trigger
+  language plpgsql set search_path = pg_catalog, public, pg_temp as $$
+begin
+  if old.role = 'owner' and old.removed_at is null
+     and (new.role <> 'owner' or new.removed_at is not null) then
+    perform pg_advisory_xact_lock(hashtextextended(old.org_id::text, 0));
+    if sessclone_org_owners(old.org_id) = 0 then
+      raise exception 'an org keeps at least one owner'
+        using hint = 'make somebody else an owner first';
+    end if;
+  end if;
+  return null;
+end $$;
+
 -- 4. Accepting, once, for both ways in.
 --
--- The body of the old `sessclone_accept_invitation(text)`, keyed on the
--- invitation's id rather than its token, and matched against the address the
--- caller passes from their verified session. It returns the member id, which
--- is what the dashboard remembers as the chosen Org.
+-- The body of the old `sessclone_accept_invitation(text)` as
+-- `20260922040000_admin_review.sql` left it, keyed on the invitation's id
+-- rather than its token, and matched against the address the caller passes
+-- from their verified session. It returns the member id, which is what the
+-- dashboard remembers as the chosen Org.
+--
+-- No seat check and no advisory lock here: `members_guard_seat_ceiling` is
+-- the one copy of that rule, and takes the Org's lock after the tuple's.
+-- admin_review removed the copy that used to sit here because the two took
+-- the locks in opposite orders and could deadlock.
 create or replace function sessclone_accept_own_invitation(
   invitation_id uuid, verified_email text
 ) returns uuid language plpgsql security definer
@@ -191,8 +223,6 @@ create or replace function sessclone_accept_own_invitation(
 declare
   invite invitations;
   caller uuid := sessclone_user_id();
-  seats integer;
-  ceiling integer;
   joined uuid;
 begin
   if caller is null or coalesce(btrim(verified_email), '') = '' then
@@ -223,20 +253,6 @@ begin
    where org_id = invite.org_id and user_id = caller and removed_at is null;
 
   if joined is null then
-    -- Per Org, so the count and the insert below are one step.
-    perform pg_advisory_xact_lock(hashtextextended(invite.org_id::text, 0));
-
-    select tier.max_seats into ceiling
-      from subscriptions subscription
-      join tiers tier on tier.id = subscription.tier_id
-     where subscription.org_id = invite.org_id;
-
-    seats := (select count(*)::integer from members
-               where org_id = invite.org_id and removed_at is null);
-    if ceiling is not null and seats >= ceiling then
-      raise exception 'this Org has no seat free (% of % in use)', seats, ceiling;
-    end if;
-
     -- The re-admission branch of the guard above reads this.
     perform set_config('sessclone.admitting', invite.id::text, true);
 
@@ -260,9 +276,7 @@ end $$;
 
 -- The link's way in, now with the verified address. Still returns the Org, as
 -- the join page expects.
-drop function sessclone_accept_invitation(text);
-
-create function sessclone_accept_invitation(
+create or replace function sessclone_accept_invitation(
   presented_hash text, verified_email text
 ) returns uuid language plpgsql security definer
   set search_path = pg_catalog, public, pg_temp as $$
@@ -280,6 +294,22 @@ begin
 
   perform sessclone_accept_own_invitation(found.id, verified_email);
   return found.org_id;
+end $$;
+
+-- The one-argument form the app deployed today still calls. This SQL runs on
+-- production before the new app is deployed, so dropping it here would break
+-- every invitation link in between. It keeps its old meaning — the address on
+-- `users` — and goes through the same acceptance, so re-admission still passes
+-- the members guard above. A later migration drops it once the app that
+-- passes the verified address is live.
+create or replace function sessclone_accept_invitation(presented_hash text)
+  returns uuid language plpgsql security definer
+  set search_path = pg_catalog, public, pg_temp as $$
+declare
+  caller_email text;
+begin
+  select email into caller_email from users where id = sessclone_user_id();
+  return sessclone_accept_invitation(presented_hash, caller_email);
 end $$;
 
 -- 5. Declining, and dismissing an expired one: the same write.
@@ -307,9 +337,11 @@ end $$;
 -- 6. The invitations addressed to the caller, for the switcher.
 --
 -- Open ones, and expired ones for seven days after their expiry so the person
--- can see what lapsed and dismiss it. Not the Org's Members, not the token
--- hash, not the address. Invitations into an Org they are already in are
--- left out: accepting one would change nothing.
+-- can see what lapsed and dismiss it. Not the Org's Members and not the token
+-- hash. It does name who sent it: the inviter's display name, or their
+-- address when they have not set one — the same address the invitation email
+-- already showed the invitee. Invitations into an Org they are already in
+-- are left out: accepting one would change nothing.
 create or replace function sessclone_own_invitations(verified_email text)
   returns table (
     id uuid,
@@ -376,12 +408,14 @@ end $$;
 
 revoke execute on function sessclone_accept_own_invitation(uuid, text) from public;
 revoke execute on function sessclone_accept_invitation(text, text) from public;
+revoke execute on function sessclone_accept_invitation(text) from public;
 revoke execute on function sessclone_decline_own_invitation(uuid, text) from public;
 revoke execute on function sessclone_own_invitations(text) from public;
 revoke execute on function sessclone_leave_org(uuid) from public;
 
 grant execute on function sessclone_accept_own_invitation(uuid, text) to sessclone_app;
 grant execute on function sessclone_accept_invitation(text, text) to sessclone_app;
+grant execute on function sessclone_accept_invitation(text) to sessclone_app;
 grant execute on function sessclone_decline_own_invitation(uuid, text) to sessclone_app;
 grant execute on function sessclone_own_invitations(text) to sessclone_app;
 grant execute on function sessclone_leave_org(uuid) to sessclone_app;
@@ -394,6 +428,7 @@ begin
   foreach routine in array array[
     'sessclone_accept_own_invitation(uuid, text)',
     'sessclone_accept_invitation(text, text)',
+    'sessclone_accept_invitation(text)',
     'sessclone_decline_own_invitation(uuid, text)',
     'sessclone_own_invitations(text)',
     'sessclone_leave_org(uuid)'
