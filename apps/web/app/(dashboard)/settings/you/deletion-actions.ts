@@ -12,7 +12,7 @@ import { asViewer } from '../../../../lib/db'
 import { DEMO_REFUSAL, isDemoUser } from '../../../../lib/demo'
 import {
   sessionClaims,
-  sessionUser,
+  accountUser,
   signedInUser,
   supabaseServer,
 } from '../../../../lib/supabase/server'
@@ -75,9 +75,9 @@ export const signInAgain = async () => {
 }
 
 /** Keep my account: the whole request undone. Works during the grace,
- * which is why it asks `sessionUser` and not `signedInUser`. */
+ * which is why it asks `accountUser`: `sessionUser` is null then. */
 export const keepAccount = async () => {
-  const user = await sessionUser()
+  const user = await accountUser()
   if (!user || isDemoUser(user.id)) redirect('/sign-in')
   await asViewer(user.id, cancelOwnDeletion)
   redirect('/')

@@ -1,7 +1,10 @@
+import { randomBytes } from 'node:crypto'
+
 import { beforeEach, expect, test } from 'vitest'
 
 import { hashApiKey } from '../lib/api-keys'
 import { resolveCaller } from '../lib/collector-auth'
+import { acceptOwnInvitation } from '../lib/invitations'
 import { leaveOrg } from '../lib/members'
 import {
   cancelOwnDeletion,
@@ -288,18 +291,168 @@ test('a failed sign-in removal is retried and listed', async () => {
   expect(await stuckDeletions(sql)).toEqual([])
 })
 
-test('someone who became a blocking sole Owner during the grace waits', async () => {
+test('nobody can hand an Org to someone in their grace', async () => {
   const person = fixture.acme.users.member
   await asUser(person, requestOwnDeletion)
   await ageRequest(person)
-  // Promoted during the grace, and the old Owner stepped down.
-  await asRole(fixture.acme, 'owner', async (tx) => {
-    await tx`update members set role = 'owner' where id = ${fixture.acme.members.member}`
-    await tx`update members set role = 'admin' where id = ${fixture.acme.members.owner}`
-  })
+  // Promoted during the grace, then the old Owner tries to step down.
+  await expect(
+    asRole(fixture.acme, 'owner', async (tx) => {
+      await tx`update members set role = 'owner' where id = ${fixture.acme.members.member}`
+      await tx`update members set role = 'admin' where id = ${fixture.acme.members.owner}`
+    }),
+  ).rejects.toThrow(/at least one owner/)
   expect(await finalizeDueDeletions(sql, removeSignIn)).toEqual({
-    scrubbed: 0,
-    signInsRemoved: 0,
+    scrubbed: 1,
+    signInsRemoved: 1,
     failed: [],
   })
+})
+
+// Review of ticket 141.
+
+const invite = async (orgId: string, email: string) => {
+  const [row] = await sql<{ id: string }[]>`
+    insert into invitations (org_id, email, role, token_hash)
+    values (${orgId}, ${email}, 'member', ${randomBytes(32).toString('hex')})
+    returning id
+  `
+  return row!.id
+}
+
+const newcomer = async (email: string) => {
+  const [row] = await sql<{ id: string }[]>`
+    insert into users (email) values (${email}) returning id
+  `
+  return row!.id
+}
+
+test('a closed Org takes nobody in on an invitation sent before', async () => {
+  const solo = await soloOrg()
+  const sent = await invite(solo.org, 'late@solo.test')
+  await asUser(solo.user, requestOwnDeletion)
+  await ageRequest(solo.user)
+  expect((await finalizeDueDeletions(sql, removeSignIn)).scrubbed).toBe(1)
+
+  const late = await newcomer('late@solo.test')
+  await expect(
+    asUser(late, (tx) => acceptOwnInvitation(tx, sent, 'late@solo.test')),
+  ).rejects.toThrow(/not valid/)
+  expect(
+    await sql`select 1 from members where org_id = ${solo.org} and removed_at is null`,
+  ).toHaveLength(0)
+})
+
+test('nobody joins an Org whose only Owner is in their grace', async () => {
+  const solo = await soloOrg()
+  const sent = await invite(solo.org, 'early@solo.test')
+  await asUser(solo.user, requestOwnDeletion)
+  const early = await newcomer('early@solo.test')
+  await expect(
+    asUser(early, (tx) => acceptOwnInvitation(tx, sent, 'early@solo.test')),
+  ).rejects.toThrow(/not valid/)
+})
+
+test('a person in their grace joins nothing', async () => {
+  const sent = await invite(fixture.acme.id, 'leaving@acme.test')
+  const leaving = await newcomer('leaving@acme.test')
+  await asUser(leaving, requestOwnDeletion)
+  await expect(
+    asUser(leaving, (tx) => acceptOwnInvitation(tx, sent, 'leaving@acme.test')),
+  ).rejects.toThrow(/being deleted/)
+})
+
+test('a co-Owner cannot leave or step down behind an Owner in their grace', async () => {
+  await asRole(
+    fixture.acme,
+    'owner',
+    (tx) =>
+      tx`update members set role = 'owner' where id = ${fixture.acme.members.admin}`,
+  )
+  await asRole(fixture.acme, 'owner', requestOwnDeletion)
+  await expect(
+    asRole(fixture.acme, 'admin', (tx) =>
+      leaveOrg(tx, fixture.acme.members.admin),
+    ),
+  ).rejects.toThrow(/owner/)
+  await expect(
+    asRole(
+      fixture.acme,
+      'admin',
+      (tx) =>
+        tx`update members set role = 'admin' where id = ${fixture.acme.members.admin}`,
+    ),
+  ).rejects.toThrow(/at least one owner/)
+  // And the one leaving is not their blocker: the other Owner stays.
+  await ageRequest(fixture.acme.users.owner)
+  expect((await finalizeDueDeletions(sql, removeSignIn)).scrubbed).toBe(1)
+})
+
+test('two co-Owners cannot both leave by asking at once', async () => {
+  await asRole(
+    fixture.acme,
+    'owner',
+    (tx) =>
+      tx`update members set role = 'owner' where id = ${fixture.acme.members.admin}`,
+  )
+  const results = await Promise.allSettled([
+    asRole(fixture.acme, 'owner', requestOwnDeletion),
+    asRole(fixture.acme, 'admin', requestOwnDeletion),
+  ])
+  expect(
+    results.filter((result) => result.status === 'fulfilled'),
+  ).toHaveLength(1)
+})
+
+test('one person whose scrub fails holds back nobody else', async () => {
+  const stuck = fixture.acme.users.member
+  const solo = await soloOrg()
+  await asUser(stuck, requestOwnDeletion)
+  await asUser(solo.user, requestOwnDeletion)
+  await ageRequest(stuck, 20)
+  await ageRequest(solo.user)
+  await sql.unsafe(`
+    create or replace function public.test_refuse_scrub() returns trigger
+      language plpgsql as $$
+    begin
+      if new.id = '${stuck}' and new.deleted_at is not null then
+        raise exception 'refused for the test';
+      end if;
+      return new;
+    end $$;
+    create trigger test_refuse_scrub before update on users
+      for each row execute function public.test_refuse_scrub();
+  `)
+  try {
+    const result = await finalizeDueDeletions(sql, removeSignIn)
+    expect(result.scrubbed).toBe(1)
+    expect(result.failed).toEqual([stuck])
+  } finally {
+    await sql.unsafe(`
+      drop trigger test_refuse_scrub on users;
+      drop function public.test_refuse_scrub();
+    `)
+  }
+})
+
+test('the scrub takes the address off invitations and the saved views', async () => {
+  const person = fixture.acme.users.member
+  const [account] = await sql<{ email: string }[]>`
+    select email from users where id = ${person}
+  `
+  const email = account!.email
+  await invite(fixture.globex.id, email)
+  await sql`
+    insert into transcript_view_presets (user_id, name, categories, thinking)
+    values (${person}, 'mine', array['user'], 'hidden')
+  `
+  await asUser(person, requestOwnDeletion)
+  await ageRequest(person)
+  await finalizeDueDeletions(sql, removeSignIn)
+  expect(
+    await sql`select 1 from invitations where lower(email) = lower(${email})`,
+  ).toHaveLength(0)
+  expect(
+    await sql`select 1 from transcript_view_presets where user_id = ${person}`,
+  ).toHaveLength(0)
 })

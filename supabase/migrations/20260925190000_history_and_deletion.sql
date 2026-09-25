@@ -95,6 +95,32 @@ begin
 end
 $$;
 
+-- A lower ceiling, from a Tier change or a contract edit, brings an Org's own
+-- setting down with it, so Org settings never shows a window the sweep does
+-- not honour. Runs as the owner: the Platform Admin who saved it may not
+-- write the Org's row.
+create or replace function sessclone_clamp_org_retention() returns trigger
+  language plpgsql security definer
+  set search_path = pg_catalog, public, pg_temp as $$
+begin
+  if new.status = 'active' then
+    update orgs org
+       set retention_days = ceiling.days
+      from (select coalesce(new.retention_max_days, tier.retention_max_days) as days
+              from tiers tier where tier.id = new.tier_id) ceiling
+     where org.id = new.org_id
+       and ceiling.days is not null
+       and org.retention_days > ceiling.days;
+  end if;
+  return null;
+end $$;
+
+revoke execute on function sessclone_clamp_org_retention() from public;
+
+create trigger subscriptions_clamp_retention
+  after insert or update of tier_id, status, retention_max_days on subscriptions
+  for each row execute function sessclone_clamp_org_retention();
+
 -- 3. The history window, where every dashboard read already goes: the read
 -- policies on `turns` and `session_events` (and `turn_costs`, which is
 -- `security_invoker` over `turns`). A Session straddling the edge then counts
@@ -158,7 +184,7 @@ create or replace function sessclone_session_has_hidden_turns(
        and turn.session_id = session
        and member in (select sessclone_visible_member_ids())
        and turn.occurred_at < coalesce(
-         (sessclone_visible_member_floors() ->> member::text)::timestamptz,
+         ((select sessclone_visible_member_floors()) ->> member::text)::timestamptz,
          '-infinity')
   )
 $$;
@@ -238,7 +264,15 @@ create or replace function sessclone_deletion_blockers(person uuid)
    where mine.user_id = person
      and mine.removed_at is null
      and mine.role = 'owner'
-     and sessclone_org_owners(mine.org_id) <= 1
+     and not exists (
+       select 1 from members owner
+         join users account on account.id = owner.user_id
+        where owner.org_id = mine.org_id
+          and owner.id <> mine.id
+          and owner.role = 'owner'
+          and owner.removed_at is null
+          and account.deletion_requested_at is null
+     )
      and exists (
        select 1 from members other
         where other.org_id = mine.org_id
@@ -269,7 +303,14 @@ begin
   end if;
 
   -- Locked first, as `sessclone_leave_org` does, so a role change racing the
-  -- request cannot slip a sole Owner past the check.
+  -- request cannot slip a sole Owner past the check. The Org lock is the one
+  -- the last-Owner trigger takes, so two co-Owners asking at once, or one
+  -- asking while the other leaves, run one after the other and the second
+  -- sees the first.
+  perform pg_advisory_xact_lock(hashtextextended(mine.org_id::text, 0))
+     from (select distinct org_id from members
+            where user_id = person and removed_at is null and role = 'owner'
+            order by org_id) mine;
   perform 1 from members
    where user_id = person and removed_at is null
    order by id
@@ -315,8 +356,10 @@ end $$;
 --      the retention sweep deletes from storage;
 --   d. name and email are replaced. The tag is stable and short, so two
 --      deleted people in one Org stay two rows, and is not the id.
--- A person who became a blocking sole Owner during the grace (an invite
--- accepted, then promoted) is skipped and stays frozen until they hand over.
+-- An Owner in their grace does not count as one (`sessclone_org_owners`
+-- below), so nobody can leave them the last Owner of a shared Org, and
+-- nobody can join an Org whose only Owner is leaving. A person who is a
+-- blocker anyway is skipped, and the cron leaves them out.
 create or replace function sessclone_finalize_account_deletion(person uuid)
   returns boolean language plpgsql security definer
   set search_path = pg_catalog, public, pg_temp as $$
@@ -355,6 +398,32 @@ begin
                and other.user_id <> person
           )
      );
+
+  -- A closed Org takes no one in later on an invitation sent before.
+  update invitations invitation
+     set revoked_at = now()
+   where invitation.revoked_at is null
+     and invitation.accepted_at is null
+     and invitation.declined_at is null
+     and invitation.org_id in (
+       select mine.org_id from members mine
+        where mine.user_id = person and mine.removed_at is null
+          and not exists (
+            select 1 from members other
+             where other.org_id = mine.org_id
+               and other.removed_at is null
+               and other.user_id <> person
+          )
+     );
+
+  -- Invitations are addressed to the email the scrub below replaces, and an
+  -- Admin's list shows them; they go, as a sent invitation is fixed.
+  delete from invitations invitation
+   using users account
+   where account.id = person
+     and lower(btrim(invitation.email)) = lower(btrim(account.email));
+
+  delete from transcript_view_presets where user_id = person;
 
   update api_keys set revoked_at = now()
    where revoked_at is null
@@ -432,6 +501,121 @@ begin
   return null;
 end $$;
 
+-- An Owner in their deletion grace no longer counts as one. Every rule that
+-- asks "is there an Owner left" reads this, so a co-Owner cannot leave or
+-- step down behind someone who is leaving, and the last-Owner trigger holds
+-- the Org to an Owner who is staying. `20260922010000_last_owner.sql`'s body
+-- with that one condition added.
+create or replace function sessclone_org_owners(org uuid) returns integer
+  language sql stable security definer
+  set search_path = pg_catalog, public, pg_temp as $$
+  select count(*)::integer from members member
+    join users account on account.id = member.user_id
+   where member.org_id = org and member.role = 'owner'
+     and member.removed_at is null
+     and account.deletion_requested_at is null
+$$;
+
+-- `20260925120000_org_switcher.sql`'s accept, with the two refusals above
+-- the insert added.
+create or replace function sessclone_accept_own_invitation(
+  invitation_id uuid, verified_email text
+) returns uuid language plpgsql security definer
+  set search_path = pg_catalog, public, pg_temp as $$
+declare
+  invite invitations;
+  caller uuid := sessclone_user_id();
+  joined uuid;
+begin
+  if caller is null or coalesce(btrim(verified_email), '') = '' then
+    raise exception 'sign in before accepting an invitation';
+  end if;
+
+  -- `for update` so two tabs accepting the same invitation at once cannot
+  -- both pass the used-and-expired checks below.
+  select * into invite from invitations where id = invitation_id for update;
+
+  -- One message for absent, revoked, declined and already-used alike: telling
+  -- them apart tells a stranger which invitations once existed.
+  if invite.id is null or invite.revoked_at is not null
+     or invite.accepted_at is not null or invite.declined_at is not null then
+    raise exception 'this invitation is not valid';
+  end if;
+
+  if invite.expires_at <= now() then
+    raise exception 'this invitation has expired; ask for another';
+  end if;
+
+  if lower(btrim(verified_email)) <> lower(btrim(invite.email)) then
+    raise exception 'this invitation was sent to a different address';
+  end if;
+
+  -- Ticket 141: nobody joins in their own deletion grace, or after it, and
+  -- nobody joins an Org whose only Owner is leaving or gone: they would be
+  -- left in it with nobody to run it.
+  if exists (select 1 from users
+              where id = caller
+                and (deletion_requested_at is not null or deleted_at is not null)) then
+    raise exception 'this account is being deleted';
+  end if;
+  if sessclone_org_owners(invite.org_id) = 0 then
+    raise exception 'this invitation is not valid';
+  end if;
+
+  -- Already in the Org: the invitation is spent and the Role left alone.
+  select id into joined from members
+   where org_id = invite.org_id and user_id = caller and removed_at is null;
+
+  if joined is null then
+    -- The re-admission branch of the guard above reads this.
+    perform set_config('sessclone.admitting', invite.id::text, true);
+
+    insert into members (org_id, user_id, role)
+    values (invite.org_id, caller, invite.role)
+    on conflict (org_id, user_id) do update
+       set removed_at = null,
+           role = excluded.role,
+           archival_enabled = false
+    returning id into joined;
+
+    perform set_config('sessclone.admitting', '', true);
+  end if;
+
+  update invitations
+     set accepted_at = now(), accepted_member_id = joined
+   where id = invite.id;
+
+  return joined;
+end $$;
+
+-- When the sweep takes an Org's transcripts because its Tier keeps none
+-- (ticket 139): seven days after it moved off the last Tier that kept them,
+-- which is the first subscription event after that Tier's last one. Price or
+-- note edits after the move do not restart it. An Org that never had such a
+-- Tier has no transcripts to keep and gets `-infinity`. Null while the Org's
+-- active Tier keeps transcripts. One reading, for the sweep and the banner.
+create or replace function sessclone_transcripts_end(org uuid)
+  returns timestamptz language sql stable
+  set search_path = pg_catalog, public, pg_temp as $$
+  select coalesce(
+           (select min(event.occurred_at) from subscription_events event
+             where event.org_id = org
+               and event.occurred_at > coalesce(
+                 (select max(kept.occurred_at) from subscription_events kept
+                    join tiers kept_tier on kept_tier.id = kept.tier_id
+                   where kept.org_id = org and kept_tier.archival_available),
+                 '-infinity')),
+           '-infinity') + interval '7 days'
+    from subscriptions subscription
+    join tiers tier on tier.id = subscription.tier_id
+   where subscription.org_id = org
+     and subscription.status = 'active'
+     and not tier.archival_available
+$$;
+
+revoke execute on function sessclone_transcripts_end(uuid) from public;
+grant execute on function sessclone_transcripts_end(uuid) to sessclone_app;
+
 revoke execute on function sessclone_visible_member_floors() from public;
 revoke execute on function sessclone_session_has_hidden_turns(uuid, text) from public;
 grant execute on function sessclone_visible_member_floors() to sessclone_app;
@@ -450,6 +634,7 @@ do $$
 begin
   if exists (select 1 from pg_roles where rolname = 'anon') then
     revoke execute on function sessclone_visible_member_floors() from anon, authenticated;
+    revoke execute on function sessclone_transcripts_end(uuid) from anon, authenticated;
     revoke execute on function sessclone_session_has_hidden_turns(uuid, text) from anon, authenticated;
     revoke execute on function sessclone_deletion_blockers(uuid) from anon, authenticated;
     revoke execute on function sessclone_own_deletion_blockers() from anon, authenticated;

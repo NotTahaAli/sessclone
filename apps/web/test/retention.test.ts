@@ -746,3 +746,37 @@ test('moving to a Tier without transcripts keeps them seven days, then sweeps al
   await sweepRetention(sql)
   expect(bucket.deleted).toContain(recent)
 })
+
+test('an edit after the move to a Tier without transcripts does not restart the seven days', async () => {
+  const [tier] = await sql<{ id: string }[]>`
+    insert into tiers (key, name, base_price_usd, retention_max_days,
+                       archival_available, sort_order)
+    values ('no-transcripts-2', 'Personal', 5, 90, false, 1) returning id
+  `
+  await withTier(fixture.acme.id, 90)
+  await sql`
+    update subscriptions set tier_id = ${tier!.id} where org_id = ${fixture.acme.id}
+  `
+  const recent = await seedArtifact({ age: 1 })
+  await sql`
+    update subscription_events set occurred_at = now() - interval '8 days'
+     where org_id = ${fixture.acme.id}
+  `
+  // A price agreed today writes an event of its own.
+  await sql`
+    update subscriptions set price_base_cents = 500 where org_id = ${fixture.acme.id}
+  `
+  await sweepRetention(sql)
+  expect(bucket.deleted).toContain(recent)
+})
+
+test('a lower ceiling brings the Org’s own setting down with it', async () => {
+  await withTier(fixture.acme.id, 365)
+  await sql`update orgs set retention_days = 300 where id = ${fixture.acme.id}`
+  await sql`
+    update subscriptions set retention_max_days = 30 where org_id = ${fixture.acme.id}
+  `
+  const [org] =
+    await sql`select retention_days from orgs where id = ${fixture.acme.id}`
+  expect(org!.retention_days).toBe(30)
+})

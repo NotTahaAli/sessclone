@@ -87,7 +87,7 @@ export type Finalized = {
   scrubbed: number
   /** Sign-ins removed this call. */
   signInsRemoved: number
-  /** Scrubbed people whose sign-in could not be removed; retried next call. */
+  /** People whose scrub or sign-in removal failed; retried next call. */
   failed: string[]
 }
 
@@ -109,16 +109,25 @@ export const finalizeDueDeletions = async (
     select id from users
      where deleted_at is null
        and deletion_requested_at <= now() - ${`${GRACE_DAYS} days`}::interval
+       -- Someone who is a blocker waits without taking a slot every day.
+       and not exists (select 1 from sessclone_deletion_blockers(users.id))
      order by deletion_requested_at
      limit ${limit}
   `
   let scrubbed = 0
+  const failed: string[] = []
   for (const { id } of due) {
-    // oxlint-disable-next-line no-await-in-loop -- one transaction per person.
-    const [row] = await sql<{ done: boolean }[]>`
-      select sessclone_finalize_account_deletion(${id}) as done
-    `
-    if (row?.done) scrubbed += 1
+    // One person's failure is theirs: it is listed, and the rest, and the
+    // sweep after this, still run.
+    try {
+      // oxlint-disable-next-line no-await-in-loop -- one transaction per person.
+      const [row] = await sql<{ done: boolean }[]>`
+        select sessclone_finalize_account_deletion(${id}) as done
+      `
+      if (row?.done) scrubbed += 1
+    } catch {
+      failed.push(id)
+    }
   }
 
   const pending = await sql<{ id: string }[]>`
@@ -128,7 +137,6 @@ export const finalizeDueDeletions = async (
      limit ${limit}
   `
   let signInsRemoved = 0
-  const failed: string[] = []
   for (const { id } of pending) {
     try {
       // oxlint-disable-next-line no-await-in-loop -- the Admin API, one by one.
@@ -151,4 +159,5 @@ export const stuckDeletions = (tx: postgres.TransactionSql | postgres.Sql) =>
     select id, deleted_at from users
      where deleted_at is not null and deletion_requested_at is not null
      order by deleted_at
+     limit ${FINALIZE_LIMIT}
   `

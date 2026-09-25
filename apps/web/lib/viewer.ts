@@ -7,7 +7,8 @@ import { asViewer } from './db'
 import { ownInvitations, type InvitedRole } from './invitations'
 import { logoPath } from './org-logo'
 import type { SubscriptionStatus } from './tier'
-import { sessionUser } from './supabase/server'
+import { isDemoUser } from './demo'
+import { accountUser } from './supabase/server'
 
 // Ticket 45: the Org context the shell establishes, read once per request.
 //
@@ -133,7 +134,7 @@ export const chosenMember = async (): Promise<string | null> => {
  * life of the request and no longer.
  */
 export const sessionViewer = cache(async (): Promise<Viewer | null> => {
-  const user = await sessionUser()
+  const user = await accountUser()
   if (!user) return null
   const chosen = await chosenMember()
 
@@ -278,6 +279,24 @@ export const orgSwitcherData = cache(
  * for the shell, which is what draws the waiting page. See `signedInUser` for
  * why the lock is here rather than in each action.
  */
+/**
+ * When this person asked for their account to be deleted, or null (ticket
+ * 141). Its own read rather than the viewer's, so a person in their grace
+ * with no live membership is frozen too. Once per request per person.
+ */
+export const deletionRequestedAt = cache(
+  async (userId: string): Promise<Date | null> => {
+    if (isDemoUser(userId)) return null
+    const [row] = await asViewer(
+      userId,
+      (tx) => tx<{ at: Date | null }[]>`
+        select deletion_requested_at as at from users where id = ${userId}
+      `,
+    )
+    return row?.at ?? null
+  },
+)
+
 export const currentViewer = cache(async (): Promise<Viewer | null> => {
   const viewer = await sessionViewer()
   return viewer &&
@@ -307,8 +326,9 @@ export const viewerOfOrg = async (orgId: unknown): Promise<Viewer | null> => {
  * reads nothing.
  */
 export const viewerLocked = async (): Promise<boolean> => {
+  const user = await accountUser()
+  if (user && (await deletionRequestedAt(user.id))) return true
   const viewer = await sessionViewer()
-  if (viewer?.deletionRequestedAt) return true
   if (!approvalRequired()) return false
   return viewer !== null && isLocked(viewer.subscriptionStatus)
 }

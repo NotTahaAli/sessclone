@@ -30,7 +30,7 @@ vi.mock('../lib/supabase/server', () => {
     session.userId === null
       ? null
       : { id: session.userId, email: 'whoever@example.test' }
-  return { signedInUser: who, sessionUser: who }
+  return { signedInUser: who, sessionUser: who, accountUser: who }
 })
 vi.mock('../lib/storage', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/storage')>()),

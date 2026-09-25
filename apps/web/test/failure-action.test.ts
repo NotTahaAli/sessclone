@@ -14,6 +14,7 @@ vi.mock('next/headers', () => ({
 vi.mock('../lib/supabase/server', () => ({
   signedInUser,
   sessionUser: signedInUser,
+  accountUser: signedInUser,
 }))
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }))
 // As `retention-action.test.ts` says: the owning role ignores every policy,

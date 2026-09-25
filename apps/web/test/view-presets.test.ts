@@ -13,7 +13,7 @@ vi.mock('../lib/db', async () => {
 vi.mock('../lib/supabase/server', () => {
   const who = async () =>
     session.userId === null ? null : { id: session.userId }
-  return { signedInUser: who, sessionUser: who }
+  return { signedInUser: who, sessionUser: who, accountUser: who }
 })
 
 const actions =

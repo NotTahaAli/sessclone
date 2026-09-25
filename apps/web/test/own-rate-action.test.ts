@@ -14,6 +14,7 @@ vi.mock('next/headers', () => ({
 vi.mock('../lib/supabase/server', () => ({
   signedInUser,
   sessionUser: signedInUser,
+  accountUser: signedInUser,
 }))
 const revalidatePath = vi.hoisted(() => vi.fn())
 vi.mock('next/cache', () => ({ revalidatePath }))

@@ -16,6 +16,7 @@ vi.mock('next/headers', () => ({
 vi.mock('../lib/supabase/server', () => ({
   signedInUser,
   sessionUser: signedInUser,
+  accountUser: signedInUser,
 }))
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }))
 
@@ -140,7 +141,9 @@ test('the Tier’s ceiling is reported as the ceiling', async () => {
     error:
       'That is longer than this Org’s Tier allows. The Tier page states the ceiling.',
   })
-  expect(await daysOf()).toBe(90)
+  // Ticket 139: the 90-day default came down to the Tier's 30 when the
+  // subscription was written, and the refused 365 changed nothing.
+  expect(await daysOf()).toBe(30)
 })
 
 test('a failure that is not a refusal is not reported as one', async () => {
