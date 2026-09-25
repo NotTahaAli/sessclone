@@ -51,7 +51,11 @@ vi.mock('@supabase/ssr', () => ({
   }),
 }))
 vi.mock('next/headers', () => ({
-  cookies: async () => ({ getAll: () => [], set: () => {} }),
+  cookies: async () => ({
+    getAll: () => [],
+    get: () => undefined,
+    set: () => {},
+  }),
 }))
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }))
 vi.mock('../lib/db', async () => {

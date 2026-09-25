@@ -24,6 +24,10 @@ import {
 // applies to. The one stub is who Supabase says is signed in.
 
 const signedInUser = vi.hoisted(() => vi.fn())
+// No choice of Org on this request: `sessionViewer` reads the cookie.
+vi.mock('next/headers', () => ({
+  cookies: async () => ({ get: () => undefined }),
+}))
 vi.mock('../lib/supabase/server', () => ({
   signedInUser,
   sessionUser: signedInUser,

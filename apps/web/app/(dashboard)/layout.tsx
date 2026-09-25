@@ -7,6 +7,7 @@ import { AppearanceSync } from './appearance-sync'
 import { LogoMark } from '../_ui/logo'
 import { Waiting } from './waiting'
 import { OrgMark } from '../org-mark'
+import { OrgSwitcher } from './org-switcher'
 import { PanelCredit } from './credit'
 import {
   BottomBarLinks,
@@ -27,7 +28,7 @@ import { isLocked } from '../../lib/approval'
 import { asViewer } from '../../lib/db'
 import { currentOperator } from '../../lib/platform-admin'
 import { pendingOrgCount } from '../../lib/subscriptions'
-import { sessionViewer } from '../../lib/viewer'
+import { orgSwitcherData, sessionViewer } from '../../lib/viewer'
 
 // Ticket 83: this layout prerenders a static shell.
 //
@@ -135,10 +136,17 @@ function Inactive({
   )
 }
 
-/** The Org name, which every figure under here belongs to. */
+/**
+ * The Org name, which every figure under here belongs to — and the Org
+ * switcher, when there is anything to switch to, answer or leave. Read from
+ * `sessionViewer`, so it is there on the waiting page too: a person in an Org
+ * waiting for approval can still switch out of it.
+ */
 async function OrgName({ className }: { className: string }) {
   const viewer = await sessionViewer()
   if (!viewer) return <span className={className}>No Org</span>
+  // Cached per request: the sidebar and the phone header both draw this.
+  const data = await orgSwitcherData(viewer)
 
   // Ticket 77: an uploaded logo sits beside the name, never instead of it,
   // since a logo is not a label. It rides on the viewer's own row rather than
@@ -152,9 +160,17 @@ async function OrgName({ className }: { className: string }) {
       {viewer.orgLogo ? (
         <OrgMark name={viewer.orgName} src={viewer.orgLogo} size={20} />
       ) : null}
-      <span className={className} title={viewer.orgName}>
-        {viewer.orgName}
-      </span>
+      <OrgSwitcher
+        data={data}
+        current={viewer.memberId}
+        orgName={viewer.orgName}
+        // What the preview was captured with: the name truncates inside.
+        className="flex min-w-0 items-center"
+      >
+        <span className="truncate" title={viewer.orgName}>
+          {viewer.orgName}
+        </span>
+      </OrgSwitcher>
     </span>
   )
 }

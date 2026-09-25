@@ -1,11 +1,13 @@
 'use server'
 
+import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
 import { asViewer } from '../../../lib/db'
 import { acceptFailure, acceptInvitation } from '../../../lib/invitations'
 import { sessionUser } from '../../../lib/supabase/server'
+import { MEMBER_COOKIE, MEMBER_COOKIE_OPTIONS } from '../../../lib/viewer'
 
 // Accepting is a write, so it is a POST and never the render of a GET.
 //
@@ -26,14 +28,27 @@ export const acceptAction = async (
   const token = Token.safeParse(formData.get('token'))
   if (!token.success) return { error: 'This invitation is not valid.' }
 
+  let memberId: string | undefined
   try {
-    await asViewer(user.id, (tx) =>
-      acceptInvitation(tx, token.data, user.email),
-    )
+    memberId = await asViewer(user.id, async (tx) => {
+      const org = await acceptInvitation(tx, token.data, user.email)
+      const [member] = await tx<{ id: string }[]>`
+        select id from members
+         where org_id = ${org} and user_id = ${user.id} and removed_at is null
+      `
+      return member?.id
+    })
   } catch (error) {
     // Outside the transaction: a raise aborts it, so the error surfaces again
     // when the transaction ends however the statement was wrapped.
     return { error: acceptFailure(error) }
+  }
+
+  // The Org just joined is the one to open, on this device (the switcher's
+  // cookie), rather than whichever the usual order would pick.
+  if (memberId) {
+    const store = await cookies()
+    store.set(MEMBER_COOKIE, memberId, MEMBER_COOKIE_OPTIONS)
   }
 
   // Where a new Member starts. Outside the `try` on purpose — `redirect`

@@ -7,6 +7,10 @@ import { owner as sql, seedFixture, type Fixture } from './harness'
 // since anybody can POST to it whether or not the page rendered a form.
 
 const signedInUser = vi.hoisted(() => vi.fn())
+// No choice of Org on this request: `sessionViewer` reads the cookie.
+vi.mock('next/headers', () => ({
+  cookies: async () => ({ get: () => undefined }),
+}))
 vi.mock('../lib/supabase/server', () => ({
   signedInUser,
   sessionUser: signedInUser,

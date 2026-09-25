@@ -69,10 +69,10 @@ export class EmailBelongsToAnotherAccount extends Error {
  * Makes sure the signer has a `users` row and a Member row somewhere, creating
  * an Org they own if they have none, and returns the Org they belong to.
  *
- * Returns the *first* Org when they belong to several. v1 has no Org switcher
- * (the product IA puts one Org per person), so "the Org they are in" is
- * unambiguous today; the ticket that adds a second Org is the one that has to
- * decide which is current.
+ * Returns the *oldest* Org when they belong to several. Which one the
+ * dashboard opens is `sessionViewer`'s to decide (the Org switcher's choice on
+ * this device, then an Org that works, then the oldest); this is only proof
+ * that there is somewhere to be.
  */
 export const ensureOrgForSigner = async (
   userId: string,

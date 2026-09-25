@@ -11,7 +11,7 @@ import type { Viewer } from '../../lib/viewer'
 // reader has to discover.
 
 /** The Role, as the reader's own word for their authority. */
-const ROLE_LABEL = {
+export const ROLE_LABEL = {
   owner: 'Owner',
   admin: 'Admin',
   manager: 'Manager',

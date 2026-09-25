@@ -154,3 +154,40 @@ test('Members writes touch only the Org they are made in', async () => {
 
   expect(written).toEqual([false, false, false])
 })
+
+test('the chosen Org is honoured only when it is one of the viewer’s own', async () => {
+  const { sessionViewer, MEMBER_COOKIE } = await import('../lib/viewer')
+  const current = async (chosen: string | null) => {
+    jar.clear()
+    if (chosen) jar.set(MEMBER_COOKIE, chosen)
+    return (await sessionViewer())?.orgId
+  }
+
+  // No choice: today's order, the oldest.
+  expect(await current(null)).toBe(fixture.acme.id)
+  expect(await current(elsewhere)).toBe(fixture.globex.id)
+  // Somebody else's membership, garbage, and a removed one of their own all
+  // fall back rather than fail.
+  expect(await current(fixture.globex.members.owner)).toBe(fixture.acme.id)
+  expect(await current('not-a-uuid')).toBe(fixture.acme.id)
+  await asUser(fixture.globex.users.owner, (tx) =>
+    setMemberRemoved(tx, fixture.globex.id, elsewhere, true),
+  )
+  expect(await current(elsewhere)).toBe(fixture.acme.id)
+})
+
+test('switching refuses a membership that is not the viewer’s', async () => {
+  const { switchOrg } = await import('../app/(dashboard)/org-actions')
+  const { MEMBER_COOKIE } = await import('../lib/viewer')
+  const form = new FormData()
+  form.append('memberId', fixture.globex.members.owner)
+
+  expect(await switchOrg(null, form)).toEqual({
+    error: 'That is not one of your Orgs.',
+  })
+  expect(jar.has(MEMBER_COOKIE)).toBe(false)
+
+  form.set('memberId', elsewhere)
+  await expect(switchOrg(null, form)).rejects.toThrow(/NEXT_REDIRECT/)
+  expect(jar.get(MEMBER_COOKIE)).toBe(elsewhere)
+})
