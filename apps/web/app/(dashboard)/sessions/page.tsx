@@ -10,15 +10,10 @@ import { Finder, FinderColumn, FinderList } from '../finder'
 import { PageHeader } from '../page-header'
 import { hrefWith, one, type Query } from '../query'
 import { Row, SectionBreak } from '../../_ui/primitives'
-import { asViewer } from '../../../lib/db'
+import { sessionsReads } from '../../../lib/page-reads'
 import { resolveRange, type RangeParams } from '../../../lib/range'
 import { compact, usd } from '../../../lib/money'
-import {
-  sessionFilters,
-  sessionCursorOf,
-  sessionList,
-  type SessionRow,
-} from '../../../lib/sessions'
+import { sessionCursorOf, type SessionRow } from '../../../lib/sessions'
 import { currentViewer } from '../../../lib/viewer'
 
 // Ticket 86: the Sessions of a period, and the way into one of them.
@@ -94,19 +89,13 @@ export default async function Sessions({
     ...(failed ? { failedOnly: true } : {}),
   } as const
 
-  const [page, options] = await asViewer(viewer.userId, (tx) =>
-    Promise.all([
-      sessionList(
-        tx,
-        viewer.orgId,
-        viewer.orgTimezone,
-        resolved.range,
-        filter,
-        { before: sessionCursorOf(params.before) },
-      ),
-      sessionFilters(tx, viewer.orgId),
-    ]),
-  )
+  const [page, options] = await sessionsReads(viewer.userId, {
+    orgId: viewer.orgId,
+    timezone: viewer.orgTimezone,
+    range: resolved.range,
+    filter,
+    before: sessionCursorOf(params.before),
+  })
 
   // The open Session: `<member uuid>:<session id>`. A malformed value opens
   // nothing rather than failing the list.

@@ -1,6 +1,8 @@
+import { revalidateTag } from 'next/cache'
+
 import { presentedBearer, secretMatches } from '../../../../lib/bearer'
 import { ingestDb } from '../../../../lib/collector-auth'
-import { demoEnabled } from '../../../../lib/demo'
+import { DEMO_CACHE_TAG, demoEnabled } from '../../../../lib/demo'
 import { presignedStore, refreshDemo } from '../../../../lib/demo-refresh'
 import { storageConfigured } from '../../../../lib/storage'
 
@@ -30,6 +32,12 @@ export async function GET(request: Request) {
       ingestDb(),
       storageConfigured() ? presignedStore : null,
     )
+    // The demo's cached reads are keyed by day, but a day can be read before
+    // this has seeded it: expire them, stale-while-revalidate as the pricing
+    // route does, whenever the data changed.
+    if (refreshed && (refreshed.seeded > 0 || refreshed.pruned > 0)) {
+      revalidateTag(DEMO_CACHE_TAG, 'max')
+    }
     return refreshed
       ? Response.json(refreshed)
       : Response.json(

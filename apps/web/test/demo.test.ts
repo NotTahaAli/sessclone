@@ -46,7 +46,13 @@ vi.mock('next/headers', () => ({
     delete: (name: string) => jar.delete(name),
   }),
 }))
-vi.mock('next/cache', () => ({ revalidatePath: () => {}, cacheTag: () => {} }))
+const nextCache = vi.hoisted(() => ({
+  revalidatePath: () => {},
+  cacheTag: vi.fn(),
+  cacheLife: vi.fn(),
+  revalidateTag: vi.fn(),
+}))
+vi.mock('next/cache', () => nextCache)
 
 // A backfill is 60 days of two Orgs: seconds, not the default five.
 vi.setConfig({ testTimeout: 60_000 })
@@ -90,6 +96,7 @@ beforeEach(async () => {
   vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://app.test')
   claims = null
   jar.clear()
+  vi.clearAllMocks()
   await sql`
     insert into tiers (key, name, retention_max_days, max_seats, sort_order)
     values ('team', 'Team', 365, 10, 2)
@@ -425,6 +432,7 @@ test('the storage PUT gives up rather than hanging the refresh', async () => {
     await presignedStore.put('demo/key', '{}')
   } finally {
     vi.unstubAllGlobals()
+    vi.stubEnv('STORAGE_ENDPOINT', '')
   }
   expect(signal).toBeInstanceOf(AbortSignal)
 })
@@ -456,6 +464,12 @@ test('the refresh route: a secret, then DEMO, then one at a time', async () => {
     return call('the-secret')
   })
   expect(busy.status).toBe(409)
+  expect(nextCache.revalidateTag).not.toHaveBeenCalled()
+
+  // A refresh that seeds expires the demo's cached reads.
+  const seeded = await call('the-secret')
+  expect(seeded.status).toBe(200)
+  expect(nextCache.revalidateTag).toHaveBeenCalledWith('demo', 'max')
 })
 
 const form = (entries: Record<string, string>) => {
@@ -515,4 +529,67 @@ test('the demo visitor is signed out wherever an account is the point', async ()
   jar.clear()
   claims = null
   expect(await sessionUser()).toBeNull()
+})
+
+test('only the demo visitor’s reads are cached, and they are read as the demo visitor', async () => {
+  const fixture = await seedFixture()
+  await createDemo()
+  const visitor = demoId('member:northwind:0')
+  await sql`
+    insert into turns (org_id, member_id, session_id, message_id, occurred_at)
+    values (${fixture.acme.id}, ${fixture.acme.members.owner}, 'real', 'm',
+            ${NIGHT}),
+           (${NORTHWIND}, ${visitor}, 'demo', 'm', ${NIGHT})
+  `
+  const { costsReads, sessionsReads } = await import('../lib/page-reads')
+  const range = { from: '2026-09-01', to: '2026-10-01' }
+  const costsOf = (orgId: string, memberId: string) => ({
+    orgId,
+    memberId,
+    timezone: 'UTC',
+    range,
+    time: true,
+    dimension: null,
+    failures: false,
+  })
+  const sessionsOf = (orgId: string) => ({
+    orgId,
+    timezone: 'UTC',
+    range,
+    filter: {},
+    before: undefined,
+  })
+
+  // A real Owner: their own rows, live, and nothing tagged for the cache.
+  const owner = fixture.acme.users.owner
+  const [, [, realDays]] = await costsReads(
+    owner,
+    costsOf(fixture.acme.id, fixture.acme.members.owner),
+    NIGHT,
+  )
+  const [realSessions] = await sessionsReads(
+    owner,
+    sessionsOf(fixture.acme.id),
+    NIGHT,
+  )
+  expect(realDays!.rows.length).toBeGreaterThan(0)
+  expect(realSessions.sessions.map((row) => row.sessionId)).toEqual(['real'])
+  expect(nextCache.cacheTag).not.toHaveBeenCalled()
+
+  // The demo visitor: cached, keyed by the demo day, and read as the demo
+  // visitor, so even an entry asked for with a real Org's id holds nothing
+  // of it.
+  const [, [, demoDays]] = await costsReads(
+    DEMO_USER_ID,
+    costsOf(NORTHWIND, visitor),
+    NIGHT,
+  )
+  expect(demoDays!.rows.length).toBeGreaterThan(0)
+  expect(nextCache.cacheTag).toHaveBeenCalledWith('demo', 'demo:2026-09-25')
+  const [leak] = await sessionsReads(
+    DEMO_USER_ID,
+    sessionsOf(fixture.acme.id),
+    NIGHT,
+  )
+  expect(leak.sessions).toEqual([])
 })

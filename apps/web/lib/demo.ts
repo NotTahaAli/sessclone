@@ -66,3 +66,7 @@ export class DemoRefusal extends Error {
 
 /** Postgres' `read_only_sql_transaction`. */
 export const READ_ONLY_TRANSACTION = '25006'
+
+/** The tag on the demo's cached page reads (`lib/page-reads.ts`), which the
+ * refresh expires once it has changed the data. */
+export const DEMO_CACHE_TAG = 'demo'
