@@ -196,6 +196,15 @@ pnpm --filter web start
 The `NEXT_PUBLIC_*` variables are read by the browser bundle at build time, so
 changing one means rebuilding rather than restarting.
 
+### The dashboard alone, or the whole site
+
+A self-hosted copy serves the dashboard and nothing else: `/` goes to sign-in,
+or to Costs once you are signed in, and docs links point at
+https://sessclone.com/docs. `ENABLE_LANDING=true`, `ENABLE_DOCS=true` and
+`ENABLE_DEMO=true` add the landing and pricing pages, these docs, and the demo
+(configuration, "Public site"). The public pages read them at build time, so
+changing one means rebuilding as well.
+
 ## 5. Sign in, and collect the first Turn
 
 1. Open the deployment and sign in. Supabase GitHub sign-in needs a GitHub

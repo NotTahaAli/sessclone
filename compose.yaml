@@ -31,6 +31,11 @@ services:
         NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
         NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
         NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+        # The site flags (ticket 138): read when the public pages prerender,
+        # and again per request from env_file below. Unset is off.
+        ENABLE_LANDING: ${ENABLE_LANDING:-}
+        ENABLE_DOCS: ${ENABLE_DOCS:-}
+        ENABLE_DEMO: ${ENABLE_DEMO:-}
     # Every value comes from the environment file rather than from this file:
     # a compose file in a repository is a compose file in a pull request.
     env_file: .env

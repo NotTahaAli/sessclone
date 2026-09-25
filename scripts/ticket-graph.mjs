@@ -169,10 +169,10 @@ const PHASES = [
   },
   {
     id: 'demo',
-    label: 'Live Demo',
+    label: 'Demo & Flags',
     type: 'frontend',
     pos: [500, 1000],
-    range: [137, 137],
+    range: [137, 138],
   },
 ]
 

@@ -24,7 +24,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   too, so you can switch out of an Org that is waiting. It emails the platform
   admins the same way a sign-up does, and just as little: nothing with
   approval off, nothing once the Org is active.
-- A read-only live demo, off unless `DEMO=on`: "Try the demo" beside sign-up
+- A read-only live demo, off unless `ENABLE_DEMO=true`: "Try the demo" beside sign-up
   on the landing and pricing pages opens two made-up Orgs with six invented
   people each and 60 days of generated usage and transcripts. Every page is
   visible and every save answers "This is a demo". A daily
@@ -34,6 +34,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `pnpm --filter web e2e`) accepts an invitation from the Org switcher and
   starts a New Org from it. It signs in without a Supabase project and seeds
   a `*_test` database directly.
+- `ENABLE_LANDING`, `ENABLE_DOCS` and `ENABLE_DEMO`, each `true` or `false`
+  and off when unset, so a self-hosted copy serves only the dashboard. With
+  the landing page off, `/` goes to sign-in or the dashboard and `/pricing` is
+  a 404; the privacy and terms pages stay. With the docs off, `/docs` is a
+  404 and docs links go to sessclone.com. A signed-in visit to `/` opens the
+  dashboard, and the dashboard's logo links back to the landing page.
+  Changing a flag needs a rebuild.
 - `/.well-known/security.txt` (RFC 9116), pointing to GitHub private advisories
   and, when set, the deployment's contact address. Its expiry is always a
   year ahead.
