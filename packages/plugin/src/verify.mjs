@@ -306,9 +306,7 @@ const ingestProbe = async (url, apiKey) => {
     return {
       reached: true,
       status: response.status,
-      // Only the origin a redirect names: its path and query are not needed
-      // to say where the URL should point.
-      redirectsTo: redirectOrigin(response),
+      redirectsTo: redirectTarget(response, `${url}/api/ingest`),
       error: null,
     }
   } catch (error) {
@@ -323,11 +321,17 @@ const ingestProbe = async (url, apiKey) => {
   }
 }
 
-/** The origin a 3xx answer points at, or null. */
-const redirectOrigin = (response) => {
+/**
+ * Where a 3xx answer points, resolved against the URL asked (a `Location`
+ * may be relative), as origin and path only: a query could carry a token.
+ */
+export const redirectTarget = (response, asked) => {
   if (response.status < 300 || response.status > 399) return null
+  const location = response.headers.get('location')
+  if (!location) return null
   try {
-    return new URL(response.headers.get('location') ?? '').origin
+    const target = new URL(location, asked)
+    return `${target.origin}${target.pathname}`
   } catch {
     return null
   }
@@ -336,16 +340,19 @@ const redirectOrigin = (response) => {
 /**
  * What an ingest probe's status means, in words a person can act on.
  *
- * A redirect gets its own words: `fetch` follows it and turns the report's
- * POST into a GET, which ingest refuses, so a URL that redirects (an old
- * deployment address, http for https) loses every Turn.
+ * A report does not survive a redirect: `fetch` turns a 301, 302 or 303 into
+ * a GET, which ingest refuses, and a 307 or 308 to another origin drops the
+ * key. So the advice is to point the URL at the deployment itself. A new
+ * origin is named as the URL to use only when it serves the same ingest path
+ * over https; anything else is the deployment's or the proxy's route to fix,
+ * never a URL copied from a redirect.
  *
  * @param {number} status
- * @param {string | null} [redirectsTo] the origin a redirect names
+ * @param {string | null} [redirectsTo] origin and path the redirect names
  */
 export const probeVerdict = (status, redirectsTo = null) =>
   status >= 300 && status <= 399
-    ? `**redirects${redirectsTo ? ` to ${redirectsTo}` : ''}**, which loses every report — set the URL to ${redirectsTo ?? 'where it redirects'}`
+    ? redirectVerdict(status, redirectsTo)
     : status === 400
       ? 'key accepted'
       : status === 401
@@ -353,6 +360,23 @@ export const probeVerdict = (status, redirectsTo = null) =>
         : status === 404
           ? '**no ingest route here** — wrong URL'
           : 'unexpected answer'
+
+/** @param {number} status @param {string | null} redirectsTo */
+const redirectVerdict = (status, redirectsTo) => {
+  const loss = [301, 302, 303].includes(status)
+    ? 'which turns every report into a GET that ingest refuses'
+    : 'which a report does not survive'
+  if (!redirectsTo)
+    return `**redirects**, ${loss} — point the URL at the deployment itself`
+  const target = new URL(redirectsTo)
+  const newHome =
+    target.protocol === 'https:' && target.pathname === '/api/ingest'
+  return `**redirects to ${redirectsTo}**, ${loss} — ${
+    newHome
+      ? `if that is your deployment, set the URL to ${target.origin}`
+      : 'point the URL at the deployment itself, or fix the route that redirects'
+  }`
+}
 
 /**
  * Everything tickets 68 and 69 ask a person to observe, in one object.

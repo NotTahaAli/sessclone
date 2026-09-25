@@ -14,6 +14,7 @@ import {
   keyEvidence,
   probeVerdict,
   reconcile,
+  redirectTarget,
 } from './verify.mjs'
 
 const usage = {
@@ -341,15 +342,51 @@ describe('collect', () => {
 })
 
 describe('probeVerdict', () => {
-  it('names where a redirecting URL should point, since a report cannot follow it', () => {
-    expect(probeVerdict(301, 'https://sessclone.com')).toMatch(
-      /redirects to https:\/\/sessclone\.com.*set the URL to https:\/\/sessclone\.com/,
+  it('names a moved deployment as the URL to use, since a report cannot follow it', () => {
+    expect(probeVerdict(301, 'https://sessclone.com/api/ingest')).toMatch(
+      /redirects to https:\/\/sessclone\.com\/api\/ingest\*\*, which turns every report into a GET.*set the URL to https:\/\/sessclone\.com$/,
     )
-    expect(probeVerdict(308)).toMatch(/redirects\*\*.*where it redirects/)
+  })
+
+  it('never recommends a cleartext or elsewhere-routed redirect as the URL', () => {
+    expect(probeVerdict(308, 'http://sessclone.com/api/ingest')).not.toMatch(
+      /set the URL/,
+    )
+    expect(probeVerdict(307, 'https://sessclone.com/login')).toMatch(
+      /does not survive — point the URL at the deployment itself, or fix the route/,
+    )
+    expect(probeVerdict(302)).toMatch(/\*\*redirects\*\*, which turns/)
   })
 
   it('keeps its words for the answers ingest gives', () => {
     expect(probeVerdict(400)).toBe('key accepted')
     expect(probeVerdict(404)).toMatch(/wrong URL/)
+  })
+})
+
+const answer = (status, location) =>
+  new Response(null, { status, headers: location ? { location } : {} })
+
+describe('redirectTarget', () => {
+  const asked = 'https://sessclone.vercel.app/api/ingest'
+
+  it('resolves a relative or scheme-relative Location against the URL asked', () => {
+    expect(redirectTarget(answer(308, '/v2/ingest'), asked)).toBe(
+      'https://sessclone.vercel.app/v2/ingest',
+    )
+    expect(
+      redirectTarget(answer(301, '//sessclone.com/api/ingest'), asked),
+    ).toBe('https://sessclone.com/api/ingest')
+  })
+
+  it('drops a query, which could carry a token', () => {
+    expect(
+      redirectTarget(answer(302, 'https://sso.example/login?token=x'), asked),
+    ).toBe('https://sso.example/login')
+  })
+
+  it('is null for anything but a redirect with a Location', () => {
+    expect(redirectTarget(answer(400), asked)).toBeNull()
+    expect(redirectTarget(answer(301), asked)).toBeNull()
   })
 })
