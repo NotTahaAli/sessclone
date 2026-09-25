@@ -160,6 +160,13 @@ const PHASES = [
     pos: [960, 1000],
     range: [128, 133],
   },
+  {
+    id: 'orgs',
+    label: 'Org Switcher',
+    type: 'frontend',
+    pos: [1190, 1000],
+    range: [134, 134],
+  },
 ]
 
 const phaseOf = (n) =>
