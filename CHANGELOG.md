@@ -6,6 +6,15 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-25
+
+### Fixed
+
+- A signed-in or demo visitor opening `/` directly, and a sign-in link that
+  landed on `/?code=…`, got a server error on Vercel: the redirect's Location
+  was relative, which Vercel's Proxy runtime refuses. It now names the
+  deployment's origin (`NEXT_PUBLIC_APP_URL`, else the request's).
+
 ## [0.2.0] - 2026-09-25
 
 Upgrading a self-hosted copy from 0.1.0: set `ENABLE_LANDING`, `ENABLE_DOCS`
@@ -118,6 +127,7 @@ The first public release.
 - Self-hosting: a Dockerfile, `compose.yaml` and a guide, free at any size
   under AGPL-3.0-only with the additional term in `NOTICE.md`.
 
-[Unreleased]: https://github.com/NotTahaAli/sessclone/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/NotTahaAli/sessclone/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/NotTahaAli/sessclone/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/NotTahaAli/sessclone/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/NotTahaAli/sessclone/releases/tag/v0.1.0
