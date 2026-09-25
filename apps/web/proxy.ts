@@ -53,12 +53,12 @@ const PUBLIC_PATHS = [
 
 // The files crawlers, browsers and link previews fetch with no cookie: the
 // metadata routes Next serves from `app/` (robots, sitemap, icons, Open Graph
-// and Twitter images, the manifest) and `llms.txt`. Exact names at the root,
+// and Twitter images, the manifest), `llms.txt` and `security.txt`. Exact names,
 // with the `icon*`/`*-image*` families' generated suffixes (`icon0.png`,
 // `opengraph-image-abc123`). A redirect here is a missing favicon or a blank
 // share card, and a crawler reading `/sign-in` as the whole site.
 const PUBLIC_FILE =
-  /^\/(?:robots\.txt|sitemap\.xml|favicon\.ico|manifest\.webmanifest|llms\.txt|(?:apple-)?icon[^/]*|(?:opengraph|twitter)-image[^/]*)$/
+  /^\/(?:robots\.txt|sitemap\.xml|favicon\.ico|manifest\.webmanifest|llms\.txt|\.well-known\/security\.txt|(?:apple-)?icon[^/]*|(?:opengraph|twitter)-image[^/]*)$/
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request })
