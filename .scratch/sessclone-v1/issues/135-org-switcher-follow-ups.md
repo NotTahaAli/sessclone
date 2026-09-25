@@ -12,3 +12,4 @@
 - [ ] Migration drops `sessclone_accept_invitation(text)`; `invitations.test.ts` no longer exercises the one-argument form.
 - [ ] Migration run on production (Taha).
 - [ ] Playwright: accept an invitation from the switcher.
+- [ ] Playwright: create an Org from the switcher and land on the waiting page (from ticket 136).
