@@ -20,7 +20,7 @@
 
 **Review fixes (2026-09-25).** The `/` redirect keeps the session cookies `getClaims` rotated and is sent `Cache-Control: private, no-store`; a `/?code=…` that Supabase sent to its Site URL goes on to `/auth/callback` with the query kept (self-hosting now says to allow-list `/auth/callback`); the Referer fallback compares with `NEXT_PUBLIC_APP_URL`'s origin, so it holds behind a reverse proxy; the header's Sign in / Dashboard button streams in behind a same-width placeholder instead of flashing "Sign in"; the logo is not prefetched; the sitemap and `llms.txt` wait for a request (`connection()`, since `dynamic` is refused under `cacheComponents`), so they follow the runtime flags. Second round: the `/` redirects send a relative Location, so behind a reverse proxy the browser is never sent to the server's own `localhost`; "Try the demo" is not in the prerendered shell, so a signed-in reader never sees it before the session read.
 
-**Merge prerequisite.** Before deploying, set `ENABLE_LANDING`, `ENABLE_DOCS` and `ENABLE_DEMO` to `true` on Vercel for Production and Preview, and remove `DEMO`. Unset, sessclone.com would serve the dashboard alone.
+**Merge prerequisite.** Before deploying, set `ENABLE_LANDING`, `ENABLE_DOCS` and `ENABLE_DEMO` to `true` on Vercel for Production and Preview, and remove `DEMO`. Unset, sessclone.com would serve the dashboard alone. Done 2026-09-25: the three are `true` for Production and Preview (set through the Vercel connector). `DEMO` is still set and nothing reads it after this deploys; Taha removes it in the dashboard.
 
 **Blocked by:** 137
 
