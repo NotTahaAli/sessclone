@@ -66,18 +66,30 @@ test('no paragraph holds a block the parser would close it on', () => {
 // 2026-09-24: the "Yours" intro said archival "is off until you turn it on"
 // to a Member whose archival was on. It reads the switch the page already
 // loads, one per membership.
+/** Markup to its text, stripped until nothing changes (CodeQL js/incomplete-multi-character-sanitization). */
+const text = (html: string) => {
+  let previous
+  do {
+    previous = html
+    html = html.replace(/<[^>]*>/g, '')
+  } while (html !== previous)
+  return html
+}
+
 /** The sentence, as text, for one switch per Org. */
 const note = (...enabled: boolean[]) =>
-  renderToStaticMarkup(
-    ArchivalNote({
-      memberships: enabled.map((archival_enabled, index) => ({
-        member_id: `m${index}`,
-        org_id: `o${index}`,
-        org_name: `Org ${index}`,
-        archival_enabled,
-      })),
-    }),
-  ).replace(/<[^>]+>/g, '')
+  text(
+    renderToStaticMarkup(
+      ArchivalNote({
+        memberships: enabled.map((archival_enabled, index) => ({
+          member_id: `m${index}`,
+          org_id: `o${index}`,
+          org_name: `Org ${index}`,
+          archival_enabled,
+        })),
+      }),
+    ),
+  )
 
 test('the archival sentence says what the switch actually is', () => {
   expect(note(false)).toBe(
