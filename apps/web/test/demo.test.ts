@@ -90,7 +90,7 @@ afterAll(() => {
 })
 
 beforeEach(async () => {
-  vi.stubEnv('DEMO', 'on')
+  vi.stubEnv('ENABLE_DEMO', 'true')
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://example.supabase.co')
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'anon')
   vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://app.test')
@@ -220,7 +220,7 @@ test('the demo visitor sees the demo Orgs and nothing else, as Owner of one', as
   expect(turnOrgs.map((row) => row.org_id)).toEqual(both)
 })
 
-test('the demo is off unless DEMO=on, and a real session always wins', async () => {
+test('the demo is off unless ENABLE_DEMO=true, and a real session always wins', async () => {
   const fixture = await seedFixture()
   await createDemo()
   enterDemo()
@@ -232,7 +232,11 @@ test('the demo is off unless DEMO=on, and a real session always wins', async () 
   expect((await sessionViewer())?.orgId).toBe(fixture.acme.id)
 
   claims = null
-  vi.stubEnv('DEMO', 'off')
+  vi.stubEnv('ENABLE_DEMO', 'false')
+  expect(await sessionUser()).toBeNull()
+  // Ticket 138 renamed it: the old spelling turns nothing on.
+  vi.stubEnv('ENABLE_DEMO', undefined)
+  vi.stubEnv('ENABLE_DEMO', 'true')
   expect(await sessionUser()).toBeNull()
 })
 
@@ -401,7 +405,7 @@ test('/demo sets the cookie and stays on the host it was asked on', async () => 
   )
   expect(response.headers.get('x-robots-tag')).toBe('noindex, nofollow')
 
-  vi.stubEnv('DEMO', 'off')
+  vi.stubEnv('ENABLE_DEMO', 'false')
   expect(GET().status).toBe(404)
 })
 
@@ -463,7 +467,7 @@ test('the storage PUT gives up rather than hanging the refresh', async () => {
   expect(signal).toBeInstanceOf(AbortSignal)
 })
 
-test('the refresh route: a secret, then DEMO, then one at a time', async () => {
+test('the refresh route: a secret, then ENABLE_DEMO, then one at a time', async () => {
   const { GET } = await import('../app/api/demo/refresh/route')
   const call = (bearer?: string) =>
     GET(
@@ -479,12 +483,12 @@ test('the refresh route: a secret, then DEMO, then one at a time', async () => {
   expect((await call('wrong')).status).toBe(401)
   expect((await call()).status).toBe(401)
 
-  vi.stubEnv('DEMO', 'off')
+  vi.stubEnv('ENABLE_DEMO', 'false')
   const off = await call('the-secret')
   expect(off.status).toBe(200)
   expect(await off.json()).toEqual({ demo: 'off' })
 
-  vi.stubEnv('DEMO', 'on')
+  vi.stubEnv('ENABLE_DEMO', 'true')
   const busy = await sql.begin(async (tx) => {
     await tx`select pg_advisory_xact_lock(hashtext('sessclone_demo_refresh'))`
     return call('the-secret')
@@ -619,4 +623,22 @@ test('only the demo visitor’s reads are cached, and they are read as the demo 
     NIGHT,
   )
   expect(leak.sessions).toEqual([])
+})
+
+test('Exit demo leaves for the landing page, or sign-in where there is none', async () => {
+  const { exitDemo } = await import('../app/demo/actions')
+  // The redirect's digest is `NEXT_REDIRECT;replace;<path>;307;`.
+  const leavesFor = async (path: string) => {
+    enterDemo()
+    await expect(exitDemo()).rejects.toMatchObject({
+      digest: expect.stringContaining(`;${path};`),
+    })
+    expect(jar.has(DEMO_COOKIE)).toBe(false)
+  }
+
+  vi.stubEnv('ENABLE_LANDING', 'true')
+  await leavesFor('/')
+  // Ticket 138: `/` with no landing page would only bounce to sign-in.
+  vi.stubEnv('ENABLE_LANDING', 'false')
+  await leavesFor('/sign-in')
 })

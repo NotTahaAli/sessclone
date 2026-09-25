@@ -29,6 +29,7 @@ import Loading from './loading'
 import { exitDemo } from '../demo/actions'
 import { isLocked } from '../../lib/approval'
 import { isDemoUser } from '../../lib/demo'
+import { siteFlags, siteLinks } from '../../lib/site-flags'
 import { asViewer } from '../../lib/db'
 import { currentOperator } from '../../lib/platform-admin'
 import { pendingOrgCount } from '../../lib/subscriptions'
@@ -273,7 +274,7 @@ async function Content({ children }: { children: ReactNode }) {
         operator={(await currentOperator()) !== null}
       >
         <div className={BRAND}>
-          <LogoMark className="text-text" />
+          <HomeLogo />
           <OrgName className="block truncate" />
         </div>
       </Waiting>
@@ -324,6 +325,24 @@ async function AdminEntry() {
   return <SidebarLinks items={adminPanelEntry(pending)} />
 }
 
+/**
+ * The sessclone mark, as the way to the landing page (ticket 138), or to
+ * Costs where this deployment has none. The Proxy lets a click from here reach
+ * the landing page, where a typed `/` would open the dashboard instead.
+ */
+function HomeLogo() {
+  const { logo } = siteLinks(siteFlags())
+  return (
+    <Link
+      href={logo.href}
+      aria-label={logo.label}
+      className="hover:bg-surface-hover -m-1 shrink-0 rounded p-1"
+    >
+      <LogoMark className="text-text" />
+    </Link>
+  )
+}
+
 /** The brand line at both widths: the sessclone mark, then the Org's name in
  * small capitals (Direction A, ticket 111). */
 // A `div`, not a `p`: the Org name is the switcher, whose popover holds
@@ -370,7 +389,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       >
         <div>
           <div className={BRAND}>
-            <LogoMark className="text-text" />
+            <HomeLogo />
             <Suspense fallback={PENDING_SIDEBAR}>
               <OrgName className="block truncate" />
             </Suspense>
@@ -405,7 +424,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           the four destinations are a bottom bar. */}
       <header className="border-rule bg-ground sticky top-0 z-10 flex items-center justify-between gap-3 border-b px-4 py-1.5 lg:hidden">
         <div className={BRAND}>
-          <LogoMark className="text-text" />
+          <HomeLogo />
           <Suspense fallback={PENDING_HEADER}>
             <OrgName className="block truncate" />
           </Suspense>

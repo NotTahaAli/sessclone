@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 
+import { siteFlags, siteLinks } from '../../lib/site-flags'
 import { Lockup } from '../_ui/logo'
 import { CloudflareAnalytics } from '../cloudflare-analytics'
 import { ClarityAnalytics } from './clarity'
@@ -12,11 +13,14 @@ import { SignedInLink } from './signed-in-link'
 // themes, following the visitor's preference; the accent stays the Clay
 // default, since a signed-out visitor has no Org and so no seed.
 //
-// `/docs` is another ticket's (116); the nav links to it and builds nothing.
+// Ticket 138: with no landing page this frame still carries the legal pages,
+// so Pricing drops out of the nav and the footer; with no docs, Docs links to
+// sessclone.com. Read while the frame prerenders, hence a rebuild per change.
 
 const LINK = 'hover:text-text flex h-[var(--pill-h)] items-center'
 
 export default function MarketingLayout({ children }: { children: ReactNode }) {
+  const { docs, pricing } = siteLinks(siteFlags())
   return (
     <div className="bg-ground text-text flex min-h-dvh flex-col">
       <header>
@@ -31,10 +35,12 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
             <Lockup />
           </Link>
           <div className="text-text-muted flex items-center gap-4 text-[13px]">
-            <Link href="/pricing" className={LINK}>
-              Pricing
-            </Link>
-            <Link href="/docs" className={LINK}>
+            {pricing ? (
+              <Link href={pricing} className={LINK}>
+                Pricing
+              </Link>
+            ) : null}
+            <Link href={docs()} className={LINK}>
               Docs
             </Link>
             <a href={REPOSITORY} className={`${LINK} max-sm:hidden`}>
@@ -53,10 +59,12 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
         >
           <p>SessClone · Claude Code usage and cost, for a whole team.</p>
           <div className="flex flex-wrap gap-x-4">
-            <Link href="/pricing" className={LINK}>
-              Pricing
-            </Link>
-            <Link href="/docs" className={LINK}>
+            {pricing ? (
+              <Link href={pricing} className={LINK}>
+                Pricing
+              </Link>
+            ) : null}
+            <Link href={docs()} className={LINK}>
               Docs
             </Link>
             <a href={REPOSITORY} className={LINK}>

@@ -90,7 +90,7 @@ export const readAnonymously = <T>(
  * The id comes from the verified Supabase session and never from a request
  * header, which is attacker-controllable — the same reasoning that keeps
  * `NEXT_PUBLIC_APP_URL` out of `Host`. The one exception is the demo visitor
- * (ticket 137): a fixed id, chosen by a cookie only with `DEMO=on` and no
+ * (ticket 137): a fixed id, chosen by a cookie only with `ENABLE_DEMO=true` and no
  * session, whose every transaction is read-only.
  *
  * `set local` makes the claim transaction-local, so a connection returned to

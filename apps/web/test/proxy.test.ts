@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { beforeEach, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 // The Proxy's two redirects, which are each other's mirror: a signed-out
 // visitor is sent to the sign-in page, and — the half that was missing until
@@ -23,6 +23,13 @@ beforeEach(() => {
   claims = null
   process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co'
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'anon'
+  // The whole public site, as sessclone.com runs it; ticket 138's tests
+  // below switch parts of it off.
+  vi.stubEnv('ENABLE_LANDING', 'true')
+  vi.stubEnv('ENABLE_DOCS', 'true')
+})
+afterEach(() => {
+  vi.unstubAllEnvs()
 })
 
 const at = (path: string) =>
@@ -84,12 +91,7 @@ test('a `next` that leaves the origin is not redirected to', async () => {
   )
 })
 
-test('the marketing page is left alone either way', async () => {
-  expect((await at('/')).status).toBe(200)
-
-  claims = { sub: 'user-1' }
-  // Signed in, `/` still renders: the call to action on it changes instead,
-  // which is `app/(marketing)/signed-in-link.tsx`.
+test('the marketing page renders for a signed-out visitor', async () => {
   expect((await at('/')).status).toBe(200)
 })
 
@@ -145,25 +147,95 @@ const withCookie = (path: string, cookie: string) =>
     }),
   )
 
-test('/demo is public, and the demo cookie reaches the dashboard only with DEMO=on', async () => {
-  vi.stubEnv('DEMO', 'on')
-  try {
-    expect((await at('/demo')).headers.get('location')).toBeNull()
-    expect(
-      (await withCookie('/costs', 'sessclone-demo=1')).headers.get('location'),
-    ).toBeNull()
-    // Any other value is no demo at all.
-    expect(
-      (await withCookie('/costs', 'sessclone-demo=yes')).headers.get(
-        'location',
-      ),
-    ).toBe('https://sessclone.example.com/sign-in')
+test('/demo is public, and the demo cookie reaches the dashboard only with ENABLE_DEMO=true', async () => {
+  vi.stubEnv('ENABLE_DEMO', 'true')
+  expect((await at('/demo')).headers.get('location')).toBeNull()
+  expect(
+    (await withCookie('/costs', 'sessclone-demo=1')).headers.get('location'),
+  ).toBeNull()
+  // Any other value is no demo at all.
+  expect(
+    (await withCookie('/costs', 'sessclone-demo=yes')).headers.get('location'),
+  ).toBe('https://sessclone.example.com/sign-in')
 
-    vi.stubEnv('DEMO', 'off')
-    expect(
-      (await withCookie('/costs', 'sessclone-demo=1')).headers.get('location'),
-    ).toBe('https://sessclone.example.com/sign-in')
-  } finally {
-    vi.unstubAllEnvs()
-  }
+  vi.stubEnv('ENABLE_DEMO', 'false')
+  expect(
+    (await withCookie('/costs', 'sessclone-demo=1')).headers.get('location'),
+  ).toBe('https://sessclone.example.com/sign-in')
+})
+
+// Ticket 138: the three site flags. The decisions are `lib/site-flags.ts`'s,
+// tested there case by case; these prove the Proxy applies them.
+const visit = (path: string, headers: Record<string, string> = {}) =>
+  proxy(new NextRequest(`https://sessclone.example.com${path}`, { headers }))
+
+test('with landing off, / goes to sign-in or, signed in, to the dashboard', async () => {
+  vi.stubEnv('ENABLE_LANDING', 'false')
+  expect((await at('/')).headers.get('location')).toBe(
+    'https://sessclone.example.com/sign-in',
+  )
+
+  claims = { sub: 'user-1' }
+  // Even from a page of the site: there is no landing page to read.
+  const response = await visit('/', { 'sec-fetch-site': 'same-origin' })
+  expect(response.headers.get('location')).toBe(
+    'https://sessclone.example.com/costs',
+  )
+})
+
+test('with landing on, a signed-in direct visit to / opens the dashboard', async () => {
+  claims = { sub: 'user-1' }
+
+  const direct: Record<string, string>[] = [{ 'sec-fetch-site': 'none' }, {}]
+  const locations = await Promise.all(
+    direct.map(async (headers) =>
+      (await visit('/', headers)).headers.get('location'),
+    ),
+  )
+  expect(locations).toEqual([
+    'https://sessclone.example.com/costs',
+    'https://sessclone.example.com/costs',
+  ])
+  // The dashboard's logo is a link on this origin: no bounce.
+  const logo = await visit('/', { 'sec-fetch-site': 'same-origin' })
+  expect(logo.status).toBe(200)
+  expect(logo.headers.get('location')).toBeNull()
+})
+
+test('the demo visitor counts as signed in only where the demo runs', async () => {
+  vi.stubEnv('ENABLE_DEMO', 'true')
+  const demo = { cookie: 'sessclone-demo=1', 'sec-fetch-site': 'none' }
+  expect((await visit('/', demo)).headers.get('location')).toBe(
+    'https://sessclone.example.com/costs',
+  )
+  // Never for sign-in and sign-up: the demo banner's "Sign up" must work.
+  expect((await visit('/sign-up', demo)).headers.get('location')).toBeNull()
+
+  vi.stubEnv('ENABLE_DEMO', 'false')
+  expect((await visit('/', demo)).status).toBe(200)
+})
+
+test('pricing 404s with landing off, docs and their search with docs off', async () => {
+  vi.stubEnv('ENABLE_LANDING', 'false')
+  vi.stubEnv('ENABLE_DOCS', 'false')
+  claims = { sub: 'user-1' }
+  const paths = ['/pricing', '/docs', '/docs/self-hosting', '/api/search?q=x']
+  const statuses = await Promise.all(
+    paths.map(async (path) => (await at(path)).status),
+  )
+  expect(statuses).toEqual([404, 404, 404, 404])
+
+  // The legal pages stay, and so does everything else signed-out.
+  claims = null
+  const kept = ['/privacy', '/terms', '/sign-in', '/sign-up']
+  const keptStatuses = await Promise.all(
+    kept.map(async (path) => (await at(path)).status),
+  )
+  expect(keptStatuses).toEqual([200, 200, 200, 200])
+})
+
+test('a flag 404 holds on a deployment with Supabase unconfigured', async () => {
+  vi.stubEnv('ENABLE_DOCS', 'false')
+  vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', '')
+  expect((await at('/docs')).status).toBe(404)
 })
