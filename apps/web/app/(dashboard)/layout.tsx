@@ -138,7 +138,7 @@ function Inactive({
 
 /**
  * The Org name, which every figure under here belongs to — and the Org
- * switcher, when there is anything to switch to, answer or leave. Read from
+ * switcher: other Orgs, invitations, Leave and New Org. Read from
  * `sessionViewer`, so it is there on the waiting page too: a person in an Org
  * waiting for approval can still switch out of it.
  */
@@ -230,7 +230,12 @@ async function Content({ children }: { children: ReactNode }) {
         orgName={viewer.orgName}
         planName={viewer.planName}
         operator={(await currentOperator()) !== null}
-      />
+      >
+        <p className={BRAND}>
+          <LogoMark className="text-text" />
+          <OrgName className="block truncate" />
+        </p>
+      </Waiting>
     )
   }
 

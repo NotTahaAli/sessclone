@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 
 import { asViewer } from '../../../../lib/db'
-import { NAME_LIMIT, renameOrg } from '../../../../lib/names'
+import { ORG_NAME_RULE, OrgNameInput, renameOrg } from '../../../../lib/names'
 import type { NameState } from '../../inline-name'
 import { setOrgRetention, setOrgTimezone } from '../../../../lib/org'
 import { viewerOfOrg } from '../../../../lib/viewer'
@@ -152,15 +152,10 @@ export const setOrgName = async (
   if (!viewer) return { error: 'Sign in again to rename the Org.' }
 
   const orgId = z.uuid().safeParse(formData.get('orgId'))
-  const name = z
-    .string()
-    .trim()
-    .min(1)
-    .max(NAME_LIMIT)
-    .safeParse(formData.get('name'))
+  const name = OrgNameInput.safeParse(formData.get('name'))
   if (!orgId.success) return { error: 'That request was missing the Org.' }
   if (!name.success) {
-    return { error: `An Org needs a name of 1 to ${NAME_LIMIT} characters.` }
+    return { error: ORG_NAME_RULE }
   }
 
   const written = await asViewer(viewer.userId, (tx) =>

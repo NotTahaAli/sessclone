@@ -160,10 +160,14 @@ function Leave({
   memberId,
   orgName,
   lastOwner,
+  locked,
 }: {
   memberId: string
   orgName: string
   lastOwner: boolean
+  /** The current Org waits or is cancelled: Members is behind the waiting
+   * page, so it is named, not linked. */
+  locked: boolean
 }) {
   const [state, action, pending] = useActionState(leaveCurrentOrg, null)
   const [asked, setAsked] = useState(false)
@@ -175,9 +179,13 @@ function Leave({
       <p className="text-text-muted px-2 py-2 text-caption">
         You are {orgName}&apos;s only Owner, so you cannot leave it. Make
         somebody else an Owner in{' '}
-        <Link href="/settings/org/members" className="underline">
-          Members
-        </Link>{' '}
+        {locked ? (
+          'Members'
+        ) : (
+          <Link href="/settings/org/members" className="underline">
+            Members
+          </Link>
+        )}{' '}
         first.
       </p>
     )
@@ -210,8 +218,12 @@ function Leave({
   )
 }
 
+/** A list that scrolls on its own once it is long, so New Org and Leave stay
+ * in reach on a phone's sheet and in the desktop panel alike. */
+const LIST = 'max-h-[28dvh] overflow-y-auto overscroll-contain lg:max-h-44'
+
 /** The lists, in the order a reader wants them: where you are, then what is
- * waiting on you, then the way out. */
+ * waiting on you, then the way out, then a new Org (ticket 136). */
 export function SwitcherBody({
   data,
   current,
@@ -225,46 +237,51 @@ export function SwitcherBody({
   const { orgs, invites, now, lastOwner } = data
   return (
     <>
-      {orgs.length > 1 ? (
-        <section>
-          <h2 className={HEADING}>Orgs</h2>
-          <ul>
-            {orgs.map((org) => (
-              <OrgRow
-                key={org.memberId}
-                org={org}
-                current={org.memberId === current}
-              />
-            ))}
-          </ul>
-        </section>
-      ) : null}
+      <section>
+        <h2 className={HEADING}>Orgs</h2>
+        <ul className={LIST}>
+          {orgs.map((org) => (
+            <OrgRow
+              key={org.memberId}
+              org={org}
+              current={org.memberId === current}
+            />
+          ))}
+        </ul>
+      </section>
       {invites.length > 0 ? (
-        <section
-          className={orgs.length > 1 ? 'border-rule mt-1.5 border-t' : ''}
-        >
+        <section className="border-rule mt-1.5 border-t">
           <h2 className={HEADING}>Pending invites</h2>
-          <ul className="flex flex-col">
+          <ul className={`${LIST} flex flex-col`}>
             {invites.map((invite) => (
               <InviteRow key={invite.id} invite={invite} now={now} />
             ))}
           </ul>
         </section>
       ) : null}
+      {/* Leaving the only Org lands on the no-Org page with no way back
+          (Taha, 2026-09-25). */}
       {orgs.length > 1 ? (
         <div className="border-rule mt-1.5 border-t">
-          <Leave memberId={current} orgName={orgName} lastOwner={lastOwner} />
+          <Leave
+            memberId={current}
+            orgName={orgName}
+            lastOwner={lastOwner}
+            locked={orgs.some((org) => org.memberId === current && org.locked)}
+          />
         </div>
       ) : null}
+      <div className="border-rule mt-1.5 border-t pt-1.5">
+        <Link href="/new-org" className={ORG_ROW}>
+          <span aria-hidden="true" className="text-center">
+            +
+          </span>
+          <span>New Org</span>
+        </Link>
+      </div>
     </>
   )
 }
-
-/** Whether the switcher has anything to offer: another Org or an invitation.
- * One Org and no invitations reads exactly as before the switcher, nothing
- * clickable, and leaving the only Org is not offered (Taha, 2026-09-25). */
-export const hasChoices = (data: OrgSwitcherData) =>
-  data.orgs.length > 1 || data.invites.length > 0
 
 /** The invitations that can still be accepted: the one accent mark on the
  * closed control. */

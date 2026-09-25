@@ -5,6 +5,9 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
+import { approvalRequired } from '../../lib/approval'
+import { createOwnOrg, PendingOrgExists } from '../../lib/auth/bootstrap'
+import { parsePlan } from '../../lib/auth/plan'
 import { asViewer } from '../../lib/db'
 import {
   acceptFailure,
@@ -12,16 +15,19 @@ import {
   declineOwnInvitation,
 } from '../../lib/invitations'
 import { leaveOrg } from '../../lib/members'
+import { ORG_NAME_RULE, OrgNameInput } from '../../lib/names'
 import { sessionUser } from '../../lib/supabase/server'
+import { marketingTiers } from '../../lib/tiers'
 import {
   MEMBER_COOKIE,
   MEMBER_COOKIE_OPTIONS,
   sessionViewer,
 } from '../../lib/viewer'
 
-// The Org switcher's four writes. Every one starts from `sessionUser()`, not
+// The Org switcher's five writes. Every one starts from `sessionUser()`, not
 // `signedInUser()`: somebody whose current Org is waiting for approval must
-// still be able to switch out of it, answer an invitation, or leave. Identity
+// still be able to switch out of it, answer an invitation, leave, or start
+// another. Identity
 // and the verified address come from the session; the ids in the form are
 // parsed and then checked by the database as the person.
 
@@ -143,6 +149,48 @@ export const leaveCurrentOrg = async (
   // The choice named the Org just left; the usual order decides from here.
   const store = await cookies()
   store.delete(MEMBER_COOKIE)
+  redirect('/costs')
+  return null
+}
+
+/**
+ * Starts a new Org with the viewer as its Owner, and opens it (ticket 136).
+ * The plan is asked for exactly where sign-up asks for one: with approval on.
+ * `createOwnOrg` is the rule on how many may wait at once.
+ */
+export const createOrg = async (
+  _previous: OrgActionState,
+  formData: FormData,
+): Promise<OrgActionState> => {
+  const user = await sessionUser()
+  if (!user) return { error: 'Sign in again to create an Org.' }
+
+  const name = OrgNameInput.safeParse(formData.get('name'))
+  if (!name.success) return { error: ORG_NAME_RULE }
+
+  let plan = null
+  if (approvalRequired()) {
+    const team = (await marketingTiers()).find((tier) => tier.key === 'team')
+    plan = parsePlan(formData, team)
+    if (!plan) return { error: 'Choose a plan for the new Org.' }
+  }
+
+  let memberId: string
+  try {
+    ;({ memberId } = await asViewer(user.id, (tx) =>
+      createOwnOrg(tx, user.id, { name: name.data, plan }),
+    ))
+  } catch (error) {
+    if (!(error instanceof PendingOrgExists)) throw error
+    return {
+      error:
+        'You already have an Org waiting for approval. You can start another once it is approved.',
+    }
+  }
+
+  // Lands in the new Org: the waiting page, while it waits.
+  const store = await cookies()
+  store.set(MEMBER_COOKIE, memberId, MEMBER_COOKIE_OPTIONS)
   redirect('/costs')
   return null
 }

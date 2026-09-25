@@ -10,7 +10,7 @@ import {
 } from 'react'
 
 import { ChevronDown } from '../_ui/primitives'
-import { hasChoices, liveInvites, SwitcherBody } from './org-choices'
+import { liveInvites, SwitcherBody } from './org-choices'
 import type { OrgSwitcherData } from '../../lib/viewer'
 
 // The Org switcher (variant A, Taha's pick): the brand line's Org name is the
@@ -50,11 +50,6 @@ export function OrgSwitcher({
       })
     }
   }, [])
-
-  // Nothing to open, so the name stays text.
-  if (!hasChoices(data)) {
-    return <span className={className}>{children}</span>
-  }
 
   const live = liveInvites(data)
 

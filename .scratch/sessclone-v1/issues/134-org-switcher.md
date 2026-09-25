@@ -17,12 +17,12 @@ With one Org and no invitations, nothing changes and nothing is clickable. Leave
 
 **Blocked by:** —
 
-**Status:** todo
+**Status:** done
 
 - [x] Devices, Keys, Transcripts (both sections) and appearance read the current Org or membership, not every membership. Proven by `multi-org.test.ts` running as `sessclone_app`.
 - [x] Org settings, Members, invite and key writes refuse a form drawn for another Org (a tab left open across a switch).
 - [x] Migration `20260925120000_org_switcher.sql`: `invitations.declined_at`, definer functions to list, accept, decline and leave, the last-Owner race closed with an Org lock, and the one-argument accept kept for the deploy window.
 - [x] Switcher UI, variant A, at 1440x900 and 390x844 in light and dark.
-- [ ] Playwright flow: accept an invitation from the switcher.
-- [ ] Migration run on production before the deploy (Taha).
-- [ ] A later migration drops the one-argument `sessclone_accept_invitation(text)` once the deploy is live.
+- [ ] Playwright flow: accept an invitation from the switcher. Moved to ticket 135.
+- [x] Migration run on production before the deploy (Taha, 2026-09-25; deployed with the merge of #42).
+- [ ] A later migration drops the one-argument `sessclone_accept_invitation(text)` once the deploy is live. Moved to ticket 135.

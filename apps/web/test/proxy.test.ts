@@ -115,6 +115,7 @@ test('pages and files read before an account are public', async () => {
     '/twitter-image-abc123',
     '/manifest.webmanifest',
     '/llms.txt',
+    '/.well-known/security.txt',
   ]
   const statuses = await Promise.all(
     paths.map(async (path) => ({ path, status: (await at(path)).status })),
@@ -123,9 +124,14 @@ test('pages and files read before an account are public', async () => {
 })
 
 test('a lookalike of a public file is not public', async () => {
-  const paths = ['/robots.txt.bak', '/icons/costs', '/llms.txt/x']
+  const paths = [
+    '/robots.txt.bak',
+    '/icons/costs',
+    '/llms.txt/x',
+    '/.well-known/other.txt',
+  ]
   const statuses = await Promise.all(
     paths.map(async (path) => (await at(path)).status),
   )
-  expect(statuses).toEqual([307, 307, 307])
+  expect(statuses).toEqual([307, 307, 307, 307])
 })

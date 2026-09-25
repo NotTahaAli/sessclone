@@ -17,6 +17,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and can invite the same person again.
 - Leave an Org from the switcher. The only Owner is asked to make somebody
   else an Owner first.
+- New Org, at the bottom of the switcher, which now always opens. It asks for
+  a name and, where sign-up asks for one, a plan; the new Org waits for
+  approval like a sign-up, or opens at once where approval is off. You can have one
+  Org of your own waiting at a time. The waiting page carries the switcher
+  too, so you can switch out of an Org that is waiting.
+- `/.well-known/security.txt` (RFC 9116), pointing to GitHub private advisories
+  and, when set, the deployment's contact address. Its expiry is always a
+  year ahead.
 
 ### Fixed
 
