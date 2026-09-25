@@ -41,7 +41,9 @@ export async function AppearanceSync() {
   const viewer = await currentViewer()
   if (!viewer) return null
 
-  const appearance = await asViewer(viewer.userId, viewerAppearance)
+  const appearance = await asViewer(viewer.userId, (tx) =>
+    viewerAppearance(tx, viewer.memberId),
+  )
   const wanted = encodeAppearance(appearance)
   const carried = (await cookies()).get(APPEARANCE_COOKIE)?.value
 

@@ -54,7 +54,7 @@ export default async function Page() {
       Promise.all([
         listTimezones(tx),
         orgRetention(tx, viewer.orgId),
-        viewerAppearance(tx),
+        viewerAppearance(tx, viewer.memberId),
         orgLogoSrc(tx, viewer.orgId),
       ]),
   )

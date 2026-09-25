@@ -37,7 +37,7 @@ test('own machines only, most recently seen first', async () => {
   await device(fixture.acme.members.owner, 'host:macbook')
 
   const rows = await asRole(fixture.acme, 'member', (tx) =>
-    listOwnDevices(tx),
+    listOwnDevices(tx, fixture.acme.members.member),
   ).then((result) => result.devices)
 
   expect(rows.map((row) => row.key)).toEqual(['cloud:acct-1', 'host:thinkpad'])
@@ -47,7 +47,7 @@ test('an Owner sees their own machines, not the Org’s', async () => {
   await device(fixture.acme.members.member, 'host:thinkpad')
 
   const rows = await asRole(fixture.acme, 'owner', (tx) =>
-    listOwnDevices(tx),
+    listOwnDevices(tx, fixture.acme.members.owner),
   ).then((result) => result.devices)
 
   expect(rows).toEqual([])
@@ -78,7 +78,7 @@ test('the Session count is per machine, a Session of many Turns once', async () 
   }
 
   const rows = await asRole(fixture.acme, 'member', (tx) =>
-    listOwnDevices(tx),
+    listOwnDevices(tx, fixture.acme.members.member),
   ).then((result) => result.devices)
 
   expect(
@@ -99,9 +99,9 @@ test('a rename sticks, and an empty name clears it', async () => {
   ).toBe(true)
   expect(
     (
-      await asRole(fixture.acme, 'member', (tx) => listOwnDevices(tx)).then(
-        (result) => result.devices,
-      )
+      await asRole(fixture.acme, 'member', (tx) =>
+        listOwnDevices(tx, fixture.acme.members.member),
+      ).then((result) => result.devices)
     )[0]!.nickname,
   ).toBe('work laptop')
 
@@ -110,9 +110,9 @@ test('a rename sticks, and an empty name clears it', async () => {
   ).toBe(true)
   expect(
     (
-      await asRole(fixture.acme, 'member', (tx) => listOwnDevices(tx)).then(
-        (result) => result.devices,
-      )
+      await asRole(fixture.acme, 'member', (tx) =>
+        listOwnDevices(tx, fixture.acme.members.member),
+      ).then((result) => result.devices)
     )[0]!.nickname,
   ).toBeNull()
 })
@@ -140,9 +140,9 @@ test('another Org’s machine is neither listed nor renamed', async () => {
   const id = await device(fixture.globex.members.member, 'host:thinkpad')
 
   expect(
-    await asRole(fixture.acme, 'member', (tx) => listOwnDevices(tx)).then(
-      (result) => result.devices,
-    ),
+    await asRole(fixture.acme, 'member', (tx) =>
+      listOwnDevices(tx, fixture.acme.members.member),
+    ).then((result) => result.devices),
   ).toEqual([])
   expect(
     await asRole(fixture.acme, 'member', (tx) => renameDevice(tx, id, 'mine')),
@@ -157,7 +157,7 @@ test('the list is capped, and says so', async () => {
   )
 
   const { devices, more } = await asRole(fixture.acme, 'member', (tx) =>
-    listOwnDevices(tx),
+    listOwnDevices(tx, fixture.acme.members.member),
   )
 
   expect(devices).toHaveLength(DEVICE_LIMIT)
@@ -179,7 +179,7 @@ test('the Session count is the last 30 days, not all of history', async () => {
   `
 
   const { devices } = await asRole(fixture.acme, 'member', (tx) =>
-    listOwnDevices(tx),
+    listOwnDevices(tx, fixture.acme.members.member),
   )
 
   expect(devices[0]!.sessions).toBe(0)

@@ -99,15 +99,12 @@ export function StoredTranscripts({
   projects,
   sessions,
   more,
-  orgNames,
   audience = 'own',
   timezone,
 }: {
   projects: StoredProject[]
   sessions: StoredSession[]
   more: boolean
-  /** Member id to Org name, and empty when the viewer is in one Org. */
-  orgNames: Map<string, string>
   /**
    * Whose transcripts these are (ticket 84). A `team` listing names the
    * Member each group belongs to and carries no Delete control at all:
@@ -145,7 +142,6 @@ export function StoredTranscripts({
             key={groupKey(project.memberId, project.projectId)}
             project={project}
             own={own}
-            orgName={orgNames.get(project.memberId)}
             stamp={stamp}
             sessions={
               byGroup.get(groupKey(project.memberId, project.projectId)) ??
@@ -169,13 +165,11 @@ export function StoredTranscripts({
 function Group({
   project,
   sessions,
-  orgName,
   own,
   stamp,
 }: {
   project: StoredProject
   sessions: StoredSession[]
-  orgName: string | undefined
   own: boolean
   stamp: Intl.DateTimeFormat
 }) {
@@ -194,7 +188,6 @@ function Group({
           {own ? '' : `${project.memberEmail ?? 'A Member'} · `}
           {project.sessions} session{project.sessions === 1 ? '' : 's'} ·{' '}
           {size(project.bytes)} · last upload {stamp.format(project.newest)}
-          {orgName ? ` · ${orgName}` : ''}
         </span>
         {own ? (
           <Confirm

@@ -10,7 +10,6 @@ import {
   inputClass,
   SectionBreak,
 } from '../../_ui/primitives'
-import type { Membership } from '../../../lib/api-keys'
 import { installCommand } from '../../../lib/install-command'
 
 // The one client component on this page, and it is client-side for exactly one
@@ -19,18 +18,12 @@ import { installCommand } from '../../../lib/install-command'
 // from on the next render, which is the point.
 
 export function NewKeyForm({
-  memberships,
   appUrl,
 }: {
-  memberships: Membership[]
   /** This deployment's own URL, so the command below is ready to run. */
   appUrl: string
 }) {
   const [state, formAction, pending] = useActionState(createKey, null)
-
-  // Only when there is a choice. One membership is the common case and a
-  // one-option select is a control that asks a question with one answer.
-  const choose = memberships.length > 1
 
   return (
     <section aria-labelledby="create-key">
@@ -39,7 +32,8 @@ export function NewKeyForm({
       </SectionBreak>
 
       {/* Direction A's field: one round input and the primary button beside
-          it, with the Org choice between them only when there is one. */}
+          it. The key reports to the current Org; the Org switcher is how
+          somebody in two makes one for the other. */}
       <form action={formAction} className="flex flex-wrap gap-1.5 py-1">
         <label htmlFor="label" className="sr-only">
           Label
@@ -52,29 +46,6 @@ export function NewKeyForm({
           placeholder="Label, like work laptop"
           className={`${inputClass} min-w-40 flex-1`}
         />
-        {choose ? (
-          <>
-            <label htmlFor="memberId" className="sr-only">
-              Org
-            </label>
-            <select
-              id="memberId"
-              name="memberId"
-              required
-              defaultValue=""
-              className={inputClass}
-            >
-              <option value="" disabled>
-                Choose an org
-              </option>
-              {memberships.map((membership) => (
-                <option key={membership.member_id} value={membership.member_id}>
-                  {membership.org_name}
-                </option>
-              ))}
-            </select>
-          </>
-        ) : null}
         <Button type="submit" variant="primary" disabled={pending}>
           {pending ? 'Creating…' : 'Create key'}
         </Button>

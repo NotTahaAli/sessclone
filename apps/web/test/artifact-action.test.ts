@@ -66,7 +66,9 @@ const artifact = async ({
 }
 
 const remaining = () =>
-  asUser(fixture.acme.users.member, storedProjects).then(({ projects }) =>
+  asUser(fixture.acme.users.member, (tx) =>
+    storedProjects(tx, { orgId: fixture.acme.id }),
+  ).then(({ projects }) =>
     projects.reduce((total, row) => total + row.sessions, 0),
   )
 

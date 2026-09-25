@@ -67,6 +67,12 @@ const memberIds = (tx: TransactionSql, audience: Audience) =>
  * no paging at all.
  */
 export type Listing = {
+  /**
+   * The Org on the screen. Required: the policies answer with every Org the
+   * viewer is in, and a listing that forgot this showed another Org's
+   * transcripts on this one's page, linking to Sessions it then 404s.
+   */
+  orgId: string
   audience?: Audience
   limit?: number
   group?: { memberId: string; projectId: string | null }
@@ -85,16 +91,6 @@ export type StoredProject = {
    * address.
    */
   memberEmail: string | null
-  /**
-   * The Org the group belongs to, for a `team` listing.
-   *
-   * `sessclone_visible_member_ids()` unions every Org the caller owns or
-   * administers *and* their own memberships elsewhere, so a team listing can
-   * legitimately carry rows from a second Org — and a page that showed them
-   * under one Org's name would be claiming something untrue about where a
-   * transcript came from.
-   */
-  orgName: string | null
   projectId: string | null
   /** Null is the Sessions that ran outside any repository. */
   projectKey: string | null
@@ -138,12 +134,7 @@ export type StoredSession = {
 export const SESSION_PAGE = 100
 
 /**
- * What the viewer has stored, a line per Project of each of their
- * memberships.
- *
- * Every membership in one statement rather than one statement per membership:
- * the page renders all of them, and a query in a loop is a query in a loop
- * whether the loop is over Orgs or over rows.
+ * What the viewer has stored in the current Org, a line per Project.
  *
  * The summary rather than the rows, because the question the page answers
  * first is "what is being kept about me, and how much of it" — one aggregate
@@ -154,13 +145,12 @@ export const PROJECT_PAGE = 50
 
 export const storedProjects = async (
   tx: TransactionSql,
-  { audience = 'own', limit = PROJECT_PAGE, group }: Listing = {},
+  { orgId, audience = 'own', limit = PROJECT_PAGE, group }: Listing,
 ): Promise<{ projects: StoredProject[]; more: boolean }> => {
   const rows = await tx<
     {
       member_id: string
       member_email: string | null
-      org_name: string | null
       project_id: string | null
       project_key: string | null
       sessions: string
@@ -171,7 +161,6 @@ export const storedProjects = async (
     select artifact.member_id,
            ${audience === 'team' ? tx`coalesce(person.display_name, person.email)` : tx`null::text`}
              as member_email,
-           ${audience === 'team' ? tx`org.name` : tx`null::text`} as org_name,
            artifact.project_id,
            -- Ticket 90: the Org's name for the Project, or its key.
            coalesce(project.nickname, project.key) as project_key,
@@ -188,11 +177,11 @@ export const storedProjects = async (
         // reads.
         audience === 'team'
           ? tx`left join members member on member.id = artifact.member_id
-      left join users person on person.id = member.user_id
-      left join orgs org on org.id = artifact.org_id`
+      left join users person on person.id = member.user_id`
           : tx``
       }
      where artifact.member_id in (${memberIds(tx, audience)})
+       and artifact.org_id = ${orgId}
        and artifact.kind = 'transcript'
        ${
          // One group, for the page that opens it: the summary it shows is the
@@ -205,7 +194,7 @@ export const storedProjects = async (
        }
      group by artifact.member_id, ${
        audience === 'team'
-         ? tx`coalesce(person.display_name, person.email), org.name,`
+         ? tx`coalesce(person.display_name, person.email),`
          : tx``
      } artifact.project_id, coalesce(project.nickname, project.key)
      order by max(artifact.uploaded_at) desc
@@ -215,7 +204,6 @@ export const storedProjects = async (
   const projects = rows.slice(0, limit).map((row) => ({
     memberId: row.member_id,
     memberEmail: row.member_email,
-    orgName: row.org_name,
     projectId: row.project_id,
     projectKey: row.project_key,
     sessions: Number(row.sessions),
@@ -227,7 +215,7 @@ export const storedProjects = async (
 }
 
 /**
- * The viewer's stored Sessions, newest first, across every membership.
+ * The viewer's stored Sessions in the current Org, newest first.
  *
  * All of them in one statement and grouped by the caller, rather than a query
  * per Project: the page shows every group, and a hundred Projects would
@@ -236,7 +224,7 @@ export const storedProjects = async (
  */
 export const storedSessions = async (
   tx: TransactionSql,
-  { audience = 'own', limit = SESSION_PAGE, group, before }: Listing = {},
+  { orgId, audience = 'own', limit = SESSION_PAGE, group, before }: Listing,
 ): Promise<{ sessions: StoredSession[]; more: boolean }> => {
   const rows = await tx<
     {
@@ -265,6 +253,7 @@ export const storedSessions = async (
            and project_id is not distinct from ${group.projectId}`
          : tx`member_id in (${memberIds(tx, audience)})`
      }
+       and org_id = ${orgId}
        -- A sidecar is not a transcript to list (ticket 104).
        and kind = 'transcript'
        ${

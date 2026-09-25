@@ -92,7 +92,9 @@ describe('creating a key', () => {
       createApiKey(tx, 'laptop'),
     )
 
-    const listed = await asUser(fixture.acme.users.member, listApiKeys)
+    const listed = await asUser(fixture.acme.users.member, (tx) =>
+      listApiKeys(tx, fixture.acme.members.member),
+    )
 
     expect(listed).toHaveLength(1)
     expect(JSON.stringify(listed)).not.toContain(key)
@@ -110,7 +112,9 @@ describe('creating a key', () => {
       await createApiKey(tx, 'desktop')
     })
 
-    const listed = await asUser(fixture.acme.users.member, listApiKeys)
+    const listed = await asUser(fixture.acme.users.member, (tx) =>
+      listApiKeys(tx, fixture.acme.members.member),
+    )
 
     expect(listed.map((row) => row.label)).toEqual(['desktop', 'laptop'])
     expect(listed.every((row) => row.revoked_at === null)).toBe(true)
@@ -145,13 +149,15 @@ describe('another Member', () => {
   test('cannot read the key, list it, or revoke it', async () => {
     const id = await asUser(fixture.acme.users.member, async (tx) => {
       await createApiKey(tx, 'laptop')
-      const [only] = await listApiKeys(tx)
+      const [only] = await listApiKeys(tx, fixture.acme.members.member)
       return only!.id
     })
 
     // In the same Org, and an Admin at that: a key is personal, and
     // `api_keys_own` gives nobody else a way to it.
-    const seen = await asUser(fixture.acme.users.admin, listApiKeys)
+    const seen = await asUser(fixture.acme.users.admin, (tx) =>
+      listApiKeys(tx, fixture.acme.members.admin),
+    )
     expect(seen).toEqual([])
 
     // Named directly. The row exists and the id is spelled out, so the policy
@@ -177,14 +183,16 @@ describe('revocation', () => {
     const listed = await asUser(fixture.acme.users.member, async (tx) => {
       await createApiKey(tx, 'laptop')
       await createApiKey(tx, 'desktop')
-      return listApiKeys(tx)
+      return listApiKeys(tx, fixture.acme.members.member)
     })
 
     const doomed = listed.find((row) => row.label === 'laptop')!
 
     await asUser(fixture.acme.users.member, (tx) => revokeApiKey(tx, doomed.id))
 
-    const after = await asUser(fixture.acme.users.member, listApiKeys)
+    const after = await asUser(fixture.acme.users.member, (tx) =>
+      listApiKeys(tx, fixture.acme.members.member),
+    )
     const byLabel = new Map(after.map((row) => [row.label, row]))
 
     expect(byLabel.get('laptop')!.revoked_at).toBeInstanceOf(Date)
@@ -194,7 +202,7 @@ describe('revocation', () => {
   test('cannot be undone, even by the key’s own Member', async () => {
     const id = await asUser(fixture.acme.users.member, async (tx) => {
       await createApiKey(tx, 'laptop')
-      const [only] = await listApiKeys(tx)
+      const [only] = await listApiKeys(tx, fixture.acme.members.member)
       await revokeApiKey(tx, only!.id)
       return only!.id
     })
@@ -237,7 +245,9 @@ describe('a Member of more than one Org', () => {
       createApiKey(tx, 'laptop', second),
     )
 
-    const listed = await asUser(fixture.acme.users.member, listApiKeys)
+    const listed = await asUser(fixture.acme.users.member, (tx) =>
+      listApiKeys(tx, second),
+    )
     expect(listed).toMatchObject([{ label: 'laptop', org_name: 'Globex' }])
   })
 

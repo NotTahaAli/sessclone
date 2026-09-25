@@ -27,7 +27,7 @@ export default async function Page() {
   if (!viewer) notFound()
 
   const { devices, more } = await asViewer(viewer.userId, (tx) =>
-    listOwnDevices(tx),
+    listOwnDevices(tx, viewer.memberId),
   )
 
   // In the Org's timezone, like every other date on the dashboard: a Turn is

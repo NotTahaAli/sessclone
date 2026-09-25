@@ -72,6 +72,7 @@ type AppearanceRow = {
  */
 export const viewerAppearance = async (
   tx: postgres.Sql | postgres.TransactionSql,
+  memberId: string,
 ): Promise<Appearance> => {
   const [row] = await tx<AppearanceRow[]>`
     select member.accent_seed as member_seed,
@@ -82,12 +83,10 @@ export const viewerAppearance = async (
            org.accent_locked
       from members member
       join orgs org on org.id = member.org_id
-     where member.id in (select sessclone_own_member_ids())
-     -- The same row currentViewer reads, chosen the same way: v1 has one Org
-     -- per person, and the ticket that adds a switcher decides which is
-     -- current for both.
-     order by member.created_at
-     limit 1
+     -- The membership the viewer is in now (the Org switcher's choice),
+     -- and only if it is theirs: the id is a filter, the function the check.
+     where member.id = ${memberId}
+       and member.id in (select sessclone_own_member_ids())
   `
 
   if (!row) return DEFAULT_APPEARANCE

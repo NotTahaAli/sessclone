@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { createApiKey, revokeApiKey } from '../../../lib/api-keys'
 import { asViewer } from '../../../lib/db'
 import { signedInUser } from '../../../lib/supabase/server'
+import { currentViewer } from '../../../lib/viewer'
 
 // A Server Action is a POST endpoint that anyone can reach, whether or not the
 // page rendered a form for them — so identity is taken from the session here
@@ -30,33 +31,26 @@ export const createKey = async (
   _previous: unknown,
   formData: FormData,
 ): Promise<{ key: string } | { error: string } | null> => {
-  const user = await signedInUser()
-  if (!user) return { error: 'Sign in again to create a key.' }
+  const viewer = await currentViewer()
+  if (!viewer) return { error: 'Sign in again to create a key.' }
 
   const label = Label.safeParse(formData.get('label'))
   if (!label.success) {
     return { error: 'Give the key a label — the machine it will live on.' }
   }
 
-  // Absent when the viewer has one membership: the page renders no picker
-  // then, and `createApiKey` resolves it. Present, it is still only a claim —
-  // parsed here, and intersected with the viewer's own memberships there.
-  const raw = formData.get('memberId')
-  const memberId = raw === null || raw === '' ? undefined : Id.safeParse(raw)
-  if (memberId && !memberId.success) {
-    return { error: 'Choose which org this key reports to.' }
-  }
-
   try {
-    const key = await asViewer(user.id, (tx) =>
-      createApiKey(tx, label.data, memberId?.data),
+    // The current Org's membership, never a form field: the key reports
+    // where the person is looking, and the switcher is how they change that.
+    const key = await asViewer(viewer.userId, (tx) =>
+      createApiKey(tx, label.data, viewer.memberId),
     )
     revalidatePath('/keys')
     return { key }
   } catch {
     // The message would say which membership was refused, which is a fact
     // about somebody else's Org if the id was guessed at.
-    return { error: 'Could not create that key. Choose an org and try again.' }
+    return { error: 'Could not create that key. Try again.' }
   }
 }
 

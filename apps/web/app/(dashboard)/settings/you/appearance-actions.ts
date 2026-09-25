@@ -52,8 +52,10 @@ const submitted = (formData: FormData) =>
  * cookie that disagreed with the database would show somebody the colour they
  * did not save until the next sign-in.
  */
-const remember = async (userId: string) => {
-  const appearance = await asViewer(userId, viewerAppearance)
+const remember = async (userId: string, memberId: string) => {
+  const appearance = await asViewer(userId, (tx) =>
+    viewerAppearance(tx, memberId),
+  )
   const store = await cookies()
   store.set(
     APPEARANCE_COOKIE,
@@ -112,7 +114,7 @@ export const setOwnAccent = async (
     }
   }
 
-  await remember(user.id)
+  await remember(user.id, memberId.data)
   // Not this page alone: the accent paints the shell and every page under it,
   // and the cookie is only read on a full load.
   revalidatePath('/', 'layout')
@@ -143,7 +145,7 @@ export const setOwnTheme = async (
   )
   if (!written) return { error: 'That is not your membership to change.' }
 
-  await remember(user.id)
+  await remember(user.id, memberId.data)
   revalidatePath('/', 'layout')
   return {
     saved:

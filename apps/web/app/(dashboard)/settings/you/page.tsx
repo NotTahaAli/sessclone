@@ -19,7 +19,7 @@ import { SwitchForm } from '../switch-form'
 import { Field, Row, SectionBreak } from '../../../_ui/primitives'
 import { viewerAppearance } from '../../../../lib/appearance'
 import { asViewer } from '../../../../lib/db'
-import { signedInUser } from '../../../../lib/supabase/server'
+import { currentViewer } from '../../../../lib/viewer'
 
 // Ticket 72: `/settings/you`, the destination `docs/design/product-ia.md`
 // gives every Role, carrying the settings that are the Member's own: archival,
@@ -38,22 +38,24 @@ import { signedInUser } from '../../../../lib/supabase/server'
 const EMPTY: ArchivalProject[] = []
 
 export default async function YourSettings() {
-  const user = await signedInUser()
+  // The current membership, not the oldest: appearance is per membership,
+  // and the one being changed is the one the shell is painted with.
+  const viewer = await currentViewer()
 
   // The shell above has already said so for every page under it, so this is
   // narrowing for the type checker rather than a second message.
-  if (!user) return null
+  if (!viewer) return null
 
   // One transaction, which is what `asViewer` opens and what carries the
   // viewer's claim. The statements are independent, so they go together.
   const [memberships, projects, scopes, appearance, displayName] =
-    await asViewer(user.id, (tx) =>
+    await asViewer(viewer.userId, (tx) =>
       Promise.all([
         listArchivalMemberships(tx),
         listArchivalProjects(tx),
         ownScopes(tx),
-        viewerAppearance(tx),
-        ownDisplayName(tx, user.id),
+        viewerAppearance(tx, viewer.memberId),
+        ownDisplayName(tx, viewer.userId),
       ]),
     )
 
@@ -65,8 +67,6 @@ export default async function YourSettings() {
     if (!group) byMember.set(project.member_id, (group = []))
     group.push(project)
   }
-
-  const first = memberships[0]
 
   return (
     <div className="flex max-w-3xl flex-col">
@@ -82,12 +82,12 @@ export default async function YourSettings() {
         <InlineName
           action={setName}
           current={displayName}
-          fallback={user.email ?? 'your address'}
+          fallback={viewer.email}
           label="Your name"
           placeholder="Taha"
         />
       </Field>
-      <Field label="Email">{user.email ?? '—'}</Field>
+      <Field label="Email">{viewer.email}</Field>
 
       <YourScopes scopes={scopes} />
 
@@ -95,46 +95,42 @@ export default async function YourSettings() {
           the Org has locked it, and it only paints the few things that are
           "now" — never the status colours or a chart's series, which have to
           mean the same thing across a desk. */}
-      {first ? (
-        <>
-          <SectionBreak>Appearance</SectionBreak>
-          <Field label="Theme">
-            <ThemeForm memberId={first.member_id} current={appearance.theme} />
-          </Field>
-          {appearance.locked ? (
-            <Field
-              label="Accent"
-              hint="Your Org has locked its accent colour. If you had chosen one it is still stored, and applies again when the lock is lifted."
-            >
-              {appearance.orgSeed}
-            </Field>
-          ) : (
-            <Field
-              label="Accent"
-              hint={
-                appearance.ownSeed
-                  ? 'Yours, on your screens only. The last swatch takes any colour.'
-                  : 'Your Org’s, until you pick one. The last swatch takes any colour; yours shows on your screens only.'
-              }
-            >
-              <SeedPicker
-                action={setOwnAccent}
-                field="memberId"
-                rowId={first.member_id}
-                current={appearance.ownSeed}
-                orgSeed={appearance.orgSeed}
-                inheritable
-                label={
-                  appearance.ownSeed
-                    ? 'Your accent colour'
-                    : 'Your accent colour, currently your Org’s'
-                }
-              />
-            </Field>
-          )}
-          <AccentPreview seed={appearance.seed} tones={appearance.tones} />
-        </>
-      ) : null}
+      <SectionBreak>Appearance</SectionBreak>
+      <Field label="Theme">
+        <ThemeForm memberId={viewer.memberId} current={appearance.theme} />
+      </Field>
+      {appearance.locked ? (
+        <Field
+          label="Accent"
+          hint="Your Org has locked its accent colour. If you had chosen one it is still stored, and applies again when the lock is lifted."
+        >
+          {appearance.orgSeed}
+        </Field>
+      ) : (
+        <Field
+          label="Accent"
+          hint={
+            appearance.ownSeed
+              ? 'Yours, on your screens only. The last swatch takes any colour.'
+              : 'Your Org’s, until you pick one. The last swatch takes any colour; yours shows on your screens only.'
+          }
+        >
+          <SeedPicker
+            action={setOwnAccent}
+            field="memberId"
+            rowId={viewer.memberId}
+            current={appearance.ownSeed}
+            orgSeed={appearance.orgSeed}
+            inheritable
+            label={
+              appearance.ownSeed
+                ? 'Your accent colour'
+                : 'Your accent colour, currently your Org’s'
+            }
+          />
+        </Field>
+      )}
+      <AccentPreview seed={appearance.seed} tones={appearance.tones} />
 
       <SectionBreak>Transcript upload</SectionBreak>
       <BeforeYouOptIn />

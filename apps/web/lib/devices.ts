@@ -42,7 +42,9 @@ type DeviceRow = {
 export const DEVICE_LIMIT = 50
 
 /**
- * The signed-in Member's own Devices, most recently seen first.
+ * The signed-in Member's own Devices in one membership — the current Org's —
+ * most recently seen first. A person in two Orgs has a Device row per
+ * membership, and the other Org's belong on the other Org's page.
  *
  * The Session count is a correlated aggregate rather than a join and a group by,
  * and it is bounded to the last 30 days on both counts: bounded, it reaches
@@ -53,6 +55,7 @@ export const DEVICE_LIMIT = 50
  */
 export const listOwnDevices = async (
   tx: TransactionSql,
+  memberId: string,
   limit = DEVICE_LIMIT,
 ): Promise<{ devices: Device[]; more: boolean }> => {
   const rows = await tx<DeviceRow[]>`
@@ -66,7 +69,8 @@ export const listOwnDevices = async (
              where turn.device_id = device.id
                and turn.occurred_at >= now() - interval '30 days') as sessions
       from devices device
-     where device.member_id in (select sessclone_own_member_ids())
+     where device.member_id = ${memberId}
+       and device.member_id in (select sessclone_own_member_ids())
      order by device.last_seen_at desc
      limit ${limit + 1}
   `
