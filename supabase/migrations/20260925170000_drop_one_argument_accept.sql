@@ -1,0 +1,11 @@
+-- Ticket 135: drop the one-argument accept.
+--
+-- `20260925120000_org_switcher.sql` kept `sessclone_accept_invitation(text)`
+-- so invitation links kept working between that SQL reaching production and
+-- the app that passes the verified address being deployed. That app is live
+-- (#42, 2026-09-25), so the form is dead code that `sessclone_app` could still
+-- execute, and it trusts `users.email`, which does not follow an address
+-- change. Dropping a function drops its grants with it.
+--
+-- `if exists` so a database that never had it is not an error.
+drop function if exists sessclone_accept_invitation(text);

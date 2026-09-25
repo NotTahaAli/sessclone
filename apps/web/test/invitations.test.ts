@@ -704,36 +704,23 @@ test('a Member leaves an Org; the last Owner cannot, and nobody leaves for anoth
   ).rejects.toThrow()
 })
 
-test('the app deployed before this migration still accepts by link, re-admission included', async () => {
-  // The SQL reaches production before the new app does, and the app already
-  // there calls the one-argument form. It must keep working in between.
-  const [account] = await sql<{ email: string }[]>`
-    select email from users where id = ${fixture.acme.users.removed}
+test('the one-argument accept is gone, so only the verified address admits', async () => {
+  // Ticket 135. `20260925120000_org_switcher.sql` kept
+  // `sessclone_accept_invitation(text)` for the app deployed before it, keyed
+  // on `users.email`, which does not follow an address change. That app is
+  // gone; the form went with it, grants and all.
+  const [row] = await sql<{ found: string | null }[]>`
+    select to_regprocedure('sessclone_accept_invitation(text)')::text as found
   `
-  const back = await invited(account!.email)
-  const fresh = await invited()
-  const oldCall = (userId: string, token: string) =>
-    asUser(
-      userId,
-      (tx) => tx<{ org: string }[]>`
-        select sessclone_accept_invitation(
-          ${hashOf(token)}
-        ) as org
-      `,
-    ).then(([row]) => row!.org)
+  expect(row!.found).toBeNull()
 
-  expect(await oldCall(fixture.acme.users.removed, back.token)).toBe(
-    fixture.acme.id,
-  )
-  expect(await oldCall(fixture.stranger.userId, fresh.token)).toBe(
-    fixture.acme.id,
-  )
-  const rows = await sql<{ user_id: string }[]>`
-    select user_id from members
-     where org_id = ${fixture.acme.id} and removed_at is null
-       and user_id in (${fixture.acme.users.removed}, ${fixture.stranger.userId})
-  `
-  expect(rows).toHaveLength(2)
+  const { token } = await invited()
+  await expect(
+    asUser(
+      fixture.stranger.userId,
+      (tx) => tx`select sessclone_accept_invitation(${hashOf(token)})`,
+    ),
+  ).rejects.toThrow(/does not exist/)
 })
 
 test('two Owners leaving at once cannot leave the Org with none', async () => {
