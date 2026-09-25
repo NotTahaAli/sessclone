@@ -17,6 +17,7 @@ import { owner as sql, seedFixture, type Fixture } from './harness'
 
 const session = vi.hoisted(() => ({ userId: null as string | null }))
 const objects = vi.hoisted(() => new Map<string, Uint8Array>())
+const cancelled = vi.hoisted(() => new Set<string>())
 
 vi.mock('next/headers', () => ({
   cookies: async () => ({ get: () => undefined }),
@@ -37,7 +38,16 @@ vi.mock('../lib/storage', async (importOriginal) => ({
   storageConfigured: () => true,
   objectStream: async (key: string) => {
     const bytes = objects.get(key)
-    return bytes ? new Response(new Uint8Array(bytes)).body : null
+    if (!bytes) return null
+    return new ReadableStream<Uint8Array>({
+      pull: (controller) => {
+        controller.enqueue(new Uint8Array(bytes))
+        controller.close()
+      },
+      cancel: () => {
+        cancelled.add(key)
+      },
+    })
   },
 }))
 
@@ -46,6 +56,7 @@ let fixture: Fixture
 beforeEach(async () => {
   fixture = await seedFixture()
   objects.clear()
+  cancelled.clear()
   session.userId = null
   vi.resetModules()
 })
@@ -263,4 +274,29 @@ test('refuses filters it did not send, the signed out, and a locked Org', async 
   } finally {
     vi.unstubAllEnvs()
   }
+})
+
+test('an entry left before its body is read closes its storage stream', async () => {
+  const { archiveEntries } = await import('../lib/transcript-archive')
+  objects.set('k/left.jsonl', new TextEncoder().encode('x\n'))
+  const entries = archiveEntries(
+    [
+      {
+        memberId: fixture.acme.members.member,
+        person: 'member@acme.test',
+        project: null,
+        sessionId: 'left',
+        agentId: null,
+        uploadedAt: new Date('2026-09-20T12:00:00Z'),
+        sizeBytes: 2,
+        storageKey: 'k/left.jsonl',
+        chunks: [],
+      },
+    ],
+    new AbortController().signal,
+  )
+  // The client goes while the entry's header is out.
+  expect((await entries.next()).done).toBe(false)
+  await entries.return(undefined)
+  expect([...cancelled]).toEqual(['k/left.jsonl'])
 })

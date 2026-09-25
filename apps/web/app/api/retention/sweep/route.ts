@@ -41,8 +41,11 @@ export async function POST(request: Request) {
   // rather than a second cron and a second secret. First, and before the
   // storage check: the scrub queues a person's transcripts as orphans, which
   // the sweep below then deletes, and a deployment without storage still
-  // owes its people their deletion.
-  const accounts = await finalizeDueDeletions(ingestDb(), removeSignIn)
+  // owes its people their deletion. Its failure is reported, never allowed
+  // to stop the sweep: the transcripts past their window are owed too.
+  const accounts = await finalizeDueDeletions(ingestDb(), removeSignIn).catch(
+    () => null,
+  )
 
   // Storage first: the rows and the objects go together, so a sweep that
   // cannot reach the bucket must not delete rows — that is the one failure
@@ -60,11 +63,13 @@ export async function POST(request: Request) {
     const swept = await sweepRetention(sql)
     return Response.json({
       removed: swept.removed,
-      accounts: {
-        scrubbed: accounts.scrubbed,
-        signInsRemoved: accounts.signInsRemoved,
-        signInsFailed: accounts.failed.length,
-      },
+      accounts: accounts
+        ? {
+            scrubbed: accounts.scrubbed,
+            signInsRemoved: accounts.signInsRemoved,
+            signInsFailed: accounts.failed.length,
+          }
+        : { error: 'account deletions did not run' },
       // What is still past the window after this call, so a caller draining a
       // backlog knows to call again rather than guessing from `more`.
       remaining: swept.more ? await expiredCount(sql) : 0,

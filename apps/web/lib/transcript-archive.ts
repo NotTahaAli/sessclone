@@ -267,20 +267,30 @@ export async function* archiveEntries(
     )
     if (!opened) continue
 
-    yield {
-      name: paths[index]!,
-      modified: item.uploadedAt,
-      body: (async function* () {
-        for (const [at, sealed] of item.chunks.entries()) {
-          yield* chunk(sealed, at === 0 ? opened : null, signal)
-        }
-        const tail =
-          first === undefined
-            ? opened
-            : await objectStream(item.storageKey, signal)
-        if (!tail) throw missing(item.storageKey)
-        yield* read(tail)
-      })(),
+    // A body only closes its stream once read. Stopped before that (the
+    // client left while the entry's header went out), the stream is closed
+    // here, or it holds a storage socket until it times out.
+    let started = false
+    try {
+      yield {
+        name: paths[index]!,
+        modified: item.uploadedAt,
+        body: (async function* () {
+          started = true
+          for (const [at, sealed] of item.chunks.entries()) {
+            yield* chunk(sealed, at === 0 ? opened : null, signal)
+          }
+          const tail =
+            first === undefined
+              ? opened
+              : await objectStream(item.storageKey, signal)
+          if (!tail) throw missing(item.storageKey)
+          yield* read(tail)
+        })(),
+      }
+    } finally {
+      // oxlint-disable-next-line no-await-in-loop -- this entry's own stream.
+      if (!started) await opened.cancel().catch(() => {})
     }
   }
 }

@@ -780,3 +780,21 @@ test('a lower ceiling brings the Org’s own setting down with it', async () => 
     await sql`select retention_days from orgs where id = ${fixture.acme.id}`
   expect(org!.retention_days).toBe(30)
 })
+
+test('account deletions that cannot run never stop the sweep', async () => {
+  process.env.RETENTION_SWEEP_SECRET = 'a-real-secret'
+  await sql`update orgs set retention_days = 1 where id = ${fixture.acme.id}`
+  await seedArtifact({ age: 10 })
+  // The queue's first read fails.
+  await sql`alter function sessclone_deletion_blockers(uuid) rename to blockers_gone`
+  try {
+    expect(await (await sweep('a-real-secret')).json()).toEqual({
+      removed: 1,
+      remaining: 0,
+      accounts: { error: 'account deletions did not run' },
+    })
+  } finally {
+    await sql`alter function blockers_gone(uuid) rename to sessclone_deletion_blockers`
+    delete process.env.RETENTION_SWEEP_SECRET
+  }
+})
