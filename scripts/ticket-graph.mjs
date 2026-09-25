@@ -153,6 +153,13 @@ const PHASES = [
     pos: [730, 1000],
     range: [122, 127],
   },
+  {
+    id: 'chunked',
+    label: 'Chunked Archival',
+    type: 'cloud',
+    pos: [960, 1000],
+    range: [128, 133],
+  },
 ]
 
 const phaseOf = (n) =>

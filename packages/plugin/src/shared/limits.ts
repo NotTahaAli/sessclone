@@ -27,3 +27,10 @@ export const FAILURES_PER_PAYLOAD = 100
  * be pushed into the table through it.
  */
 export const FAILURE_MESSAGE_LIMIT = 2000
+
+/**
+ * The most chunks one archival pass may seal (ADR 0008), so a confirm HEADs
+ * at most 17 objects. Here rather than in `presign.ts` so the Collector, which
+ * cannot import zod, seals to the same cap the route validates.
+ */
+export const MAX_SEAL = 16

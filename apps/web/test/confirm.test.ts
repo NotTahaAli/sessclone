@@ -13,6 +13,8 @@ import { asUser, owner as sql, seedFixture, type Fixture } from './harness'
 
 const stored = vi.hoisted(() => ({
   size: 4096 as number | null,
+  /** Per-key sizes, for the chunked tests; any other key answers `size`. */
+  sizes: {} as Record<string, number | null>,
   /** Set to throw from `storedObject`, as an unreachable provider does. */
   unreadable: false,
   configured: true,
@@ -23,9 +25,10 @@ const stored = vi.hoisted(() => ({
 vi.mock('../lib/storage', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/storage')>()),
   storageConfigured: () => stored.configured,
-  storedObject: async () => {
+  storedObject: async (key: string) => {
     if (stored.unreadable) throw new Error('endpoint refused')
-    return stored.size === null ? null : { sizeBytes: stored.size }
+    const size = key in stored.sizes ? stored.sizes[key]! : stored.size
+    return size === null ? null : { sizeBytes: size }
   },
   deleteObjects: async (keys: string[]) => {
     stored.deleted.push(keys)
@@ -36,6 +39,8 @@ let fixture: Fixture
 let key: string
 
 const SHA = 'a'.repeat(64)
+/** The pass `ask` records its keys under when the body names none. */
+const PASS = '0000000000000000'
 
 const issueKey = async (memberId: string) => {
   const { key: plaintext, prefix, hash } = generateApiKey()
@@ -109,11 +114,55 @@ const setArchival = (enabled: boolean) =>
           where id = ${fixture.acme.members.member}`,
   )
 
+/**
+ * Whether `ask` first records the keys it names as pending, as the presign
+ * that issued them would have. The tests about an unpresigned key clear it.
+ */
+let presigned = true
+
+/** The keys a confirm body names: its tail, and each chunk's content key. */
+const keysOf = (body: {
+  storageKey: string
+  chunks?: { seq: number; sha256: string }[]
+}) => {
+  const dir = body.storageKey.replace(/\/tail-[^/]*$/, '')
+  return [
+    body.storageKey,
+    ...(body.chunks ?? []).map(
+      (chunk) =>
+        `${dir}/chunks/${String(chunk.seq).padStart(6, '0')}-${chunk.sha256.slice(0, 16)}.jsonl.gz`,
+    ),
+  ]
+}
+
 const ask = async (
   body: Record<string, unknown> = {},
   presented: string | null = key,
-) =>
-  POST(
+) => {
+  const sent = {
+    sessionId: 'session-1',
+    sha256: SHA,
+    // The key the presign issued, which the Collector echoes. Overridden
+    // by the tests that are about it.
+    storageKey: derivedKey(),
+    ...body,
+  }
+  if (presigned && typeof sent.storageKey === 'string') {
+    await sql`
+      insert into log_upload_pending ${sql(
+        keysOf(sent as Parameters<typeof keysOf>[0]).map((storage_key) => ({
+          storage_key,
+          pass: typeof body.pass === 'string' ? body.pass : PASS,
+          member_id: fixture.acme.members.member,
+          session_id: 'session-1',
+          kind: 'transcript',
+          expires_at: new Date(Date.now() + 3_600_000),
+        })),
+      )}
+      on conflict (storage_key, pass) do nothing
+    `
+  }
+  return POST(
     new Request('https://sessclone.test/api/logs/confirm', {
       method: 'POST',
       headers: presented
@@ -122,16 +171,10 @@ const ask = async (
             'content-type': 'application/json',
           }
         : { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        sessionId: 'session-1',
-        sha256: SHA,
-        // The key the presign issued, which the Collector echoes. Overridden
-        // by the tests that are about it.
-        storageKey: derivedKey(),
-        ...body,
-      }),
+      body: JSON.stringify(sent),
     }),
   )
+}
 
 const answer = async (response: Response) =>
   [response.status, await response.json()] as const
@@ -172,9 +215,11 @@ beforeEach(async () => {
   fixture = await seedFixture()
   key = await issueKey(fixture.acme.members.member)
   stored.size = 4096
+  stored.sizes = {}
   stored.unreadable = false
   stored.configured = true
   stored.deleted = []
+  presigned = true
   await setArchival(true)
 })
 
@@ -401,8 +446,10 @@ test('a Project change moves the row and destroys the object left behind', async
   expect(rows).toHaveLength(1)
   expect(rows[0]!.storage_key).toBe(moved)
   // The old object had no row naming it any more, and bytes no retention
-  // sweep can reach are a transcript kept forever.
-  expect(stored.deleted).toEqual([[first!.storage_key]])
+  // sweep can reach are a transcript kept forever. Queued for the sweep in
+  // the confirm's transaction, never deleted by the confirm itself.
+  expect(await orphanKeys()).toEqual([first!.storage_key])
+  expect(stored.deleted).toEqual([])
 })
 
 test('an upload to the same key deletes nothing', async () => {
@@ -413,6 +460,7 @@ test('an upload to the same key deletes nothing', async () => {
   await ask({ sha256: 'd'.repeat(64) })
 
   expect(stored.deleted).toEqual([])
+  expect(await orphanKeys()).toEqual([])
   expect(await artifacts()).toHaveLength(1)
 })
 
@@ -550,4 +598,643 @@ test('between the deploy and the old key’s drop, a sidecar beside its transcri
         drop constraint if exists log_artifacts_member_id_session_id_agent_id_key
     `
   }
+})
+
+// Ticket 129, ADR 0008: the chunked confirm records the chunks a pass sealed
+// and moves the tail, in one transaction; `whole` clears them.
+
+const MiB = 1_048_576
+const base = (projectKey = 'github.com-acme-api') =>
+  `orgs/${fixture.acme.id}/members/${fixture.acme.members.member}/projects/${projectKey}/session-1`
+/** Content-addressed: the seq and the first 16 hex of the raw SHA-256. */
+const chunkAt = (seq: number, sha = 'd'.repeat(64), projectKey?: string) =>
+  `${base(projectKey)}/chunks/${String(seq).padStart(6, '0')}-${sha.slice(0, 16)}.jsonl.gz`
+/** A tail after `chunks` chunks, with the per-pass nonce the presign drew. */
+const NONCE = '0123456789abcdef'
+const tailAt = (chunks: number, nonce = NONCE, projectKey?: string) =>
+  `${base(projectKey)}/tail-${chunks}-${nonce}.jsonl`
+
+/** A transcript row with `chunks` sealed 1 MiB chunks, as a sealing confirm
+ * would have left it. */
+const seedChunked = async (chunks: number, projectKey?: string) => {
+  const [artifact] = await sql<{ id: string }[]>`
+    insert into log_artifacts
+      (org_id, member_id, session_id, storage_key, sha256, size_bytes,
+       sealed_bytes, sealed_sha256)
+    values (${fixture.acme.id}, ${fixture.acme.members.member}, 'session-1',
+            ${tailAt(chunks, NONCE, projectKey)}, ${'e'.repeat(64)},
+            ${chunks * MiB + 10}, ${chunks * MiB}, ${'c'.repeat(64)})
+    returning id
+  `
+  await sql`
+    insert into log_artifact_chunks ${sql(
+      Array.from({ length: chunks }, (_, index) => ({
+        artifact_id: artifact!.id,
+        member_id: fixture.acme.members.member,
+        seq: index + 1,
+        raw_offset: index * MiB,
+        raw_length: MiB,
+        stored_bytes: 200_000,
+        sha256: 'd'.repeat(64),
+        storage_key: chunkAt(index + 1, 'd'.repeat(64), projectKey),
+      })),
+    )}
+  `
+}
+
+const chunkRows = () => sql<
+  {
+    seq: number
+    raw_offset: string
+    raw_length: string
+    stored_bytes: string
+    sha256: string
+    storage_key: string
+  }[]
+>`
+  select seq, raw_offset, raw_length, stored_bytes, sha256, storage_key
+    from log_artifact_chunks order by seq
+`
+
+const sealedRow = async () =>
+  (
+    await sql<
+      {
+        storage_key: string
+        size_bytes: string
+        sealed_bytes: string
+        sealed_sha256: string | null
+        sha256: string
+      }[]
+    >`
+      select storage_key, size_bytes, sealed_bytes, sealed_sha256, sha256
+        from log_artifacts where kind = 'transcript'
+    `
+  )[0]
+
+test('a steady-state chunked confirm moves the tail and touches no chunk', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await seedChunked(2)
+  // Every pass draws a fresh nonce, so no two passes share a tail key.
+  const next = tailAt(2, 'fedcba9876543210')
+  stored.sizes[next] = 500
+
+  const [status, body] = await answer(
+    await ask({ layout: 'chunked', storageKey: next }),
+  )
+
+  expect(status).toBe(200)
+  // Raw bytes: what is sealed plus the tail, which is what a download yields.
+  expect(body).toMatchObject({ stored: true, sizeBytes: 2 * MiB + 500 })
+  expect(await sealedRow()).toMatchObject({
+    storage_key: next,
+    size_bytes: String(2 * MiB + 500),
+    sealed_bytes: String(2 * MiB),
+    sha256: SHA,
+  })
+  expect(await chunkRows()).toHaveLength(2)
+  expect(await orphanKeys()).toEqual([tailAt(2)])
+})
+
+test('a sealing confirm writes the chunk rows and moves the tail key', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  // A whole-file row, as every row before ADR 0008 is.
+  await ask()
+  stored.sizes = {
+    [chunkAt(1, '1'.repeat(64))]: 300_000,
+    [chunkAt(2, '2'.repeat(64))]: 310_000,
+    [tailAt(2)]: 1234,
+  }
+
+  const [status, body] = await answer(
+    await ask({
+      layout: 'chunked',
+      sha256: 'f'.repeat(64),
+      storageKey: tailAt(2),
+      sealedSha256: '9'.repeat(64),
+      chunks: [
+        { seq: 1, rawOffset: 0, rawLength: 1_048_600, sha256: '1'.repeat(64) },
+        {
+          seq: 2,
+          rawOffset: 1_048_600,
+          rawLength: 1_048_700,
+          sha256: '2'.repeat(64),
+          // A size the Collector claims is not a field of this request.
+          storedBytes: 1,
+          stored_bytes: 1,
+        },
+      ],
+    }),
+  )
+
+  expect(status).toBe(200)
+  expect(body).toMatchObject({
+    stored: true,
+    storageKey: tailAt(2),
+    sizeBytes: 2_097_300 + 1234,
+  })
+  expect(await chunkRows()).toEqual([
+    {
+      seq: 1,
+      raw_offset: '0',
+      raw_length: '1048600',
+      stored_bytes: '300000',
+      sha256: '1'.repeat(64),
+      storage_key: chunkAt(1, '1'.repeat(64)),
+    },
+    {
+      seq: 2,
+      raw_offset: '1048600',
+      raw_length: '1048700',
+      // From the HEAD, never from the body.
+      stored_bytes: '310000',
+      sha256: '2'.repeat(64),
+      storage_key: chunkAt(2, '2'.repeat(64)),
+    },
+  ])
+  expect(await sealedRow()).toMatchObject({
+    storage_key: tailAt(2),
+    size_bytes: String(2_097_300 + 1234),
+    sealed_bytes: '2097300',
+    sealed_sha256: '9'.repeat(64),
+    sha256: 'f'.repeat(64),
+  })
+  // The old tail went after the commit, as any replaced key does.
+  expect(await orphanKeys()).toEqual([`${base()}.jsonl`])
+})
+
+test('chunks that do not follow on from what is sealed are stale_chunks, and write nothing', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await seedChunked(2)
+  const before = await sealedRow()
+  const chunk = (seq: number, rawOffset: number) => ({
+    seq,
+    rawOffset,
+    rawLength: MiB,
+    sha256: '1'.repeat(64),
+  })
+  const seal = (chunks: unknown[], tail: number) =>
+    ask({
+      layout: 'chunked',
+      sha256: 'f'.repeat(64),
+      storageKey: tailAt(tail),
+      sealedSha256: '9'.repeat(64),
+      chunks,
+    })
+
+  for (const [chunks, tail] of [
+    // Not contiguous.
+    [[chunk(3, 2 * MiB), chunk(5, 3 * MiB)], 5],
+    // Not starting at the next seq.
+    [[chunk(4, 2 * MiB)], 4],
+    // Not starting at the sealed bytes.
+    [[chunk(3, 2 * MiB + 1)], 3],
+    // A gap between two chunks' raw ranges.
+    [[chunk(3, 2 * MiB), chunk(4, 3 * MiB + 1)], 4],
+    // A tail key for a different number of chunks.
+    [[chunk(3, 2 * MiB)], 4],
+    [[], 3],
+  ] as const) {
+    // oxlint-disable-next-line no-await-in-loop -- one at a time, so a failure names which.
+    const [status, body] = await answer(await seal([...chunks], tail))
+    expect([status, body.refused], JSON.stringify(chunks)).toEqual([
+      200,
+      'stale_chunks',
+    ])
+  }
+
+  expect(await chunkRows()).toHaveLength(2)
+  expect(await sealedRow()).toEqual(before)
+})
+
+test('a chunk that is not in the bucket records nothing', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  stored.sizes[chunkAt(1, SHA)] = null
+
+  expect(
+    await answer(
+      await ask({
+        layout: 'chunked',
+        storageKey: tailAt(1),
+        sealedSha256: '9'.repeat(64),
+        chunks: [{ seq: 1, rawOffset: 0, rawLength: MiB, sha256: SHA }],
+      }),
+    ),
+  ).toMatchObject([200, { refused: 'not_uploaded' }])
+  expect(await artifacts()).toHaveLength(0)
+  expect(await chunkRows()).toHaveLength(0)
+})
+
+test('a chunk is looked for under the key its SHA-256 addresses', async () => {
+  // Content-addressed keys: a confirm naming different bytes than were
+  // presigned and PUT names a different key, which is not in the bucket.
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  stored.size = null
+  stored.sizes = { [chunkAt(1, '1'.repeat(64))]: 3000, [tailAt(1)]: 20 }
+  const confirmWith = (sha256: string) =>
+    ask({
+      layout: 'chunked',
+      storageKey: tailAt(1),
+      sealedSha256: '9'.repeat(64),
+      chunks: [{ seq: 1, rawOffset: 0, rawLength: MiB, sha256 }],
+    })
+
+  expect(await answer(await confirmWith('2'.repeat(64)))).toMatchObject([
+    200,
+    { refused: 'not_uploaded' },
+  ])
+  expect(await answer(await confirmWith('1'.repeat(64)))).toMatchObject([
+    200,
+    { stored: true },
+  ])
+  expect((await chunkRows())[0]?.storage_key).toBe(chunkAt(1, '1'.repeat(64)))
+})
+
+test('a tail key without a nonce is not this Session’s tail', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+
+  expect(
+    await answer(
+      await ask({
+        layout: 'chunked',
+        storageKey: `${base()}/tail-1.jsonl`,
+        sealedSha256: '9'.repeat(64),
+        chunks: [{ seq: 1, rawOffset: 0, rawLength: MiB, sha256: SHA }],
+      }),
+    ),
+  ).toMatchObject([200, { refused: 'stale_key' }])
+})
+
+test('a whole confirm from an older Collector clears the chunks and deletes their objects', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await seedChunked(2)
+  // The whole file holds at least what was sealed.
+  stored.sizes[`${base()}.jsonl`] = 3 * MiB
+
+  // The shape every Collector before ADR 0008 sends: no layout at all.
+  const [status, body] = await answer(
+    await ask({ sha256: 'f'.repeat(64), storageKey: `${base()}.jsonl` }),
+  )
+
+  expect(status).toBe(200)
+  expect(body).toMatchObject({ stored: true, storageKey: `${base()}.jsonl` })
+  expect(await chunkRows()).toHaveLength(0)
+  expect(await sealedRow()).toMatchObject({
+    storage_key: `${base()}.jsonl`,
+    sealed_bytes: '0',
+    sealed_sha256: null,
+    size_bytes: String(3 * MiB),
+  })
+  expect(await orphanKeys()).toEqual(
+    [chunkAt(1), chunkAt(2), tailAt(2)].toSorted(),
+  )
+})
+
+test('replaced objects are queued in the transaction, never deleted by the confirm', async () => {
+  // The sweep deletes a queued key only while no row names it again, so a
+  // key a later pass reuses is kept; a direct delete after the commit had
+  // no such guard.
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await seedChunked(1)
+  stored.sizes[`${base()}.jsonl`] = 2 * MiB
+
+  expect((await ask({ storageKey: `${base()}.jsonl` })).status).toBe(200)
+  expect(stored.deleted).toEqual([])
+
+  const orphans = await sql<{ storage_key: string }[]>`
+    select storage_key from storage_orphans order by storage_key
+  `
+  expect(orphans.map((row) => row.storage_key)).toEqual(
+    [chunkAt(1), tailAt(1)].toSorted(),
+  )
+})
+
+test('a confirm that records a key takes it out of storage_orphans', async () => {
+  // An earlier replace could not delete this key and queued it; the key is
+  // live again now, so the sweep must not be left holding it.
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await sql`
+    insert into storage_orphans (storage_key)
+    values (${derivedKey()}), ('unrelated.jsonl')
+  `
+
+  expect((await ask()).status).toBe(200)
+
+  const orphans = await sql<{ storage_key: string }[]>`
+    select storage_key from storage_orphans
+  `
+  expect(orphans.map((row) => row.storage_key)).toEqual(['unrelated.jsonl'])
+})
+
+test('an unchanged chunked confirm still short-circuits to the stored row', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await seedChunked(1)
+  stored.size = null
+
+  const [status, body] = await answer(
+    await ask({
+      layout: 'chunked',
+      sha256: 'e'.repeat(64),
+      storageKey: tailAt(1),
+    }),
+  )
+  expect(status).toBe(200)
+  expect(body).toMatchObject({
+    stored: true,
+    storageKey: tailAt(1),
+    sizeBytes: MiB + 10,
+  })
+})
+
+test('a Session that moved Project reseals from zero and its old chunks go', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await seedChunked(2, 'github.com-acme-old')
+
+  const [, body] = await answer(
+    await ask({
+      layout: 'chunked',
+      sha256: 'f'.repeat(64),
+      storageKey: tailAt(1),
+      sealedSha256: '9'.repeat(64),
+      chunks: [{ seq: 1, rawOffset: 0, rawLength: MiB, sha256: SHA }],
+    }),
+  )
+
+  expect(body).toMatchObject({ stored: true })
+  expect((await chunkRows()).map((row) => row.storage_key)).toEqual([
+    chunkAt(1, SHA),
+  ])
+  expect(await orphanKeys()).toEqual(
+    [
+      chunkAt(1, 'd'.repeat(64), 'github.com-acme-old'),
+      chunkAt(2, 'd'.repeat(64), 'github.com-acme-old'),
+      tailAt(2, NONCE, 'github.com-acme-old'),
+    ].toSorted(),
+  )
+})
+
+test('a chunked confirm to another Project’s key is still stale_key', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+
+  expect(
+    await answer(
+      await ask({
+        layout: 'chunked',
+        storageKey: `${base('github.com-acme-other')}.jsonl`,
+      }),
+    ),
+  ).toMatchObject([200, { refused: 'stale_key' }])
+})
+
+test('a sidecar confirm that names chunks is refused: only transcripts chunk', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession({ agentId: 'agent-7' })
+
+  const [status] = await answer(
+    await ask({
+      agentId: 'agent-7',
+      kind: 'agent_meta',
+      layout: 'chunked',
+      storageKey: `${base()}/agents/agent-7.meta.json`,
+      sealedSha256: '9'.repeat(64),
+      chunks: [{ seq: 1, rawOffset: 0, rawLength: MiB, sha256: SHA }],
+    }),
+  )
+  expect(status).toBe(400)
+  expect(await chunkRows()).toHaveLength(0)
+})
+
+test('two sealing confirms racing on one seq record it once and delete neither chunk', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await ask()
+  const seal = () =>
+    ask({
+      layout: 'chunked',
+      sha256: 'f'.repeat(64),
+      storageKey: tailAt(1),
+      sealedSha256: '9'.repeat(64),
+      chunks: [{ seq: 1, rawOffset: 0, rawLength: MiB, sha256: SHA }],
+    })
+
+  const answers = await Promise.all(
+    [seal(), seal()].map(async (each) => answer(await each)),
+  )
+
+  expect(answers.map(([status]) => status)).toEqual([200, 200])
+  expect(await chunkRows()).toHaveLength(1)
+  expect(stored.deleted.flat()).not.toContain(chunkAt(1, SHA))
+  expect(stored.deleted.flat()).not.toContain(tailAt(1))
+})
+
+// ADR 0008: the presign records every key it signs as pending. The confirm
+// takes the keys it records out of that ledger in its transaction, and a
+// pass that ends any other way queues its keys for the sweep.
+
+const pendingKeys = async () =>
+  (
+    await sql<{ storage_key: string }[]>`
+      select storage_key from log_upload_pending order by storage_key
+    `
+  ).map((row) => row.storage_key)
+
+const orphanKeys = async () =>
+  (
+    await sql<{ storage_key: string }[]>`
+      select storage_key from storage_orphans order by storage_key
+    `
+  ).map((row) => row.storage_key)
+
+const sealOne = () => ({
+  layout: 'chunked',
+  sha256: 'f'.repeat(64),
+  storageKey: tailAt(1, '1111222233334444'),
+  sealedSha256: '9'.repeat(64),
+  chunks: [{ seq: 1, rawOffset: 0, rawLength: MiB, sha256: SHA }],
+})
+
+test('a recorded confirm takes its keys out of the pending ledger', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await sql`
+    insert into log_upload_pending
+      (storage_key, pass, member_id, session_id, kind, expires_at)
+    values ('another-pass', '1111111111111111', ${fixture.acme.members.member},
+            'session-1',
+            'transcript', now() + interval '1 hour')
+  `
+
+  expect((await answer(await ask(sealOne())))[1]).toMatchObject({
+    stored: true,
+  })
+
+  expect(await pendingKeys()).toEqual(['another-pass'])
+})
+
+test('a key no presign signed, or whose authorisation lapsed, is not recorded', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  presigned = false
+
+  expect(await answer(await ask(sealOne()))).toMatchObject([
+    200,
+    { refused: 'not_uploaded' },
+  ])
+  expect(await artifacts()).toHaveLength(0)
+  expect(await chunkRows()).toHaveLength(0)
+})
+
+test('a stale, unchanged or refused confirm queues its pass’s keys for the sweep', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await seedChunked(1)
+  const passKeys = (body: Parameters<typeof keysOf>[0]) =>
+    keysOf(body).toSorted()
+
+  // Lost a race: the pass sealed seq 1 again after another sealed it.
+  expect((await answer(await ask(sealOne())))[1].refused).toBe('stale_chunks')
+  expect(await orphanKeys()).toEqual(passKeys(sealOne()))
+  expect(await pendingKeys()).toEqual([])
+  await sql`delete from storage_orphans`
+
+  // Unchanged: the row already holds these bytes, so this pass's tail is
+  // nobody's.
+  const unchanged = {
+    layout: 'chunked',
+    sha256: 'e'.repeat(64),
+    storageKey: tailAt(1, 'fedcba9876543210'),
+  }
+  expect((await answer(await ask(unchanged)))[1].stored).toBe(true)
+  expect(await orphanKeys()).toEqual([unchanged.storageKey])
+  await sql`delete from storage_orphans`
+
+  // Refused: archival was switched off between the presign and the confirm.
+  await setArchival(false)
+  const off = { ...unchanged, sha256: 'f'.repeat(64) }
+  expect((await answer(await ask(off)))[1].refused).toBe('archival_off')
+  expect(await orphanKeys()).toEqual([off.storageKey])
+  expect(await pendingKeys()).toEqual([])
+})
+
+test('a confirm queues only its own Member’s pending keys', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await seedChunked(1)
+  presigned = false
+  await sql`
+    insert into log_upload_pending
+      (storage_key, pass, member_id, session_id, kind, expires_at)
+    values (${tailAt(1, 'fedcba9876543210')}, ${PASS},
+            ${fixture.acme.members.admin},
+            'session-1', 'transcript', now() + interval '1 hour')
+  `
+
+  await ask({
+    layout: 'chunked',
+    sha256: 'e'.repeat(64),
+    storageKey: tailAt(1, 'fedcba9876543210'),
+  })
+
+  expect(await orphanKeys()).toEqual([])
+  expect(await pendingKeys()).toEqual([tailAt(1, 'fedcba9876543210')])
+})
+
+test('a chunk whose raw length its stored bytes could not inflate to is refused', async () => {
+  // Deflate expands at most about 1032 to 1, so a raw length past that is
+  // a Collector overstating what it stored, and it would inflate size_bytes.
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  stored.sizes = { [chunkAt(1, SHA)]: 1000 }
+  const confirmWith = (rawLength: number) =>
+    ask({
+      layout: 'chunked',
+      storageKey: tailAt(1),
+      sealedSha256: '9'.repeat(64),
+      chunks: [{ seq: 1, rawOffset: 0, rawLength, sha256: SHA }],
+    })
+
+  const [status, body] = await answer(await confirmWith(1000 * 1032 + 1))
+  expect(status).toBe(400)
+  expect(body.detail).toMatch(/rawLength/)
+  expect(await artifacts()).toHaveLength(0)
+
+  expect((await answer(await confirmWith(1000 * 1032)))[1]).toMatchObject({
+    stored: true,
+  })
+})
+
+test('two passes signed one key neither take nor cancel the other’s', async () => {
+  // Every zero-chunk pass is signed the whole-file key. A confirm or a
+  // refusal takes only its own pass's pending row.
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  const other = '2222222222222222'
+  await sql`
+    insert into log_upload_pending
+      (storage_key, pass, member_id, session_id, kind, expires_at)
+    values (${derivedKey()}, ${other}, ${fixture.acme.members.member},
+            'session-1', 'transcript', now() + interval '1 hour')
+  `
+
+  expect((await answer(await ask({ pass: PASS })))[1].stored).toBe(true)
+  expect(await pendingKeys()).toEqual([derivedKey()])
+  expect(await orphanKeys()).toEqual([])
+
+  presigned = false
+  const [, body] = await answer(
+    await ask({ pass: other, sha256: 'b'.repeat(64) }),
+  )
+  expect(body).toMatchObject({ stored: true })
+})
+
+test('after a sealing pass confirms, none of its pending keys remain', async () => {
+  // Its first presign signed a tail it never used once it went on to seal.
+  // That key is queued for the sweep, not before its URL is dead.
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  const unused = tailAt(0, 'aaaabbbbccccdddd')
+  await sql`
+    insert into log_upload_pending
+      (storage_key, pass, member_id, session_id, kind, expires_at)
+    values (${unused}, ${PASS}, ${fixture.acme.members.member},
+            'session-1', 'transcript', now() + interval '1 hour')
+  `
+
+  expect(
+    (await answer(await ask({ ...sealOne(), pass: PASS })))[1],
+  ).toMatchObject({ stored: true })
+
+  expect(await pendingKeys()).toEqual([])
+  const [queued] = await sql<{ storage_key: string; waits: boolean }[]>`
+    select storage_key, not_before > now() + interval '30 minutes' as waits
+      from storage_orphans
+  `
+  expect(queued).toEqual({ storage_key: unused, waits: true })
+})
+
+test('a whole file shorter than what is sealed is stale, and rolls nothing back', async () => {
+  // A pass that read the file before another sealed more. Recording its
+  // whole file would drop the newer chunks.
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await seedChunked(2)
+  stored.sizes[`${base()}.jsonl`] = 2 * MiB - 1
+
+  expect(
+    (await answer(await ask({ storageKey: `${base()}.jsonl` })))[1],
+  ).toMatchObject({ refused: 'stale_chunks' })
+  expect(await chunkRows()).toHaveLength(2)
+  expect((await sealedRow())?.storage_key).toBe(tailAt(2))
 })

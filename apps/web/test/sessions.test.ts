@@ -403,6 +403,8 @@ test('a stored transcript is listed, the session’s and each subagent’s', asy
 
   expect(stored.map((row) => row.agentId)).toEqual([null, 'agent-1'])
   expect(stored[0]!.bytes).toBe(100)
+  // Ticket 133: neither is chunked, so both keep the 302 download.
+  expect(stored.map((row) => row.chunked)).toEqual([false, false])
 
   // And a Member who may not see that person gets nothing, which is
   // `log_artifacts_read` rather than this statement.

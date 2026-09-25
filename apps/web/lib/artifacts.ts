@@ -1,4 +1,4 @@
-import type { TransactionSql } from 'postgres'
+import postgres, { type TransactionSql } from 'postgres'
 
 import { deleteObjects } from './storage'
 
@@ -19,6 +19,25 @@ import { deleteObjects } from './storage'
 // excluded uploads again, because the presign route reads the switches and not
 // this table — the only thing a deleted row changes there is that the
 // unchanged-hash refusal no longer applies.
+
+/**
+ * Whether the `log_artifacts` row under `alias` is stored as chunks plus a
+ * tail (ADR 0008): its key is a `tail-<n>-<nonce>` key and it has exactly
+ * `n` chunk rows. The same test `presignDecision` makes with `tailChunks`.
+ *
+ * Not `sealed_bytes > 0`: a rollback to code that predates chunks writes
+ * the whole-file key and leaves `sealed_bytes` and the chunk rows behind,
+ * and that row's object is the whole transcript. The count is the chunks'
+ * `(artifact_id, seq)` key, once per row of a bounded page.
+ */
+export const chunkedSql = (tx: TransactionSql, alias: string) => tx`
+  coalesce(
+    substring(${tx(alias)}.storage_key
+              from '/tail-([1-9][0-9]{0,8})-[0-9a-f]{16}\.jsonl$')::int
+      = (select count(*) from log_artifact_chunks chunk
+          where chunk.artifact_id = ${tx(alias)}.id),
+    false)
+`
 
 /**
  * Whose transcripts a listing is about (ticket 84).
@@ -92,6 +111,11 @@ export type StoredSession = {
   agentId: string | null
   bytes: number
   uploadedAt: Date
+  /**
+   * ADR 0008: stored as sealed chunks plus a tail, so the page downloads it
+   * in the browser (ticket 133) rather than through the 302.
+   */
+  chunked: boolean
   /**
    * When the last message of this Session was reported, or null when no Turn
    * of it is readable.
@@ -223,10 +247,11 @@ export const storedSessions = async (
       agent_id: string | null
       size_bytes: string
       uploaded_at: Date
+      chunked: boolean
     }[]
   >`
     select id, member_id, project_id, session_id, agent_id, size_bytes,
-           uploaded_at
+           uploaded_at, ${chunkedSql(tx, 'log_artifacts')} as chunked
       from log_artifacts
      -- One Member by equality when a group is named, which is what lets
      -- log_artifacts_member_uploaded_idx answer the order as well as the
@@ -259,6 +284,7 @@ export const storedSessions = async (
     agentId: row.agent_id,
     bytes: Number(row.size_bytes),
     uploadedAt: row.uploaded_at,
+    chunked: row.chunked,
   }))
 
   const last = await lastTurns(tx, page)
@@ -349,11 +375,20 @@ export const downloadableArtifact = async (
   storageKey: string
   filename: string
   contentType: string
+  /** ADR 0008: `storageKey` is only the tail; the page assembles the rest. */
+  chunked: boolean
 } | null> => {
   const [row] = await tx<
-    { member_id: string; storage_key: string; name: string; kind: string }[]
+    {
+      member_id: string
+      storage_key: string
+      name: string
+      kind: string
+      chunked: boolean
+    }[]
   >`
     select member_id, storage_key, kind,
+           ${chunkedSql(tx, 'log_artifacts')} as chunked,
            case when agent_id is null then session_id
                 when kind = 'workflow_journal'
                   then session_id || '-workflow-' || agent_id
@@ -374,6 +409,31 @@ export const downloadableArtifact = async (
     storageKey: row.storage_key,
     filename: `${row.name}${extension}`,
     contentType,
+    chunked: row.chunked,
+  }
+}
+
+/**
+ * Runs one delete statement, and once more if it lost a race with 23503.
+ *
+ * A confirm that seals inserts chunk rows while a delete of their artifact
+ * waits on it. The delete's snapshot predates them, so it deletes the
+ * artifact but not them, and the `no action` key refuses the statement at
+ * its end. Run again, the statement sees the committed chunks and takes
+ * them. Under a savepoint, so the caller's transaction survives the first
+ * try. Once: a second loss in a row is left to fail, and the caller retries.
+ */
+export const onceMoreOnRace = async <T>(
+  tx: TransactionSql,
+  statement: (sql: TransactionSql) => Promise<T>,
+) => {
+  try {
+    return await tx.savepoint(statement)
+  } catch (error) {
+    if (!(error instanceof postgres.PostgresError && error.code === '23503')) {
+      throw error
+    }
+    return tx.savepoint(statement)
   }
 }
 
@@ -399,24 +459,62 @@ export const deleteStoredSession = async (
   // The transcript and its sidecars in one statement (ticket 104): an Agent
   // Run's `.meta.json`, and for the Session's own transcript its workflows'
   // journals. A sidecar's id names no transcript and deletes nothing.
-  const rows = await tx<{ storage_key: string }[]>`
+  //
+  // ADR 0008: each doomed transcript's chunks go in the same statement, their
+  // keys with them. The foreign key is `no action`, so a path that forgot
+  // them would fail here rather than leave source code in the bucket.
+  const rows = await onceMoreOnRace(
+    tx,
+    (sp) => sp<{ storage_key: string; artifact: boolean }[]>`
     with transcript as (
       select member_id, session_id, agent_id from log_artifacts
        where id = ${artifactId}
          and kind = 'transcript'
          and member_id in (select sessclone_own_member_ids())
+    ), doomed as (
+      select artifact.id
+        from log_artifacts artifact
+        join transcript
+          on artifact.member_id = transcript.member_id
+         and artifact.session_id = transcript.session_id
+       where artifact.kind in ('transcript', 'agent_meta')
+               and artifact.agent_id is not distinct from transcript.agent_id
+          or artifact.kind = 'workflow_journal'
+               and transcript.agent_id is null
+    ), chunks as (
+      delete from log_artifact_chunks
+       where artifact_id in (select id from doomed)
+      returning storage_key
+    ), artifacts as (
+      delete from log_artifacts
+       where id in (select id from doomed)
+      returning storage_key
+    ), pending as (
+      -- Uploads presigned under these files and not yet confirmed: a pass
+      -- mid-flight has PUT, or is about to PUT, objects no row names. Taking
+      -- them here also refuses that pass's confirm. A PUT can still land
+      -- after this, so each is queued for the sweep too, not before its URL
+      -- is dead.
+      select sessclone_forget_pending(array(
+        select upload.storage_key
+          from log_upload_pending upload
+          join transcript
+            on upload.member_id = transcript.member_id
+           and upload.session_id = transcript.session_id
+         where upload.kind in ('transcript', 'agent_meta')
+                 and upload.agent_id is not distinct from transcript.agent_id
+            or upload.kind = 'workflow_journal'
+                 and transcript.agent_id is null
+      )) as storage_key
     )
-    delete from log_artifacts artifact
-     using transcript
-     where artifact.member_id = transcript.member_id
-       and artifact.session_id = transcript.session_id
-       and (artifact.kind in ('transcript', 'agent_meta')
-              and artifact.agent_id is not distinct from transcript.agent_id
-            or artifact.kind = 'workflow_journal'
-              and transcript.agent_id is null)
-    returning artifact.storage_key
-  `
-  if (rows.length === 0) return false
+    select storage_key, true as artifact from artifacts
+    union all
+    select storage_key, false from chunks
+    union all
+    select storage_key, false from pending
+  `,
+  )
+  if (!rows.some((row) => row.artifact)) return false
 
   await deleteObjects(rows.map((row) => row.storage_key))
   return true
@@ -445,13 +543,41 @@ export const deleteStoredProject = async (
   memberId: string,
   projectId: string | null,
 ): Promise<number> => {
-  const rows = await tx<{ storage_key: string; kind: string }[]>`
-    delete from log_artifacts
-     where member_id = ${memberId}
-       and member_id in (select sessclone_own_member_ids())
-       and project_id is not distinct from ${projectId}
-    returning storage_key, kind
-  `
+  // ADR 0008: the chunks of every doomed transcript in the same statement,
+  // and the uploads still pending in the Project.
+  const rows = await onceMoreOnRace(
+    tx,
+    (sp) => sp<{ storage_key: string; kind: string | null }[]>`
+    with doomed as (
+      select id from log_artifacts
+       where member_id = ${memberId}
+         and member_id in (select sessclone_own_member_ids())
+         and project_id is not distinct from ${projectId}
+    ), chunks as (
+      delete from log_artifact_chunks
+       where artifact_id in (select id from doomed)
+      returning storage_key
+    ), artifacts as (
+      delete from log_artifacts
+       where id in (select id from doomed)
+      returning storage_key, kind
+    ), pending as (
+      -- Uploads presigned in this Project and not yet confirmed (ADR 0008),
+      -- queued for the sweep as well for a PUT that lands after this.
+      select sessclone_forget_pending(array(
+        select storage_key from log_upload_pending
+         where member_id = ${memberId}
+           and member_id in (select sessclone_own_member_ids())
+           and project_id is not distinct from ${projectId}
+      )) as storage_key
+    )
+    select storage_key, kind from artifacts
+    union all
+    select storage_key, null from chunks
+    union all
+    select storage_key, null from pending
+  `,
+  )
   if (rows.length === 0) return 0
 
   // The keys come from the rows the policy just handed back, never from the

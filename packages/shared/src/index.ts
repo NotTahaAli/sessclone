@@ -19,7 +19,13 @@ export {
   TranscriptReport,
 } from './ingest.ts'
 export { ingestOpenAPI } from './openapi.ts'
-export { ArtifactKind, ConfirmRequest, PresignRequest } from './presign.ts'
+export {
+  ArtifactKind,
+  ConfirmRequest,
+  Layout,
+  MAX_SEAL,
+  PresignRequest,
+} from './presign.ts'
 export type {
   ConfirmResponse,
   PresignRefusal,

@@ -436,6 +436,22 @@ test('an object no row names is deleted by the sweep', async () => {
   expect(await sql`select storage_key from storage_orphans`).toHaveLength(0)
 })
 
+test('an orphan whose key a row names again is not deleted', async () => {
+  // A key can come back: the whole-file key is reused by every pass, and a
+  // chunk resealed with the same bytes lands on the same key. Deleting it
+  // then would delete a transcript a row still points at.
+  const live = await seedArtifact({ age: 1 })
+  const [chunk] = await sealChunks(live, 1)
+  await sql`
+    insert into storage_orphans (storage_key)
+    values (${live}), (${chunk!}), ('gone.jsonl')
+  `
+
+  await sweepRetention(sql)
+
+  expect(bucket.deleted).toEqual(['gone.jsonl'])
+})
+
 test('a bucket that refuses keeps the orphan too', async () => {
   await sql`insert into storage_orphans (storage_key) values ('orphan.jsonl')`
   bucket.fails = true
@@ -490,4 +506,167 @@ test('a sweep records that it ran, even when it removed nothing', async () => {
   `
   // One row, replaced: a log of every sweep is a table nobody reads.
   expect(rows.map((one) => one.removed)).toEqual([1])
+})
+
+/** Gives an artifact `count` sealed chunks (ADR 0008), keyed beside it. */
+const sealChunks = async (storageKey: string, count: number) => {
+  const [artifact] = await sql<{ id: string; member_id: string }[]>`
+    update log_artifacts
+       set sealed_bytes = ${count * 1024}, sealed_sha256 = ${'c'.repeat(64)}
+     where storage_key = ${storageKey}
+    returning id, member_id
+  `
+  const keys = Array.from(
+    { length: count },
+    (_, index) =>
+      `${storageKey}/chunks/${String(index + 1).padStart(6, '0')}.jsonl.gz`,
+  )
+  await sql`
+    insert into log_artifact_chunks ${sql(
+      keys.map((key, index) => ({
+        artifact_id: artifact!.id,
+        member_id: artifact!.member_id,
+        seq: index + 1,
+        raw_offset: index * 1024,
+        raw_length: 1024,
+        stored_bytes: 300,
+        sha256: 'd'.repeat(64),
+        storage_key: key,
+      })),
+    )}
+  `
+  return keys
+}
+
+const chunkCount = async () =>
+  (
+    await sql<
+      { n: number }[]
+    >`select count(*)::int as n from log_artifact_chunks`
+  )[0]!.n
+
+test('an expired chunked transcript takes every chunk with it, all at once', async () => {
+  // Ticket 130: chunks never expire one by one — the age is the artifact's.
+  await sql`update orgs set retention_days = 30 where id = ${fixture.acme.id}`
+  const tail = await seedArtifact({ age: 31 })
+  const chunks = await sealChunks(tail, 3)
+  const kept = await seedArtifact({ age: 1 })
+  const keptChunks = await sealChunks(kept, 1)
+
+  expect(await sweepRetention(sql)).toEqual({ removed: 1, more: false })
+
+  expect(bucket.deleted.toSorted()).toEqual([tail, ...chunks].toSorted())
+  const left = await sql<{ storage_key: string }[]>`
+    select storage_key from log_artifact_chunks
+  `
+  expect(left.map((row) => row.storage_key)).toEqual(keptChunks)
+})
+
+test('a bucket that refuses keeps the chunk rows as well as the artifact', async () => {
+  await sql`update orgs set retention_days = 1 where id = ${fixture.acme.id}`
+  const tail = await seedArtifact({ age: 10 })
+  await sealChunks(tail, 2)
+  bucket.fails = true
+
+  await expect(sweepRetention(sql)).rejects.toThrow(/refused/)
+
+  expect(await sql`select id from log_artifacts`).toHaveLength(1)
+  expect(await chunkCount()).toBe(2)
+})
+
+// ADR 0008: a key a presign signed and no confirm recorded — a pass cut off
+// by its deadline, a crash, a lost confirm — expires out of the pending
+// ledger into the sweep.
+
+const pendingAt = (storageKey: string, expiresIn: number) => sql`
+  insert into log_upload_pending
+    (storage_key, pass, member_id, session_id, kind, expires_at)
+  values (${storageKey}, '0000000000000000', ${fixture.acme.members.member},
+          'session-1',
+          'transcript', ${new Date(Date.now() + expiresIn)})
+`
+
+test('an expired pending upload is deleted; one still in time is kept', async () => {
+  await pendingAt('lapsed/tail-1-0123456789abcdef.jsonl', -1000)
+  await pendingAt('in-time/tail-1-0123456789abcdef.jsonl', 3_600_000)
+
+  expect(await sweepRetention(sql)).toEqual({ removed: 0, more: false })
+
+  expect(bucket.deleted).toEqual(['lapsed/tail-1-0123456789abcdef.jsonl'])
+  const left = await sql<{ storage_key: string }[]>`
+    select storage_key from log_upload_pending
+  `
+  expect(left.map((row) => row.storage_key)).toEqual([
+    'in-time/tail-1-0123456789abcdef.jsonl',
+  ])
+})
+
+test('an expired pending key a row names is not deleted', async () => {
+  // The whole-file key is presigned by every zero-chunk pass, including one
+  // whose confirm never came after an earlier one recorded it.
+  const live = await seedArtifact({ age: 1 })
+  await pendingAt(live, -1000)
+
+  await sweepRetention(sql)
+
+  expect(bucket.deleted).toEqual([])
+})
+
+test('a queued orphan a presign has signed again is kept while that upload is pending', async () => {
+  await sql`insert into storage_orphans (storage_key) values ('again.jsonl')`
+  await pendingAt('again.jsonl', 3_600_000)
+
+  await sweepRetention(sql)
+
+  expect(bucket.deleted).toEqual([])
+})
+
+test('lapsed keys already queued still count toward the limit', async () => {
+  // A lapsed key can already sit in storage_orphans; the insert then skips
+  // it, but the ledger row still went. Counting inserts read a full batch as
+  // the end of the backlog.
+  const live = await seedArtifact({ age: 1 })
+  await sql`insert into storage_orphans (storage_key) values (${live})`
+  await pendingAt(live, -2000)
+  await pendingAt('later/tail-1-0123456789abcdef.jsonl', -1000)
+
+  expect(await sweepRetention(sql, 1)).toEqual({ removed: 0, more: true })
+})
+
+test('a sweep racing a confirm that seals takes the new chunks too', async () => {
+  // As the Member's deletes: the chunk rows commit while the sweep waits on
+  // the artifact, and the statement runs once more on the 23503.
+  await sql`update orgs set retention_days = 1 where id = ${fixture.acme.id}`
+  const tail = await seedArtifact({ age: 10 })
+  const [artifact] = await sql<{ id: string }[]>`
+    select id from log_artifacts where storage_key = ${tail}
+  `
+  let sweeping: ReturnType<typeof sweepRetention> | undefined
+  await sql.begin(async (confirm) => {
+    await confirm`
+      insert into log_artifact_chunks ${confirm({
+        artifact_id: artifact!.id,
+        member_id: fixture.acme.members.member,
+        seq: 1,
+        raw_offset: 0,
+        raw_length: 1024,
+        stored_bytes: 300,
+        sha256: 'd'.repeat(64),
+        storage_key: `${tail}/chunks/000001-dddd.jsonl.gz`,
+      })}
+    `
+    sweeping = sweepRetention(sql)
+    for (;;) {
+      // eslint-disable-next-line no-await-in-loop -- polling until it waits
+      const [row] = await confirm<{ n: number }[]>`
+        select count(*)::int as n from pg_locks where not granted
+      `
+      if (row!.n > 0) break
+      // eslint-disable-next-line no-await-in-loop -- as above
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+  })
+
+  expect((await sweeping)?.removed).toBe(1)
+  expect(await chunkCount()).toBe(0)
 })

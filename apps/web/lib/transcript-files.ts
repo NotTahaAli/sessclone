@@ -1,5 +1,7 @@
 import type { TransactionSql } from 'postgres'
 
+import { chunkedSql } from './artifacts'
+
 // Tickets 105-107: what the transcript viewer reads from the database.
 //
 // Nothing here names a Role: `log_artifacts_read` and `turns_read` decide.
@@ -18,9 +20,24 @@ export type TranscriptFileRow = {
   sizeBytes: number
   uploadedAt: Date
   storageKey: string
+  /** ADR 0008: the raw offset the object at `storageKey` starts at. */
+  tailOffset: number
+  /** Sealed chunks before the tail, in `seq` order; none for a whole file. */
+  chunks: {
+    rawOffset: number
+    rawLength: number
+    sha256: string
+    storageKey: string
+  }[]
 }
 
-/** Every stored file of one Session the viewer may read, in one statement. */
+/**
+ * Every stored file of one Session the viewer may read, in one statement.
+ *
+ * Each row's chunks are aggregated beside it rather than read per file, off
+ * the chunks' `(artifact_id, seq)` key. `log_artifact_chunks_read` applies to
+ * the subquery just as `log_artifacts_read` does to the rows.
+ */
 export const transcriptFiles = async (
   tx: TransactionSql,
   memberId: string,
@@ -34,10 +51,33 @@ export const transcriptFiles = async (
       size_bytes: string
       uploaded_at: Date
       storage_key: string
+      sealed_bytes: string
+      chunks: {
+        rawOffset: number
+        rawLength: number
+        sha256: string
+        storageKey: string
+      }[]
     }[]
   >`
-    select id, kind, agent_id, size_bytes, uploaded_at, storage_key
-      from log_artifacts
+    select artifact.id, artifact.kind, artifact.agent_id, artifact.size_bytes,
+           artifact.uploaded_at, artifact.storage_key,
+           case when chunked then artifact.sealed_bytes else 0 end
+             as sealed_bytes,
+           case when chunked then coalesce(chunk.list, '[]') else '[]' end
+             as chunks
+      from log_artifacts artifact
+      -- A row that is not chunked by ADR 0008's test — a rollback left its
+      -- chunk rows behind a whole-file key — is read as the whole file.
+      cross join lateral (select ${chunkedSql(tx, 'artifact')} as chunked) test
+      left join lateral (
+        select json_agg(json_build_object(
+                 'rawOffset', raw_offset, 'rawLength', raw_length,
+                 'sha256', sha256, 'storageKey', storage_key
+               ) order by seq) as list
+          from log_artifact_chunks
+         where artifact_id = artifact.id
+      ) chunk on true
      where member_id = ${memberId}
        and session_id = ${sessionId}
      order by agent_id nulls first, kind
@@ -49,6 +89,8 @@ export const transcriptFiles = async (
     sizeBytes: Number(row.size_bytes),
     uploadedAt: row.uploaded_at,
     storageKey: row.storage_key,
+    tailOffset: Number(row.sealed_bytes),
+    chunks: row.chunks,
   }))
 }
 

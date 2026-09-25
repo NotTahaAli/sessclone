@@ -26,6 +26,11 @@
 // or `SessionStart` sweep asks again. An unchanged transcript is refused with
 // `unchanged` at the cost of one small request, which is the property that
 // keeps a sweep over a year of history from re-uploading all of it.
+//
+// Ticket 131 (ADR 0008): a transcript that grows is not re-sent whole. The
+// deployment says how much of it is sealed; the Collector checks that prefix
+// locally, seals about 1 MiB at a time as gzip chunks, and sends only the raw
+// tail past them. Anything unexpected falls back to the whole file.
 
 import { createReadStream } from 'node:fs'
 import {
@@ -41,8 +46,10 @@ import { createHash } from 'node:crypto'
 import { basename, dirname, join } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
+import { createGzip } from 'node:zlib'
 
 import { NO_DEADLINE, expired, requestSignal } from './deadline.mjs'
+import { MAX_SEAL } from './shared/limits.ts'
 import { sessionFiles } from './transcripts.mjs'
 
 /**
@@ -96,6 +103,188 @@ export const hashFile = async (path, size) => {
     return null
   }
   return digest.digest('hex')
+}
+
+/** How much raw transcript a sealed chunk holds, at least (ADR 0008). */
+export const CHUNK_BYTES = 1024 * 1024
+
+/**
+ * Where the next chunks end, as exclusive raw offsets (ADR 0008). Pure.
+ *
+ * A chunk starting at `from` ends just after the first `\n` at or after
+ * `from + chunkBytes - 1`, so it holds at least `chunkBytes` and never splits a
+ * line: a line longer than that makes a longer chunk, and bytes after the last
+ * line end stay in the tail. At most `max` cuts.
+ *
+ * `bytes` may be one piece of a longer file, starting at raw offset `at`: the
+ * streaming read below plans each piece as it arrives, with `from` the start
+ * of a chunk that may have begun in an earlier piece.
+ *
+ * @param {Buffer} bytes
+ * @param {number} from
+ * @param {{ at?: number, chunkBytes?: number, max?: number }} [options]
+ * @returns {number[]}
+ */
+export const sealPlan = (
+  bytes,
+  from,
+  { at = 0, chunkBytes = CHUNK_BYTES, max = MAX_SEAL } = {},
+) => {
+  const ends = []
+  let start = from
+  while (ends.length < max) {
+    const newline = bytes.indexOf(
+      0x0a,
+      Math.max(0, start + chunkBytes - 1 - at),
+    )
+    if (newline === -1) break
+    start = at + newline + 1
+    ends.push(start)
+  }
+  return ends
+}
+
+/**
+ * Reads `[0, size)` once: the SHA-256 of all of it, for the unchanged guard,
+ * and every place a chunk would be cut if the file were sealed from byte 0
+ * (ADR 0008), each with the SHA-256 of the prefix it ends and of its own
+ * bytes. Null when the file cannot be read. Streamed: only the piece being
+ * read is in memory, plus about a hundred bytes per MiB of transcript.
+ *
+ * Cuts depend only on the bytes before them, and every pass seals from the
+ * last cut on, so the deployment's sealed bytes are always one of these —
+ * which is what lets one read serve the hash, the prefix check and the plan
+ * of every presign in the pass.
+ *
+ * @param {string} path
+ * @param {number} size
+ * @param {{ chunkBytes?: number }} [options]
+ */
+export const scanFile = async (path, size, { chunkBytes } = {}) => {
+  const all = createHash('sha256')
+  let piece = createHash('sha256')
+  let start = 0
+  let position = 0
+  /** @type {{ end: number, prefix: string, sha256: string }[]} */
+  const cuts = []
+  try {
+    if (size > 0) {
+      for await (const bytes of createReadStream(path, {
+        start: 0,
+        end: size - 1,
+      })) {
+        let used = 0
+        for (const end of sealPlan(bytes, start, {
+          at: position,
+          chunkBytes,
+          max: Infinity,
+        })) {
+          const part = bytes.subarray(used, end - position)
+          all.update(part)
+          piece.update(part)
+          cuts.push({
+            end,
+            prefix: all.copy().digest('hex'),
+            sha256: piece.digest('hex'),
+          })
+          piece = createHash('sha256')
+          start = end
+          used = end - position
+        }
+        all.update(bytes.subarray(used))
+        piece.update(bytes.subarray(used))
+        position += bytes.length
+      }
+    }
+  } catch {
+    return null
+  }
+  // Shrunk mid-read (truncated or rewritten): the stat size no longer
+  // describes these bytes, so nothing planned from it could be uploaded.
+  if (position !== size) return null
+  return { sha256: all.digest('hex'), size, cuts }
+}
+
+/**
+ * What to seal after the deployment's sealed prefix, from a scan. Pure.
+ *
+ * `'stale'` when the deployment has sealed more bytes than this scan read:
+ * another pass read the file later and sealed more, so this one is behind and
+ * ends quietly — its whole file would roll the archive back. The next pass
+ * reads the file again and catches up. A file truly truncated below what is
+ * sealed is not archived again until it grows past it. Sealed bytes within
+ * the scan but past its last cut are not staleness: a cut depends only on the
+ * bytes before it, so this scan would have found it, and the file differs.
+ *
+ * `'mismatch'` when no cut ends at the sealed bytes or its prefix hashes
+ * differently: the file was rewritten (or sealed by rules other than these),
+ * so the caller falls back to the whole file. Otherwise at most
+ * `MAX_SEAL` new chunks, in order from seq `sealed.chunks + 1`, and the
+ * SHA-256 of every raw byte up to the last of them.
+ *
+ * @param {{ size: number, cuts: { end: number, prefix: string, sha256: string }[] }} scan
+ * @param {{ bytes: number, sha256: string | null, chunks: number }} sealed
+ */
+export const planFrom = (scan, sealed) => {
+  if (sealed.bytes > scan.size) return 'stale'
+  const from =
+    sealed.bytes === 0
+      ? 0
+      : scan.cuts.findIndex((cut) => cut.end === sealed.bytes) + 1
+  if (from === 0 && sealed.bytes !== 0) return 'mismatch'
+  if (from > 0 && scan.cuts[from - 1].prefix !== sealed.sha256) {
+    return 'mismatch'
+  }
+  const chunks = scan.cuts.slice(from, from + MAX_SEAL).map((cut, index) => {
+    const rawOffset =
+      index === 0 ? sealed.bytes : scan.cuts[from + index - 1].end
+    return {
+      seq: sealed.chunks + index + 1,
+      rawOffset,
+      rawLength: cut.end - rawOffset,
+      sha256: cut.sha256,
+    }
+  })
+  return {
+    chunks,
+    sealedSha256: chunks.length
+      ? scan.cuts[from + chunks.length - 1].prefix
+      : sealed.sha256,
+  }
+}
+
+/**
+ * `scanFile` then `planFrom`, for a caller with one prefix to check.
+ *
+ * @param {string} path
+ * @param {number} size
+ * @param {{ bytes: number, sha256: string | null, chunks: number }} sealed
+ * @param {{ chunkBytes?: number }} [options]
+ */
+export const planSeals = async (path, size, sealed, options) => {
+  const scan = await scanFile(path, size, options)
+  return scan && planFrom(scan, sealed)
+}
+
+/**
+ * Raw `[start, start + length)` gzipped, streamed through zlib; only the
+ * compressed result is collected, because a presigned PUT needs its length.
+ *
+ * @param {string} path
+ * @param {number} start
+ * @param {number} length
+ * @returns {Promise<Buffer>}
+ */
+export const gzipRange = async (path, start, length) => {
+  const parts = []
+  await pipeline(
+    createReadStream(path, { start, end: start + length - 1 }),
+    createGzip(),
+    async (source) => {
+      for await (const part of source) parts.push(part)
+    },
+  )
+  return Buffer.concat(parts)
 }
 
 /**
@@ -273,8 +462,14 @@ export const archiveTranscript = async ({
       : { archived: false, refused: last.outcome, skipped: true }
   }
 
-  const sha256 = await hashFile(transcriptPath, size)
-  if (!sha256) return { archived: false, refused: 'unreadable' }
+  // A transcript is scanned once for its hash and its chunk plan together
+  // (ADR 0008); a sidecar only needs the hash.
+  const scan =
+    kind === 'transcript' ? await scanFile(transcriptPath, size) : undefined
+  const sha256 =
+    scan === undefined ? await hashFile(transcriptPath, size) : scan?.sha256
+  if (!sha256 || scan === null)
+    return { archived: false, refused: 'unreadable' }
 
   /** Remembers what happened, keyed on the file as it was read. */
   const settle = async (outcome) => {
@@ -286,86 +481,270 @@ export const archiveTranscript = async ({
     })
   }
 
-  const presign = await ask({
-    configuration,
-    path: '/api/logs/presign',
-    body: { sessionId, agentId, kind, sha256 },
-    deadline,
-  })
+  /**
+   * This pass's id (ADR 0008), from the first presign that answers one: the
+   * later presigns and the confirm echo it, so the deployment takes only this
+   * pass's pending keys. An older deployment sends none.
+   *
+   * @type {string | undefined}
+   */
+  let pass
 
-  // Anything that is not an issued URL — a refusal, a 401, a deployment with
-  // no storage, an unreachable host — ends here without the file being opened.
-  if (!presign.ok) return { archived: false, refused: 'unavailable' }
-  if (presign.body?.refused) {
-    await settle(presign.body.refused)
-    return { archived: false, refused: presign.body.refused }
-  }
-  if (!presign.body?.url || !presign.body?.storageKey) {
-    return { archived: false, refused: 'unavailable' }
-  }
-  // A deployment older than ticket 104 strips `kind` and would file a sidecar
-  // as the run's transcript, overwriting it. Newer ones echo the kind they
-  // presigned for, so a sidecar goes only where the answer says so; otherwise
-  // it is skipped, unsettled, and asked about again once the server upgrades.
-  if (kind !== 'transcript' && presign.body.kind !== kind) {
-    return { archived: false, refused: 'kind_unsupported' }
-  }
-
-  try {
-    const answer = await fetch(presign.body.url, {
-      method: 'PUT',
-      headers: {
-        'content-type':
-          kind === 'agent_meta' ? 'application/json' : 'application/x-ndjson',
-        // Exactly the range that was hashed. A stream that yielded more or
-        // fewer bytes than this fails the request after sending them, which is
-        // what a transcript being appended to by a live session would do.
-        'content-length': String(size),
-      },
-      body: Readable.toWeb(
-        createReadStream(transcriptPath, { start: 0, end: size - 1 }),
-      ),
-      // Node requires this for a streamed request body.
-      duplex: 'half',
-      signal: requestSignal(uploadTimeoutMs, deadline),
+  /** @param {Record<string, unknown>} extra */
+  const presignFor = async (extra) => {
+    const answer = await ask({
+      configuration,
+      path: '/api/logs/presign',
+      body: { sessionId, agentId, kind, sha256, pass, ...extra },
+      deadline,
     })
-    if (!answer.ok) return { archived: false, refused: 'upload_failed' }
-  } catch {
-    return { archived: false, refused: 'upload_failed' }
-  }
-
-  const confirm = await ask({
-    configuration,
-    path: '/api/logs/confirm',
-    // The key the bytes actually went to, echoed so the deployment can refuse
-    // a Session that moved Project since the presign rather than record one
-    // object under another's hash.
-    body: {
-      sessionId,
-      agentId,
-      kind,
-      sha256,
-      storageKey: presign.body.storageKey,
-    },
-    deadline,
-  })
-  if (!confirm.ok || !confirm.body?.stored) {
-    if (confirm.body?.refused) {
-      // A refusal here is transient by construction (`stale_key`,
-      // `not_uploaded`): remembered only so a status surface can say what
-      // happened, never treated as settled.
-      return { archived: false, refused: confirm.body.refused }
+    if (/^[0-9a-f]{16}$/.test(String(answer.body?.pass))) {
+      pass ??= answer.body.pass
     }
-    // The bytes are in the bucket and no row names them. The next pass
-    // re-uploads and re-confirms, which is why the object is replaced in place
-    // rather than versioned: a repeat costs the upload again and never a
-    // second object.
-    return { archived: false, refused: 'unconfirmed' }
+    return answer
   }
 
-  await settle('archived')
-  return { archived: true, sizeBytes: confirm.body.sizeBytes }
+  /**
+   * What a presign answer means when it is not a URL to use: the result to
+   * return, or null to go on.
+   *
+   * Anything that is not an issued URL — a refusal, a 401, a deployment with
+   * no storage, an unreachable host — ends here without the file being opened.
+   *
+   * @param {{ ok: boolean, body: any }} presign
+   */
+  const notIssued = async (presign) => {
+    if (!presign.ok) return { archived: false, refused: 'unavailable' }
+    if (presign.body?.refused) {
+      await settle(presign.body.refused)
+      return { archived: false, refused: presign.body.refused }
+    }
+    if (!presign.body?.url || !presign.body?.storageKey) {
+      return { archived: false, refused: 'unavailable' }
+    }
+    // A deployment older than ticket 104 strips `kind` and would file a
+    // sidecar as the run's transcript, overwriting it. Newer ones echo the
+    // kind they presigned for, so a sidecar goes only where the answer says
+    // so; otherwise it is skipped, unsettled, and asked about again once the
+    // server upgrades.
+    if (kind !== 'transcript' && presign.body.kind !== kind) {
+      return { archived: false, refused: 'kind_unsupported' }
+    }
+    return null
+  }
+
+  /**
+   * One PUT straight to storage, true when it landed. `body` is a raw range
+   * `[start, end)` of the file, streamed, or bytes already in hand.
+   *
+   * @param {string} url
+   * @param {string} contentType
+   * @param {{ start: number, end: number } | Buffer} body
+   */
+  const put = async (url, contentType, body) => {
+    const length = Buffer.isBuffer(body) ? body.length : body.end - body.start
+    try {
+      const answer = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'content-type': contentType,
+          // Exactly the range that was hashed. A stream that yielded more or
+          // fewer bytes than this fails the request after sending them, which
+          // is what a transcript being appended to by a live session would do.
+          'content-length': String(length),
+        },
+        body:
+          Buffer.isBuffer(body) || length === 0
+            ? Buffer.isBuffer(body)
+              ? body
+              : Buffer.alloc(0)
+            : Readable.toWeb(
+                createReadStream(transcriptPath, {
+                  start: body.start,
+                  end: body.end - 1,
+                }),
+              ),
+        // Node requires this for a streamed request body.
+        duplex: 'half',
+        signal: requestSignal(uploadTimeoutMs, deadline),
+      })
+      // Storage's answer body is never read; release its connection.
+      await answer.body?.cancel().catch(() => {})
+      return answer.ok
+    } catch {
+      return false
+    }
+  }
+
+  /** @param {Record<string, unknown>} extra */
+  const confirmWith = async (extra) => {
+    const confirm = await ask({
+      configuration,
+      path: '/api/logs/confirm',
+      // The key the bytes actually went to (in `extra`), echoed so the
+      // deployment can refuse a Session that moved Project since the presign
+      // rather than record one object under another's hash.
+      body: { sessionId, agentId, kind, sha256, pass, ...extra },
+      deadline,
+    })
+    if (!confirm.ok || !confirm.body?.stored) {
+      if (confirm.body?.refused) {
+        // A refusal here is transient by construction (`stale_key`,
+        // `stale_chunks`, `not_uploaded`): remembered only so a status surface
+        // can say what happened, never treated as settled.
+        return { archived: false, refused: confirm.body.refused }
+      }
+      // The bytes are in the bucket and no row names them. The next pass
+      // re-uploads and re-confirms; the deployment recorded these keys as
+      // pending when it signed them, and its sweep deletes them once that
+      // lapses (ADR 0008).
+      return { archived: false, refused: 'unconfirmed' }
+    }
+    await settle('archived')
+    return { archived: true, sizeBytes: confirm.body.sizeBytes }
+  }
+
+  const uploadFailed = { archived: false, refused: 'upload_failed' }
+  const staleChunks = { archived: false, refused: 'stale_chunks' }
+
+  /**
+   * ADR 0008: seal what has grown past the deployment's sealed prefix, then
+   * send the tail. `'whole'` when this pass must fall back to the whole file.
+   *
+   * @param {any} answer A presign answer that echoed `layout: 'chunked'`.
+   */
+  const archiveChunks = async (answer) => {
+    const { sealed } = answer
+    if (!validSealed(sealed) || !scan) return 'whole'
+    const plan = planFrom(scan, sealed)
+    if (plan === 'mismatch') return 'whole'
+    // Behind a pass that read more of the file: left, unsettled, to the next.
+    if (plan === 'stale') return { archived: false, refused: 'stale' }
+
+    const { chunks } = plan
+    let tail = answer
+    if (chunks.length > 0) {
+      // Each planned chunk's hash goes with it: the deployment builds the
+      // chunk's key from it, so different bytes never share a key.
+      const sealing = await presignFor({
+        layout: 'chunked',
+        seal: chunks.map(({ seq, sha256: hash }) => ({ seq, sha256: hash })),
+      })
+      const refused = await notIssued(sealing)
+      if (refused) return refused
+      tail = sealing.body
+      // Another pass sealed in between, or the answer is not the one asked
+      // for: plan again from what the deployment now holds.
+      if (
+        tail.layout !== 'chunked' ||
+        !sameSealed(tail.sealed, sealed) ||
+        tail.seals?.length !== chunks.length ||
+        chunks.some((chunk, index) => tail.seals[index]?.seq !== chunk.seq)
+      ) {
+        return staleChunks
+      }
+      for (const [index, chunk] of chunks.entries()) {
+        if (expired(deadline)) return uploadFailed
+        let packed
+        try {
+          // eslint-disable-next-line no-await-in-loop -- one chunk in memory at a time
+          packed = await gzipRange(
+            transcriptPath,
+            chunk.rawOffset,
+            chunk.rawLength,
+          )
+        } catch {
+          return 'whole'
+        }
+        // No Content-Encoding: set, it makes browsers and some providers
+        // inflate the object in transit (ADR 0008).
+        // eslint-disable-next-line no-await-in-loop -- as above
+        if (!(await put(tail.seals[index].url, 'application/gzip', packed))) {
+          return uploadFailed
+        }
+      }
+    }
+
+    const newest = chunks.at(-1)
+    const start = newest ? newest.rawOffset + newest.rawLength : sealed.bytes
+    if (!(await put(tail.url, 'application/x-ndjson', { start, end: size }))) {
+      return uploadFailed
+    }
+    return confirmWith({
+      storageKey: tail.storageKey,
+      layout: 'chunked',
+      ...(chunks.length > 0 && { chunks, sealedSha256: plan.sealedSha256 }),
+    })
+  }
+
+  // Only a transcript chunks (ADR 0008): sidecars are small and rewritten.
+  let presign = await presignFor({
+    layout: kind === 'transcript' ? 'chunked' : 'whole',
+  })
+  const refused = await notIssued(presign)
+  if (refused) return refused
+
+  // A deployment that predates ADR 0008 does not echo `layout`; its `url` is
+  // then the whole file's, exactly as before.
+  if (presign.body.layout === 'chunked') {
+    for (let attempt = 1; ; attempt += 1) {
+      // eslint-disable-next-line no-await-in-loop -- each try depends on the last
+      const result = await archiveChunks(presign.body)
+      if (result === 'whole') break
+      // `stale_chunks` is transient: ask again once — the scan is reused,
+      // so that costs requests and no read — then leave it unsettled for the
+      // next pass.
+      if (result.refused !== 'stale_chunks' || attempt >= STALE_TRIES) {
+        return result
+      }
+      // eslint-disable-next-line no-await-in-loop -- as above
+      presign = await presignFor({ layout: 'chunked' })
+      // eslint-disable-next-line no-await-in-loop -- as above
+      const again = await notIssued(presign)
+      if (again) return again
+      if (presign.body.layout !== 'chunked') break
+    }
+    // The failsafe: rewritten, truncated, uncompressible, or no longer
+    // chunking. The whole file goes to the whole-file key, and that confirm
+    // drops every chunk.
+    if (presign.body.layout === 'chunked') {
+      presign = await presignFor({ layout: 'whole' })
+      const whole = await notIssued(presign)
+      if (whole) return whole
+    }
+  }
+
+  const contentType =
+    kind === 'agent_meta' ? 'application/json' : 'application/x-ndjson'
+  if (!(await put(presign.body.url, contentType, { start: 0, end: size }))) {
+    return uploadFailed
+  }
+  return confirmWith({ storageKey: presign.body.storageKey, layout: 'whole' })
 }
+
+/** How many chunked attempts one pass makes: the first, and one after
+ * `stale_chunks`. */
+const STALE_TRIES = 2
+
+/**
+ * Whether a presign's `sealed` is shaped as ADR 0008 has it. The answer
+ * crosses a trust boundary and the Collector cannot import zod, so this is
+ * checked by hand; anything else falls back to the whole file.
+ *
+ * @param {any} sealed
+ */
+const validSealed = (sealed) =>
+  Number.isSafeInteger(sealed?.bytes) &&
+  sealed.bytes >= 0 &&
+  Number.isSafeInteger(sealed.chunks) &&
+  sealed.chunks >= 0 &&
+  (sealed.bytes === 0
+    ? sealed.sha256 === null || typeof sealed.sha256 === 'string'
+    : typeof sealed.sha256 === 'string')
+
+/** @param {any} a @param {any} b */
+const sameSealed = (a, b) =>
+  a?.bytes === b.bytes && a?.chunks === b.chunks && a?.sha256 === b.sha256
 
 /**
  * Archives every transcript one Session wrote: its own, and one per Agent Run.

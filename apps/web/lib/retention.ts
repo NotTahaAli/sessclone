@@ -1,5 +1,6 @@
 import type postgres from 'postgres'
 
+import { onceMoreOnRace } from './artifacts'
 import { deleteObjects } from './storage'
 
 // Ticket 61: transcripts stop accumulating forever.
@@ -32,7 +33,7 @@ import { deleteObjects } from './storage'
 export const SWEEP_LIMIT = 500
 
 export type Swept = {
-  /** Rows removed, which equals objects deleted. */
+  /** Artifact rows removed. Their chunks (ADR 0008) went too, uncounted. */
   removed: number
   /** Whether more remain past the window: call again. */
   more: boolean
@@ -105,8 +106,14 @@ export const sweepRetention = async (
     // written after the transcript they describe and must not outlive it.
     // Found by the identity key's leading `(member_id, session_id)`, in the
     // same statement.
-    const rows = await tx<{ storage_key: string; expired: boolean }[]>`
-      with cutoffs as (${CUTOFFS(tx)}), expired as (
+    // Once more on a 23503: a confirm sealing an expired transcript as it
+    // goes (see `onceMoreOnRace`).
+    const rows = await onceMoreOnRace(
+      tx,
+      (sp) => sp<
+        { storage_key: string; expired: boolean; artifact: boolean }[]
+      >`
+      with cutoffs as (${CUTOFFS(sp)}), expired as (
         select artifact.id, artifact.member_id, artifact.session_id,
                artifact.agent_id, artifact.kind
           from log_artifacts artifact
@@ -129,21 +136,72 @@ export const sweepRetention = async (
                   and sidecar.agent_id = transcript.agent_id
                 or sidecar.kind = 'workflow_journal'
                   and transcript.agent_id is null)
+      ), chunks as (
+        -- ADR 0008: a transcript's chunks go in the same statement as the
+        -- transcript, and their keys with it. The foreign key is no action,
+        -- so forgetting this fails the sweep rather than orphaning them.
+        delete from log_artifact_chunks
+         where artifact_id in (select id from doomed)
+        returning storage_key
+      ), artifacts as (
+        delete from log_artifacts
+         where id in (select id from doomed)
+        returning storage_key, id in (select id from expired) as expired
       )
-      delete from log_artifacts
-       where id in (select id from doomed)
-      returning storage_key, id in (select id from expired) as expired
-    `
+      select storage_key, expired, true as artifact from artifacts
+      union all
+      select storage_key, false, false from chunks
+    `,
+    )
     const expired = rows.filter((row) => row.expired).length
+    const removed = rows.filter((row) => row.artifact).length
+
+    // ADR 0008: keys a presign signed that no confirm recorded before they
+    // expired — a pass cut off, crashed, or whose confirm never came. They
+    // join the orphans below, which deletes each once no row names it. A
+    // confirm arriving now waits on these rows and is then refused.
+    //
+    // Counted by the ledger rows deleted, not the orphans inserted: a key
+    // already queued is skipped by the insert, and a full batch counted short
+    // would report no backlog.
+    const [lapsed] = await tx<{ count: number }[]>`
+      with lapsed as (
+        delete from log_upload_pending
+         where storage_key in (
+           select storage_key from log_upload_pending
+            where expires_at < now()
+            order by expires_at limit ${limit}
+         )
+        returning storage_key
+      ), queued as (
+        insert into storage_orphans (storage_key)
+        select storage_key from lapsed
+        on conflict (storage_key) do nothing
+      )
+      select count(*)::int as count from lapsed
+    `
 
     // The objects nothing names any more (`storage_orphans`), taken in the
     // same batch: they are already paid for in one round trip, and they are
     // the one class of stored transcript no row can lead anybody to.
+    //
+    // Only while no row names the key again, and no presign has signed it
+    // again: the whole-file key is reused by every zero-chunk pass, so a key
+    // queued here can be live once more. All three lookups are unique
+    // indexes. Such a key stays queued, and goes once it is an orphan again.
     const orphans = await tx<{ storage_key: string }[]>`
       delete from storage_orphans
        where storage_key in (
-         select storage_key from storage_orphans
-          order by noticed_at limit ${limit}
+         select orphan.storage_key from storage_orphans orphan
+          where not exists (select 1 from log_artifacts artifact
+                             where artifact.storage_key = orphan.storage_key)
+            and not exists (select 1 from log_artifact_chunks chunk
+                             where chunk.storage_key = orphan.storage_key)
+            and not exists (select 1 from log_upload_pending pending
+                             where pending.storage_key = orphan.storage_key)
+            -- A key taken from the ledger unrecorded waits out its URL.
+            and orphan.not_before <= now()
+          order by orphan.noticed_at limit ${limit}
        )
       returning storage_key
     `
@@ -156,7 +214,7 @@ export const sweepRetention = async (
     // with no scheduler promises a window it never enforces.
     await tx`
       insert into retention_sweeps (swept_at, removed)
-      values (now(), ${rows.length})
+      values (now(), ${removed})
       on conflict (id) do update
          set swept_at = excluded.swept_at, removed = excluded.removed
     `
@@ -165,8 +223,11 @@ export const sweepRetention = async (
     // "more" when the backlog happened to end exactly on the limit costs one
     // extra call that removes nothing, which is the cheap way to be wrong.
     return {
-      removed: rows.length,
-      more: expired === limit || orphans.length === limit,
+      removed,
+      more:
+        expired === limit ||
+        orphans.length === limit ||
+        lapsed!.count === limit,
     }
   })
 

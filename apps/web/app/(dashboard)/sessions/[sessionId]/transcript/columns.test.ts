@@ -3,9 +3,8 @@ import { describe, expect, it } from 'vitest'
 import {
   agentColumn,
   columnWidths,
-  earlierRange,
+  earlierRead,
   keepReading,
-  rangesToStart,
   splitEarlier,
   readWidths,
   toggleColumn,
@@ -64,11 +63,74 @@ describe('readWidths', () => {
   })
 })
 
-describe('earlierRange', () => {
-  it('reads the last chunk first, then backwards to byte 0', () => {
-    expect(earlierRange(2500, 1000)).toEqual({ start: 1500, end: 2499 })
-    expect(earlierRange(700, 1000)).toEqual({ start: 0, end: 699 })
-    expect(earlierRange(0, 1000)).toBeNull()
+const walk = (file: Parameters<typeof earlierRead>[0], from: number) => {
+  const reads = []
+  for (let read = earlierRead(file, from, 1000); read;) {
+    reads.push(read)
+    read = earlierRead(file, read.start, 1000)
+  }
+  return reads
+}
+
+describe('earlierRead', () => {
+  const whole = { tailOffset: 0, chunks: [] }
+
+  it('with zero chunks reads the ranges it always did', () => {
+    // What earlierRange and rangesToStart answered before ADR 0008.
+    expect(walk(whole, 2500)).toEqual([
+      { kind: 'range', start: 1500, end: 2499 },
+      { kind: 'range', start: 500, end: 1499 },
+      { kind: 'range', start: 0, end: 499 },
+    ])
+    expect(earlierRead(whole, 0, 1000)).toBeNull()
+  })
+
+  const chunked = {
+    tailOffset: 3000,
+    chunks: [
+      { rawOffset: 0, rawLength: 1200 },
+      { rawOffset: 1200, rawLength: 1800 },
+    ],
+  }
+
+  it('clamps a tail shorter than one read at the tail', () => {
+    expect(earlierRead(chunked, 3400, 1000)).toEqual({
+      kind: 'range',
+      start: 3000,
+      end: 3399,
+    })
+  })
+
+  it('crosses from the tail into the last chunk, read whole', () => {
+    expect(earlierRead(chunked, 3000, 1000)).toEqual({
+      kind: 'chunk',
+      index: 1,
+      start: 1200,
+      end: 2999,
+    })
+  })
+
+  it('walks to byte 0 with no gap and no repeat', () => {
+    const reads = walk(chunked, 5500)
+    expect(reads).toEqual([
+      { kind: 'range', start: 4500, end: 5499 },
+      { kind: 'range', start: 3500, end: 4499 },
+      { kind: 'range', start: 3000, end: 3499 },
+      { kind: 'chunk', index: 1, start: 1200, end: 2999 },
+      { kind: 'chunk', index: 0, start: 0, end: 1199 },
+    ])
+    reads.forEach((read, i) => {
+      expect(read.end + 1).toBe(i === 0 ? 5500 : reads[i - 1]!.start)
+    })
+  })
+
+  it('reads a chunk only up to where the loaded bytes begin', () => {
+    expect(earlierRead(chunked, 2000, 1000)).toEqual({
+      kind: 'chunk',
+      index: 1,
+      start: 1200,
+      end: 1999,
+    })
   })
 })
 
@@ -86,17 +148,6 @@ describe('keepReading', () => {
   it('stops once the rows overflow, or at the start of the file', () => {
     expect(keepReading({ from: 10, items: 3, ...view })).toBe(false)
     expect(keepReading({ from: 0, items: 0, ...view })).toBe(false)
-  })
-})
-
-describe('rangesToStart', () => {
-  it('walks back to byte 0 a chunk per request', () => {
-    expect(rangesToStart(2500, 1000)).toEqual([
-      { start: 1500, end: 2499 },
-      { start: 500, end: 1499 },
-      { start: 0, end: 499 },
-    ])
-    expect(rangesToStart(0, 1000)).toEqual([])
   })
 })
 

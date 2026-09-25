@@ -1,4 +1,5 @@
 import { deleteProject, deleteSession } from './artifact-actions'
+import { DownloadTranscript } from '../sessions/[sessionId]/transcript/download'
 import { Row, SectionBreak } from '../../_ui/primitives'
 import type { StoredProject, StoredSession } from '../../../lib/artifacts'
 
@@ -204,15 +205,27 @@ function Group({
                     the route redirects to storage so the bytes never come
                     through the application. A new tab, because every failure
                     of the route answers with plain text rather than a page. */}
-                <a
-                  href={`/api/logs/download/${session.id}`}
-                  target="_blank"
-                  rel="noopener"
-                  className={LINK}
-                  aria-label={`Download the transcript of session ${session.sessionId}`}
-                >
-                  Download
-                </a>
+                {session.chunked ? (
+                  // Ticket 133: sealed chunks plus a tail, assembled in the
+                  // browser into one .jsonl.
+                  <DownloadTranscript
+                    sessionId={session.sessionId}
+                    memberId={session.memberId}
+                    agentId={session.agentId}
+                    className={LINK}
+                    label={`Download the transcript of session ${session.sessionId}`}
+                  />
+                ) : (
+                  <a
+                    href={`/api/logs/download/${session.id}`}
+                    target="_blank"
+                    rel="noopener"
+                    className={LINK}
+                    aria-label={`Download the transcript of session ${session.sessionId}`}
+                  >
+                    Download
+                  </a>
+                )}
                 {own ? (
                   <Confirm
                     summary="Delete"

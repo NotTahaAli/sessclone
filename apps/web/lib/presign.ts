@@ -1,7 +1,7 @@
 import type { ArtifactKind, PresignRefusal } from '@sessclone/shared'
 import type postgres from 'postgres'
 
-import { artifactKey } from './storage'
+import { artifactKey, type ArtifactPath, tailChunks } from './storage'
 
 // Ticket 58: what the presign route is allowed to say yes to.
 //
@@ -30,11 +30,21 @@ export type PresignDecision =
        * a second time from a second query that could disagree.
        */
       projectId: string | null
+      /** What the key is built from, for the chunk and tail keys (ADR 0008). */
+      path: ArtifactPath
+      /**
+       * What the row holds sealed (ADR 0008), or all zero when there is no
+       * row, no chunks, or the chunks sit under a Project the Session has
+       * since left — sealing then starts again from zero under the new one.
+       */
+      sealed: Sealed
     }
   | { allowed: false; refusal: PresignRefusal; detail: string }
   /** No live membership for that key. The route answers 401, as it does for
    * every other way a key fails to identify somebody. */
   | null
+
+export type Sealed = { bytes: number; sha256: string | null; chunks: number }
 
 type Facts = {
   archival_enabled: boolean
@@ -43,6 +53,10 @@ type Facts = {
   project_key: string | null
   project_excluded: boolean
   stored_sha256: string | null
+  stored_key: string | null
+  sealed_bytes: string | null
+  sealed_sha256: string | null
+  chunks: number | null
 }
 
 /**
@@ -86,7 +100,13 @@ export const presignDecision = async (
            session.project_id,
            project.key as project_key,
            coalesce(exception.archival_enabled = false, false) as project_excluded,
-           artifact.sha256 as stored_sha256
+           artifact.sha256 as stored_sha256,
+           artifact.storage_key as stored_key,
+           artifact.sealed_bytes,
+           artifact.sealed_sha256,
+           -- ADR 0008. The chunks' primary key, (artifact_id, seq), answers this.
+           (select count(*)::int from log_artifact_chunks chunk
+             where chunk.artifact_id = artifact.id) as chunks
       from members member
       -- Only an active subscription entitles anything (lib/tier.ts): an Org
       -- on the Team Tier with a cancelled or never-activated subscription is
@@ -189,16 +209,35 @@ export const presignDecision = async (
     }
   }
 
+  const path: ArtifactPath = {
+    orgId: request.orgId,
+    memberId: request.memberId,
+    projectKey: facts.project_key,
+    sessionId: request.sessionId,
+    agentId: request.agentId,
+    kind: request.kind,
+  }
+
+  // The row's chunks count only while its tail sits where this Session's
+  // tail would be after them: a Session that moved Project has a different
+  // prefix now, and its old chunks go with the replaced row (ADR 0008).
+  const chunks = facts.chunks ?? 0
+  const sealed: Sealed =
+    chunks > 0 &&
+    facts.stored_key !== null &&
+    tailChunks(path, facts.stored_key) === chunks
+      ? {
+          bytes: Number(facts.sealed_bytes),
+          sha256: facts.sealed_sha256,
+          chunks,
+        }
+      : { bytes: 0, sha256: null, chunks: 0 }
+
   return {
     allowed: true,
     projectId: facts.project_id,
-    storageKey: artifactKey({
-      orgId: request.orgId,
-      memberId: request.memberId,
-      projectKey: facts.project_key,
-      sessionId: request.sessionId,
-      agentId: request.agentId,
-      kind: request.kind,
-    }),
+    storageKey: artifactKey(path),
+    path,
+    sealed,
   }
 }

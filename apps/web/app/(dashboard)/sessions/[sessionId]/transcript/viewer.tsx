@@ -38,6 +38,7 @@ import { ColumnContext, ViewerContext, type Viewer } from './context'
 import {
   listFiles,
   readBytes,
+  readChunk,
   readCosts,
   readItems,
   readText,
@@ -200,12 +201,20 @@ export function TranscriptViewer({
     let live = true
     void (async () => {
       try {
-        const { bytes } = await readBytes(
-          file,
-          { start: 0, end: Math.max(0, Math.min(file.sizeBytes, 65536) - 1) },
-          () => renew(file.id),
-          load.signal,
-        )
+        // ADR 0008: a chunked transcript's start is its first chunk.
+        const bytes = file.chunks.length
+          ? await readChunk(file, 0, () => renew(file.id), load.signal)
+          : (
+              await readBytes(
+                file,
+                {
+                  start: 0,
+                  end: Math.max(0, Math.min(file.sizeBytes, 65536) - 1),
+                },
+                () => renew(file.id),
+                load.signal,
+              )
+            ).bytes
         const lines = splitChunk(bytes, 0, {
           atFileStart: true,
           atFileEnd: bytes.length >= file.sizeBytes,

@@ -338,3 +338,255 @@ test('a deployment with no storage says so rather than issuing a dead URL', asyn
     configured.mockRestore()
   }
 })
+
+// Ticket 129, ADR 0008: a Collector that asks for the chunked layout is told
+// what is already sealed and gets URLs for its new chunks and its tail.
+
+const base = (projectKey = 'github.com-acme-api') =>
+  `orgs/${fixture.acme.id}/members/${fixture.acme.members.member}/projects/${projectKey}/session-1`
+
+/** A transcript row with `chunks` sealed chunks of 1 MiB each, as the
+ * confirm route would have left it. */
+/** What a sealing ask names: each planned chunk's seq and raw SHA-256. */
+const planned = (...seqs: number[]) =>
+  seqs.map((seq) => ({ seq, sha256: String(seq % 10).repeat(64) }))
+
+/** A tail key after `chunks` chunks, with any per-pass nonce. */
+const tailPattern = (dir: string, chunks: number) =>
+  new RegExp(
+    `^${dir.replaceAll('.', '\\.')}/tail-${chunks}-[0-9a-f]{16}\\.jsonl$`,
+  )
+
+const seedChunked = async (chunks: number, projectKey?: string) => {
+  const dir = base(projectKey)
+  const [artifact] = await sql<{ id: string }[]>`
+    insert into log_artifacts
+      (org_id, member_id, session_id, storage_key, sha256, size_bytes,
+       sealed_bytes, sealed_sha256)
+    values (${fixture.acme.id}, ${fixture.acme.members.member}, 'session-1',
+            ${`${dir}/tail-${chunks}-0123456789abcdef.jsonl`}, ${'b'.repeat(64)},
+            ${chunks * 1_048_576 + 10}, ${chunks * 1_048_576}, ${'c'.repeat(64)})
+    returning id
+  `
+  for (let seq = 1; seq <= chunks; seq++) {
+    // oxlint-disable-next-line no-await-in-loop -- a handful of fixture rows.
+    await sql`
+      insert into log_artifact_chunks
+        (artifact_id, member_id, seq, raw_offset, raw_length, stored_bytes,
+         sha256, storage_key)
+      values (${artifact!.id}, ${fixture.acme.members.member}, ${seq},
+              ${(seq - 1) * 1_048_576}, 1048576, 200000, ${'d'.repeat(64)},
+              ${`${dir}/chunks/${String(seq).padStart(6, '0')}-dddddddddddddddd.jsonl.gz`})
+    `
+  }
+}
+
+test('an old-shape request is answered exactly as before', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+
+  const [status, body] = await answer(await ask())
+
+  expect(status).toBe(200)
+  // `pass` is additive: an older Collector ignores it.
+  expect(Object.keys(body).toSorted()).toEqual([
+    'expiresIn',
+    'kind',
+    'pass',
+    'storageKey',
+    'url',
+  ])
+  expect(body.storageKey).toBe(`${base()}.jsonl`)
+})
+
+test('a chunked ask with nothing sealed gets the whole-file key as its tail', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+
+  const [status, body] = await answer(await ask({ layout: 'chunked' }))
+
+  expect(status).toBe(200)
+  expect(body).toMatchObject({
+    layout: 'chunked',
+    sealed: { bytes: 0, sha256: null, chunks: 0 },
+    storageKey: `${base()}.jsonl`,
+  })
+  expect(body.seals).toBeUndefined()
+})
+
+test('a sealing ask gets content-addressed chunk URLs from the next seq, and a fresh tail after them', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await seedChunked(3)
+
+  const [, body] = await answer(
+    await ask({ layout: 'chunked', seal: planned(4, 5) }),
+  )
+
+  const four = `${base()}/chunks/000004-${'4'.repeat(16)}.jsonl.gz`
+  const five = `${base()}/chunks/000005-${'5'.repeat(16)}.jsonl.gz`
+  expect(body).toMatchObject({
+    layout: 'chunked',
+    sealed: { bytes: 3 * 1_048_576, sha256: 'c'.repeat(64), chunks: 3 },
+    seals: [
+      { seq: 4, storageKey: four, url: `https://storage.test/${four}?signed` },
+      { seq: 5, storageKey: five, url: `https://storage.test/${five}?signed` },
+    ],
+  })
+  expect(body.storageKey).toMatch(tailPattern(base(), 5))
+  expect(body.url).toBe(`https://storage.test/${body.storageKey}?signed`)
+})
+
+test('a steady-state chunked ask gets one tail URL at the current seq, never the same key twice', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await seedChunked(2)
+
+  const [, first] = await answer(await ask({ layout: 'chunked' }))
+  const [, second] = await answer(await ask({ layout: 'chunked' }))
+
+  expect(first.storageKey).toMatch(tailPattern(base(), 2))
+  expect(second.storageKey).toMatch(tailPattern(base(), 2))
+  expect(second.storageKey).not.toBe(first.storageKey)
+  expect(first.seals).toBeUndefined()
+})
+
+test('an Agent Run chunks under its own directory', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession({ agentId: 'agent-7' })
+
+  const [, body] = await answer(
+    await ask({ agentId: 'agent-7', layout: 'chunked', seal: planned(1) }),
+  )
+
+  expect(body.seals[0].storageKey).toBe(
+    `${base()}/agents/agent-7/chunks/000001-${'1'.repeat(16)}.jsonl.gz`,
+  )
+  expect(body.storageKey).toMatch(tailPattern(`${base()}/agents/agent-7`, 1))
+})
+
+test('only a transcript chunks: a sidecar asking for it is answered whole', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession({ agentId: 'agent-7' })
+
+  const [, body] = await answer(
+    await ask({
+      agentId: 'agent-7',
+      kind: 'agent_meta',
+      layout: 'chunked',
+      seal: planned(1),
+    }),
+  )
+
+  expect(body.layout).toBeUndefined()
+  expect(body.seals).toBeUndefined()
+  expect(body.storageKey).toBe(`${base()}/agents/agent-7.meta.json`)
+})
+
+test('the whole-file unchanged guard still comes first for a chunked ask', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await seedChunked(1)
+
+  expect(
+    await answer(
+      await ask({
+        layout: 'chunked',
+        seal: planned(2),
+        sha256: 'b'.repeat(64),
+      }),
+    ),
+  ).toMatchObject([200, { refused: 'unchanged' }])
+})
+
+test('a Session that moved Project starts sealing again from zero', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await seedChunked(2, 'github.com-acme-old')
+
+  const [, body] = await answer(
+    await ask({ layout: 'chunked', seal: planned(1) }),
+  )
+
+  expect(body).toMatchObject({
+    sealed: { bytes: 0, sha256: null, chunks: 0 },
+    seals: [
+      {
+        seq: 1,
+        storageKey: `${base()}/chunks/000001-${'1'.repeat(16)}.jsonl.gz`,
+      },
+    ],
+  })
+  expect(body.storageKey).toMatch(tailPattern(base(), 1))
+})
+
+// ADR 0008: every key a presign signs is recorded as pending until a confirm
+// records it, so an upload that is never confirmed still has a delete path.
+
+const pending = () =>
+  sql<{ storage_key: string; member_id: string; ttl: number }[]>`
+    select storage_key, member_id,
+           extract(epoch from expires_at - now())::int as ttl
+      from log_upload_pending order by storage_key
+  `
+
+test('every key a presign signs is recorded as pending, and taken out of storage_orphans', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await seedChunked(1)
+  const four = `${base()}/chunks/000002-${'2'.repeat(16)}.jsonl.gz`
+  await sql`insert into storage_orphans (storage_key) values (${four})`
+
+  const [, body] = await answer(
+    await ask({ layout: 'chunked', seal: planned(2) }),
+  )
+
+  const rows = await pending()
+  expect(rows.map((row) => row.storage_key).toSorted()).toEqual(
+    [four, String(body.storageKey)].toSorted(),
+  )
+  for (const row of rows) {
+    expect(row.member_id).toBe(fixture.acme.members.member)
+    // Past the URL's own life, so a confirm that follows a slow PUT is
+    // still in time; bounded, so an unconfirmed one is swept.
+    expect(row.ttl).toBeGreaterThan(300)
+    expect(row.ttl).toBeLessThanOrEqual(300 + 3600)
+  }
+  expect(await sql`select 1 from storage_orphans`).toHaveLength(0)
+})
+
+test('a refused presign records nothing as pending', async () => {
+  await withArchival(fixture.acme.id)
+  await seedSession()
+  await seedChunked(1)
+
+  await ask({ layout: 'chunked', sha256: 'b'.repeat(64) })
+
+  expect(await pending()).toEqual([])
+})
+
+test('each presign draws a pass, and one the pass echoes is kept', async () => {
+  // ADR 0008: a pass's later presigns and its confirm echo the id, so the
+  // keys it was signed are its own and no other pass takes them.
+  await withArchival(fixture.acme.id)
+  await seedSession()
+
+  const [, first] = await answer(await ask({ layout: 'chunked' }))
+  const [, second] = await answer(await ask({ layout: 'chunked' }))
+  expect(first.pass).toMatch(/^[0-9a-f]{16}$/)
+  expect(second.pass).not.toBe(first.pass)
+
+  const [, echoed] = await answer(
+    await ask({ layout: 'chunked', pass: first.pass }),
+  )
+  expect(echoed.pass).toBe(first.pass)
+  // Three presigns of the whole-file key, two passes: two pending rows.
+  const passes = await sql<{ pass: string }[]>`
+    select pass from log_upload_pending
+     where storage_key = ${echoed.storageKey}
+  `
+  expect(passes).toHaveLength(2)
+  expect(passes.map((row) => row.pass)).toEqual(
+    expect.arrayContaining([first.pass, second.pass]),
+  )
+})

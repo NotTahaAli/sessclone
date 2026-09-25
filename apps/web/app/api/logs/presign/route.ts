@@ -9,9 +9,12 @@ import {
 } from '../../../../lib/collector-auth'
 import { presignDecision } from '../../../../lib/presign'
 import {
+  chunkKey,
   MAX_KEY_BYTES,
   presignUpload,
   storageConfigured,
+  tailKey,
+  tailNonce,
   ttl,
 } from '../../../../lib/storage'
 
@@ -41,6 +44,14 @@ import {
 // 403 would have to parse a body to tell "not opted in" from "excluded" from
 // "already stored" anyway, and the transient one — the Session is not ingested
 // yet — is simply "ask again later".
+
+/**
+ * How long past the URL's own life a signed key stays pending (ADR 0008): a
+ * PUT may start just before the URL expires and run for its own timeout, and
+ * the confirm comes after it. Past this the sweep takes the key, and a
+ * confirm naming it is `not_uploaded`.
+ */
+const PENDING_GRACE_SECONDS = 3600
 
 const refused = (error: string, detail?: string) =>
   Response.json({ error, detail }, { status: 400 })
@@ -112,20 +123,89 @@ export async function POST(request: Request) {
     () => {},
   )
 
+  // ADR 0008: only a transcript chunks. Any other kind asking for it is
+  // answered as whole — no `layout` echo — which is the path a Collector
+  // takes when the echo is missing.
+  const chunked = parsed.data.layout === 'chunked' && kind === 'transcript'
+  const { sealed } = decision
+  const seal = chunked ? (parsed.data.seal ?? []) : []
+  // The tail is keyed by how many chunks precede it and by a nonce drawn for
+  // this pass, so a sealing pass moves it, a reader never sees a tail that
+  // overlaps or gaps the chunks, and no two passes share a tail key.
+  const storageKey = chunked
+    ? tailKey(decision.path, sealed.chunks + seal.length, tailNonce())
+    : decision.storageKey
+  // Seqs from what the row holds, hashes from the Collector's plan: a plan
+  // made against an older seal gets keys it will see are not its own.
+  const seals = seal.map((planned, index) => {
+    const seq = sealed.chunks + 1 + index
+    return { seq, storageKey: chunkKey(decision.path, seq, planned.sha256) }
+  })
+
   // Before the bytes move, not after: a key over the provider's limit is
   // refused once the whole transcript has been streamed, which is the cost
   // this route exists to save. The ids are bounded by the schema, so reaching
-  // this needs a Project key long enough to be worth saying so about.
-  if (Buffer.byteLength(decision.storageKey) > MAX_KEY_BYTES) {
+  // this needs a Project key long enough to be worth saying so about. A chunk
+  // key is the longest this request names.
+  const longest = [storageKey, ...seals.map((each) => each.storageKey)].reduce(
+    (a, b) => (Buffer.byteLength(b) > Buffer.byteLength(a) ? b : a),
+  )
+  if (Buffer.byteLength(longest) > MAX_KEY_BYTES) {
     return refused(
       'this Session cannot be stored under a key that long',
-      `${decision.storageKey.slice(0, 80)}…`,
+      `${longest.slice(0, 80)}…`,
     )
   }
 
-  let url
+  // Every key this answer signs is recorded as pending before it is handed
+  // out (ADR 0008), so an upload that is never confirmed — a pass cut off,
+  // a lost race, a refused confirm — still has a delete path: the confirm
+  // takes the keys it records, and the retention sweep the rest once they
+  // expire. A key queued in `storage_orphans` is live again from here: the
+  // delete waits on a sweep holding that row, so no sweep deletes it after
+  // this answer goes out.
+  const signed = [storageKey, ...seals.map((each) => each.storageKey)]
+  // The pass these keys belong to: the one the Collector echoes, or a new one.
+  const pass = parsed.data.pass ?? tailNonce()
+  const expiresAt = new Date(
+    Date.now() + (ttl() + PENDING_GRACE_SECONDS) * 1000,
+  )
   try {
-    url = await presignUpload(decision.storageKey)
+    await sql`
+      with pending as (
+        insert into log_upload_pending ${sql(
+          signed.map((key) => ({
+            storage_key: key,
+            pass,
+            member_id: caller.memberId,
+            session_id: sessionId,
+            agent_id: agentId,
+            kind,
+            project_id: decision.projectId,
+            expires_at: expiresAt,
+          })),
+        )}
+        on conflict (storage_key, pass) do update
+           set expires_at = excluded.expires_at,
+               project_id = excluded.project_id
+        returning storage_key
+      )
+      delete from storage_orphans
+       where storage_key in (select storage_key from pending)
+    `
+  } catch (error) {
+    return databaseFailure(error)
+  }
+
+  let url
+  let sealUrls
+  try {
+    // Signing is local — no request to the provider — so seventeen of them
+    // cost nothing worth batching.
+    ;[url, ...sealUrls] = await Promise.all([
+      presignUpload(storageKey),
+      ...seals.map((each) => presignUpload(each.storageKey)),
+    ])
   } catch {
     // Signing fails for configuration reasons — a bad endpoint, credentials
     // the client rejects — so it is the same answer as no storage at all
@@ -138,11 +218,21 @@ export async function POST(request: Request) {
 
   return Response.json({
     url,
-    storageKey: decision.storageKey,
+    storageKey,
     expiresIn: ttl(),
     // Echoed so a Collector can tell this deployment knows kinds: an older
     // one strips it and would file a sidecar as a transcript.
     kind,
+    pass,
+    // ADR 0008, only when chunking: a deployment older than this omits all
+    // three, and the Collector reads that as the whole-file path.
+    ...(chunked && {
+      layout: 'chunked' as const,
+      sealed,
+      ...(seal.length > 0 && {
+        seals: seals.map((each, index) => ({ ...each, url: sealUrls[index]! })),
+      }),
+    }),
   } satisfies PresignResponse)
 }
 

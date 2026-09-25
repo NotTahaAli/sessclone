@@ -4,6 +4,7 @@
 export {
   FAILURE_MESSAGE_LIMIT,
   FAILURES_PER_PAYLOAD,
+  MAX_SEAL,
   REPORTS_PER_PAYLOAD,
   TURNS_PER_REPORT,
 } from '../../plugin/src/shared/limits.ts'

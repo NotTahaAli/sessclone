@@ -21,7 +21,8 @@ vi.mock('../lib/supabase/server', () => {
 vi.mock('../lib/storage', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/storage')>()),
   storageConfigured: () => true,
-  presignDownload: async (key: string) => `https://storage.test/${key}?signed`,
+  presignDownload: async (key: string, _name: string, type?: string) =>
+    `https://storage.test/${key}?signed${type ? `&type=${type}` : ''}`,
 }))
 
 let fixture: Fixture
@@ -50,6 +51,32 @@ const artifact = async (
       sha256: 'a'.repeat(64),
       size_bytes: 100,
     })}
+  `
+}
+
+/** ADR 0008: seals `count` 1 KiB chunks before the row's tail, out of order. */
+const seal = async (count: number) => {
+  const [row] = await sql<{ id: string; member_id: string }[]>`
+    update log_artifacts
+       set sealed_bytes = ${count * 1024}, sealed_sha256 = ${'c'.repeat(64)},
+           storage_key = storage_key || ${`/tail-${count}-0123456789abcdef.jsonl`}
+     where agent_id is null and kind = 'transcript'
+    returning id, member_id
+  `
+  const seqs = Array.from({ length: count }, (_, i) => count - i)
+  await sql`
+    insert into log_artifact_chunks ${sql(
+      seqs.map((seq) => ({
+        artifact_id: row!.id,
+        member_id: row!.member_id,
+        seq,
+        raw_offset: (seq - 1) * 1024,
+        raw_length: 1024,
+        stored_bytes: 300,
+        sha256: String(seq).repeat(64).slice(0, 64),
+        storage_key: `chunks/${seq}.jsonl.gz`,
+      })),
+    )}
   `
 }
 
@@ -172,4 +199,47 @@ test('two Members with the same session id: each viewer reads only its own Membe
   expect((await call(costs, 's-1', fixture.acme.users.owner, 'x')).status).toBe(
     404,
   )
+})
+
+test('a chunked transcript lists its chunks in seq order; a whole file has none', async () => {
+  // Ticket 132.
+  await artifact(null)
+  await artifact('agent-1')
+  await seal(3)
+
+  const body = await (await call(files, 's-1', fixture.acme.users.owner)).json()
+  const [main, agent] = body.files
+  expect(main.tailOffset).toBe(3072)
+  expect(main.sizeBytes).toBe(100)
+  expect(main.chunks).toEqual(
+    [1, 2, 3].map((seq) => ({
+      rawOffset: (seq - 1) * 1024,
+      rawLength: 1024,
+      sha256: String(seq).repeat(64),
+      url: `https://storage.test/chunks/${seq}.jsonl.gz?signed&type=application/gzip`,
+    })),
+  )
+  expect(agent).toMatchObject({ tailOffset: 0, chunks: [] })
+
+  // A Member sees their own, and nobody outside the Org sees either.
+  const own = await (await call(files, 's-1', fixture.acme.users.member)).json()
+  expect(own.files[0].chunks).toHaveLength(3)
+  expect((await call(files, 's-1', fixture.globex.users.owner)).status).toBe(
+    404,
+  )
+})
+
+test('a row rolled back to a whole file lists no chunks and reads from byte 0', async () => {
+  // ADR 0008: code that predates chunks writes the whole-file key and
+  // leaves sealed_bytes and the chunk rows behind. Its object is the whole
+  // transcript, so the viewer must not read chunks before it.
+  await artifact(null)
+  await seal(2)
+  await sql`
+    update log_artifacts set storage_key = regexp_replace(storage_key,
+      '/tail-[^/]*$', '')
+  `
+
+  const body = await (await call(files, 's-1', fixture.acme.users.owner)).json()
+  expect(body.files[0]).toMatchObject({ tailOffset: 0, chunks: [] })
 })

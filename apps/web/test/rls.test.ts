@@ -1089,6 +1089,206 @@ describe('log_artifacts', () => {
   })
 })
 
+describe('log_artifact_chunks', () => {
+  // ADR 0008: a chunk is part of its transcript, so it is read and destroyed
+  // by exactly who may read and destroy the transcript.
+  //
+  // Seeded here rather than in `seedRows`: a chunk makes its transcript
+  // undeletable on its own (the `no action` key below), which is the point,
+  // and would turn every other test's plain artifact delete into a 23503.
+  // One chunk per transcript, so a count is a set of Roles as above.
+  beforeEach(async () => {
+    await sql`
+      update log_artifacts
+         set sealed_bytes = 1024, sealed_sha256 = ${hex('c')}
+    `
+    await sql`
+      insert into log_artifact_chunks
+        (artifact_id, member_id, seq, raw_offset, raw_length, stored_bytes,
+         sha256, storage_key)
+      select id, member_id, 1, 0, 1024, 300, ${hex('c')},
+             storage_key || '.chunks/000001.jsonl.gz'
+        from log_artifacts
+    `
+  })
+
+  test('is readable exactly as far as the transcript it belongs to', async () => {
+    expect(await reach('log_artifact_chunks')).toEqual({
+      owner: 6,
+      admin: 6,
+      manager: 2,
+      managerWithoutScope: 1,
+      member: 1,
+      removed: 0,
+      platformAdmin: 0,
+      stranger: 0,
+    })
+  })
+
+  test('is destroyed by its own Member and by nobody above them', async () => {
+    const theirs = fixture.acme.members.member
+    for (const role of ['owner', 'admin', 'manager'] as const) {
+      // oxlint-disable-next-line no-await-in-loop -- one Role at a time reads clearly on failure.
+      const refused = await asRole(
+        fixture.acme,
+        role,
+        (tx) => tx`delete from log_artifact_chunks where member_id = ${theirs}`,
+      )
+      expect(refused.count, role).toBe(0)
+    }
+
+    const own = await asRole(
+      fixture.acme,
+      'member',
+      (tx) => tx`delete from log_artifact_chunks where member_id = ${theirs}`,
+    )
+    expect(own.count).toBe(1)
+  })
+
+  test('is written by the confirm route alone', async () => {
+    const [artifact] = await sql<{ id: string }[]>`
+      select id from log_artifacts where member_id = ${fixture.acme.members.member}
+    `
+    await expect(
+      asRole(
+        fixture.acme,
+        'member',
+        (tx) => tx`
+          insert into log_artifact_chunks
+            (artifact_id, member_id, seq, raw_offset, raw_length, stored_bytes,
+             sha256, storage_key)
+          values (${artifact!.id}, ${fixture.acme.members.member}, 2, 1024, 1,
+                  1, ${hex('d')}, 'acme/forged.jsonl.gz')
+        `,
+      ),
+    ).rejects.toThrow(/permission denied for table log_artifact_chunks/)
+
+    await expect(
+      asRole(
+        fixture.acme,
+        'member',
+        (tx) => tx`update log_artifact_chunks set stored_bytes = 0`,
+      ),
+    ).rejects.toThrow(/permission denied for table log_artifact_chunks/)
+  })
+
+  test('outlives no transcript: deleting one that still has chunks fails', async () => {
+    const theirs = fixture.acme.members.member
+    // `no action`, not `cascade`: a cascade would drop the only record of the
+    // chunk objects' keys and leave source code in the bucket.
+    await expect(
+      sql`delete from log_artifacts where member_id = ${theirs}`,
+    ).rejects.toMatchObject({ code: '23503' })
+
+    // The delete paths take both in one statement and gather every key.
+    const keys = await sql<{ storage_key: string }[]>`
+      with doomed as (
+        select id from log_artifacts where member_id = ${theirs}
+      ), chunks as (
+        delete from log_artifact_chunks
+         where artifact_id in (select id from doomed)
+        returning storage_key
+      ), artifacts as (
+        delete from log_artifacts where id in (select id from doomed)
+        returning storage_key
+      )
+      select storage_key from chunks
+      union all select storage_key from artifacts
+    `
+    expect(keys.map((row) => row.storage_key).toSorted()).toEqual([
+      'acme/member.jsonl',
+      'acme/member.jsonl.chunks/000001.jsonl.gz',
+    ])
+  })
+
+  test('names the same Member as the transcript it belongs to', async () => {
+    const [artifact] = await sql<{ id: string }[]>`
+      select id from log_artifacts where member_id = ${fixture.acme.members.member}
+    `
+    // `member_id` is denormalised for the policies, so it must not be able to
+    // disagree with the artifact's: a chunk filed under the Admin would be
+    // deletable by the wrong person.
+    await expect(sql`
+      insert into log_artifact_chunks
+        (artifact_id, member_id, seq, raw_offset, raw_length, stored_bytes,
+         sha256, storage_key)
+      values (${artifact!.id}, ${fixture.acme.members.admin}, 2, 1024, 1, 1,
+              ${hex('d')}, 'acme/mismatch.jsonl.gz')
+    `).rejects.toMatchObject({ code: '23503' })
+  })
+})
+
+describe('log_upload_pending', () => {
+  // ADR 0008: the keys a presign signed and no confirm has recorded yet. A
+  // Member's own delete takes them with their transcript; nobody else reads
+  // or removes them, and nothing the browser reaches writes them.
+  beforeEach(async () => {
+    await sql`
+      insert into log_upload_pending
+        (storage_key, pass, member_id, session_id, kind, expires_at)
+      select storage_key || '.pending', '0000000000000000', member_id,
+             session_id, 'transcript', now() + interval '1 hour'
+        from log_artifacts where org_id = ${fixture.acme.id}
+    `
+  })
+
+  test('is read by its own Member alone', async () => {
+    expect(await reach('log_upload_pending')).toEqual({
+      owner: 1,
+      admin: 1,
+      manager: 1,
+      managerWithoutScope: 1,
+      member: 1,
+      removed: 0,
+      platformAdmin: 0,
+      stranger: 0,
+    })
+  })
+
+  test('is deleted by its own Member and by nobody above them', async () => {
+    const theirs = fixture.acme.members.member
+    for (const role of ['owner', 'admin', 'manager'] as const) {
+      // oxlint-disable-next-line no-await-in-loop -- one Role at a time reads clearly on failure.
+      const refused = await asRole(
+        fixture.acme,
+        role,
+        (tx) => tx`delete from log_upload_pending where member_id = ${theirs}`,
+      )
+      expect(refused.count, role).toBe(0)
+    }
+
+    const own = await asRole(
+      fixture.acme,
+      'member',
+      (tx) => tx`delete from log_upload_pending where member_id = ${theirs}`,
+    )
+    expect(own.count).toBe(1)
+  })
+
+  test('is written by the presign route alone', async () => {
+    await expect(
+      asRole(
+        fixture.acme,
+        'member',
+        (tx) => tx`
+          insert into log_upload_pending
+            (storage_key, member_id, session_id, kind, expires_at)
+          values ('acme/forged', ${fixture.acme.members.member}, 's',
+                  'transcript', now())
+        `,
+      ),
+    ).rejects.toThrow(/permission denied for table log_upload_pending/)
+
+    await expect(
+      asRole(
+        fixture.acme,
+        'member',
+        (tx) => tx`update log_upload_pending set expires_at = now()`,
+      ),
+    ).rejects.toThrow(/permission denied for table log_upload_pending/)
+  })
+})
+
 describe('across Orgs', () => {
   test('no Role reads a row of the other Org, on any table that has one', async () => {
     // Globex holds the same rows Acme does, seeded the same way, so each zero

@@ -3,9 +3,11 @@ import { beforeEach, expect, test, vi } from 'vitest'
 import {
   deleteStoredProject,
   deleteStoredSession,
+  downloadableArtifact,
   storedProjects,
   storedSessions,
 } from '../lib/artifacts'
+import { sweepRetention } from '../lib/retention'
 import {
   asRole,
   asUser,
@@ -695,4 +697,327 @@ test('sidecars are not listed as transcripts, and go with the transcript they be
     ),
   ).toBe(0)
   expect(deleted).toHaveLength(2)
+})
+
+/** Gives an artifact `count` sealed chunks (ADR 0008), keyed beside it. */
+const sealChunks = async (artifactId: string, count: number) => {
+  const [row] = await sql<{ storage_key: string; member_id: string }[]>`
+    update log_artifacts
+       set sealed_bytes = ${count * 1024}, sealed_sha256 = ${'c'.repeat(64)}
+     where id = ${artifactId}
+    returning storage_key, member_id
+  `
+  const keys = Array.from(
+    { length: count },
+    (_, index) =>
+      `${row!.storage_key}/chunks/${String(index + 1).padStart(6, '0')}.jsonl.gz`,
+  )
+  await sql`
+    insert into log_artifact_chunks ${sql(
+      keys.map((key, index) => ({
+        artifact_id: artifactId,
+        member_id: row!.member_id,
+        seq: index + 1,
+        raw_offset: index * 1024,
+        raw_length: 1024,
+        stored_bytes: 300,
+        sha256: 'd'.repeat(64),
+        storage_key: key,
+      })),
+    )}
+  `
+  return keys
+}
+
+const chunkKeys = async () =>
+  (
+    await sql<{ storage_key: string }[]>`
+      select storage_key from log_artifact_chunks order by storage_key
+    `
+  ).map((row) => row.storage_key)
+
+test('destroying a chunked Session takes its chunks, its tail and its sidecars', async () => {
+  // Ticket 130.
+  const projectId = await project('github.com/acme/api')
+  const main = await artifact({ projectId })
+  const chunks = await sealChunks(main.id, 2)
+  const run = await artifact({ projectId, agentId: 'agent-7' })
+  const runChunks = await sealChunks(run.id, 1)
+  const journal = await artifact({
+    projectId,
+    agentId: 'wf_1',
+    kind: 'workflow_journal',
+  })
+
+  expect(await asMember((tx) => deleteStoredSession(tx, main.id))).toBe(true)
+
+  expect(deleted.toSorted()).toEqual(
+    [main.key, ...chunks, journal.key].toSorted(),
+  )
+  // The Agent Run is its own transcript, and keeps its chunks.
+  expect(await chunkKeys()).toEqual(runChunks)
+})
+
+test('destroying a Project takes every chunk in it', async () => {
+  const projectId = await project('github.com/acme/api')
+  const one = await artifact({ projectId })
+  const chunks = await sealChunks(one.id, 3)
+  const otherId = await project('github.com/acme/web')
+  const kept = await artifact({
+    projectId: otherId,
+    projectKey: 'github.com/acme/web',
+    sessionId: 'session-3',
+  })
+  const keptChunks = await sealChunks(kept.id, 1)
+
+  expect(
+    await asMember((tx) =>
+      deleteStoredProject(tx, fixture.acme.members.member, projectId),
+    ),
+  ).toBe(1)
+
+  expect(deleted.toSorted()).toEqual([one.key, ...chunks].toSorted())
+  expect(await chunkKeys()).toEqual(keptChunks)
+})
+
+test('a storage failure rolls back the chunk rows with their artifact', async () => {
+  const projectId = await project('github.com/acme/api')
+  const one = await artifact({ projectId })
+  const chunks = await sealChunks(one.id, 2)
+  refuseDelete = true
+
+  await expect(
+    asMember((tx) => deleteStoredSession(tx, one.id)),
+  ).rejects.toThrow(/storage is unreachable/)
+  await expect(
+    asMember((tx) =>
+      deleteStoredProject(tx, fixture.acme.members.member, projectId),
+    ),
+  ).rejects.toThrow(/storage is unreachable/)
+
+  expect(await chunkKeys()).toEqual(chunks)
+  const [row] = await sql<{ count: number }[]>`
+    select count(*)::int as count from log_artifacts where id = ${one.id}
+  `
+  expect(row!.count).toBe(1)
+})
+
+test('a chunked transcript is marked so the page downloads it in the browser', async () => {
+  // Ticket 133: its object is only the tail, so the 302 would be half a file.
+  const projectId = await project('github.com/acme/api')
+  const main = await artifact({ projectId })
+  await artifact({ projectId, agentId: 'agent-7' })
+  await sealChunks(main.id, 1)
+  await sql`
+    update log_artifacts
+       set storage_key = storage_key || '/tail-1-0123456789abcdef.jsonl'
+     where id = ${main.id}
+  `
+
+  const { sessions } = await asMember(storedSessions)
+  expect(
+    Object.fromEntries(sessions.map((s) => [s.agentId ?? 'main', s.chunked])),
+  ).toEqual({ main: true, 'agent-7': false })
+})
+
+test('chunked means a tail key after exactly its chunk rows, not sealed bytes', async () => {
+  // ADR 0008, the test `presignDecision` makes. A rollback to code that
+  // predates chunks writes the whole-file key and leaves sealed_bytes and
+  // the chunk rows behind; that row's object is the whole transcript.
+  const projectId = await project('github.com/acme/api')
+  const rolledBack = await artifact({ projectId })
+  await sealChunks(rolledBack.id, 2)
+  // A tail key whose count disagrees with the rows is not a chunked row
+  // either: its chunks cannot be what came before that tail.
+  const miscounted = await artifact({ projectId, sessionId: 'session-2' })
+  await sealChunks(miscounted.id, 1)
+  await sql`
+    update log_artifacts
+       set storage_key = storage_key || '/tail-2-0123456789abcdef.jsonl'
+     where id = ${miscounted.id}
+  `
+
+  const { sessions } = await asMember(storedSessions)
+  expect(sessions.map((s) => s.chunked)).toEqual([false, false])
+  const download = await asMember((tx) =>
+    downloadableArtifact(tx, rolledBack.id),
+  )
+  expect(download?.chunked).toBe(false)
+})
+
+/** A key a presign signed for this Member and no confirm recorded yet. */
+const pendingUpload = async ({
+  storageKey,
+  sessionId = 'session-1',
+  agentId = null,
+  kind = 'transcript',
+  projectId = null,
+}: {
+  storageKey: string
+  sessionId?: string
+  agentId?: string | null
+  kind?: 'transcript' | 'agent_meta' | 'workflow_journal'
+  projectId?: string | null
+}) => {
+  await sql`
+    insert into log_upload_pending ${sql({
+      storage_key: storageKey,
+      pass: '0000000000000000',
+      member_id: fixture.acme.members.member,
+      session_id: sessionId,
+      agent_id: agentId,
+      kind,
+      project_id: projectId,
+      expires_at: new Date(Date.now() + 3_600_000),
+    })}
+  `
+  return storageKey
+}
+
+const pendingLeft = async () =>
+  (
+    await sql<{ storage_key: string }[]>`
+      select storage_key from log_upload_pending order by storage_key
+    `
+  ).map((row) => row.storage_key)
+
+test('destroying a Session takes the uploads still pending under it', async () => {
+  // ADR 0008: a pass mid-upload when the Member deletes has PUT, or is
+  // about to PUT, objects no row names yet. They go with the transcript.
+  const projectId = await project('github.com/acme/api')
+  const main = await artifact({ projectId })
+  const tail = await pendingUpload({
+    storageKey: 'p/session-1/tail-2-aa.jsonl',
+  })
+  const chunk = await pendingUpload({ storageKey: 'p/session-1/chunks/2-bb' })
+  const journal = await pendingUpload({
+    storageKey: 'p/session-1/workflows/wf_1.journal.jsonl',
+    agentId: 'wf_1',
+    kind: 'workflow_journal',
+  })
+  // An Agent Run's own upload is its transcript's, not the Session's.
+  const run = await pendingUpload({
+    storageKey: 'p/session-1/agents/agent-7/tail-1-cc.jsonl',
+    agentId: 'agent-7',
+  })
+
+  expect(await asMember((tx) => deleteStoredSession(tx, main.id))).toBe(true)
+
+  expect(deleted.toSorted()).toEqual(
+    [main.key, tail, chunk, journal].toSorted(),
+  )
+  expect(await pendingLeft()).toEqual([run])
+})
+
+test('destroying a Project takes the uploads still pending in it', async () => {
+  const projectId = await project('github.com/acme/api')
+  const one = await artifact({ projectId })
+  const tail = await pendingUpload({ storageKey: 'p/tail-1-aa', projectId })
+  const otherId = await project('github.com/acme/web')
+  const kept = await pendingUpload({
+    storageKey: 'q/tail-1-bb',
+    projectId: otherId,
+  })
+
+  await asMember((tx) =>
+    deleteStoredProject(tx, fixture.acme.members.member, projectId),
+  )
+
+  expect(deleted.toSorted()).toEqual([one.key, tail].toSorted())
+  expect(await pendingLeft()).toEqual([kept])
+})
+
+test('a PUT that lands after a delete is swept once its URL has expired', async () => {
+  // ADR 0008: the delete removes the objects already there, but a presigned
+  // PUT stays valid until its expiry and can land afterwards. So each pending
+  // key is also queued for the sweep, not before its URL is dead.
+  const projectId = await project('github.com/acme/api')
+  const main = await artifact({ projectId })
+  const tail = await pendingUpload({
+    storageKey: 'p/session-1/tail-1-0123456789abcdef.jsonl',
+  })
+  expect(await asMember((tx) => deleteStoredSession(tx, main.id))).toBe(true)
+  expect(deleted).toContain(tail)
+  deleted.length = 0
+
+  // The late PUT lands now. Before the URL expires the sweep leaves it.
+  await sweepRetention(sql)
+  expect(deleted).toEqual([])
+
+  await sql`update storage_orphans set not_before = now() - interval '1 second'`
+  await sweepRetention(sql)
+  expect(deleted).toEqual([tail])
+})
+
+test('a Project delete queues its pending keys the same way', async () => {
+  const projectId = await project('github.com/acme/api')
+  await artifact({ projectId })
+  const tail = await pendingUpload({ storageKey: 'p/tail-1-aa', projectId })
+
+  await asMember((tx) =>
+    deleteStoredProject(tx, fixture.acme.members.member, projectId),
+  )
+
+  const queued = await sql<{ storage_key: string; waits: boolean }[]>`
+    select storage_key, not_before > now() + interval '30 minutes' as waits
+      from storage_orphans
+  `
+  expect(queued).toEqual([{ storage_key: tail, waits: true }])
+})
+
+test('nobody queues or takes another Member’s pending keys', async () => {
+  const theirs = await pendingUpload({ storageKey: 'p/tail-1-theirs' })
+
+  const taken = await asRole(
+    fixture.acme,
+    'admin',
+    (tx) =>
+      tx`select sessclone_forget_pending(array[${theirs}]) as storage_key`,
+  )
+
+  expect(taken).toEqual([])
+  expect(await pendingLeft()).toEqual([theirs])
+  expect(await sql`select 1 from storage_orphans`).toHaveLength(0)
+})
+
+/** Resolves once some statement is waiting on a lock another holds. */
+const blocked = async () => {
+  for (;;) {
+    // eslint-disable-next-line no-await-in-loop -- polling until it waits
+    const [row] = await sql<{ n: number }[]>`
+      select count(*)::int as n from pg_locks where not granted
+    `
+    if (row!.n > 0) return
+    // eslint-disable-next-line no-await-in-loop -- as above
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+}
+
+test('a delete racing a confirm that seals takes the new chunks too', async () => {
+  // The confirm's chunk rows commit while the delete waits on the artifact;
+  // the delete's snapshot did not see them, and the no action key refused
+  // it with 23503. It is tried once more, and then sees them.
+  const projectId = await project('github.com/acme/api')
+  const main = await artifact({ projectId })
+  let deleting: Promise<boolean> | undefined
+  await sql.begin(async (confirm) => {
+    await confirm`
+      insert into log_artifact_chunks ${confirm({
+        artifact_id: main.id,
+        member_id: fixture.acme.members.member,
+        seq: 1,
+        raw_offset: 0,
+        raw_length: 1024,
+        stored_bytes: 300,
+        sha256: 'd'.repeat(64),
+        storage_key: `${main.key}/chunks/000001-dddd.jsonl.gz`,
+      })}
+    `
+    deleting = asMember((tx) => deleteStoredSession(tx, main.id))
+    await blocked()
+  })
+
+  expect(await deleting).toBe(true)
+  expect(await chunkKeys()).toEqual([])
+  expect(deleted).toContain(`${main.key}/chunks/000001-dddd.jsonl.gz`)
 })

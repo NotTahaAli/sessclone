@@ -2,6 +2,8 @@ import { z } from 'zod'
 
 import { splitChunk, parseLines, type Item } from '@sessclone/shared'
 
+import type { Read } from './columns'
+
 // Tickets 105-107: how the viewer's browser reaches the bytes. The file list
 // comes from our route; the bytes come straight from storage through the
 // presigned links it hands out (ADR 0003), never through the application.
@@ -15,6 +17,22 @@ const StoredFile = z.object({
   uploadedAt: z.string(),
   url: z.string(),
   expiresIn: z.number(),
+  /**
+   * ADR 0008: the raw offset the object at `url` starts at. Zero, with no
+   * chunks, for a whole-file transcript and every sidecar.
+   */
+  tailOffset: z.number().int().nonnegative().default(0),
+  /** The sealed gzip chunks before the tail, in order. */
+  chunks: z
+    .array(
+      z.object({
+        rawOffset: z.number().int().nonnegative(),
+        rawLength: z.number().int().positive(),
+        sha256: z.string().regex(/^[0-9a-f]{64}$/),
+        url: z.string(),
+      }),
+    )
+    .default([]),
 })
 export type StoredFile = z.infer<typeof StoredFile>
 const Files = z.object({ files: z.array(StoredFile) })
@@ -42,42 +60,60 @@ export const listFiles = async (
     }
   }
   const body = Files.safeParse(await response.json())
-  return body.success
+  if (!body.success) {
+    return {
+      status: 'error',
+      message: 'The file list was not in a shape this page reads.',
+    }
+  }
+  return body.data.files.every(linedUp)
     ? { status: 'ready', files: body.data.files }
     : {
         status: 'error',
-        message: 'The file list was not in a shape this page reads.',
+        message:
+          'This transcript’s stored chunks do not line up with its tail, so ' +
+          'it cannot be shown without repeating or losing bytes.',
       }
 }
 
 /**
- * Bytes of one stored file, `range` inclusive, or the whole file without one.
- * The links expire after a few minutes, and a storage refusal of an expired
- * link is a 403: `renew` fetches a fresh list once and the read is retried on
- * the new link. A server that ignores Range answers 200 with everything, which
- * `whole` reports so the caller can treat it as the whole file.
+ * Whether a file's chunks start at byte 0, run on from each other with no
+ * gap or overlap, and end where its tail starts (ADR 0008). A whole file,
+ * with no chunks and its tail at 0, trivially does.
  */
-export const readBytes = async (
-  file: StoredFile,
-  range: { start: number; end: number } | null,
-  renew: () => Promise<StoredFile | null>,
-  signal?: AbortSignal,
-): Promise<{ bytes: Uint8Array; whole: boolean }> => {
-  const get = (url: string) =>
-    fetch(url, {
-      signal,
-      headers: range ? { Range: `bytes=${range.start}-${range.end}` } : {},
-    })
+const linedUp = (file: StoredFile) =>
+  file.tailOffset ===
+  file.chunks.reduce<number>(
+    (end, chunk) => (chunk.rawOffset === end ? end + chunk.rawLength : NaN),
+    0,
+  )
+
+const RELOAD =
+  'This transcript was archived further since it opened. Reload to read it.'
+
+/**
+ * One GET, renewed once on a refusal. The links expire after a few minutes,
+ * and a storage refusal of an expired link is a 403: `fresh` fetches a new
+ * link once and the read is retried on it. A 404 is renewed the same way: a
+ * seal deletes the tail it replaced (ADR 0008), so a list read before it
+ * names an object that is gone, and the fresh list names the one that is not.
+ */
+const getRenewing = async (
+  url: string,
+  fresh: () => Promise<string | null>,
+  init: RequestInit,
+) => {
+  const get = (link: string) => fetch(link, init)
   // R2 answers an expired link's 403 without CORS headers, so the browser
   // reports a network error rather than the status: treat that like a 403.
   // An abort is the caller's own doing and is not retried.
-  let response = await get(file.url).catch((error: unknown) => {
+  let response = await get(url).catch((error: unknown) => {
     if (error instanceof TypeError) return null
     throw error
   })
-  if (!response || response.status === 403) {
-    const fresh = await renew()
-    if (fresh) response = await get(fresh.url)
+  if (!response || response.status === 403 || response.status === 404) {
+    const link = await fresh()
+    if (link) response = await get(link)
   }
   if (!response) throw new Error('Storage could not be reached.')
   if (!response.ok) {
@@ -87,10 +123,178 @@ export const readBytes = async (
         : `Storage answered ${response.status}.`,
     )
   }
+  return response
+}
+
+/**
+ * Bytes of one stored object, `range` inclusive and counted inside the object
+ * (so from `tailOffset` for a chunked transcript), or the whole object without
+ * one. A server that ignores Range answers 200 with everything, which `whole`
+ * reports so the caller can treat it as the whole object.
+ *
+ * A renewed link must name the same tail: once a transcript seals more chunks
+ * its tail moves to a new key that starts at a new offset, and reading it at
+ * the old offsets would repeat or skip bytes.
+ */
+export const readBytes = async (
+  file: StoredFile,
+  range: { start: number; end: number } | null,
+  renew: () => Promise<StoredFile | null>,
+  signal?: AbortSignal,
+): Promise<{ bytes: Uint8Array; whole: boolean }> => {
+  const response = await getRenewing(
+    file.url,
+    async () => {
+      const fresh = await renew()
+      if (fresh && fresh.tailOffset !== file.tailOffset) throw new Error(RELOAD)
+      return fresh?.url ?? null
+    },
+    {
+      signal,
+      headers: range ? { Range: `bytes=${range.start}-${range.end}` } : {},
+    },
+  )
   return {
     bytes: new Uint8Array(await response.arrayBuffer()),
     whole: !range || response.status === 200,
   }
+}
+
+const hex = async (bytes: Uint8Array<ArrayBuffer>) =>
+  Array.from(
+    new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)),
+    (byte) => byte.toString(16).padStart(2, '0'),
+  ).join('')
+
+/**
+ * One sealed chunk (ADR 0008), fetched whole, gunzipped, and checked against
+ * its raw SHA-256: a mismatch throws, so neither the viewer nor a download
+ * ever shows or saves a corrupt chunk. Chunks are stored as `application/gzip`
+ * with no Content-Encoding, so the browser hands over the gzip bytes as they
+ * are. A chunk is immutable; a renewed list must still hold this one.
+ */
+export const readChunk = async (
+  file: StoredFile,
+  index: number,
+  renew: () => Promise<StoredFile | null>,
+  signal?: AbortSignal,
+): Promise<Uint8Array> => {
+  const chunk = file.chunks[index]
+  if (!chunk) throw new Error(RELOAD)
+  const response = await getRenewing(
+    chunk.url,
+    async () => {
+      const fresh = await renew()
+      const same = fresh?.chunks.find(
+        (one) =>
+          one.rawOffset === chunk.rawOffset && one.sha256 === chunk.sha256,
+      )
+      if (fresh && !same) throw new Error(RELOAD)
+      return same?.url ?? null
+    },
+    { signal },
+  )
+  if (!response.body) throw new Error('Storage sent an empty chunk.')
+  const bytes = new Uint8Array(
+    await new Response(
+      response.body.pipeThrough(new DecompressionStream('gzip')),
+    ).arrayBuffer(),
+  )
+  if ((await hex(bytes)) !== chunk.sha256) {
+    throw new Error('A chunk of this transcript failed its checksum.')
+  }
+  return bytes
+}
+
+/**
+ * The raw bytes `columns.earlierRead` planned, with the raw offset they start
+ * at: a Range read inside the tail, or one chunk cut where the loaded bytes
+ * begin. A server that ignored Range sent the whole tail, which is kept up to
+ * the end of the read, so the caller loads more than it asked and nothing
+ * twice.
+ */
+export const readRaw = async (
+  file: StoredFile,
+  read: Read,
+  renew: () => Promise<StoredFile | null>,
+  signal?: AbortSignal,
+): Promise<{ bytes: Uint8Array; start: number }> => {
+  if (read.kind === 'chunk') {
+    const offset = file.chunks[read.index]?.rawOffset ?? 0
+    const bytes = await readChunk(file, read.index, renew, signal)
+    return {
+      bytes: bytes.subarray(read.start - offset, read.end - offset + 1),
+      start: read.start,
+    }
+  }
+  const at = file.tailOffset
+  const { bytes, whole } = await readBytes(
+    file,
+    { start: read.start - at, end: read.end - at },
+    renew,
+    signal,
+  )
+  return whole
+    ? { bytes: bytes.subarray(0, read.end - at + 1), start: at }
+    : { bytes, start: read.start }
+}
+
+/** A renewed list whose tail has moved on past the one being read. */
+class TailMoved extends Error {
+  constructor(readonly file: StoredFile) {
+    super(RELOAD)
+  }
+}
+
+/**
+ * The whole raw transcript as one stream: each chunk in order, gunzipped and
+ * checked, then the tail (tickets 132 and 133). A whole-file row is its one
+ * object. Pulled a chunk at a time, so a reader that writes as it goes holds
+ * about a chunk in memory.
+ *
+ * A transcript that sealed more while this was reading has a new list whose
+ * tail starts further on, and the old tail is gone. The file is append-only,
+ * so the new list's chunks from where the old tail started, then its tail,
+ * are exactly the bytes still to come.
+ */
+export const wholeStream = (
+  file: StoredFile,
+  renew: () => Promise<StoredFile | null>,
+  signal?: AbortSignal,
+) => {
+  let current = file
+  let next = 0
+  const renewTail = async () => {
+    const fresh = await renew()
+    if (fresh && fresh.tailOffset > current.tailOffset) {
+      throw new TailMoved(fresh)
+    }
+    return fresh
+  }
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      for (;;) {
+        if (next < current.chunks.length) {
+          // oxlint-disable-next-line no-await-in-loop -- returns straight after
+          controller.enqueue(await readChunk(current, next++, renew, signal))
+          return
+        }
+        try {
+          // oxlint-disable-next-line no-await-in-loop -- at most once more per seal
+          const { bytes } = await readBytes(current, null, renewTail, signal)
+          controller.enqueue(bytes)
+          controller.close()
+          return
+        } catch (error) {
+          if (!(error instanceof TailMoved)) throw error
+          const from = current.tailOffset
+          next = error.file.chunks.findIndex((one) => one.rawOffset === from)
+          if (next === -1) throw new Error(RELOAD, { cause: error })
+          current = error.file
+        }
+      }
+    },
+  })
 }
 
 /** A whole small file — an agent's transcript — as Items. */
@@ -99,7 +303,9 @@ export const readItems = async (
   renew: () => Promise<StoredFile | null>,
   signal?: AbortSignal,
 ): Promise<Item[]> => {
-  const { bytes } = await readBytes(file, null, renew, signal)
+  const bytes = new Uint8Array(
+    await new Response(wholeStream(file, renew, signal)).arrayBuffer(),
+  )
   return parseLines(
     splitChunk(bytes, 0, { atFileStart: true, atFileEnd: true }).lines,
   )
