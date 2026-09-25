@@ -115,7 +115,7 @@ export default async function AdminLayout({
         </p>
       </header>
 
-      <main className="min-w-0 grow px-4 py-5 pb-28 lg:px-7 lg:pb-8">
+      <main className="min-w-0 grow px-4 py-5 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:px-7 lg:pb-8">
         {children}
         {/* At phone width the sidebar is not rendered at all, so the notices
             go under the content instead. One of the two is visible at a

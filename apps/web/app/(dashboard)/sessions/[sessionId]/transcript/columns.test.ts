@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   agentColumn,
@@ -6,6 +6,7 @@ import {
   earlierRead,
   keepReading,
   splitEarlier,
+  stickToBottom,
   readWidths,
   toggleColumn,
   workflowColumn,
@@ -164,5 +165,67 @@ describe('splitEarlier', () => {
   })
   it('keeps every line of a chunk that ends in a newline', () => {
     expect(splitEarlier(bytes('{"a":1}\n{"b":2}\n'), 0).lines).toHaveLength(2)
+  })
+})
+
+// 2026-09-24: a long transcript opened ~5,800 px above its end. Rows below
+// the fold are `content-visibility: auto`, so the first scroll to the bottom
+// measured their 3rem placeholders; as the rows in view took their real
+// height the end moved away. The column stays pinned until the reader acts.
+/** The one ResizeObserver a test's column made, and whether it still listens. */
+let resized: (() => void) | undefined
+class StubObserver {
+  constructor(private callback: () => void) {}
+  observe() {
+    resized = this.callback
+  }
+  disconnect() {
+    resized = undefined
+  }
+}
+
+const column = () => {
+  vi.stubGlobal('ResizeObserver', StubObserver)
+  const scroller = Object.assign(new EventTarget(), {
+    scrollTop: 0,
+    scrollHeight: 1000,
+  })
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- no DOM in these tests; the stub observer never reads it
+  const release = stickToBottom(scroller, {} as Element)
+  const resize = (height: number) => {
+    scroller.scrollHeight = height
+    resized?.()
+  }
+  return { scroller, release, resize }
+}
+
+describe('stickToBottom', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('follows the end as the rows take their real height', () => {
+    const { scroller, resize, release } = column()
+    expect(scroller.scrollTop).toBe(1000)
+    resize(6800)
+    expect(scroller.scrollTop).toBe(6800)
+    release()
+  })
+
+  it('lets go once the reader scrolls, and not before', () => {
+    const { scroller, resize } = column()
+    scroller.dispatchEvent(new Event('scroll'))
+    resize(2000)
+    expect(scroller.scrollTop).toBe(2000)
+    scroller.dispatchEvent(new Event('wheel'))
+    resize(3000)
+    expect(scroller.scrollTop).toBe(2000)
+  })
+
+  it('lets go on a click alone, as a screen reader activates a control', () => {
+    const { scroller, resize } = column()
+    scroller.dispatchEvent(new Event('click'))
+    resize(3000)
+    expect(scroller.scrollTop).toBe(1000)
   })
 })

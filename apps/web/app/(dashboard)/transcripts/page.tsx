@@ -1,6 +1,6 @@
 import Link from 'next/link'
 
-import { StoredTranscripts } from './stored-transcripts'
+import { ArchivalNote, StoredTranscripts } from './stored-transcripts'
 import { PageHeader } from '../page-header'
 import { Row } from '../../_ui/primitives'
 import { listArchivalMemberships } from '../../../lib/archival'
@@ -88,10 +88,7 @@ export default async function Transcripts({
           What has already been uploaded from your machines. Deleting one
           destroys the transcript itself, not the session&apos;s usage or cost —
           those are always reported. This cannot be undone.{' '}
-          <Link href="/settings/you" className="text-text underline">
-            Archival is a setting
-          </Link>
-          , and it is off until you turn it on.
+          <ArchivalNote memberships={memberships} />
         </p>
 
         <StoredTranscripts

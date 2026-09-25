@@ -469,12 +469,14 @@ export function TranscriptViewer({
         <div
           ref={measure}
           // The frame's header, this page's own header and filters, and on a
-          // phone the fixed bottom bar, are what the column height leaves
-          // room for, so each column scrolls inside the viewport.
+          // phone the fixed bottom bar, its safe-area inset and the credit
+          // under the page, are what the column height leaves room for, so
+          // each column scrolls inside the viewport and nothing of the page
+          // opens under the bar.
           className={`border-rule flex ${
             columns.length > 1
-              ? 'h-[calc(100dvh-18.5rem)]'
-              : 'h-[calc(100dvh-16rem)]'
+              ? 'h-[calc(100dvh-20.5rem-env(safe-area-inset-bottom))]'
+              : 'h-[calc(100dvh-18rem-env(safe-area-inset-bottom))]'
           } min-h-[20rem] snap-x snap-mandatory gap-2 overflow-x-auto overscroll-x-contain lg:h-[calc(100dvh-8rem)] lg:snap-none lg:gap-0 lg:rounded-md lg:border`}
         >
           {columns.map((column, index) => (

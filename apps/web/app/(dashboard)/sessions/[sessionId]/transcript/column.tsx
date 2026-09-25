@@ -26,6 +26,7 @@ import {
   earlierRead,
   keepReading,
   splitEarlier,
+  stickToBottom,
 } from './columns'
 import {
   ColumnContext,
@@ -104,6 +105,10 @@ export function MainColumn({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const scroller = useRef<HTMLDivElement>(null)
+  const content = useRef<HTMLDivElement>(null)
+  /** Lets go of the end, once the first chunk has pinned the column there. */
+  const unpin = useRef<(() => void) | null>(null)
+  useEffect(() => () => unpin.current?.(), [])
   // Refs rather than state for what the scroll handler reads, so a burst of
   // scroll events never starts two loads of the same range.
   const current = useRef(loaded)
@@ -194,12 +199,18 @@ export function MainColumn({
     if (!element) return
     if (target !== null && loaded.items.length > 0) {
       settle.current = null
-      element.scrollTop =
-        target === 'bottom'
-          ? element.scrollHeight
-          : target === 'top'
-            ? 0
-            : element.scrollHeight - target.fromBottom
+      if (target === 'bottom' && content.current) {
+        // Not a single jump: the rows below are still placeholders.
+        unpin.current?.()
+        unpin.current = stickToBottom(element, content.current)
+      } else {
+        element.scrollTop =
+          target === 'bottom'
+            ? element.scrollHeight
+            : target === 'top'
+              ? 0
+              : element.scrollHeight - target.fromBottom
+      }
     }
     // A chunk that parsed to nothing (a last line longer than a chunk), or a
     // filter leaving too few rows to scroll: keep reading until there is
@@ -234,32 +245,35 @@ export function MainColumn({
         onScroll={onScroll}
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
       >
-        {error ? (
-          <Failure message={error} retry={earlier} />
-        ) : more ? (
-          <p className="text-text-muted flex flex-wrap items-center justify-center gap-x-3 p-3 text-caption">
-            {busy
-              ? 'Loading earlier messages…'
-              : 'Scroll up for earlier messages.'}
-            <button
-              type="button"
-              onClick={toStart}
-              disabled={busy}
-              className="text-accent-text underline disabled:opacity-50"
-            >
-              Jump to start
-            </button>
-          </p>
-        ) : null}
-        {loaded.items.length === 0 && busy ? (
-          <ColumnSkeleton />
-        ) : loaded.items.length === 0 && !more && !error ? (
-          <p className="text-text-muted p-4 text-caption">
-            This transcript is empty.
-          </p>
-        ) : (
-          <Rows items={loaded.items} preset={preset} />
-        )}
+        {/* One box around everything scrolled, for `stickToBottom` to watch. */}
+        <div ref={content}>
+          {error ? (
+            <Failure message={error} retry={earlier} />
+          ) : more ? (
+            <p className="text-text-muted flex flex-wrap items-center justify-center gap-x-3 p-3 text-caption">
+              {busy
+                ? 'Loading earlier messages…'
+                : 'Scroll up for earlier messages.'}
+              <button
+                type="button"
+                onClick={toStart}
+                disabled={busy}
+                className="text-accent-text underline disabled:opacity-50"
+              >
+                Jump to start
+              </button>
+            </p>
+          ) : null}
+          {loaded.items.length === 0 && busy ? (
+            <ColumnSkeleton />
+          ) : loaded.items.length === 0 && !more && !error ? (
+            <p className="text-text-muted p-4 text-caption">
+              This transcript is empty.
+            </p>
+          ) : (
+            <Rows items={loaded.items} preset={preset} />
+          )}
+        </div>
       </div>
     </>
   )
