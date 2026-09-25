@@ -242,3 +242,36 @@ test('a Role change or removal from a tab left open across a switch says nothing
   `
   expect(row).toEqual({ role: 'member', removed_at: null })
 })
+
+const appearanceForm = (memberId: string) => {
+  const data = new FormData()
+  data.append('memberId', memberId)
+  data.append('theme', 'dark')
+  data.append('seed', '#336699')
+  return data
+}
+
+test('an appearance form from a tab left open across a switch writes nothing', async () => {
+  // The You page was drawn for Globex; Acme is selected now. Neither the
+  // Globex row nor the cookie may change, or Acme would show Globex's colours.
+  const { setOwnAccent, setOwnTheme } =
+    await import('../app/(dashboard)/settings/you/appearance-actions')
+  const { APPEARANCE_COOKIE } = await import('../lib/appearance')
+  expect(await setOwnTheme(null, appearanceForm(elsewhere))).toMatchObject({
+    error: expect.any(String),
+  })
+  expect(await setOwnAccent(null, appearanceForm(elsewhere))).toMatchObject({
+    error: expect.any(String),
+  })
+  const [row] = await sql<{ theme: string; accent_seed: string | null }[]>`
+    select theme, accent_seed from members where id = ${elsewhere}
+  `
+  expect(row).toEqual({ theme: 'system', accent_seed: null })
+  expect(jar.has(APPEARANCE_COOKIE)).toBe(false)
+
+  // The membership on screen still saves.
+  expect(
+    await setOwnTheme(null, appearanceForm(fixture.acme.members.owner)),
+  ).toMatchObject({ saved: expect.any(String) })
+  expect(jar.has(APPEARANCE_COOKIE)).toBe(true)
+})
