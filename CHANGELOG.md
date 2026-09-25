@@ -22,6 +22,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   approval like a sign-up, or opens at once where approval is off. You can have one
   Org of your own waiting at a time. The waiting page carries the switcher
   too, so you can switch out of an Org that is waiting.
+- `/.well-known/security.txt` (RFC 9116), pointing to GitHub private advisories
+  and, when set, the deployment's contact address. Its expiry is always a
+  year ahead.
 
 ### Fixed
 
