@@ -17,7 +17,11 @@ export const securityTxt = (now: Date, email = contactEmail()) =>
     ...(email ? [`Contact: mailto:${email}`] : []),
     `Expires: ${new Date(now.getTime() + YEAR_MS).toISOString()}`,
     `Policy: ${REPOSITORY}/blob/main/SECURITY.md`,
-    `Canonical: ${canonical('/.well-known/security.txt')}`,
+    // RFC 9116 wants an https Canonical; the localhost fallback of an
+    // unconfigured deployment is neither that nor where the file was fetched.
+    ...(canonical('/').startsWith('https://')
+      ? [`Canonical: ${canonical('/.well-known/security.txt')}`]
+      : []),
     'Preferred-Languages: en',
     '',
   ].join('\n')

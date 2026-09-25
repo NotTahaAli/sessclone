@@ -4,6 +4,7 @@ import { Suspense, type ReactNode } from 'react'
 import { approvalRequired } from '../../lib/approval'
 import { signupStep } from '../../lib/auth/plan'
 import { sessionUser } from '../../lib/supabase/server'
+import type { MarketingTier } from '../../lib/tiers'
 import { PanelCredit } from '../(dashboard)/credit'
 import { LogoMark } from '../_ui/logo'
 import { offeredPlans, PlanChoices } from '../sign-up/plan-choices'
@@ -24,7 +25,19 @@ async function Form() {
   const approval = approvalRequired()
   if (!approval) return <Intro approval={false} />
 
-  const tiers = await offeredPlans()
+  return <PlanStep tiers={await offeredPlans()} />
+}
+
+/** The form with its plan radios; with no Tier to offer (they could not be
+ * read), a notice instead of a form every submit of which is refused. */
+export function PlanStep({ tiers }: { tiers: MarketingTier[] }) {
+  if (tiers.length === 0) {
+    return (
+      <p role="status" className="text-text-secondary mt-2 text-body">
+        Plans cannot be loaded right now. Try again in a few minutes.
+      </p>
+    )
+  }
   const step = signupStep(new URLSearchParams(), tiers)
   return (
     <Intro approval>

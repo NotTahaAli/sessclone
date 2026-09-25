@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest'
+import { expect, test, vi } from 'vitest'
 
 import { securityTxt } from '../lib/security-txt'
 
@@ -23,4 +23,14 @@ test('private advisories always, the operator address only when set', () => {
     'https://github.com/NotTahaAli/sessclone/security/advisories/new',
     'mailto:hello@example.com',
   ])
+})
+
+test('Canonical only for an https deployment, never the localhost fallback', () => {
+  vi.stubEnv('NEXT_PUBLIC_APP_URL', undefined)
+  expect(field(securityTxt(new Date(), null), 'Canonical')).toEqual([])
+  vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://sessclone.com')
+  expect(field(securityTxt(new Date(), null), 'Canonical')).toEqual([
+    'https://sessclone.com/.well-known/security.txt',
+  ])
+  vi.unstubAllEnvs()
 })
