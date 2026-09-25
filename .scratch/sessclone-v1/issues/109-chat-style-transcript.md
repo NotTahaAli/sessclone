@@ -15,7 +15,7 @@
 
 **Blocked by:** 105
 
-**Status:** todo
+**Status:** done
 
 - [ ] Chat rows, step groups, markdown and code boxes
 - [ ] Options sheet, info popup, long-press menu

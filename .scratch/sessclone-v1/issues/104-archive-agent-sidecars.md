@@ -9,7 +9,7 @@
 
 **Blocked by:** —
 
-**Status:** todo
+**Status:** done
 
 - [ ] `kind` on the presign and confirm wire contracts, defaulting to `transcript` so older Collectors keep working
 - [ ] Migration adding `log_artifacts.kind`, unique key including it

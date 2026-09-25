@@ -10,7 +10,7 @@
 
 **Blocked by:** 103
 
-**Status:** todo
+**Status:** done
 
 - [ ] `transcript_view_presets` table with its RLS policies in one migration
 - [ ] Server actions to list, save, delete and set default

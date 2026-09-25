@@ -9,7 +9,7 @@
 
 **Blocked by:** 103
 
-**Status:** todo
+**Status:** done
 
 - [ ] `GET /api/transcripts/<sessionId>/costs`, one query
 - [ ] Info panel in the viewer

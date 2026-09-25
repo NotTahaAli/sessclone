@@ -15,7 +15,7 @@
 
 **Blocked by:** 109
 
-**Status:** todo
+**Status:** done
 
 - [ ] Replies, edits, reactions, status and decision cards
 - [ ] Header icons and view menu; full width

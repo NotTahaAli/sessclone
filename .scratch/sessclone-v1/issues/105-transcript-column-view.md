@@ -15,7 +15,7 @@
 
 **Blocked by:** 103, 104
 
-**Status:** todo
+**Status:** done
 
 - [ ] `GET /api/transcripts/<sessionId>` returns short-lived storage links, 404 when nothing visible
 - [ ] Column view, chunked loading, phone layout, draggable widths

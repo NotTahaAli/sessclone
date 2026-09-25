@@ -9,7 +9,7 @@
 
 **Blocked by:** 104, 105
 
-**Status:** todo
+**Status:** done
 
 - [ ] Workflow block and column
 - [ ] Journal missing reads "not stored", not an empty list
