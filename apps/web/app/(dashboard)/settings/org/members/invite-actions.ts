@@ -20,6 +20,7 @@ import {
   reachesOrgSettings,
   type Role,
 } from '../../../../../lib/viewer'
+import { DEMO_REFUSAL, isDemoUser } from '../../../../../lib/demo'
 
 // The Members page's writes: ticket 49's invitation and withdrawal, and
 // ticket 50's Role change and removal. One file because they are one page's
@@ -67,6 +68,7 @@ export const sendInvite = async (
   if (!viewer || !reachesOrgSettings(viewer.role)) {
     return { error: 'Only an Owner or an Admin may invite someone.' }
   }
+  if (isDemoUser(viewer.userId)) return { error: DEMO_REFUSAL }
 
   const email = Email.safeParse(formData.get('email'))
   const role = InviteRole.safeParse(formData.get('role'))
@@ -142,6 +144,7 @@ export const changeRole = async (
   if (!viewer || !reachesOrgSettings(viewer.role)) {
     return { error: 'Only an Owner or an Admin may change a Role.' }
   }
+  if (isDemoUser(viewer.userId)) return { error: DEMO_REFUSAL }
 
   const memberId = Id.safeParse(formData.get('memberId'))
   const role = MemberRole.safeParse(formData.get('role'))
@@ -168,6 +171,7 @@ export const changeMembership = async (
   if (!viewer || !reachesOrgSettings(viewer.role)) {
     return { error: 'Only an Owner or an Admin may remove a Member.' }
   }
+  if (isDemoUser(viewer.userId)) return { error: DEMO_REFUSAL }
 
   const memberId = Id.safeParse(formData.get('memberId'))
   const to = z.enum(['removed', 'active']).safeParse(formData.get('to'))

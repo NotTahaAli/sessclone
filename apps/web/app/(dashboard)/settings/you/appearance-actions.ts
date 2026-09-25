@@ -15,6 +15,7 @@ import {
 } from '../../../../lib/appearance'
 import { asViewer } from '../../../../lib/db'
 import { currentViewer } from '../../../../lib/viewer'
+import { DEMO_REFUSAL, isDemoUser } from '../../../../lib/demo'
 
 // Ticket 77's two Member writes. A Server Action is a POST endpoint anybody
 // can reach whether or not the page rendered a form for them, so identity
@@ -94,6 +95,7 @@ export const setOwnAccent = async (
 ): Promise<AppearanceResult> => {
   const viewer = await ownViewer(formData)
   if (!viewer) return { error: STALE }
+  if (isDemoUser(viewer.userId)) return { error: DEMO_REFUSAL }
 
   // The empty field is "inherit", which is how somebody undoes a choice
   // without having to know what the Org's seed is.
@@ -146,6 +148,7 @@ export const setOwnTheme = async (
 ): Promise<AppearanceResult> => {
   const viewer = await ownViewer(formData)
   if (!viewer) return { error: STALE }
+  if (isDemoUser(viewer.userId)) return { error: DEMO_REFUSAL }
 
   const theme = Theme.safeParse(formData.get('theme'))
   if (!theme.success) {

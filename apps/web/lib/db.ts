@@ -1,5 +1,7 @@
 import postgres from 'postgres'
 
+import { DemoRefusal, isDemoUser, READ_ONLY_TRANSACTION } from './demo'
+
 // ADR 0007's connection function, and the only way anything in this app
 // obtains a connection.
 //
@@ -92,16 +94,34 @@ export const readAnonymously = <T>(
  * `set local` makes the claim transaction-local, so a connection returned to
  * the pool carries no identity to the next viewer's query.
  */
-export const asViewer = <T>(
+export const asViewer = async <T>(
   userId: string,
   query: (tx: postgres.TransactionSql) => Promise<T>,
-) =>
-  pool().begin(async (tx) => {
-    // `set_config(…, true)` is `set local` with the value passed as a
-    // parameter rather than spliced into the statement.
-    await tx`select set_config('request.jwt.claims', ${JSON.stringify({ sub: userId })}, true)`
-    return query(tx)
-  })
+) => {
+  const demo = isDemoUser(userId)
+  try {
+    return await pool().begin(async (tx) => {
+      // Ticket 137: the demo visitor's every transaction is read-only, so
+      // Postgres refuses any write (25006) whichever action forgot to check.
+      // It must be the transaction's first statement.
+      if (demo) await tx`set transaction read only`
+      // `set_config(…, true)` is `set local` with the value passed as a
+      // parameter rather than spliced into the statement.
+      await tx`select set_config('request.jwt.claims', ${JSON.stringify({ sub: userId })}, true)`
+      return query(tx)
+    })
+  } catch (error) {
+    if (
+      demo &&
+      error instanceof Error &&
+      'code' in error &&
+      error.code === READ_ONLY_TRANSACTION
+    ) {
+      throw new DemoRefusal()
+    }
+    throw error
+  }
+}
 
 /**
  * The database's own clock, read as its own statement inside a viewer's

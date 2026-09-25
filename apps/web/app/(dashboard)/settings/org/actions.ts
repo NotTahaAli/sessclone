@@ -8,6 +8,7 @@ import { ORG_NAME_RULE, OrgNameInput, renameOrg } from '../../../../lib/names'
 import type { NameState } from '../../inline-name'
 import { setOrgRetention, setOrgTimezone } from '../../../../lib/org'
 import { viewerOfOrg } from '../../../../lib/viewer'
+import { DEMO_REFUSAL, isDemoUser } from '../../../../lib/demo'
 
 // Ticket 51's timezone write and ticket 61's retention write. A Server Action is a POST endpoint anybody can reach,
 // whether or not the page rendered a form for them, so identity comes from the
@@ -34,6 +35,7 @@ export const setTimezone = async (
 ): Promise<{ error: string } | { saved: string } | null> => {
   const viewer = await viewerOfOrg(formData.get('orgId'))
   if (!viewer) return { error: 'Sign in again to change the timezone.' }
+  if (isDemoUser(viewer.userId)) return { error: DEMO_REFUSAL }
 
   const timezone = Timezone.safeParse(formData.get('timezone'))
   const orgId = z.uuid().safeParse(formData.get('orgId'))
@@ -87,6 +89,7 @@ export const setRetention = async (
 ): Promise<{ error: string } | { saved: number } | null> => {
   const viewer = await viewerOfOrg(formData.get('orgId'))
   if (!viewer) return { error: 'Sign in again to change retention.' }
+  if (isDemoUser(viewer.userId)) return { error: DEMO_REFUSAL }
 
   const days = Days.safeParse(formData.get('days'))
   const orgId = z.uuid().safeParse(formData.get('orgId'))
@@ -150,6 +153,7 @@ export const setOrgName = async (
 ): Promise<NameState> => {
   const viewer = await viewerOfOrg(formData.get('orgId'))
   if (!viewer) return { error: 'Sign in again to rename the Org.' }
+  if (isDemoUser(viewer.userId)) return { error: DEMO_REFUSAL }
 
   const orgId = z.uuid().safeParse(formData.get('orgId'))
   const name = OrgNameInput.safeParse(formData.get('name'))

@@ -12,6 +12,7 @@ import {
   setOrgLogo,
 } from '../../../../lib/org-logo'
 import { viewerOfOrg } from '../../../../lib/viewer'
+import { DEMO_REFUSAL, isDemoUser } from '../../../../lib/demo'
 
 // Ticket 77: uploading and removing the Org logo. Owner or Admin, which is
 // what `org_logos_set`, `org_logos_replace` and `org_logos_remove` say — a
@@ -31,6 +32,7 @@ export const uploadOrgLogo = async (
 ): Promise<LogoResult> => {
   const viewer = await viewerOfOrg(formData.get('orgId'))
   if (!viewer) return { error: 'Sign in again to change the logo.' }
+  if (isDemoUser(viewer.userId)) return { error: DEMO_REFUSAL }
 
   const orgId = z.uuid().safeParse(formData.get('orgId'))
   if (!orgId.success) return { error: 'That is not a setting.' }
@@ -68,6 +70,7 @@ export const removeOrgLogo = async (
 ): Promise<LogoResult> => {
   const viewer = await viewerOfOrg(formData.get('orgId'))
   if (!viewer) return { error: 'Sign in again to change the logo.' }
+  if (isDemoUser(viewer.userId)) return { error: DEMO_REFUSAL }
 
   const orgId = z.uuid().safeParse(formData.get('orgId'))
   if (!orgId.success) return { error: 'That is not a setting.' }

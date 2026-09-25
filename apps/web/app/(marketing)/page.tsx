@@ -1,5 +1,6 @@
 import { InstallCommand } from './install-command'
 import { FRAME, REPOSITORY } from './constants'
+import { DemoLink } from './demo-link'
 import { SignedInLink } from './signed-in-link'
 import { TiersUnavailable } from './tiers-unavailable'
 import { shortPrice } from '../../lib/plans'
@@ -124,6 +125,7 @@ export default async function Landing() {
           </p>
           <div className="mb-4 flex flex-wrap gap-2">
             <SignedInLink variant="hero" />
+            <DemoLink />
             <a
               href={REPOSITORY}
               className={`${buttonClass()} h-10 px-4 text-[14px]`}

@@ -7,6 +7,7 @@ import { createApiKey, revokeApiKey } from '../../../lib/api-keys'
 import { asViewer } from '../../../lib/db'
 import { signedInUser } from '../../../lib/supabase/server'
 import { viewerOfOrg } from '../../../lib/viewer'
+import { DEMO_REFUSAL, isDemoUser } from '../../../lib/demo'
 
 // A Server Action is a POST endpoint that anyone can reach, whether or not the
 // page rendered a form for them — so identity is taken from the session here
@@ -37,6 +38,7 @@ export const createKey = async (
   if (!viewer) {
     return { error: 'This page is for another Org now. Reload and try again.' }
   }
+  if (isDemoUser(viewer.userId)) return { error: DEMO_REFUSAL }
 
   const label = Label.safeParse(formData.get('label'))
   if (!label.success) {

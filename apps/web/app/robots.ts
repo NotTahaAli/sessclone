@@ -26,6 +26,7 @@ export default function robots(): MetadataRoute.Robots {
         '/devices',
         '/settings',
         '/more',
+        '/demo',
       ],
     },
     sitemap: canonical('/sitemap.xml'),

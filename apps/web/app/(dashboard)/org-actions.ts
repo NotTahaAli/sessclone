@@ -23,6 +23,7 @@ import {
   MEMBER_COOKIE_OPTIONS,
   sessionViewer,
 } from '../../lib/viewer'
+import { DEMO_REFUSAL, isDemoUser } from '../../lib/demo'
 
 // The Org switcher's five writes. Every one starts from `sessionUser()`, not
 // `signedInUser()`: somebody whose current Org is waiting for approval must
@@ -71,6 +72,7 @@ export const acceptInvite = async (
 ): Promise<OrgActionState> => {
   const user = await sessionUser()
   if (!user) return { error: 'Sign in again to accept.' }
+  if (isDemoUser(user.id)) return { error: DEMO_REFUSAL }
 
   const id = Id.safeParse(formData.get('invitationId'))
   if (!id.success) return { error: 'This invitation is not valid.' }
@@ -98,6 +100,7 @@ export const declineInvite = async (
 ): Promise<OrgActionState> => {
   const user = await sessionUser()
   if (!user) return { error: 'Sign in again to decline.' }
+  if (isDemoUser(user.id)) return { error: DEMO_REFUSAL }
 
   const id = Id.safeParse(formData.get('invitationId'))
   if (!id.success) return { error: 'This invitation is not valid.' }
@@ -127,6 +130,7 @@ export const leaveCurrentOrg = async (
 ): Promise<OrgActionState> => {
   const viewer = await sessionViewer()
   if (!viewer) return { error: 'Sign in again to leave.' }
+  if (isDemoUser(viewer.userId)) return { error: DEMO_REFUSAL }
 
   const memberId = Id.safeParse(formData.get('memberId'))
   if (!memberId.success || memberId.data !== viewer.memberId) {
@@ -164,6 +168,7 @@ export const createOrg = async (
 ): Promise<OrgActionState> => {
   const user = await sessionUser()
   if (!user) return { error: 'Sign in again to create an Org.' }
+  if (isDemoUser(user.id)) return { error: DEMO_REFUSAL }
 
   const name = OrgNameInput.safeParse(formData.get('name'))
   if (!name.success) return { error: ORG_NAME_RULE }

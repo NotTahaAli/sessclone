@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
 import { APPEARANCE_COOKIE } from '../../lib/appearance'
+import { DEMO_COOKIE } from '../../lib/demo'
 
 import { appUrl } from '../../lib/auth/app-url'
 import { safeNext } from '../../lib/auth/next-path'
@@ -100,7 +101,10 @@ export const signOut = async () => {
   // secret, but a shared machine would otherwise paint the next person's
   // sign-in page in the last person's colours, which reads as though they had
   // not signed out properly.
-  ;(await cookies()).delete(APPEARANCE_COOKIE)
+  const store = await cookies()
+  store.delete(APPEARANCE_COOKIE)
+  // Ticket 137: signing out of the demo leaves it.
+  store.delete(DEMO_COOKIE)
 
   redirect('/sign-in')
 }

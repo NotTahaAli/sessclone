@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { asViewer } from '../../../lib/db'
 import { renameDevice } from '../../../lib/devices'
 import { signedInUser } from '../../../lib/supabase/server'
+import { DEMO_REFUSAL, isDemoUser } from '../../../lib/demo'
 
 // Ticket 57's one write. A Server Action is a POST anybody can reach whether
 // or not a form was rendered for them, so the Device id is parsed and identity
@@ -24,6 +25,7 @@ export const rename = async (
 ): Promise<{ error: string } | { saved: string | null } | null> => {
   const user = await signedInUser()
   if (!user) return { error: 'Sign in again to rename this machine.' }
+  if (isDemoUser(user.id)) return { error: DEMO_REFUSAL }
 
   const deviceId = DeviceId.safeParse(formData.get('deviceId'))
   // `name`, as every naming control on the dashboard posts since tickets 90

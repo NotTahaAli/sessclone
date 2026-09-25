@@ -8,6 +8,7 @@ import { asViewer } from '../../../lib/db'
 import { acceptFailure, acceptInvitation } from '../../../lib/invitations'
 import { sessionUser } from '../../../lib/supabase/server'
 import { MEMBER_COOKIE, MEMBER_COOKIE_OPTIONS } from '../../../lib/viewer'
+import { DEMO_REFUSAL, isDemoUser } from '../../../lib/demo'
 
 // Accepting is a write, so it is a POST and never the render of a GET.
 //
@@ -24,6 +25,7 @@ export const acceptAction = async (
 ): Promise<{ error: string } | null> => {
   const user = await sessionUser()
   if (!user) return { error: 'Sign in to accept this invitation.' }
+  if (isDemoUser(user.id)) return { error: DEMO_REFUSAL }
 
   const token = Token.safeParse(formData.get('token'))
   if (!token.success) return { error: 'This invitation is not valid.' }

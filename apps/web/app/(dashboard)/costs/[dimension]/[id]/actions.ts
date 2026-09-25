@@ -7,6 +7,7 @@ import type { NameState } from '../../../inline-name'
 import { asViewer } from '../../../../../lib/db'
 import { NAME_LIMIT, renameProject } from '../../../../../lib/names'
 import { signedInUser } from '../../../../../lib/supabase/server'
+import { DEMO_REFUSAL, isDemoUser } from '../../../../../lib/demo'
 
 // Ticket 90's first write. A Server Action is a POST anybody can reach whether
 // or not a form was rendered for them, so the Project id is parsed and
@@ -25,6 +26,7 @@ export const renameProjectAction = async (
 ): Promise<NameState> => {
   const user = await signedInUser()
   if (!user) return { error: 'Sign in again to name this Project.' }
+  if (isDemoUser(user.id)) return { error: DEMO_REFUSAL }
 
   const projectId = ProjectId.safeParse(formData.get('projectId'))
   const name = Name.safeParse(formData.get('name'))
