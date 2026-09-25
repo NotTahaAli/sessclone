@@ -6,7 +6,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Upgrading: run `20260925190000_history_and_deletion.sql`,
+## [0.3.0] - 2026-09-25
+
+Upgrading from 0.2.1: run `20260925190000_history_and_deletion.sql`,
 `20260925190100_tier_limits.sql` and `20260925210000_unwindowed_facts.sql`
 before deploying, and set `SUPABASE_SERVICE_ROLE_KEY` (server-side only) so the
 retention sweep can remove a deleted account's sign-in.
@@ -151,7 +153,8 @@ The first public release.
 - Self-hosting: a Dockerfile, `compose.yaml` and a guide, free at any size
   under AGPL-3.0-only with the additional term in `NOTICE.md`.
 
-[Unreleased]: https://github.com/NotTahaAli/sessclone/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/NotTahaAli/sessclone/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/NotTahaAli/sessclone/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/NotTahaAli/sessclone/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/NotTahaAli/sessclone/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/NotTahaAli/sessclone/releases/tag/v0.1.0
