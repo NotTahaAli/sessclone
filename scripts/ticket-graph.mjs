@@ -138,6 +138,8 @@ const PHASES = [
     type: 'frontend',
     pos: [730, 800],
     range: [111, 117],
+    // Ticket 142 (email redesign) extends the visual overhaul.
+    also: [142],
   },
   {
     id: 'approval',

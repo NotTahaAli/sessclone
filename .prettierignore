@@ -10,3 +10,5 @@ packages/shared/openapi/
 # Fumadocs source added by `@fumadocs/cli add` (ticket 117); upstream style.
 apps/web/components/
 CODE_OF_CONDUCT.md
+# Rendered by apps/web/test/email-templates.test.ts; its file snapshot is exact.
+supabase/templates/*.html

@@ -1,5 +1,7 @@
 import { createTransport } from 'nodemailer'
 
+import { escapeHtml, renderLayout } from './email-layout'
+
 // Ticket 82: the invitation, delivered.
 //
 // Ticket 49 builds the invitation and hands the inviter a link to pass on,
@@ -50,6 +52,8 @@ export type InviteEmail = {
   orgName: string
   /** Who sent it, for the person deciding whether to trust the link. */
   invitedByEmail: string
+  /** The Role the invitation grants, when the caller knows it. */
+  role?: string | null
   /**
    * The Org's logo, as an absolute URL, or nothing (ticket 77). Absolute
    * because a mail client has no origin to resolve a path against — and it is
@@ -68,15 +72,16 @@ export type InviteEmail = {
   logoUrl?: string | null
 }
 
-/** A subject and body that name the Org and the inviter and carry the link.
- * Plain text and a minimal HTML part with the link as the only interactive
- * element — an invitation is a link and a sentence, not a layout. Exported so
- * the escaping below is testable without parsing MIME back off the wire. */
+/** A subject and body that name the Org and the inviter and carry the link,
+ * in the shared email layout (`lib/email-layout.ts`) plus a plain-text part.
+ * Exported so the escaping is testable without parsing MIME back off the
+ * wire. */
 export const renderInvite = ({
   to,
   link,
   orgName,
   invitedByEmail,
+  role,
   logoUrl,
 }: InviteEmail) => ({
   to,
@@ -86,34 +91,34 @@ export const renderInvite = ({
     '',
     `Accept the invitation: ${link}`,
     '',
-    'The link works once and expires. If you did not expect it, ignore this email.',
+    'The link works once and expires in 7 days. If you did not expect it, ignore this email.',
   ].join('\n'),
-  html: [
+  html: renderLayout({
+    title: `You are invited to ${orgName} on SessClone`,
+    heading: `Join ${orgName}`,
+    intro: `${escapeHtml(invitedByEmail)} invited you to join <strong>${escapeHtml(orgName)}</strong> on SessClone.`,
+    action: { label: 'Accept invitation', href: link },
+    rows: [
+      ['Org', orgName],
+      ['Invited by', invitedByEmail],
+      ...(role
+        ? [
+            ['Role', role.charAt(0).toUpperCase() + role.slice(1)] as [
+              string,
+              string,
+            ],
+          ]
+        : []),
+      // The expiry is the column default in the invitations migration.
+      ['Link', 'Works once, expires in 7 days'],
+    ],
+    notes: ["Didn't expect this? Ignore it and nothing happens."],
     // Images are blocked by default in most mail clients, so the mark is
-    // decoration with an empty `alt` and the sentence beside it says the Org's
-    // name in text. A blocked logo leaves the invitation reading exactly as it
-    // did before ticket 77.
-    logoUrl
-      ? `<p><img src="${escapeHtml(logoUrl)}" alt="" width="24" height="24" style="vertical-align:middle;border-radius:2px"></p>`
-      : '',
-    `<p>${escapeHtml(invitedByEmail)} invited you to join <strong>${escapeHtml(orgName)}</strong> on SessClone.</p>`,
-    `<p><a href="${escapeHtml(link)}">Accept the invitation</a></p>`,
-    `<p>The link works once and expires. If you did not expect it, ignore this email.</p>`,
-  ]
-    .filter(Boolean)
-    .join('\n'),
+    // decoration with an empty `alt` and the heading says the Org's name in
+    // text. A blocked logo leaves the invitation reading the same.
+    logoUrl,
+  }),
 })
-
-/** The invitee address, the Org name and the inviter address are all data from
- * a row, and the body is HTML — so the three interpolated values are escaped
- * rather than trusted. The link is app-built (`invitePath` + `appUrl`), but
- * escaped too: it is cheaper than proving it can never contain a quote. */
-const escapeHtml = (value: string) =>
-  value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
 
 /**
  * Sends the invitation email, or reports why it could not.
@@ -164,10 +169,20 @@ export const renderSignupNotice = ({
       '',
       `Approve it or turn it down: ${link}`,
     ].join('\n'),
-    html: [
-      `<p>${escapeHtml(ownerEmail)} signed up and created <strong>${escapeHtml(orgName)}</strong> (${escapeHtml(plan)}).</p>`,
-      `<p><a href="${escapeHtml(link)}">Approve it or turn it down</a></p>`,
-    ].join('\n'),
+    html: renderLayout({
+      title: `${orgName} is waiting for approval on SessClone`,
+      heading: `${orgName} is waiting for approval`,
+      intro: `${escapeHtml(ownerEmail)} signed up and created <strong>${escapeHtml(orgName)}</strong>.`,
+      action: { label: 'Approve or turn down', href: link },
+      rows: [
+        ['Org', orgName],
+        ['Owner', ownerEmail],
+        ['Plan', plan],
+      ],
+      notes: [
+        'You get this because you are a platform admin on this deployment.',
+      ],
+    }),
   }
 }
 
