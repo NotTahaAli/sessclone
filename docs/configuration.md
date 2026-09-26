@@ -122,6 +122,10 @@ the Supabase project's own SMTP settings, not here. The **invitation** email is
 different: an invitation is this app's own `/join/<token>` route, which Supabase
 never sees, so it is sent through the app's own SMTP, below.
 
+The Supabase email templates that match the app's look are in
+`supabase/templates/`; paste them into Authentication > Emails (subjects in
+that folder's README).
+
 ### Email (SMTP)
 
 | Variable    | Required | Default | What it is                                                                      |

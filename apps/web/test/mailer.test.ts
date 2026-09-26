@@ -162,3 +162,8 @@ test('the Org name is escaped in the HTML part but left raw in text', () => {
   expect(message.html).not.toContain('<script>alert(1)</script>')
   expect(message.text).toContain('Acme <script>alert(1)</script>')
 })
+
+test('the invitation names the Role it grants, when given one', () => {
+  expect(renderInvite({ ...invite, role: 'manager' }).html).toContain('Manager')
+  expect(renderInvite(invite).html).not.toContain('>Role<')
+})

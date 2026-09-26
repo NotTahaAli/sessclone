@@ -100,6 +100,7 @@ export const sendInvite = async (
       link: `${appUrl()}${link}`,
       orgName: viewer.orgName,
       invitedByEmail: viewer.email,
+      role: role.data,
       logoUrl: logo ? `${appUrl()}${logo}` : null,
     })
     return { link, email: email.data, delivery }
