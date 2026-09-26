@@ -16,4 +16,4 @@ The emails:
 - [x] Shared layout, `apps/web/lib/email-layout.ts`
 - [x] Invitation and sign-up notice rendered through it; invitation shows the Role
 - [x] Six Supabase templates in `supabase/templates/`, generated from the same layout, drift fails `test/email-templates.test.ts`
-- [ ] Paste the templates into the hosted project (Authentication > Emails), Taha
+- [x] Templates pasted into the hosted project (Authentication > Emails), Taha, 2026-09-26
