@@ -11,7 +11,7 @@
 // directory (never the key: its first three characters and length), and the
 // status command, the Collector's own sends and `verify-collector.mjs` read it.
 
-import { createHash } from 'node:crypto'
+import { scryptSync } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
@@ -76,15 +76,17 @@ export const checkConnection = async (
 }
 
 /**
- * Which key and deployment, as a hash: a new key or a new URL is a new
+ * Which key and deployment, derived: a new key or a new URL is a new
  * connection, worth announcing and not bound by an old refusal.
+ *
+ * scrypt rather than a plain hash because the input is a credential and the
+ * result sits on disk; the URL is the salt. Computed once at session start,
+ * and on a send only while the record says refused.
  *
  * @param {{ apiKey?: string, url: string }} configuration
  */
 const identity = ({ apiKey, url }) =>
-  createHash('sha256')
-    .update(`${apiKey ?? 'proxy'}\n${url}`)
-    .digest('hex')
+  scryptSync(apiKey ?? 'proxy', url, 32).toString('hex')
 
 /**
  * What the last session start found, or null.
