@@ -21,4 +21,4 @@
 - [x] `GET /api/ingest` key check, and the session-start line
 - [x] `/sessclone:status`, `/sessclone:sync`
 - [x] Docs, dashboard cloud setup, CHANGELOG 0.4.0
-- [ ] Taha: Validate and submit in the developer portal (claude.ai/directory/manage), after the release is tagged
+- [x] Taha: Validate and submit in the developer portal (claude.ai/directory/manage), after the release is tagged
