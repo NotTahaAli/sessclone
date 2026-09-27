@@ -12,15 +12,15 @@
  * declares them, so a drift in either is refused by the manifest's own schema
  * rather than silently ignored.
  */
-export const installCommand = (appUrl: string, apiKey: string) =>
-  `claude plugin install sessclone --config url=${appUrl} --config api_key=${apiKey}`
+export const installCommand = (appUrl: string, apiKey?: string) =>
+  [
+    'claude plugin install sessclone',
+    // The plugin's own default: the hosted service needs no URL answer.
+    ...(appUrl.replace(/\/+$/, '') === HOSTED_URL
+      ? []
+      : [`--config url=${appUrl}`]),
+    ...(apiKey ? [`--config api_key=${apiKey}`] : []),
+  ].join(' ')
 
-/**
- * The key a cloud environment's setup script installs with (Taha,
- * 2026-09-22). Not a key: the environment's API credential makes the agent
- * proxy replace the `Authorization` header on the way out, so the real key
- * never enters the container. It has a key's shape only so the Collector's
- * session-start check (`KEY_PATTERN` in `packages/plugin/src/configuration.mjs`)
- * passes it.
- */
-export const CLOUD_PLACEHOLDER_KEY = `sk_${'0'.repeat(43)}`
+/** `default` of the `url` option in `packages/plugin/.claude-plugin/plugin.json`. */
+export const HOSTED_URL = 'https://sessclone.com'

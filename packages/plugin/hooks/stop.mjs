@@ -21,7 +21,7 @@
 
 import { readConfiguration } from '../src/configuration.mjs'
 import { debugFailure } from '../src/debug.mjs'
-import { deadlineIn } from '../src/deadline.mjs'
+import { deadlineIn, expired } from '../src/deadline.mjs'
 import { throughProxy } from '../src/proxy.mjs'
 
 // Ticket 98: before anything is read or sent, so the child gets stdin whole.
@@ -61,6 +61,28 @@ try {
     environment: process.env,
     deadline,
   })
+
+  // `/sessclone:sync` ran in this turn: push everything else now, in what is
+  // left of this hook's budget, and say what it did. What it does not reach,
+  // the next session start does.
+  const { takeSyncRequest } = await import('../src/sync.mjs')
+  if (await takeSyncRequest(configuration.stateDir)) {
+    const { sweep } = await import('../src/report.mjs')
+    const { queued } = await import('../src/queue.mjs')
+    const { refusedHere } = await import('../src/connection.mjs')
+    const before = await queued(configuration.stateDir)
+    await sweep({
+      configuration,
+      environment: process.env,
+      budgetMs: Math.max(0, deadline - Date.now()),
+    })
+    const after = await queued(configuration.stateDir)
+    const message = (await refusedHere(configuration))
+      ? 'sessclone did not sync: the deployment refused the key at session start. Run /sessclone:status.'
+      : `sessclone synced to ${configuration.url}: ${before} waiting before, ${after} now.${expired(deadline) ? ' Out of time; the next session start sends the rest.' : ''}`
+    // `systemMessage` is shown to the person and not added to Claude's context.
+    process.stdout.write(`${JSON.stringify({ systemMessage: message })}\n`)
+  }
 } catch (error) {
   // Deliberately silent unless somebody is looking: see `src/debug.mjs`.
   debugFailure('the Stop flush', error)

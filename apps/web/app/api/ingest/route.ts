@@ -309,3 +309,30 @@ export async function POST(request: Request) {
 
   return Response.json(accepted)
 }
+
+// The Collector's key check (`packages/plugin/src/connection.mjs`): whether a
+// key is live, and the Org it reports into, so a session can say "connected:
+// reporting to Acme" or that it is not. The same one 401 as a report for every
+// bad key, for the reason `unauthenticated` gives. It marks the key as used,
+// as a report does: a Collector that has checked in has reached this
+// deployment, which is what onboarding asks.
+export async function GET(request: Request) {
+  const presented = presentedKey(request)
+  if (!presented) return unauthenticated()
+
+  const sql = ingestDb()
+  try {
+    const caller = await resolveCaller(sql, presented)
+    if (!caller) return unauthenticated()
+
+    const [org] = await sql<{ name: string }[]>`
+      with used as (
+        update api_keys set last_used_at = now() where id = ${caller.keyId}
+      )
+      select name from orgs where id = ${caller.orgId}
+    `
+    return Response.json({ org: org?.name ?? null })
+  } catch (error) {
+    return databaseFailure(error)
+  }
+}

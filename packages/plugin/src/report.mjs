@@ -26,6 +26,8 @@ import { hostname } from 'node:os'
 import { promisify } from 'node:util'
 
 import { archiveSession } from './archive.mjs'
+import { authorization } from './configuration.mjs'
+import { refusedHere } from './connection.mjs'
 import { NO_DEADLINE, expired, requestSignal } from './deadline.mjs'
 import { readCursor, writeCursor } from './cursors.mjs'
 import { drainQueue, enqueue } from './queue.mjs'
@@ -65,7 +67,7 @@ const READ_LIMIT = 32 * 1024 * 1024
  * What a child process is allowed to see.
  *
  * `execFile` hands the child `process.env` by default, and this process holds
- * `SESSCLONE_API_KEY`. The child here is `git`, resolved through `PATH` and
+ * `CLAUDE_PLUGIN_OPTION_API_KEY`. The child here is `git`, resolved through `PATH` and
  * run in a directory the *transcript* named — so a shim earlier on `PATH`, or
  * a `git.exe` inside a cloned repository on Windows, would be handed a live
  * credential, and anything running as this user could read it out of
@@ -714,12 +716,15 @@ export const send = async ({
   payload,
   deadline = NO_DEADLINE,
 }) => {
+  // Refused at session start: say so without sending, as a 401 would. The
+  // cursor holds, and nothing is queued, exactly as for a real refusal.
+  if (await refusedHere(configuration)) return { ok: false, status: 401 }
   try {
     const answer = await fetch(`${configuration.url}/api/ingest`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        authorization: `Bearer ${configuration.apiKey}`,
+        ...authorization(configuration),
       },
       body: JSON.stringify(payload),
       signal: requestSignal(REQUEST_TIMEOUT_MS, deadline),

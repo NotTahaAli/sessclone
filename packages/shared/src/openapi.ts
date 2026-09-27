@@ -30,6 +30,9 @@ const ErrorBody = z.object({
   detail: z.string().optional(),
 })
 
+/** What `GET /api/ingest` answers a live key: the Org it reports into. */
+const KeyCheck = z.object({ org: z.string().nullable() })
+
 const errorResponse = (description: string) => ({
   description,
   content: {
@@ -61,11 +64,39 @@ export const ingestOpenAPI = () => ({
     schemas: {
       IngestPayload: schema(IngestPayload, 'input'),
       IngestResponse: schema(IngestResponse, 'output'),
+      KeyCheck: schema(KeyCheck, 'output'),
       Error: schema(ErrorBody, 'output'),
     },
   },
   paths: {
     '/api/ingest': {
+      get: {
+        operationId: 'checkKey',
+        summary: 'Check a key',
+        description:
+          'Whether a key is live, and the Org its Turns are filed under. The Collector asks at session start to say whether it is connected. Marks the key as used, as a report does.',
+        responses: {
+          '200': {
+            description: 'A live key, and the name of its Org.',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/KeyCheck' },
+              },
+            },
+          },
+          '401': {
+            ...errorResponse(
+              'No live API key: the same answer a report gets for a missing, malformed, unknown or revoked key.',
+            ),
+            headers: {
+              'WWW-Authenticate': {
+                schema: { type: 'string', const: 'Bearer' },
+              },
+            },
+          },
+          '503': errorResponse('The database is unavailable; ask again later.'),
+        },
+      },
       post: {
         operationId: 'ingest',
         summary: 'Report Turns',

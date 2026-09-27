@@ -135,6 +135,15 @@ const queueFiles = async (directory) =>
   (await readdir(directory)).filter((name) => name.endsWith('.json'))
 
 /**
+ * How many payloads are waiting, for `/sessclone:status` and `/sessclone:sync`.
+ * No queue directory yet is an empty queue.
+ *
+ * @param {string} stateDir
+ */
+export const queued = async (stateDir) =>
+  (await queueFiles(queueDirectory(stateDir)).catch(() => [])).length
+
+/**
  * Re-sends queued payloads, oldest first, until one fails or the queue is
  * empty. Resolves with how many were accepted.
  *

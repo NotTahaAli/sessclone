@@ -11,7 +11,10 @@ import {
 const KEY = `sk_${'a'.repeat(43)}`
 
 /** The minimum that resolves, so each test below varies one thing. */
-const valid = { SESSCLONE_API_KEY: KEY, SESSCLONE_STATE_DIR: '/tmp/sessclone' }
+const valid = {
+  CLAUDE_PLUGIN_OPTION_API_KEY: KEY,
+  SESSCLONE_STATE_DIR: '/tmp/sessclone',
+}
 
 /** @param {Record<string, string | undefined>} env */
 const problemsFrom = (env, platform = /** @type {const} */ ('linux')) => {
@@ -32,11 +35,16 @@ test('a key and nothing else resolves, with the documented URL default', () => {
   expect(config.device).toBeUndefined()
 })
 
-test('a missing key is refused, naming where to get one', () => {
-  const [problem] = problemsFrom({ SESSCLONE_STATE_DIR: '/tmp/sessclone' })
+test('a missing key is not a refusal: a cloud proxy may add one', () => {
+  // A Claude Code cloud environment's proxy adds the SessClone credential to
+  // a request that carries none; whether any key reached the deployment is
+  // its answer to the session-start check (`connection.mjs`), not a guess.
+  const config = readConfiguration(
+    { SESSCLONE_STATE_DIR: '/tmp/sessclone' },
+    'linux',
+  )
 
-  expect(problem).toContain('No API key')
-  expect(problem).toContain('Keys')
+  expect(config.apiKey).toBeUndefined()
 })
 
 test("the plugin's own setup answers count as configuration", () => {
@@ -58,35 +66,53 @@ test("the plugin's own setup answers count as configuration", () => {
   expect(config.url).toBe('https://sessclone.example.com')
 })
 
-test('an exported variable wins over the setup answer', () => {
+test('an exported URL wins over the setup answer', () => {
   // Somebody exporting one is doing it deliberately, usually to point one
   // shell at a second deployment.
   const config = readConfiguration(
     {
       ...valid,
       SESSCLONE_URL: 'https://exported.example.com',
-      CLAUDE_PLUGIN_OPTION_API_KEY: `sk_${'z'.repeat(43)}`,
       CLAUDE_PLUGIN_OPTION_URL: 'https://configured.example.com',
     },
     'linux',
   )
 
-  expect(config.apiKey).toBe(KEY)
   expect(config.url).toBe('https://exported.example.com')
 })
 
+test('a key already in the shell is never read', () => {
+  // The plugin directory refuses a plugin that reads a credential from the
+  // user's environment and sends it to a server: the key comes from the
+  // plugin's own setup prompt and nowhere else.
+  const config = readConfiguration(
+    { SESSCLONE_API_KEY: KEY, SESSCLONE_STATE_DIR: '/tmp/sessclone' },
+    'linux',
+  )
+
+  expect(config.apiKey).toBeUndefined()
+})
+
 test('an empty key is a missing key, not a key', () => {
-  expect(problemsFrom({ ...valid, SESSCLONE_API_KEY: '   ' })).toHaveLength(1)
+  expect(
+    readConfiguration(
+      { ...valid, CLAUDE_PLUGIN_OPTION_API_KEY: '   ' },
+      'linux',
+    ).apiKey,
+  ).toBeUndefined()
 })
 
 test('a malformed key is refused at setup rather than at report time', () => {
   // The failure this criterion exists for: a key pasted from a wrapped line,
   // which is well-formed enough to send and rejected by every report.
   expect(
-    problemsFrom({ ...valid, SESSCLONE_API_KEY: KEY.slice(0, 30) }),
+    problemsFrom({ ...valid, CLAUDE_PLUGIN_OPTION_API_KEY: KEY.slice(0, 30) }),
   ).toEqual([expect.stringContaining('not a sessclone key')])
   expect(
-    problemsFrom({ ...valid, SESSCLONE_API_KEY: `pk_${'a'.repeat(43)}` }),
+    problemsFrom({
+      ...valid,
+      CLAUDE_PLUGIN_OPTION_API_KEY: `pk_${'a'.repeat(43)}`,
+    }),
   ).toEqual([expect.stringContaining('not a sessclone key')])
 })
 
@@ -95,7 +121,10 @@ test('no message ever carries the key itself', () => {
   // stderr is shown in a session, and a session is a transcript this product
   // uploads. A message that quotes the key puts it in both.
   const secret = `sk_${'z'.repeat(60)}`
-  const problems = problemsFrom({ ...valid, SESSCLONE_API_KEY: secret })
+  const problems = problemsFrom({
+    ...valid,
+    CLAUDE_PLUGIN_OPTION_API_KEY: secret,
+  })
 
   expect(problems).toHaveLength(1)
   expect(problems.join(' ')).not.toContain(secret)
@@ -104,7 +133,7 @@ test('no message ever carries the key itself', () => {
 
 test('every problem is reported at once, not one restart at a time', () => {
   const problems = problemsFrom({
-    SESSCLONE_API_KEY: 'nope',
+    CLAUDE_PLUGIN_OPTION_API_KEY: 'nope',
     SESSCLONE_URL: 'not a url',
     SESSCLONE_STATE_DIR: '/tmp/sessclone',
   })
@@ -148,16 +177,19 @@ test('the state directory follows the platform, and never lands under ~/.claude'
   // Finding 06: Claude Code's own sweep deletes everything under
   // `~/.claude/projects/` after 30 days, cursor and retry queue included.
   const linux = readConfiguration(
-    { SESSCLONE_API_KEY: KEY, XDG_STATE_HOME: '/state' },
+    { CLAUDE_PLUGIN_OPTION_API_KEY: KEY, XDG_STATE_HOME: '/state' },
     'linux',
   )
   expect(linux.stateDir).toBe('/state/sessclone')
 
-  const mac = readConfiguration({ SESSCLONE_API_KEY: KEY }, 'darwin')
+  const mac = readConfiguration({ CLAUDE_PLUGIN_OPTION_API_KEY: KEY }, 'darwin')
   expect(mac.stateDir).toMatch(/Library\/Application Support\/sessclone$/)
 
   const windows = readConfiguration(
-    { SESSCLONE_API_KEY: KEY, LOCALAPPDATA: 'C:\\Users\\a\\AppData\\Local' },
+    {
+      CLAUDE_PLUGIN_OPTION_API_KEY: KEY,
+      LOCALAPPDATA: 'C:\\Users\\a\\AppData\\Local',
+    },
     'win32',
   )
   expect(windows.stateDir).toContain('sessclone')

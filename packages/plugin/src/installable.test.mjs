@@ -14,7 +14,7 @@ import { describe, expect, it } from 'vitest'
 // failure and says nothing by design, so the result was an install that
 // started cleanly, reported nothing, and gave no reason.
 //
-// Everything a hook can reach at runtime is checked, which is the hooks and
+// Everything a hook can reach at runtime is checked, which is the hooks, the command scripts in `scripts/`, and
 // the modules under `src/` that are not tests. A test may reach out of the
 // package: it runs here, never there.
 
@@ -23,7 +23,7 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 /** Every runtime module of the plugin, as paths relative to its root. */
 const runtimeModules = async () => {
   const perDirectory = await Promise.all(
-    ['hooks', 'src'].map((directory) =>
+    ['hooks', 'scripts', 'src'].map((directory) =>
       readdir(join(root, directory), { recursive: true, withFileTypes: true }),
     ),
   )

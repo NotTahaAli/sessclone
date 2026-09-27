@@ -94,7 +94,7 @@ const PHASES = [
     type: 'external',
     pos: [1190, 122],
     range: [66, 71],
-    also: [79, 96, 98, 99],
+    also: [79, 96, 98, 99, 143],
   },
   {
     id: 'archival',

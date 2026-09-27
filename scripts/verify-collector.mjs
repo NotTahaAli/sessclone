@@ -10,8 +10,9 @@
 //   node scripts/verify-collector.mjs
 //   node scripts/verify-collector.mjs --reconcile --day 2026-09-22 --tz Asia/Karachi
 //
-// `--no-probe` skips the one network call, which is a plain GET of
-// `SESSCLONE_URL` carrying no key.
+// `--no-probe` skips the one network call, an empty POST to the deployment's
+// `/api/ingest`. A shell never holds the key (Claude Code gives it to hooks
+// only), so the key's verdict is what the last session start recorded.
 //
 // Run it from a clone. An install carries `packages/plugin` alone, with no
 // `scripts/` directory and no `node_modules` beside it (PR #12), so there is no

@@ -285,18 +285,41 @@ answers given when the plugin was enabled, so your team can point at your
 deployment without editing the plugin. An exported variable wins over the
 answer.
 
-| Variable              | Required    | Default                 | What it is                                                                           |
-| --------------------- | ----------- | ----------------------- | ------------------------------------------------------------------------------------ |
-| `SESSCLONE_URL`       | in practice | `http://127.0.0.1:3000` | Base URL of the deployment. Matches the server's `NEXT_PUBLIC_APP_URL`               |
-| `SESSCLONE_API_KEY`   | yes         | —                       | The Member's [API key](/docs/api-keys). Identifies the Member and the Org            |
-| `SESSCLONE_STATE_DIR` | no          | per platform, below     | Where the cursors and the retry queue are kept                                       |
-| `SESSCLONE_DEVICE`    | no          | derived                 | Pins this environment's Device key instead of deriving one                           |
-| `SESSCLONE_DEBUG`     | no          | —                       | Set to anything to print a hook's swallowed failure to stderr. Off, a hook is silent |
+| Variable              | Required | Default                 | What it is                                                                           |
+| --------------------- | -------- | ----------------------- | ------------------------------------------------------------------------------------ |
+| `SESSCLONE_URL`       | no       | `https://sessclone.com` | Base URL of the deployment. Matches the server's `NEXT_PUBLIC_APP_URL`               |
+| `SESSCLONE_STATE_DIR` | no       | per platform, below     | Where the cursors and the retry queue are kept                                       |
+| `SESSCLONE_DEVICE`    | no       | derived                 | Pins this environment's Device key instead of deriving one                           |
+| `SESSCLONE_DEBUG`     | no       | —                       | Set to anything to print a hook's swallowed failure to stderr. Off, a hook is silent |
 
-`SESSCLONE_URL` is required by anyone whose deployment is not on their own
-laptop — which is everyone — but the code falls back rather than refusing, and
-says nothing about it. A value that is not an `http` or `https` URL is refused
-at session start.
+There is no variable for the API key: it comes only from the plugin's own
+setup prompt (`url` and `api_key`, both optional, in
+`packages/plugin/.claude-plugin/plugin.json`), stored in the OS keychain — the
+Claude plugin directory refuses a plugin that reads a credential from the
+user's environment and sends it on. `SESSCLONE_URL` wins over the prompt's
+`url` answer when both are set. With no key at all, reports carry no
+`Authorization` header, which is what lets a Claude Code cloud environment's
+own proxy credential stand in for it.
+
+An unset `SESSCLONE_URL` (and no `url` answer) now reports to the hosted
+service at `https://sessclone.com`, not to a laptop that never answers — so a
+self-hoster must set one or the other, or a machine quietly reports its usage
+to somebody else's deployment. A value that is not an `http` or `https` URL is
+refused at session start.
+
+**Connected, and to which Org.** `hooks/session-start.mjs` asks
+`GET /api/ingest`, which answers `{ org: <name> }` for a live key (or a live
+proxy-added credential) and the same `401` a report would get otherwise, and
+marks a live key as used. The hook records the answer in the state directory
+(`connection.json`: the state, the Org, the URL, the key's first three
+characters and length, never the key) and prints one line: "sessclone
+connected: reporting to `<Org>`." the first session after a key or deployment
+changes, and "sessclone is not connected: …" every session for as long as the
+deployment refuses it or none is set. While it is refused the Collector sends
+nothing, rather than resending a session's history on every turn. Claude Code
+gives the key to hooks only, so `/sessclone:status` prints that record with the
+Device, the reports waiting and the last push, and `/sessclone:sync` leaves a
+request that the `Stop` hook ending the same turn carries out.
 
 The **Device key** is normally `host:<hostname>` on a machine and
 `cloud:<account uuid>` in Claude Code on the web. Set `SESSCLONE_DEVICE` only

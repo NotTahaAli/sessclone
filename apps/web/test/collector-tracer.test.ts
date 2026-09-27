@@ -139,7 +139,7 @@ test('a finished session reaches the database as Turns, on this Device and Proje
     { session_id: sessionId, transcript_path: path, cwd: '/home/dev/api' },
     {
       SESSCLONE_URL: url,
-      SESSCLONE_API_KEY: key,
+      CLAUDE_PLUGIN_OPTION_API_KEY: key,
       SESSCLONE_DEVICE: 'host:tracer-box',
     },
   )
@@ -190,7 +190,7 @@ test('the counters stored are the counters in the transcript', async () => {
 
   await runHook(
     { session_id: sessionId, transcript_path: path, cwd: '/home/dev/api' },
-    { SESSCLONE_URL: url, SESSCLONE_API_KEY: key },
+    { SESSCLONE_URL: url, CLAUDE_PLUGIN_OPTION_API_KEY: key },
   )
 
   // Read straight out of the fixture here rather than restated as literals:
@@ -304,7 +304,7 @@ test('the Project is the repository the session ran in, not its directory name',
 
   await runHook(
     { session_id: sessionId, transcript_path: path, cwd: repository },
-    { SESSCLONE_URL: url, SESSCLONE_API_KEY: key },
+    { SESSCLONE_URL: url, CLAUDE_PLUGIN_OPTION_API_KEY: key },
   )
 
   const [project] = await sql<{ key: string; remote: string | null }[]>`
@@ -324,7 +324,7 @@ test('the credential travels in the header and never in the body', async () => {
 
   await runHook(
     { session_id: sessionId, transcript_path: path, cwd: '/home/dev/api' },
-    { SESSCLONE_URL: url, SESSCLONE_API_KEY: key },
+    { SESSCLONE_URL: url, CLAUDE_PLUGIN_OPTION_API_KEY: key },
   )
 
   expect(received).toHaveLength(1)
@@ -376,7 +376,11 @@ test('an Agent Run reaches the database as its own Turns, under its parent Sessi
       transcript_path: main,
       cwd: '/home/user/sessclone',
     },
-    { SESSCLONE_URL: url, SESSCLONE_API_KEY: key, CLAUDE_CONFIG_DIR: config },
+    {
+      SESSCLONE_URL: url,
+      CLAUDE_PLUGIN_OPTION_API_KEY: key,
+      CLAUDE_CONFIG_DIR: config,
+    },
   )
 
   const stored = await sql<
@@ -409,7 +413,7 @@ test('a second Stop on an unchanged transcript sends nothing at all', async () =
 
   const environment = {
     SESSCLONE_URL: url,
-    SESSCLONE_API_KEY: key,
+    CLAUDE_PLUGIN_OPTION_API_KEY: key,
     SESSCLONE_STATE_DIR: stateDir,
   }
   const event = {
@@ -448,7 +452,7 @@ test('a report the deployment refused leaves the cursor where it was', async () 
 
   await runHook(event, {
     SESSCLONE_URL: url,
-    SESSCLONE_API_KEY: `sk_${'a'.repeat(43)}`,
+    CLAUDE_PLUGIN_OPTION_API_KEY: `sk_${'a'.repeat(43)}`,
     SESSCLONE_STATE_DIR: stateDir,
   })
 
@@ -459,7 +463,7 @@ test('a report the deployment refused leaves the cursor where it was', async () 
   const key = await issueKey()
   await runHook(event, {
     SESSCLONE_URL: url,
-    SESSCLONE_API_KEY: key,
+    CLAUDE_PLUGIN_OPTION_API_KEY: key,
     SESSCLONE_STATE_DIR: stateDir,
   })
 
@@ -470,7 +474,7 @@ test('a report the deployment refused leaves the cursor where it was', async () 
   await sql`delete from turns`
   await runHook(event, {
     SESSCLONE_URL: url,
-    SESSCLONE_API_KEY: key,
+    CLAUDE_PLUGIN_OPTION_API_KEY: key,
     SESSCLONE_STATE_DIR: mkdtempSync(join(tmpdir(), 'sessclone-state-')),
   })
   const whole = await sql<{ message_id: string }[]>`
@@ -490,7 +494,7 @@ test('a session whose deployment is unreachable fails quietly and stores nothing
     { session_id: sessionId, transcript_path: path, cwd: '/home/dev/api' },
     // Nothing listens here. A hook error notice on every turn is a poor way
     // to report that a deployment is down, and stderr would be uploaded.
-    { SESSCLONE_URL: 'http://127.0.0.1:9', SESSCLONE_API_KEY: key },
+    { SESSCLONE_URL: 'http://127.0.0.1:9', CLAUDE_PLUGIN_OPTION_API_KEY: key },
   )
 
   expect(stdout).toBe('')
@@ -511,7 +515,7 @@ test('a key that is not live stores nothing, and says nothing', async () => {
       SESSCLONE_URL: url,
       // Well-formed and unknown: ingest answers one 401 for absent,
       // malformed, unknown and revoked alike, so it is no oracle.
-      SESSCLONE_API_KEY: `sk_${'a'.repeat(43)}`,
+      CLAUDE_PLUGIN_OPTION_API_KEY: `sk_${'a'.repeat(43)}`,
     },
   )
 
@@ -539,7 +543,7 @@ test('a turn that died on a rate limit is recorded against the Session', async (
     },
     {
       SESSCLONE_URL: url,
-      SESSCLONE_API_KEY: key,
+      CLAUDE_PLUGIN_OPTION_API_KEY: key,
       SESSCLONE_DEVICE: 'host:tracer-box',
     },
     FAILURE_HOOK,
@@ -590,7 +594,7 @@ test('a session end flushes the final Turns and records completeness', async () 
     { session_id: sessionId, transcript_path: path, cwd: '/home/dev/api' },
     {
       SESSCLONE_URL: url,
-      SESSCLONE_API_KEY: key,
+      CLAUDE_PLUGIN_OPTION_API_KEY: key,
       SESSCLONE_DEVICE: 'host:tracer-box',
     },
     SESSION_END_HOOK,
@@ -610,7 +614,7 @@ test('a Stop then a SessionEnd does not double-count the Turns', async () => {
   const key = await issueKey()
   const { path, text } = await transcript('multi-iteration-turn.jsonl')
   const sessionId = JSON.parse(text.split('\n').find(Boolean)!).sessionId
-  const environment = { SESSCLONE_URL: url, SESSCLONE_API_KEY: key }
+  const environment = { SESSCLONE_URL: url, CLAUDE_PLUGIN_OPTION_API_KEY: key }
 
   // The real shape of a finished session: Stop reports the turn and advances
   // the cursor, then SessionEnd runs and finds nothing past it.
@@ -646,7 +650,7 @@ test('a session end with nothing to flush still records completeness', async () 
       transcript_path: path,
       cwd: '/home/dev/api',
     },
-    { SESSCLONE_URL: url, SESSCLONE_API_KEY: key },
+    { SESSCLONE_URL: url, CLAUDE_PLUGIN_OPTION_API_KEY: key },
     SESSION_END_HOOK,
   )
   expect(stderr).toBe('')
@@ -670,7 +674,7 @@ test('a failure with no detail falls back to the type and the rendered line', as
       // the message to the rendered line.
       last_assistant_message: 'API Error: Overloaded',
     },
-    { SESSCLONE_URL: url, SESSCLONE_API_KEY: key },
+    { SESSCLONE_URL: url, CLAUDE_PLUGIN_OPTION_API_KEY: key },
     FAILURE_HOOK,
   )
 
@@ -697,7 +701,10 @@ test('a partial flush writes no session-end marker', async () => {
 
   await runHook(
     { session_id: sessionId, transcript_path: path, cwd: '/home/dev/api' },
-    { SESSCLONE_URL: url, SESSCLONE_API_KEY: `sk_${'a'.repeat(43)}` },
+    {
+      SESSCLONE_URL: url,
+      CLAUDE_PLUGIN_OPTION_API_KEY: `sk_${'a'.repeat(43)}`,
+    },
     SESSION_END_HOOK,
   )
 

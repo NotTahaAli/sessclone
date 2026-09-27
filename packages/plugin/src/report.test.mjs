@@ -215,7 +215,7 @@ test('the API key is not in the environment `git` runs with', async () => {
   const remote = await originRemote(directory, {
     PATH: directory,
     HOME: directory,
-    SESSCLONE_API_KEY: `sk_${'a'.repeat(43)}`,
+    CLAUDE_PLUGIN_OPTION_API_KEY: `sk_${'a'.repeat(43)}`,
   })
 
   expect(remote).toBe('git@github.com:acme/api.git')

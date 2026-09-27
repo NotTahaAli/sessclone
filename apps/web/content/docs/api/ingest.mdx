@@ -1,6 +1,6 @@
 ---
 title: Ingest
-description: POST /api/ingest — what the Collector sends, and what it gets back.
+description: GET and POST /api/ingest — the Collector's key check, what it sends, and what it gets back.
 full: true
 ---
 
@@ -21,5 +21,8 @@ spec itself is [`packages/shared/openapi/ingest.json`](https://github.com/NotTah
 
 <APIReference
   document="ingest"
-  operations={[{ path: '/api/ingest', method: 'post' }]}
+  operations={[
+    { path: '/api/ingest', method: 'get' },
+    { path: '/api/ingest', method: 'post' },
+  ]}
 />

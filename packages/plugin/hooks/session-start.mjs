@@ -29,6 +29,7 @@
 // of their own.
 
 import { ConfigurationError, readConfiguration } from '../src/configuration.mjs'
+import { checkConnection, recordConnection } from '../src/connection.mjs'
 import { debugFailure } from '../src/debug.mjs'
 import { throughProxy } from '../src/proxy.mjs'
 
@@ -49,25 +50,47 @@ try {
   process.exit(2)
 }
 
+// Ask the deployment about the key first: its answer is the one line a person
+// sees ("connected" once per key, "not connected" every session until it is),
+// and a refused key must not have the sweep send every session's history to a
+// deployment that already said no. Three seconds at most.
+const connection = await checkConnection(configuration)
+let notice = null
+try {
+  notice = await recordConnection(configuration, connection)
+} catch (error) {
+  debugFailure('the SessionStart key check', error)
+}
+
 // The configuration is good. Recover what an earlier session could not push:
 // the retry queue, then each session from its cursor, time-boxed inside the
 // hook's budget. Silent and exit 0, and the lazy import, for the reasons
 // `stop.mjs` gives — an old Node cannot load `report.mjs`'s TypeScript imports,
 // and a hook's stderr lands in the transcript this product uploads.
 try {
-  const { sweep } = await import('../src/report.mjs')
-  const swept = new Date()
-  await sweep({ configuration, environment: process.env })
+  if (connection.state !== 'refused') {
+    const { sweep } = await import('../src/report.mjs')
+    const swept = new Date()
+    await sweep({ configuration, environment: process.env })
 
-  // Ticket 98: a refused key is otherwise silent forever. Exit 2 shows this
-  // line to the person and blocks nothing, as the configuration check does.
-  const { readAnswer, refusalNotice } = await import('../src/last-answer.mjs')
-  const notice = refusalNotice(await readAnswer(configuration.stateDir), swept)
-  if (notice) {
-    process.stderr.write(`${notice}\n`)
-    process.exitCode = 2
+    // Ticket 98: a refused key is otherwise silent forever. Exit 2 shows this
+    // line to the person and blocks nothing, as the configuration check does.
+    // Only where the key check had nothing to say: a deployment too old for it.
+    const { readAnswer, refusalNotice } = await import('../src/last-answer.mjs')
+    const refusal = refusalNotice(
+      await readAnswer(configuration.stateDir),
+      swept,
+    )
+    if (refusal && connection.state === 'unknown') {
+      process.stderr.write(`${refusal}\n`)
+      process.exit(2)
+    }
   }
 } catch (error) {
   // Deliberately silent unless somebody is looking: see `src/debug.mjs`.
   debugFailure('the SessionStart sweep', error)
 }
+
+// `systemMessage` is shown to the person and not added to Claude's context.
+if (notice)
+  process.stdout.write(`${JSON.stringify({ systemMessage: notice })}\n`)

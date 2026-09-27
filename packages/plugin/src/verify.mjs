@@ -36,6 +36,7 @@ import {
 } from './configuration.mjs'
 import { configDirectory, sessionTranscripts } from './transcripts.mjs'
 import { readAnswer } from './last-answer.mjs'
+import { readChecked } from './connection.mjs'
 
 /** How many of the newest Sessions are opened for their Agent Runs. */
 const SESSIONS_INSPECTED = 20
@@ -341,7 +342,7 @@ export const redirectTarget = (response, asked) => {
  * What an ingest probe's status means, in words a person can act on.
  *
  * A report does not survive a redirect: `fetch` turns a 301, 302 or 303 into
- * a GET, which ingest refuses, and a 307 or 308 to another origin drops the
+ * a GET, which files nothing, and a 307 or 308 to another origin drops the
  * key. So the advice is to point the URL at the deployment itself. A new
  * origin is named as the URL to use only when it serves the same ingest path
  * over https; anything else is the deployment's or the proxy's route to fix,
@@ -364,7 +365,7 @@ export const probeVerdict = (status, redirectsTo = null) =>
 /** @param {number} status @param {string | null} redirectsTo */
 const redirectVerdict = (status, redirectsTo) => {
   const loss = [301, 302, 303].includes(status)
-    ? 'which turns every report into a GET that ingest refuses'
+    ? 'which turns every report into a GET, which files nothing'
     : 'which a report does not survive'
   if (!redirectsTo)
     return `**redirects**, ${loss} — point the URL at the deployment itself`
@@ -422,6 +423,10 @@ export const collect = async ({
     defaultStateDir(platform, environment) ??
     null
 
+  // A shell never sees the setup prompt's answers (Claude Code gives them to
+  // hooks only), so what the last session start recorded stands in for them.
+  const checked = stateDir ? await readChecked(stateDir) : null
+
   const state = stateDir
     ? {
         path: stateDir,
@@ -448,9 +453,16 @@ export const collect = async ({
     },
     configuration: {
       problems,
-      key: keyEvidence(environment.SESSCLONE_API_KEY),
-      url: configuration?.url ?? environment.SESSCLONE_URL?.trim() ?? null,
-      urlDefaulted: !environment.SESSCLONE_URL?.trim(),
+      key: keyEvidence(environment.CLAUDE_PLUGIN_OPTION_API_KEY),
+      // What the session-start hook, which does see the prompt, recorded.
+      checked,
+      url: environment.SESSCLONE_URL?.trim()
+        ? (configuration?.url ?? null)
+        : (checked?.url ?? configuration?.url ?? null),
+      urlDefaulted:
+        !environment.SESSCLONE_URL?.trim() &&
+        !environment.CLAUDE_PLUGIN_OPTION_URL?.trim() &&
+        !checked,
       device: environment.SESSCLONE_DEVICE?.trim() ?? null,
       // The key this Member's Turns will be filed under. Ticket 69's "every
       // container collapses into one Device" is this string being equal across
@@ -464,7 +476,7 @@ export const collect = async ({
       probe && configuration?.url
         ? await ingestProbe(
             configuration.url,
-            configuration?.apiKey ?? environment.SESSCLONE_API_KEY,
+            configuration?.apiKey ?? environment.CLAUDE_PLUGIN_OPTION_API_KEY,
           )
         : null,
     // Ticket 98: whether a proxy is set, and whether this process's `fetch`
@@ -680,18 +692,28 @@ export const format = (report) => {
   )
   say(`| Device key | \`${report.configuration.deviceKey}\` |`)
   say(
-    `| URL | ${report.configuration.url ?? '(none)'}${report.configuration.urlDefaulted ? ' — **defaulted**, SESSCLONE_URL is not set' : ''} |`,
+    `| URL | ${report.configuration.url ?? '(none)'}${report.configuration.urlDefaulted ? " — **defaulted**, neither the plugin's url nor SESSCLONE_URL is set" : ''} |`,
   )
   say(
     `| Key | ${
       report.configuration.key.set
         ? `starts "${report.configuration.key.prefix}", ${report.configuration.key.length} characters`
-        : '**not set**'
+        : report.configuration.checked?.key
+          ? `starts "${report.configuration.checked.key.prefix}", ${report.configuration.checked.key.length} characters (as the last session start saw it)`
+          : report.configuration.checked
+            ? '**not set** at the last session start'
+            : "not visible from a shell: Claude Code gives the prompt's answers to hooks only. Start a session and run this again"
     } |`,
   )
+  if (report.configuration.checked) {
+    const { state, org, at } = report.configuration.checked
+    say(
+      `| Session start | ${state === 'connected' ? `connected${org ? `, reporting to ${org}` : ''}` : '**refused the key**'} at ${at} |`,
+    )
+  }
   if (report.deployment) {
     say(
-      `| Ingest | ${report.deployment.reached ? `answered ${report.deployment.status}, ${probeVerdict(report.deployment.status, report.deployment.redirectsTo)}` : `**unreachable** (${report.deployment.error})`} |`,
+      `| Ingest | ${report.deployment.reached ? `answered ${report.deployment.status}, ${report.deployment.status === 401 && !report.configuration.key.set ? "refused: no key is sent from a shell, and no proxy added one (the Session start row is the key's verdict)" : probeVerdict(report.deployment.status, report.deployment.redirectsTo)}` : `**unreachable** (${report.deployment.error})`} |`,
     )
   }
   say(
