@@ -22,7 +22,8 @@ import {
 
 // Ticket 66 owns distribution. Shell commands, since the block prints a `$`
 // prompt: the same two lines a cloud environment's setup script runs (ticket
-// 95). The install prompts for the URL and the key when it has no `--config`.
+// 95). The install prompts for the key when it has no `--config`; the URL
+// defaults to the hosted service.
 const INSTALL = [
   'claude plugin marketplace add NotTahaAli/sessclone',
   'claude plugin install sessclone',

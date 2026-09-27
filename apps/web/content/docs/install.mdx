@@ -23,56 +23,69 @@ The marketplace manifest lives in the SessClone repository, so there is no
 second repository to add and nothing to clone. `sessclone@sessclone` is the
 plugin named `sessclone` from the marketplace named `sessclone`; the bare
 `/plugin install sessclone` works too while no other marketplace you have
-added offers that name.
+added offers that name. Once sessclone is listed in Claude's own plugin
+directory, the `marketplace add` step will no longer be needed —
+`/plugin install sessclone` will be enough on its own.
 
-Enabling the plugin prompts for two values, and answering them is the whole
-setup:
+Enabling the plugin prompts for two values, both optional, and answering them
+is the whole setup:
 
-- **Deployment URL** — where this machine reports to, the same address you
-  read the dashboard at.
+- **Deployment URL** — leave it empty to report to the hosted service at
+  `https://sessclone.com`. Self-hosted deployments enter their own address.
 - **API key** — issued in the dashboard under **Keys**, and shown once. See
-  [API keys](/docs/api-keys).
+  [API keys](/docs/api-keys). Leave it empty in a Claude Code cloud
+  environment whose SessClone API credential adds it (see below); anywhere
+  else, leave it empty and reports go out with no `Authorization` header,
+  which a deployment answers the same way as an unknown key — refused.
 
-Claude Code keeps the key in the OS keychain rather than in a file, and hands
+Claude Code keeps the key in its secure credential store rather than in
+`settings.json`, and hands
 both to the hooks on every session afterwards. Nothing to export, nothing to
-re-do per shell, and nothing plain-text on disk. To change an answer later,
-run `/plugin`, disable `sessclone` and enable it again.
+re-do per shell. To change an answer later,
+run `/plugin configure sessclone` and start a new session.
 
 This is also the only route that works in the desktop app, which runs Claude
 Code with the environment a GUI application is given rather than the one your
 `~/.zshrc` builds.
 
-## Without answering the prompt
+There is no environment variable for the API key — the Claude plugin
+directory refuses a plugin that reads a credential from the user's
+environment and sends it on, so `SESSCLONE_API_KEY` does not exist, and never
+put a key in `~/.claude/settings.json`'s `env` either. The plugin's own setup
+prompt above is the only way in for it.
 
-Both values can come from the environment instead, and an exported one **wins
-over the answer given at the prompt** — which is how one terminal is pointed
-at a second deployment while the machine's own answers stay as they are:
+## Pointing at a different deployment
+
+`SESSCLONE_URL` **wins over the `url` answer given at the prompt** — which is
+how one terminal is pointed at a second deployment while the machine's own
+answer stays as it is:
 
 ```bash
-export SESSCLONE_API_KEY=sk_your_key_here
 export SESSCLONE_URL=https://sessclone.example.com
 ```
 
-Put them in the profile your shell actually loads (`~/.zshrc`, `~/.bashrc`)
+Put it in the profile your shell actually loads (`~/.zshrc`, `~/.bashrc`)
 **and** in the terminal you are in, or open a new one: editing a profile does
 not change the shell that is already running. Check with `echo $SESSCLONE_URL`
-in the terminal you will start Claude Code from. The Collector reads the
-environment only and never loads a `.env`, so a key committed to one is a
-leaked key that does not even work.
+in the terminal you will start Claude Code from. It goes in your shell's
+environment, not in a file in the repository: the Collector reads the
+environment only and never loads a `.env`.
 
-<Callout type="warn" title="SESSCLONE_URL is not checked for being present">
-  With neither the answer nor the variable it falls back to
-  `http://127.0.0.1:3000` and the session start says nothing — so a machine that
-  has only a key reports into its own laptop forever.
+<Callout
+  type="warn"
+  title="An unset SESSCLONE_URL now reports to the hosted service"
+>
+  With neither the variable nor the prompt answer set, the Collector reports to
+  `https://sessclone.com`. Self-hosters must set one or the other, or a machine
+  quietly reports its usage to somebody else's deployment.
 </Callout>
 
-Claude Code's own settings file takes the same two values, applied to every
+Claude Code's own settings file takes the same value, applied to every
 session and to the hooks it starts:
 
 ```json title="~/.claude/settings.json"
 {
   "env": {
-    "SESSCLONE_API_KEY": "sk_your_key_here",
     "SESSCLONE_URL": "https://sessclone.example.com"
   }
 }
@@ -80,8 +93,7 @@ session and to the hooks it starts:
 
 On Windows that is `%USERPROFILE%\.claude\settings.json`. Create it if it is
 not there; if it is, add the `env` key beside whatever it already holds. It is
-strict JSON, so a trailing comma or a `//` comment is a syntax error. The key is
-then in a plain file, which the keychain route avoids — that is the trade.
+strict JSON, so a trailing comma or a `//` comment is a syntax error.
 
 ## Restart Claude Code
 
@@ -107,15 +119,31 @@ Turns themselves.
 
 Start a session, send one turn, and look at **Costs** in the dashboard.
 
+The first session after install, and every session while the deployment does
+not accept the key (or the credential a cloud environment's proxy adds),
+session start prints one line: `sessclone connected: reporting to <Org>.` or
+`sessclone is not connected: …`. "Connected" prints once per key and
+deployment; "not connected" repeats every session until it is fixed.
+
+`/sessclone:status` shows what the last session start found, plus this
+machine's side: the deployment, the key's first three characters and length,
+whether it was connected and to which Org, this Device, how many reports are
+waiting to send, and the last push. It reads rather than asks, because Claude
+Code gives the key to the plugin's hooks and never to a command. For the same
+reason `/sessclone:sync` does not send by itself: it asks the hook that ends
+that turn to drain the retry queue and resend unsent Turns right away, and
+that hook prints what it sent.
+
 - **Something arrives.** Done. There is nothing else to install on this
   machine.
 - **The page still says it is waiting, and the key has never been used.** The
   Collector has not reached the deployment at all: wrong `SESSCLONE_URL`, no
   network route to it, or the restart has not happened yet.
 - **Turns stopped arriving after the deployment moved.** A URL that
-  redirects, such as an old address now forwarding to a new domain, loses
-  every report: a 301 or 302 turns the report into a GET that ingest refuses,
-  and a redirect to another origin drops the key. Set the Collector's URL, and
+  redirects, such as an old address now forwarding to a new domain, delivers
+  nothing: the Collector does not follow a redirect, because a 301 or 302
+  would turn the report into a GET, and a redirect to another origin drops the
+  key. Set the Collector's URL, and
   in a cloud environment the credential's allowed website, to the new https
   address. Turns still on disk are sent on the next turn.
 - **The key has been used and no Turn has arrived.** A Collector reached the
@@ -124,9 +152,10 @@ Start a session, send one turn, and look at **Costs** in the dashboard.
   transcript; both resolve on the next turn. A genuine refusal is a `400` from
   `/api/ingest`, visible in the deployment's own logs.
 - **A misconfiguration is reported in the session itself.** The session-start
-  check writes every problem it finds at once: a missing key, a key that is not
-  `sk_` and 46 characters, a `SESSCLONE_URL` that is not an `http` or `https`
-  URL, a Node older than 22.18, and a state directory that cannot be resolved.
+  check writes every problem it finds at once: a key that is not `sk_` and 46
+  characters (a missing key is not a problem — it is optional), a
+  `SESSCLONE_URL` that is not an `http` or `https` URL, a Node older than
+  22.18, and a state directory that cannot be resolved.
 
 From a clone of the repository, `node scripts/verify-collector.mjs` reads the
 machine and prints what it found — the Node version, the state directory, the
@@ -146,14 +175,13 @@ container is replaced under you. It is configured **per environment, from
 claude.ai, before a session starts**. Open the environment for editing at
 claude.ai/code.
 
-1. **Setup script.** Paste these two lines. The key on the second line is a
-   placeholder and stays exactly as written; step 2 is what puts the real key
-   on the wire.
+1. **Setup script.** Paste these two lines. No `api_key` here — the key is
+   optional, and step 2 is what supplies the credential instead.
 
    <SiteCode
      lang="bash"
      code={
-       'claude plugin marketplace add NotTahaAli/sessclone\nclaude plugin install sessclone --config url=$SITE_URL --config api_key=sk_0000000000000000000000000000000000000000000'
+       'claude plugin marketplace add NotTahaAli/sessclone\nclaude plugin install sessclone --config url=$SITE_URL'
      }
    />
 
@@ -165,18 +193,18 @@ claude.ai/code.
    - **Custom headers**: name `Authorization`, prefix `Bearer`, and your key
      from **Keys** as the value
 
-Anthropic's agent proxy replaces the `Authorization` header on every request to
-that host after it leaves the container. The placeholder is what the Collector
-sends; the proxy swaps in the real key. So the key never reaches the container,
-the session, Claude, or the setup script, which anyone using the environment
-can read. The placeholder has the shape of a real key so the session-start
-check passes; it matches nothing on the deployment.
+Anthropic's agent proxy adds that `Authorization` header to every request to
+that host after it leaves the container. The Collector configured with no
+`api_key` sends none itself, so the key never reaches the container, the
+session, Claude, or the setup script, which anyone using the environment can
+read. Session start reports "connected" once the proxy's credential is
+accepted, exactly as it would for a key entered at the prompt.
 
 The command and **Allowed websites** above name the deployment serving these
 docs, from its `NEXT_PUBLIC_APP_URL`, so a self-hosted copy's docs already say
 the right thing. If the credential is missing or wrong,
-the deployment answers `401` and the next session start prints a line saying
-the key was refused.
+the deployment answers `401` and the next session start says sessclone is not
+connected.
 
 Claude offers API credentials on Pro and Max plans only, not yet on Team or
 Enterprise, and not on a self-hosted environment.

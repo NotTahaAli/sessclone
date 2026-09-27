@@ -29,8 +29,12 @@ import { join } from 'node:path'
  */
 const KEY_PATTERN = /^sk_[\w-]{43}$/
 
-/** What the Collector reports to when nobody says otherwise. */
-export const DEFAULT_URL = 'http://127.0.0.1:3000'
+/**
+ * What the Collector reports to when nobody says otherwise: the hosted
+ * service, so an install against it asks for the key and nothing else. A
+ * self-hoster answers the plugin's `url` prompt or sets `SESSCLONE_URL`.
+ */
+export const DEFAULT_URL = 'https://sessclone.com'
 
 /**
  * The oldest Node that can run the Collector.
@@ -66,8 +70,8 @@ export const nodeProblem = (version) => {
 /**
  * Raised when the environment cannot produce a usable configuration.
  *
- * `problems` is a sentence per variable, and **none of them ever carries a
- * value read from `SESSCLONE_API_KEY`.** That is the acceptance criterion
+ * `problems` is a sentence per variable, and **none of them ever carries the
+ * API key.** That is the acceptance criterion
  * about the key never reaching a log or a transcript, and an error message is
  * the likeliest place for it to leak: a hook's stderr is printed in the
  * session, and a session is a transcript this product then uploads.
@@ -146,34 +150,36 @@ const readUrl = (raw) => {
 }
 
 /**
- * A value from the environment, taking the plugin's own configuration where
- * the variable is unset.
+ * An answer to the plugin's own setup prompt.
  *
  * Claude Code prompts for what `.claude-plugin/plugin.json` declares under
  * `userConfig` when the plugin is enabled, and hands each answer to a hook as
- * `CLAUDE_PLUGIN_OPTION_<KEY>`. That is the only setup route on a machine
- * where nobody can export anything — the desktop app runs with the
- * environment a GUI application is given, not the one a shell profile builds —
- * and it is the better one anywhere: an answer marked `sensitive` is kept in
- * the OS keychain rather than in a file, and nobody edits JSON by hand.
- *
- * The variable wins where both are set, because a person exporting one is
- * doing it deliberately and usually to point one shell at a second deployment.
- * The key's casing is not documented as either, so both spellings are read.
+ * `CLAUDE_PLUGIN_OPTION_<KEY>`. An answer marked `sensitive` is kept in Claude
+ * Code's secure credential store, not `settings.json`. The key's casing is not documented as
+ * either, so both spellings are read.
  *
  * @param {Record<string, string | undefined>} env
- * @param {string} variable The `SESSCLONE_` variable.
- * @param {string} option The `userConfig` key, as `plugin.json` spells it.
+ * @param {string} key The `userConfig` key, as `plugin.json` spells it.
  */
-const setting = (env, variable, option) =>
-  env[variable]?.trim() ||
-  env[`CLAUDE_PLUGIN_OPTION_${option.toUpperCase()}`]?.trim() ||
-  env[`CLAUDE_PLUGIN_OPTION_${option}`]?.trim() ||
+const option = (env, key) =>
+  env[`CLAUDE_PLUGIN_OPTION_${key.toUpperCase()}`]?.trim() ||
+  env[`CLAUDE_PLUGIN_OPTION_${key}`]?.trim() ||
   undefined
 
 /**
+ * The header that carries the key, or none: with no key, a cloud
+ * environment's proxy adds the credential on the way out.
+ *
+ * @param {{ apiKey?: string }} configuration
+ * @returns {Record<string, string>}
+ */
+export const authorization = ({ apiKey }) =>
+  apiKey ? { authorization: `Bearer ${apiKey}` } : {}
+
+/**
  * @typedef {object} CollectorConfiguration
- * @property {string} apiKey The Member's key. Never logged, never reported.
+ * @property {string | undefined} apiKey The Member's key, absent where a proxy
+ *   adds it. Never logged, never reported.
  * @property {string} url Base URL of the deployment, no trailing slash.
  * @property {string} stateDir Where the cursor and the retry queue live.
  * @property {string | undefined} device `SESSCLONE_DEVICE`, used verbatim when set.
@@ -202,12 +208,14 @@ export const readConfiguration = (
   /** @type {string[]} */
   const problems = []
 
-  const apiKey = setting(env, 'SESSCLONE_API_KEY', 'api_key')
-  if (!apiKey) {
-    problems.push(
-      "No API key. Create one in the dashboard under Keys, then give it to the Collector either by answering the plugin's own setup prompt (`/plugin` — the key is kept in the keychain) or by exporting SESSCLONE_API_KEY in the shell Claude Code runs in. See docs/install.md.",
-    )
-  } else if (!KEY_PATTERN.test(apiKey)) {
+  // The key comes only from the setup prompt, never from a variable the shell
+  // already had: the plugin directory holds plugins that read a credential
+  // from the user's environment and send it to a server. It may be absent: a
+  // Claude Code cloud environment's proxy adds the SessClone credential to
+  // every request itself, and a machine with neither is told at session start
+  // that it is not connected, by the deployment's own answer.
+  const apiKey = option(env, 'api_key')
+  if (apiKey && !KEY_PATTERN.test(apiKey)) {
     // The length and the prefix, and never the key itself: those two are
     // enough to tell a truncated paste from a wrapped one, and neither is
     // secret.
@@ -216,7 +224,9 @@ export const readConfiguration = (
     )
   }
 
-  const url = readUrl(setting(env, 'SESSCLONE_URL', 'url'))
+  // `SESSCLONE_URL` wins over the prompt: a person exporting it is pointing
+  // one shell at a second deployment on purpose.
+  const url = readUrl(env.SESSCLONE_URL?.trim() || option(env, 'url'))
   if ('problem' in url) problems.push(url.problem)
 
   const node = nodeProblem(process.versions.node)
@@ -232,7 +242,7 @@ export const readConfiguration = (
 
   // Each disjunct below is already a problem above, and restating them here
   // is what narrows the three values from "or undefined" without a cast.
-  if (problems.length > 0 || !apiKey || 'problem' in url || !stateDir) {
+  if (problems.length > 0 || 'problem' in url || !stateDir) {
     throw new ConfigurationError(problems)
   }
 

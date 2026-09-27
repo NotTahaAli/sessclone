@@ -437,6 +437,21 @@
         ],
         "additionalProperties": false
       },
+      "KeyCheck": {
+        "type": "object",
+        "properties": {
+          "org": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "org"
+        ],
+        "additionalProperties": false
+      },
       "Error": {
         "type": "object",
         "properties": {
@@ -456,6 +471,51 @@
   },
   "paths": {
     "/api/ingest": {
+      "get": {
+        "operationId": "checkKey",
+        "summary": "Check a key",
+        "description": "Whether a key is live, and the Org its Turns are filed under. The Collector asks at session start to say whether it is connected. Marks the key as used, as a report does.",
+        "responses": {
+          "200": {
+            "description": "A live key, and the name of its Org.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeyCheck"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No live API key: the same answer a report gets for a missing, malformed, unknown or revoked key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string",
+                  "const": "Bearer"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The database is unavailable; ask again later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "operationId": "ingest",
         "summary": "Report Turns",

@@ -1,7 +1,7 @@
 {
   "name": "sessclone",
   "description": "Sends Claude Code usage to a SessClone deployment.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "author": {
     "name": "sessclone contributors"
   },
@@ -9,15 +9,17 @@
     "url": {
       "type": "string",
       "title": "Deployment URL",
-      "description": "Where this machine reports to, e.g. https://sessclone.example.com. Matches the deployment's own NEXT_PUBLIC_APP_URL.",
-      "required": true
+      "description": "Leave empty for the hosted service at https://sessclone.com. Self-hosted deployments enter their own address, the same one their dashboard is on.",
+      "default": "https://sessclone.com"
     },
     "api_key": {
       "type": "string",
       "title": "API key",
-      "description": "Your key from the dashboard under Keys. It identifies you and your Org, and is shown once.",
-      "sensitive": true,
-      "required": true
+      "description": "Create one in the dashboard under Keys. It is shown once and kept in Claude Code's secure credential store. Leave empty in a Claude Code cloud environment whose SessClone API credential adds it.",
+      "sensitive": true
     }
-  }
+  },
+  "homepage": "https://sessclone.com",
+  "repository": "https://github.com/NotTahaAli/sessclone",
+  "license": "MIT"
 }

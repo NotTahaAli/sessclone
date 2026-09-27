@@ -235,21 +235,25 @@ describe('handCount', () => {
 
 describe('collect', () => {
   it('reports the state directory even when the configuration is refused', async () => {
-    // A missing key is the commonest state of a machine mid-install, and where
-    // the cursor and the queue land is ticket 68's acceptance criterion
-    // regardless of whether a key is set yet.
+    // A mis-pasted key is the commonest refusal mid-install, and where the
+    // cursor and the queue land is ticket 68's acceptance criterion regardless
+    // of whether the key is right yet.
     const config = await mkdtemp(join(tmpdir(), 'verify-'))
     const state = await mkdtemp(join(tmpdir(), 'state-'))
 
     const report = await collect({
-      environment: { CLAUDE_CONFIG_DIR: config, SESSCLONE_STATE_DIR: state },
+      environment: {
+        CLAUDE_CONFIG_DIR: config,
+        SESSCLONE_STATE_DIR: state,
+        CLAUDE_PLUGIN_OPTION_API_KEY: 'sk_truncated',
+      },
       platform: 'linux',
       hostname: 'laptop',
       probe: false,
     })
 
     expect(report.configuration.problems.join(' ')).toContain(
-      'SESSCLONE_API_KEY',
+      'not a sessclone key',
     )
     expect(report.state?.path).toBe(state)
     expect(report.state?.writable).toBe(true)
@@ -287,7 +291,10 @@ describe('collect', () => {
   it('never puts the key in the rendered report', async () => {
     const key = `sk_${'b'.repeat(43)}`
     const report = await collect({
-      environment: { SESSCLONE_API_KEY: key, SESSCLONE_URL: 'https://x.test' },
+      environment: {
+        CLAUDE_PLUGIN_OPTION_API_KEY: key,
+        SESSCLONE_URL: 'https://x.test',
+      },
       platform: 'linux',
       hostname: 'laptop',
       probe: false,
@@ -297,11 +304,14 @@ describe('collect', () => {
     expect(format(report)).toContain('46 characters')
   })
 
-  it('says when SESSCLONE_URL was defaulted rather than set', async () => {
-    // The install guide's quietest failure: a Member who sets only the key
-    // reports into their own laptop forever and sees a clean session start.
+  it('says when the URL was defaulted rather than set', async () => {
+    // A self-hoster who sets only the key reports to the hosted service, not
+    // their own deployment, and sees a clean session start.
     const report = await collect({
-      environment: { SESSCLONE_API_KEY: `sk_${'c'.repeat(43)}` },
+      environment: {
+        CLAUDE_PLUGIN_OPTION_API_KEY: `sk_${'c'.repeat(43)}`,
+        SESSCLONE_STATE_DIR: await mkdtemp(join(tmpdir(), 'state-')),
+      },
       platform: 'linux',
       hostname: 'laptop',
       probe: false,
@@ -309,6 +319,35 @@ describe('collect', () => {
 
     expect(report.configuration.urlDefaulted).toBe(true)
     expect(format(report)).toContain('defaulted')
+  })
+
+  it('reads the key and URL the session start recorded, which a shell cannot see', async () => {
+    const state = await mkdtemp(join(tmpdir(), 'state-'))
+    await writeFile(
+      join(state, 'connection.json'),
+      JSON.stringify({
+        id: 'x',
+        state: 'connected',
+        org: 'Acme',
+        url: 'https://self.example.com',
+        key: { prefix: 'sk_', length: 46 },
+        at: '2026-09-27T19:00:00.000Z',
+      }),
+    )
+
+    const report = await collect({
+      environment: { SESSCLONE_STATE_DIR: state },
+      platform: 'linux',
+      hostname: 'laptop',
+      probe: false,
+    })
+
+    expect(report.configuration.url).toBe('https://self.example.com')
+    expect(report.configuration.urlDefaulted).toBe(false)
+    expect(format(report)).toContain('connected, reporting to Acme')
+    expect(format(report)).toContain(
+      '46 characters (as the last session start saw it)',
+    )
   })
 
   it('names a session written under more than one project directory', async () => {

@@ -1,7 +1,7 @@
 import type { ReportedTurn } from '@sessclone/shared'
 import { beforeEach, expect, test, vi } from 'vitest'
 
-import { POST } from '../app/api/ingest/route'
+import { GET, POST } from '../app/api/ingest/route'
 import { generateApiKey } from '../lib/api-keys'
 import { owner as sql, seedFixture, type Fixture } from './harness'
 
@@ -693,5 +693,42 @@ test('past due still collects, and so does everything when approval is off', asy
     expect((await post(payload(), globexKey)).status).toBe(200)
   } finally {
     vi.unstubAllEnvs()
+  }
+})
+
+test('the key check names the Org a live key reports into, and marks it used', async () => {
+  const response = await GET(
+    new Request('http://localhost/api/ingest', {
+      headers: { authorization: `Bearer ${acmeKey}` },
+    }),
+  )
+
+  expect(response.status).toBe(200)
+  expect(await response.json()).toEqual({ org: fixture.acme.name })
+  const [row] = await sql<{ last_used_at: Date | null }[]>`
+    select last_used_at from api_keys where key_prefix = ${acmeKey.slice(0, 12)}
+  `
+  expect(row!.last_used_at).toBeInstanceOf(Date)
+})
+
+const check = (key: string | null) =>
+  GET(
+    new Request('http://localhost/api/ingest', {
+      headers: key ? { authorization: `Bearer ${key}` } : {},
+    }),
+  )
+
+test('the key check gives the same 401 as a report for no key and a dead one', async () => {
+  const responses = await Promise.all([
+    check(null),
+    check(generateApiKey().key),
+  ])
+
+  for (const response of responses) {
+    expect(response.status).toBe(401)
+    // eslint-disable-next-line no-await-in-loop -- reading bodies already fetched
+    expect(await response.json()).toEqual({
+      error: 'no live API key was presented',
+    })
   }
 })

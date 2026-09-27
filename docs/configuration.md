@@ -474,13 +474,21 @@ inside this repository), but an install that copies only the plugin directory
 has no `packages/shared` to reach and reports nothing — silently, for the same
 reason as above.
 
-| Variable              | Required       | Default                 | What it is                                                                           |
-| --------------------- | -------------- | ----------------------- | ------------------------------------------------------------------------------------ |
-| `SESSCLONE_URL`       | in practice \* | `http://127.0.0.1:3000` | Base URL of the deployment to report to. Matches the server's `NEXT_PUBLIC_APP_URL`  |
-| `SESSCLONE_API_KEY`   | yes            | —                       | The Member's API key, issued in the dashboard. Identifies the Member and the Org     |
-| `SESSCLONE_STATE_DIR` | no             | platform-dependent \*\* | Where the cursor and the retry queue are kept                                        |
-| `SESSCLONE_DEVICE`    | no             | derived \*\*\*          | Pins this environment's Device key instead of deriving one                           |
-| `SESSCLONE_DEBUG`     | no             | —                       | Set to anything to print a hook's swallowed failure to stderr. Off, a hook is silent |
+| Variable              | Required | Default                    | What it is                                                                           |
+| --------------------- | -------- | -------------------------- | ------------------------------------------------------------------------------------ |
+| `SESSCLONE_URL`       | no       | `https://sessclone.com` \* | Base URL of the deployment to report to. Matches the server's `NEXT_PUBLIC_APP_URL`  |
+| `SESSCLONE_STATE_DIR` | no       | platform-dependent \*\*    | Where the cursor and the retry queue are kept                                        |
+| `SESSCLONE_DEVICE`    | no       | derived \*\*\*             | Pins this environment's Device key instead of deriving one                           |
+| `SESSCLONE_DEBUG`     | no       | —                          | Set to anything to print a hook's swallowed failure to stderr. Off, a hook is silent |
+
+The API key has no environment variable. It comes only from the plugin's own
+setup prompt (below) — the Claude plugin directory refuses a plugin that reads
+a credential from the user's environment and sends it on, so `SESSCLONE_API_KEY`
+was removed rather than kept as a second route. The key is optional: with none
+configured, reports go out with no `Authorization` header at all, which is
+exactly what a Claude Code cloud environment needs, since there the
+environment's own SessClone API credential is added by the agent proxy on the
+way out.
 
 The Collector keeps one cursor per transcript under
 `<state dir>/cursors/<hash>.json`: per file rather than per Session, because a
@@ -608,39 +616,56 @@ ran but whose failure or clean-end is missing from the dashboard — usage is
 still counted from the Turns themselves. Keep the state directory writable (see
 the default-path note below) and this gap stays closed.
 
-\* Not required by the code — `readConfiguration` falls back to
-`http://127.0.0.1:3000` — but required by anyone whose deployment is not on
-their own laptop, which is everyone. The fallback is a development
-convenience, and the table says "in practice" rather than "yes" because
-claiming the code enforces something it does not is how a contract stops being
-one. A value that is not an `http` or `https` URL is refused with the
-rest, because a `fetch` against one fails per report with a message about a
-protocol rather than once with a message about a variable.
+\* Not required by the code, and no longer a development-only fallback either:
+`readConfiguration` falls back to the hosted service at `https://sessclone.com`,
+so an install with no `SESSCLONE_URL` and no answer to the plugin's own prompt
+now reports there rather than to a laptop that never answers. A self-hoster
+sets their own address — the plugin's `url` prompt, or `SESSCLONE_URL`, which
+wins over the prompt. A value that is not an `http` or `https` URL is refused
+at session start, because a `fetch` against one fails per report with a
+message about a protocol rather than once with a message about a variable.
 
-**The plugin's own setup prompt is the other way in.**
+**The plugin's own setup prompt is the only way in for the key.**
 `packages/plugin/.claude-plugin/plugin.json` declares `url` and `api_key` as
-`userConfig`, so installing the plugin asks for both and keeps the key in the
-keychain. Claude Code hands those answers to the hooks as
-`CLAUDE_PLUGIN_OPTION_URL` and `CLAUDE_PLUGIN_OPTION_API_KEY`;
-`readConfiguration` prefers `SESSCLONE_URL` and `SESSCLONE_API_KEY` when both
-are set, and falls back to the plugin options otherwise. `docs/install.md` has
-both routes.
+`userConfig`, both optional — leave `url` empty for the hosted service, leave
+`api_key` empty in a Claude Code cloud environment whose own SessClone API
+credential adds it — and keeps the key in its secure credential store, not in `settings.json`.
+Claude Code hands those answers to the hooks as `CLAUDE_PLUGIN_OPTION_URL` and
+`CLAUDE_PLUGIN_OPTION_API_KEY`; `SESSCLONE_URL` wins over the `url` answer when
+both are set, and there is no environment equivalent for `api_key`.
+`docs/install.md` has the walkthrough.
 
-**A bad key fails at setup, not at report time (ticket 32).**
+**A malformed key fails at setup, not at report time (ticket 32).**
 `packages/plugin/src/configuration.mjs` reads every variable in this table and
 checks it; `hooks/session-start.mjs` runs that check when a session starts —
 which is the first thing to run after the restart the install instructions ask
 for — and writes every problem it found, at once, where the person will see
-it. A key that is absent, or that is not `sk_` and 43 base64url characters, is
-one of those problems. Whether a well-formed key is _live_ is ingest's question
-(ticket 34) and is not answerable from a machine.
+it. A key that is set but is not `sk_` and 43 base64url characters is one of
+those problems; no key at all is not, since the key is optional. Whether a
+well-formed key is _live_ is ingest's question (ticket 34) and is not
+answerable from a machine — that answer is what `GET /api/ingest` gives at
+session start instead (see "Connected, and to which Org" below).
 
-`SESSCLONE_API_KEY` is never written to a log, a transcript, or an error
+The `api_key` answer is never written to a log, a transcript, or an error
 message — the check reports the first three characters and the length, and
 `configuration.test.mjs` fails if a message ever carries more. That matters
 more than it looks: a hook's stderr is shown inside a session, and a session is
 a transcript this product then uploads. The Collector sends Usage only — never
 prompts, never code.
+
+**Connected, and to which Org.** `hooks/session-start.mjs` also asks
+`GET /api/ingest`, which answers `{ org: <name> }` for a live key (or a live
+proxy-added credential) and the same `401` a report would get otherwise, and
+marks a live key as used. The hook records the answer in the state directory
+(`connection.json`: the state, the Org, the URL, the key's first three
+characters and length, never the key) and prints one line: "sessclone
+connected: reporting to `<Org>`." the first session after a key or deployment
+changes, and "sessclone is not connected: …" every session for as long as the
+deployment refuses it or none is set. While it is refused the Collector sends
+nothing, rather than resending a session's history on every turn. Claude Code
+gives the key to hooks only, so `/sessclone:status` prints that record with the
+Device, the reports waiting and the last push, and `/sessclone:sync` leaves a
+request that the `Stop` hook ending the same turn carries out.
 
 \*\*\* The Device key is normally derived: `host:<hostname>` on a machine, and
 `cloud:<account uuid>` in Claude Code Cloud, where the account outlives the

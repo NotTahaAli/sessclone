@@ -1,9 +1,6 @@
 import { CodeBlock } from './code-block'
 import { SetupTabs } from './setup-tabs'
-import {
-  CLOUD_PLACEHOLDER_KEY,
-  installCommand,
-} from '../../lib/install-command'
+import { installCommand } from '../../lib/install-command'
 
 // The install step, shown wherever somebody has to put the Collector on a
 // machine: the onboarding state on Costs, and the Keys page for a second
@@ -96,10 +93,11 @@ function OnAMachine({ appUrl }: { appUrl: string }) {
 }
 
 // Ticket 95, Taha's finalised route (2026-09-22). The setup script installs
-// with a placeholder key, and the environment's API credential makes the agent
-// proxy replace the `Authorization` header after the request leaves the
-// container — so the real key is never in the script, which everyone using the
-// environment can read, nor in the container. Claude's docs:
+// with no key, and the environment's API credential makes the agent proxy add
+// the `Authorization` header after the request leaves the container — so the
+// real key is never in the script, which everyone using the environment can
+// read, nor in the container. (A placeholder key was needed until the key
+// became optional; the proxy adds the header when none is sent.) Claude's docs:
 // https://code.claude.com/docs/en/cloud-environments#add-api-credentials
 function InACloudEnvironment({ appUrl }: { appUrl: string }) {
   // `appUrl()` checks only that the variable is set, so a value with no
@@ -111,12 +109,12 @@ function InACloudEnvironment({ appUrl }: { appUrl: string }) {
         <h3 className="text-body font-medium">1. Add the setup script</h3>
         <p className="text-text-muted mt-0.5 text-body">
           Open the environment for editing in Claude Code on the web and paste
-          this as its setup script. The key in it is a placeholder: leave it
-          exactly as it is.
+          this as its setup script. It has no key in it on purpose: the
+          credential below adds it.
         </p>
         <div className="mt-2">
           <CodeBlock
-            command={`${MARKETPLACE}\n${installCommand(appUrl, CLOUD_PLACEHOLDER_KEY)}`}
+            command={`${MARKETPLACE}\n${installCommand(appUrl)}`}
             label="the setup script"
           />
         </div>

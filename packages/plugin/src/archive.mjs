@@ -48,6 +48,8 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { createGzip } from 'node:zlib'
 
+import { authorization } from './configuration.mjs'
+import { refusedHere } from './connection.mjs'
 import { NO_DEADLINE, expired, requestSignal } from './deadline.mjs'
 import { MAX_SEAL } from './shared/limits.ts'
 import { sessionFiles } from './transcripts.mjs'
@@ -396,12 +398,15 @@ export const agentIdOf = (path) => {
  * @returns {Promise<{ ok: boolean, status: number | null, body: any }>}
  */
 const ask = async ({ configuration, path, body, deadline = NO_DEADLINE }) => {
+  // Refused at session start: answer as the deployment would, unsent.
+  if (await refusedHere(configuration))
+    return { ok: false, status: 401, body: null }
   try {
     const answer = await fetch(`${configuration.url}${path}`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        authorization: `Bearer ${configuration.apiKey}`,
+        ...authorization(configuration),
       },
       body: JSON.stringify(body),
       signal: requestSignal(REQUEST_TIMEOUT_MS, deadline),

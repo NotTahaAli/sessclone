@@ -6,6 +6,43 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-27
+
+Upgrading from 0.3.0: deploy the web app before telling anyone to update the
+plugin; the plugin's session-start key check uses the new `GET /api/ingest`.
+No migrations. Installs pick the plugin up with `/plugin update
+sessclone@sessclone`. `SESSCLONE_API_KEY` is no longer read: enter the key at
+the plugin's setup prompt instead.
+
+### Added
+
+- The Collector says, once, which Org it is reporting to when a session
+  starts, and says every session that it is not connected while the key is
+  missing or refused.
+- `/sessclone:status` shows the deployment, whether the key was accepted at
+  session start and for which Org, this Device, and what is waiting to send.
+- `/sessclone:sync` sends everything waiting at the end of that turn instead
+  of at the next session start.
+- A key the deployment refuses stops the Collector sending until a session
+  starts with a key it accepts, instead of resending history every turn.
+- `GET /api/ingest` answers the Org's name for a live key, and the same 401 as
+  a report otherwise.
+- The plugin has a README saying what it sends, where, and what it runs.
+
+### Changed
+
+- The Collector no longer follows a redirect when it reports. A 301 or 302
+  would turn the report into the new key check's `GET`, which answers 200 and
+  files nothing, so the Turns would be marked sent and lost.
+- The deployment URL defaults to `https://sessclone.com`, so installing
+  against the hosted service asks for the key and nothing else.
+- The API key is read only from the plugin's setup prompt, never from
+  `SESSCLONE_API_KEY` in the shell. It may be left empty in a Claude Code
+  cloud environment whose SessClone API credential adds it, so the setup
+  script no longer carries a placeholder key.
+- Every email is restyled in the product's own look.
+- Google Search shows the SessClone mark (`favicon.ico`).
+
 ## [0.3.0] - 2026-09-25
 
 Upgrading from 0.2.1: run `20260925190000_history_and_deletion.sql`,
@@ -153,7 +190,8 @@ The first public release.
 - Self-hosting: a Dockerfile, `compose.yaml` and a guide, free at any size
   under AGPL-3.0-only with the additional term in `NOTICE.md`.
 
-[Unreleased]: https://github.com/NotTahaAli/sessclone/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/NotTahaAli/sessclone/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/NotTahaAli/sessclone/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/NotTahaAli/sessclone/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/NotTahaAli/sessclone/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/NotTahaAli/sessclone/compare/v0.1.0...v0.2.0
