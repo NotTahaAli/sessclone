@@ -25,6 +25,12 @@ beforeAll(async () => {
   // A deployment in miniature: `GET /api/ingest` names the Org for the one
   // live key and answers 401 otherwise, as the route does.
   server = createServer((request, response) => {
+    // An old address forwarding to the new one, as sessclone.vercel.app does.
+    if (request.url?.startsWith('/moved/')) {
+      response.writeHead(301, { location: '/api/ingest' })
+      response.end()
+      return
+    }
     seen.push(request.headers.authorization ?? '(none)')
     const live = request.headers.authorization === `Bearer ${KEY}`
     response.writeHead(live ? 200 : 401, { 'content-type': 'application/json' })
@@ -138,4 +144,12 @@ test('a sync request is taken once', async () => {
   await requestSync(stateDir)
   expect(await takeSyncRequest(stateDir)).toBe(true)
   expect(await takeSyncRequest(stateDir)).toBe(false)
+})
+
+test('a report to an address that redirects is not taken as delivered', async () => {
+  // Followed, the 301 turns the POST into the key check's GET, which answers
+  // 200 and files nothing; the cursor would move past Turns never stored.
+  const config = { ...(await configuration(KEY)), url: `${url}/moved` }
+  const answer = await send({ configuration: config, payload: {} })
+  expect(answer).toEqual({ ok: false, status: 301 })
 })

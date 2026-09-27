@@ -31,6 +31,9 @@ the plugin's setup prompt instead.
 
 ### Changed
 
+- The Collector no longer follows a redirect when it reports. A 301 or 302
+  would turn the report into the new key check's `GET`, which answers 200 and
+  files nothing, so the Turns would be marked sent and lost.
 - The deployment URL defaults to `https://sessclone.com`, so installing
   against the hosted service asks for the key and nothing else.
 - The API key is read only from the plugin's setup prompt, never from

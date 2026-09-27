@@ -722,6 +722,9 @@ export const send = async ({
   try {
     const answer = await fetch(`${configuration.url}/api/ingest`, {
       method: 'POST',
+      // Followed, a 301 or 302 turns this into the key check's GET, which
+      // answers 200 and files nothing, and the cursor would move on.
+      redirect: 'manual',
       headers: {
         'content-type': 'application/json',
         ...authorization(configuration),

@@ -83,7 +83,7 @@ try {
     )
     if (refusal && connection.state === 'unknown') {
       process.stderr.write(`${refusal}\n`)
-      process.exit(2)
+      process.exitCode = 2
     }
   }
 } catch (error) {

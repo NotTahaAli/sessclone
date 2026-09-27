@@ -11,10 +11,11 @@ spend per person, Project, Device and Session on the dashboard.
 /plugin install sessclone@sessclone
 ```
 
-Claude Code asks for two things:
+Claude Code asks for two things, both optional:
 
 - **API key**: create one in the dashboard under **Keys**. It is shown once and
-  kept in your OS keychain, never in a file.
+  kept in your OS keychain, never in a file. Leave it empty in a Claude Code
+  cloud environment whose SessClone API credential adds it.
 - **Deployment URL**: leave it empty for the hosted service at
   `https://sessclone.com`. Self-hosted deployments enter their own address.
 
@@ -77,7 +78,7 @@ environment, and never written to a log, a file or a transcript.
 
 | Setting             | Where                         | Default                  |
 | ------------------- | ----------------------------- | ------------------------ |
-| API key             | setup prompt (`api_key`)      | none, required           |
+| API key             | setup prompt (`api_key`)      | none, optional in cloud  |
 | Deployment URL      | setup prompt, `SESSCLONE_URL` | `https://sessclone.com`  |
 | State directory     | `SESSCLONE_STATE_DIR`         | per platform, see above  |
 | Device name         | `SESSCLONE_DEVICE`            | derived from the machine |
