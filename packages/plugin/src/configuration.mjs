@@ -154,8 +154,8 @@ const readUrl = (raw) => {
  *
  * Claude Code prompts for what `.claude-plugin/plugin.json` declares under
  * `userConfig` when the plugin is enabled, and hands each answer to a hook as
- * `CLAUDE_PLUGIN_OPTION_<KEY>`. An answer marked `sensitive` is kept in the OS
- * keychain rather than in a file. The key's casing is not documented as
+ * `CLAUDE_PLUGIN_OPTION_<KEY>`. An answer marked `sensitive` is kept in Claude
+ * Code's secure credential store, not `settings.json`. The key's casing is not documented as
  * either, so both spellings are read.
  *
  * @param {Record<string, string | undefined>} env

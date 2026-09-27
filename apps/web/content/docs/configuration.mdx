@@ -294,7 +294,7 @@ answer.
 
 There is no variable for the API key: it comes only from the plugin's own
 setup prompt (`url` and `api_key`, both optional, in
-`packages/plugin/.claude-plugin/plugin.json`), stored in the OS keychain — the
+`packages/plugin/.claude-plugin/plugin.json`), stored in Claude Code's secure credential store — the
 Claude plugin directory refuses a plugin that reads a credential from the
 user's environment and sends it on. `SESSCLONE_URL` wins over the prompt's
 `url` answer when both are set. With no key at all, reports carry no

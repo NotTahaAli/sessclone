@@ -629,7 +629,7 @@ message about a protocol rather than once with a message about a variable.
 `packages/plugin/.claude-plugin/plugin.json` declares `url` and `api_key` as
 `userConfig`, both optional — leave `url` empty for the hosted service, leave
 `api_key` empty in a Claude Code cloud environment whose own SessClone API
-credential adds it — and keeps the key in the OS keychain, never in a file.
+credential adds it — and keeps the key in its secure credential store, not in `settings.json`.
 Claude Code hands those answers to the hooks as `CLAUDE_PLUGIN_OPTION_URL` and
 `CLAUDE_PLUGIN_OPTION_API_KEY`; `SESSCLONE_URL` wins over the `url` answer when
 both are set, and there is no environment equivalent for `api_key`.

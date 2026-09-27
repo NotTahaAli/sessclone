@@ -15,7 +15,7 @@
     "api_key": {
       "type": "string",
       "title": "API key",
-      "description": "Create one in the dashboard under Keys. It is shown once and kept in your keychain. Leave empty in a Claude Code cloud environment whose SessClone API credential adds it.",
+      "description": "Create one in the dashboard under Keys. It is shown once and kept in Claude Code's secure credential store. Leave empty in a Claude Code cloud environment whose SessClone API credential adds it.",
       "sensitive": true
     }
   },

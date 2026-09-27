@@ -14,7 +14,7 @@ spend per person, Project, Device and Session on the dashboard.
 Claude Code asks for two things, both optional:
 
 - **API key**: create one in the dashboard under **Keys**. It is shown once and
-  kept in your OS keychain, never in a file. Leave it empty in a Claude Code
+  kept in Claude Code's secure credential store, not in `settings.json`. Leave it empty in a Claude Code
   cloud environment whose SessClone API credential adds it.
 - **Deployment URL**: leave it empty for the hosted service at
   `https://sessclone.com`. Self-hosted deployments enter their own address.

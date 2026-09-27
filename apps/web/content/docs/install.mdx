@@ -38,9 +38,10 @@ is the whole setup:
   else, leave it empty and reports go out with no `Authorization` header,
   which a deployment answers the same way as an unknown key — refused.
 
-Claude Code keeps the key in the OS keychain rather than in a file, and hands
+Claude Code keeps the key in its secure credential store rather than in
+`settings.json`, and hands
 both to the hooks on every session afterwards. Nothing to export, nothing to
-re-do per shell, and nothing plain-text on disk. To change an answer later,
+re-do per shell. To change an answer later,
 run `/plugin configure sessclone` and start a new session.
 
 This is also the only route that works in the desktop app, which runs Claude

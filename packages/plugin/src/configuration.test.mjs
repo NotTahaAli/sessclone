@@ -51,8 +51,8 @@ test("the plugin's own setup answers count as configuration", () => {
   // `userConfig` in `.claude-plugin/plugin.json`: Claude Code asks for these
   // when the plugin is enabled and hands them to a hook as
   // `CLAUDE_PLUGIN_OPTION_*`. It is the only route on a machine where nobody
-  // can export anything — the desktop app — and the key is kept in the OS
-  // keychain rather than in a file anybody can read.
+  // can export anything — the desktop app — and the key is kept in Claude
+  // Code's secure credential store, not `settings.json`.
   const config = readConfiguration(
     {
       CLAUDE_PLUGIN_OPTION_API_KEY: KEY,
