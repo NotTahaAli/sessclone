@@ -168,6 +168,8 @@ const PHASES = [
     type: 'frontend',
     pos: [1190, 1000],
     range: [134, 136],
+    // Ticket 144 (delete a waiting Org) sits beside New Org.
+    also: [144],
   },
   {
     id: 'demo',

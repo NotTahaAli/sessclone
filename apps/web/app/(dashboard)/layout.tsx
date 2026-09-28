@@ -281,7 +281,9 @@ async function Content({ children }: { children: ReactNode }) {
     return (
       <Waiting
         cancelled={viewer.subscriptionStatus === 'cancelled'}
+        orgId={viewer.orgId}
         orgName={viewer.orgName}
+        deletable={viewer.role === 'owner' && !isDemoUser(viewer.userId)}
         planName={viewer.planName}
         operator={(await currentOperator()) !== null}
       >

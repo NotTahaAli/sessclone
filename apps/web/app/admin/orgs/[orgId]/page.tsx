@@ -2,11 +2,13 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { ActivateForm } from './activate-form'
-import { setOperatorName } from './actions'
+import { deleteOrgAction, setOperatorName } from './actions'
+import { DeleteWaitingOrg } from '../../../(dashboard)/delete-waiting-org'
 import { InlineName } from '../../../(dashboard)/inline-name'
 import { AddOrgRateForm, DeleteOrgRate } from './org-rate-form'
 import { PageHeader } from '../../../(dashboard)/page-header'
 import { Field, Row, SectionBreak } from '../../../_ui/primitives'
+import { approvalRequired } from '../../../../lib/approval'
 import { asOperator } from '../../../../lib/platform-admin'
 import {
   listOrgRates,
@@ -201,6 +203,22 @@ export default async function Page({
         <p className="text-text-muted mt-2 text-caption">
           Only the {HISTORY_PAGE} most recent changes are shown.
         </p>
+      ) : null}
+
+      {/* Waiting, as the Org list counts it: never approved, so nothing to
+          keep. The database refuses anything past waiting either way. */}
+      {approvalRequired() &&
+      (org.status === null || org.status === 'inactive') ? (
+        <>
+          <SectionBreak>Delete</SectionBreak>
+          <div className="py-3">
+            <DeleteWaitingOrg
+              orgId={org.id}
+              orgName={org.name}
+              action={deleteOrgAction}
+            />
+          </div>
+        </>
       ) : null}
     </div>
   )

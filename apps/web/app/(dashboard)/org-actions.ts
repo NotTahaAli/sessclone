@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation'
 import { after } from 'next/server'
 import { z } from 'zod'
 
-import { approvalRequired } from '../../lib/approval'
+import { approvalRequired, isLocked } from '../../lib/approval'
 import { createOwnOrg, PendingOrgExists } from '../../lib/auth/bootstrap'
 import { parsePlan } from '../../lib/auth/plan'
 import { asViewer } from '../../lib/db'
@@ -17,6 +17,7 @@ import {
 } from '../../lib/invitations'
 import { leaveOrg } from '../../lib/members'
 import { ORG_NAME_RULE, OrgNameInput } from '../../lib/names'
+import { deletePendingOrg } from '../../lib/org'
 import { notifySignup } from '../../lib/signup-notice'
 import { sessionUser } from '../../lib/supabase/server'
 import { marketingTiers } from '../../lib/tiers'
@@ -27,7 +28,7 @@ import {
 } from '../../lib/viewer'
 import { DEMO_REFUSAL, isDemoUser } from '../../lib/demo'
 
-// The Org switcher's five writes. Every one starts from `sessionUser()`, not
+// The Org switcher's five writes, and deleting a waiting Org. Every one starts from `sessionUser()`, not
 // `signedInUser()`: somebody whose current Org is waiting for approval must
 // still be able to switch out of it, answer an invitation, leave, or start
 // another. Identity
@@ -156,6 +157,58 @@ export const leaveCurrentOrg = async (
   }
 
   // The choice named the Org just left; the usual order decides from here.
+  const store = await cookies()
+  store.delete(MEMBER_COOKIE)
+  redirect('/costs')
+  return null
+}
+
+/**
+ * Deletes the Org the viewer has open while it waits for approval (Taha's
+ * picks, 2026-09-28): its Owner, from the waiting page, with the Org's name
+ * typed out. Like leaving, the form names the Org it was drawn for and a tab
+ * left open across a switch is refused. The database decides who may and
+ * which Orgs are still waiting (`sessclone_delete_pending_org`).
+ */
+export const deleteWaitingOrg = async (
+  _previous: OrgActionState,
+  formData: FormData,
+): Promise<OrgActionState> => {
+  const viewer = await sessionViewer()
+  if (!viewer || viewer.deletionRequestedAt) {
+    return { error: 'Sign in again to delete this Org.' }
+  }
+  if (isDemoUser(viewer.userId)) return { error: DEMO_REFUSAL }
+
+  const orgId = Id.safeParse(formData.get('orgId'))
+  if (!orgId.success || orgId.data !== viewer.orgId) {
+    return { error: 'Reload the page: this is not the Org you have open.' }
+  }
+  // With approval off nothing waits: an Org with no subscription row is live.
+  if (!isLocked(viewer.subscriptionStatus)) {
+    return { error: 'This Org is not waiting for approval.' }
+  }
+  const typed = z.string().trim().safeParse(formData.get('name'))
+  if (!typed.success || typed.data !== viewer.orgName.trim()) {
+    return { error: `Type ${viewer.orgName} exactly to confirm.` }
+  }
+
+  const outcome = await asViewer(viewer.userId, (tx) =>
+    deletePendingOrg(tx, viewer.orgId),
+  )
+  if (outcome !== 'deleted') {
+    return {
+      error:
+        outcome === 'forbidden'
+          ? 'Only an Owner of this Org can delete it.'
+          : outcome === 'approved'
+            ? 'This Org has been approved, so it can no longer be deleted.'
+            : 'This Org has usage recorded, so it cannot be deleted.',
+    }
+  }
+
+  // Whatever Org the person has next, in the usual order; none lands them on
+  // starting one.
   const store = await cookies()
   store.delete(MEMBER_COOKIE)
   redirect('/costs')

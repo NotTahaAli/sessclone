@@ -149,3 +149,30 @@ export const setOrgRetention = async (
   `
   return rows.length > 0
 }
+
+/**
+ * Deletes an Org still waiting for approval, as its Owner or a platform admin
+ * (`sessclone_delete_pending_org`). `forbidden` covers an Org that is not the
+ * caller's to delete and one that does not exist; `approved` one that is past
+ * waiting; `history` one that already has Turns, which are never deleted.
+ */
+export const deletePendingOrg = async (
+  tx: TransactionSql,
+  orgId: string,
+): Promise<'deleted' | 'forbidden' | 'approved' | 'history'> => {
+  // A savepoint, so a refusal leaves the caller's transaction usable.
+  try {
+    const [row] = await tx.savepoint(
+      (sp) =>
+        sp<{ deleted: boolean }[]>`
+          select sessclone_delete_pending_org(${orgId}) as deleted
+        `,
+    )
+    return row?.deleted ? 'deleted' : 'forbidden'
+  } catch (error) {
+    const message = error instanceof Error ? error.message : ''
+    if (message === 'org has history') return 'history'
+    if (message === 'org is not waiting for approval') return 'approved'
+    throw error
+  }
+}

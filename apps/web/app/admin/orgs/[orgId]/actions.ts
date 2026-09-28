@@ -1,12 +1,16 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
+import { approvalRequired } from '../../../../lib/approval'
 import { asOperator, currentOperator } from '../../../../lib/platform-admin'
 import { setSubscription } from '../../../../lib/subscriptions'
 import { NAME_LIMIT, setOrgOperatorName } from '../../../../lib/names'
+import { deletePendingOrg } from '../../../../lib/org'
 import type { NameState } from '../../../(dashboard)/inline-name'
+import type { OrgActionState } from '../../../(dashboard)/org-actions'
 
 // Ticket 48's one write. A Server Action is a POST endpoint whether or not a
 // form was rendered for the caller, so every field is parsed before it reaches
@@ -133,4 +137,54 @@ export const setOperatorName = async (
   revalidatePath('/admin/orgs')
   revalidatePath(`/admin/orgs/${orgId.data}`)
   return { saved: value }
+}
+
+/**
+ * Deletes an Org still waiting for approval (Taha's picks, 2026-09-28), with
+ * the Org's own name typed out. `sessclone_delete_pending_org` refuses a
+ * caller who is not a platform admin and an Org past waiting, independently
+ * of the check below.
+ */
+export const deleteOrgAction = async (
+  _previous: OrgActionState,
+  formData: FormData,
+): Promise<OrgActionState> => {
+  if (!(await currentOperator())) {
+    return { error: 'Only a platform administrator may delete an Org here.' }
+  }
+  // With approval off nothing waits: an Org with no subscription row is live.
+  if (!approvalRequired()) {
+    return { error: 'Nothing waits for approval on this deployment.' }
+  }
+
+  const orgId = z.uuid().safeParse(formData.get('orgId'))
+  const typed = z.string().trim().safeParse(formData.get('name'))
+  if (!orgId.success || !typed.success) {
+    return { error: 'That request was missing the Org.' }
+  }
+
+  const outcome = await asOperator(async (tx) => {
+    const [org] = await tx<{ name: string }[]>`
+      select name from orgs where id = ${orgId.data}
+    `
+    if (!org) return 'forbidden' as const
+    if (typed.data !== org.name.trim()) return 'mistyped' as const
+    return deletePendingOrg(tx, orgId.data)
+  })
+  if (outcome !== 'deleted') {
+    return {
+      error:
+        outcome === 'mistyped'
+          ? "Type the Org's own name exactly to confirm."
+          : outcome === 'approved'
+            ? 'This Org is past waiting, so it can no longer be deleted.'
+            : outcome === 'history'
+              ? 'This Org has usage recorded, so it cannot be deleted.'
+              : 'That Org could not be deleted.',
+    }
+  }
+
+  revalidatePath('/', 'layout')
+  redirect('/admin/orgs')
+  return null
 }
