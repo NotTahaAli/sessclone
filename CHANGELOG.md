@@ -45,6 +45,13 @@ the plugin's setup prompt instead.
   script no longer carries a placeholder key.
 - Every email is restyled in the product's own look.
 - Google Search shows the SessClone mark (`favicon.ico`).
+- Sign-in, sign-up, invitation, new-Org and admin pages carry `noindex` and
+  their own titles, and robots.txt no longer blocks sign-in, sign-up and
+  invitations, so search engines can read that `noindex` (a blocked page can
+  still be indexed from links). The unused `Host:` line is gone.
+- The home page's structured data names an Organization (name, logo, GitHub)
+  as the application's publisher, and the docs landing page has its own
+  description.
 
 ## [0.3.0] - 2026-09-25
 

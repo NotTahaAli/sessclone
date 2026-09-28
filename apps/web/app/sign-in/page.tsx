@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Suspense } from 'react'
 
@@ -13,6 +14,12 @@ import { Notices } from './notices'
 import { invitationToken, safeNext } from '../../lib/auth/next-path'
 import { ProviderError } from './provider-error'
 import { PanelCredit } from '../(dashboard)/credit'
+
+// Reachable by crawlers (robots.txt leaves it open) so they read this noindex.
+export const metadata: Metadata = {
+  title: 'Sign in',
+  robots: { index: false },
+}
 
 // Ticket 83: the page prerenders, and the query string streams into it.
 //

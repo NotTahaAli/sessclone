@@ -87,16 +87,31 @@ export const metadata = { alternates: { canonical: canonical('/') } }
 // Structured data for search results: what the product is and where its
 // source lives. No price here, since prices are rows in the `tiers` table and
 // a second copy would drift from them.
+// The Organization node is what search engines read for the site's name, logo
+// and profiles; the application points at it as its publisher.
 const JSON_LD = JSON.stringify({
   '@context': 'https://schema.org',
-  '@type': 'SoftwareApplication',
-  name: 'SessClone',
-  url: siteUrl(),
-  description: SITE_DESCRIPTION,
-  applicationCategory: 'DeveloperApplication',
-  operatingSystem: 'macOS, Linux, Windows',
-  license: 'https://www.gnu.org/licenses/agpl-3.0.html',
-  sameAs: [REPOSITORY],
+  '@graph': [
+    {
+      '@type': 'Organization',
+      '@id': `${siteUrl()}/#organization`,
+      name: 'SessClone',
+      url: siteUrl(),
+      logo: `${siteUrl()}/apple-icon.png`,
+      sameAs: [REPOSITORY],
+    },
+    {
+      '@type': 'SoftwareApplication',
+      name: 'SessClone',
+      url: siteUrl(),
+      description: SITE_DESCRIPTION,
+      applicationCategory: 'DeveloperApplication',
+      operatingSystem: 'macOS, Linux, Windows',
+      license: 'https://www.gnu.org/licenses/agpl-3.0.html',
+      publisher: { '@id': `${siteUrl()}/#organization` },
+      sameAs: [REPOSITORY],
+    },
+  ],
 })
 const JSON_LD_HTML = { __html: JSON_LD }
 

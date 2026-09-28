@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Suspense } from 'react'
@@ -14,6 +15,12 @@ import { sendMagicLink, signInWithGitHub } from '../sign-in/actions'
 import { Notices } from '../sign-in/notices'
 import { ProviderError } from '../sign-in/provider-error'
 import { offeredPlans, PlanChoices } from './plan-choices'
+
+// Reachable by crawlers (robots.txt leaves it open) so they read this noindex.
+export const metadata: Metadata = {
+  title: 'Sign up',
+  robots: { index: false },
+}
 
 // Joining the waitlist, split from `/sign-in` (Taha, 2026-09-24, layout A):
 // sign-in only signs in, and this page asks for the plan first and the account

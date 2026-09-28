@@ -29,6 +29,17 @@ describe('robots', () => {
     }
   })
 
+  // A blocked URL is still indexed from links; only a crawl that reaches the
+  // page reads its `noindex`. These pages carry one, so they stay open.
+  it('leaves the noindex pages crawlable', () => {
+    vi.stubEnv('SEARCH_INDEXING', 'on')
+    const rules = robots().rules
+    const disallowed = Array.isArray(rules) ? [] : [rules.disallow].flat()
+    for (const route of ['/sign-in', '/sign-up', '/join']) {
+      expect(disallowed, route).not.toContain(route)
+    }
+  })
+
   it('keeps a deployment out of search unless it opts in', () => {
     vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://sessclone.com')
     for (const value of [undefined, '', 'true', 'off']) {
