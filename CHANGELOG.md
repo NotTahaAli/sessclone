@@ -16,8 +16,9 @@ the plugin's setup prompt instead.
 
 ### Added
 
-- The plugin carries its own icon and keywords, so Claude's plugin directory
-  shows the SessClone mark instead of the publisher's GitHub avatar.
+- The plugin carries its own icon, keywords, and documentation, support,
+  privacy and terms links, so Claude's plugin directory shows the SessClone
+  mark instead of the publisher's GitHub avatar and links to each page.
 - The Collector says, once, which Org it is reporting to when a session
   starts, and says every session that it is not connected while the key is
   missing or refused.
