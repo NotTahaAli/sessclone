@@ -1,3 +1,4 @@
+import { readdirSync } from 'node:fs'
 import { NextRequest } from 'next/server'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
@@ -146,17 +147,39 @@ test('pages and files read before an account are public', async () => {
   expect(statuses).toEqual(paths.map((path) => ({ path, status: 200 })))
 })
 
-test('a lookalike of a public file is not public', async () => {
+// A path no route matches is Next's 404, signed in or not. Sent to sign-in,
+// it was a soft 404 (Google Search Essentials): a crawler following a stale
+// link read the sign-in page as that URL's content.
+test('an unknown path is left to the 404, not sent to sign-in', async () => {
   const paths = [
+    '/nope',
     '/robots.txt.bak',
     '/icons/costs',
     '/llms.txt/x',
     '/.well-known/other.txt',
   ]
-  const statuses = await Promise.all(
-    paths.map(async (path) => (await at(path)).status),
+  const locations = await Promise.all(
+    paths.map(async (path) => (await at(path)).headers.get('location')),
   )
-  expect(statuses).toEqual([307, 307, 307, 307])
+  expect(locations).toEqual(paths.map(() => null))
+})
+
+// The other side of that: every page behind sign-in still sends a signed-out
+// visitor there. Read from the file system, so a new dashboard section that
+// is missing from the Proxy's list fails here rather than rendering empty.
+test('every signed-in page sends a signed-out visitor to sign-in', async () => {
+  const sections = readdirSync(new URL('../app/(dashboard)', import.meta.url), {
+    withFileTypes: true,
+  })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => `/${entry.name}`)
+  const paths = [...sections, '/admin', '/new-org', '/costs/projects']
+  const locations = await Promise.all(
+    paths.map(async (path) => (await at(path)).headers.get('location')),
+  )
+  expect(locations).toEqual(
+    paths.map(() => 'https://sessclone.example.com/sign-in'),
+  )
 })
 
 // Ticket 137: the demo has no session, so the Proxy lets its cookie through

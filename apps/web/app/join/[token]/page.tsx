@@ -1,8 +1,15 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 
 import { AcceptForm } from './accept-form'
 import { PanelCredit } from '../../(dashboard)/credit'
 import { realSessionUser } from '../../../lib/supabase/server'
+
+// Reachable by crawlers (robots.txt leaves it open) so they read this noindex.
+export const metadata: Metadata = {
+  title: 'Join an Org',
+  robots: { index: false },
+}
 
 // Cache Components (ticket 80) prerenders a static shell for every route. The
 // dashboard earns a real one by streaming the viewer into a static frame

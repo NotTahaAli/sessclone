@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import type { ReactNode } from 'react'
@@ -9,6 +10,12 @@ import { NavGlyph } from '../(dashboard)/nav-glyph'
 import { BottomBarLinks, SidebarGroups } from '../(dashboard)/nav-links'
 import type { NavGroup } from '../(dashboard)/navigation'
 import { currentOperator } from '../../lib/platform-admin'
+
+// Never in search results, whatever links here.
+export const metadata: Metadata = {
+  title: 'Admin',
+  robots: { index: false },
+}
 
 // Cache Components (ticket 80) prerenders a static shell for every route. The
 // dashboard earns a real one by streaming the viewer into a static frame

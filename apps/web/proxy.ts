@@ -28,49 +28,32 @@ import {
 // something ahead of the render writes it; without this, people are logged out
 // at intervals that look random.
 
-// `/api` is here because those routes do not authenticate by session at all:
-// the Collector posts from a machine with no cookie and proves who it is with
-// an API key (ADR 0001). Redirecting them to the sign-in page turns every
-// report into a 307 the Collector swallows, and nothing anywhere says so.
+// The pages behind sign-in: the dashboard's sections (`app/(dashboard)`),
+// the platform admin and the new-Org step. A signed-out visitor who reaches
+// one is sent to the sign-in page; `test/proxy.test.ts` reads the dashboard
+// folder, so a new section missing here fails there.
 //
-// `/` and `/pricing` are the marketing site (ticket 26). They are the pages a
-// visitor arrives on before they have an account at all, so sending them to
-// the sign-in page is sending them away.
+// Everything else passes through, signed in or not: the marketing site, the
+// docs, the legal pages, `/api` (the Collector proves itself with an API key,
+// not a session, ADR 0001), `/auth`, an invitation under `/join`, the files
+// crawlers fetch, and a path no route matches, which Next answers with a
+// 404. Sending that last one to sign-in was a soft 404 to search engines.
 //
-// `'/'` is an exact match below rather than a prefix, which matters: read as
-// a prefix it would make every path public. `//keys` would slip past the
-// redirect, and it is worth knowing that costs nothing — this file is a
-// convenience for the person, and the rows are kept apart by the policies
-// (ADR 0001), not by a redirect.
-// `/join` is ticket 49's: whoever opens an invitation may have no account at
-// all, and that page says so and sends them to sign in with the link kept, so
-// the invitation survives the round trip. Redirecting from here would drop it.
-// `/docs` is ticket 116's: the install and self-hosting guides are read before
-// anybody has an account. (`/api/search`, the docs search, is under `/api`.)
-// `/privacy` and `/terms` are the legal pages the marketing footer links to.
-// `/demo` is ticket 137's way into the demo, which 404s when it is off.
-const PUBLIC_PATHS = [
-  '/',
-  '/pricing',
-  '/sign-in',
-  '/sign-up',
-  '/auth',
-  '/api',
-  '/join',
-  '/docs',
-  '/privacy',
-  '/terms',
-  '/demo',
+// This is a convenience for the person, not the authorisation layer: rows are
+// kept apart by the policies (ADR 0001), so a page that slipped past this
+// shows an empty dashboard, never somebody else's data.
+const PRIVATE_PATHS = [
+  '/costs',
+  '/devices',
+  '/keys',
+  '/more',
+  '/sessions',
+  '/settings',
+  '/transcripts',
+  '/turns',
+  '/admin',
+  '/new-org',
 ]
-
-// The files crawlers, browsers and link previews fetch with no cookie: the
-// metadata routes Next serves from `app/` (robots, sitemap, icons, Open Graph
-// and Twitter images, the manifest), `llms.txt` and `security.txt`. Exact names,
-// with the `icon*`/`*-image*` families' generated suffixes (`icon0.png`,
-// `opengraph-image-abc123`). A redirect here is a missing favicon or a blank
-// share card, and a crawler reading `/sign-in` as the whole site.
-const PUBLIC_FILE =
-  /^\/(?:robots\.txt|sitemap\.xml|favicon\.ico|manifest\.webmanifest|llms\.txt|\.well-known\/security\.txt|(?:apple-)?icon[^/]*|(?:opengraph|twitter)-image[^/]*)$/
 
 // Ticket 138: a page a flag switches off. Rewritten to a path no route
 // matches, so the app's own not-found page renders, with a 404.
@@ -164,11 +147,9 @@ export async function proxy(request: NextRequest) {
   // is what logs people out at random.
   const { data } = await supabase.auth.getClaims()
 
-  const isPublic =
-    PUBLIC_FILE.test(path) ||
-    PUBLIC_PATHS.some(
-      (prefix) => path === prefix || path.startsWith(`${prefix}/`),
-    )
+  const isPrivate = PRIVATE_PATHS.some(
+    (prefix) => path === prefix || path.startsWith(`${prefix}/`),
+  )
 
   // Ticket 137: the demo visitor has no session and is let through; the
   // pages resolve them in `sessionUser`, which honours the same cookie.
@@ -181,7 +162,7 @@ export async function proxy(request: NextRequest) {
   const redirectHome = home(Boolean(data?.claims), demoCookie)
   if (redirectHome) return withCookies(redirectHome, response)
 
-  if (!data?.claims && !isPublic && !demo) {
+  if (!data?.claims && isPrivate && !demo) {
     const signIn = request.nextUrl.clone()
     signIn.pathname = '/sign-in'
     return NextResponse.redirect(signIn)

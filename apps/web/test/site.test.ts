@@ -24,8 +24,19 @@ describe('robots', () => {
     })
       .filter((entry) => entry.isDirectory())
       .map((entry) => `/${entry.name}`)
-    for (const route of [...routes, '/admin']) {
+    for (const route of [...routes, '/admin', '/new-org']) {
       expect(disallowed, route).toContain(route)
+    }
+  })
+
+  // A blocked URL is still indexed from links; only a crawl that reaches the
+  // page reads its `noindex`. These pages carry one, so they stay open.
+  it('leaves the noindex pages crawlable', () => {
+    vi.stubEnv('SEARCH_INDEXING', 'on')
+    const rules = robots().rules
+    const disallowed = Array.isArray(rules) ? [] : [rules.disallow].flat()
+    for (const route of ['/sign-in', '/sign-up', '/join']) {
+      expect(disallowed, route).not.toContain(route)
     }
   })
 

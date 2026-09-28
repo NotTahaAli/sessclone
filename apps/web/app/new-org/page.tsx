@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { Suspense, type ReactNode } from 'react'
 
@@ -9,6 +10,12 @@ import { PanelCredit } from '../(dashboard)/credit'
 import { LogoMark } from '../_ui/logo'
 import { offeredPlans, PlanChoices } from '../sign-up/plan-choices'
 import { NewOrgForm } from './new-org-form'
+
+// Never in search results, whatever links here.
+export const metadata: Metadata = {
+  title: 'New Org',
+  robots: { index: false },
+}
 
 // Ticket 136: "New Org", from the Org switcher. Outside the dashboard's
 // layout, which covers every page with the waiting page while the current
