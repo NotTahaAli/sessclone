@@ -49,6 +49,9 @@ the plugin's setup prompt instead.
   their own titles, and robots.txt no longer blocks sign-in, sign-up and
   invitations, so search engines can read that `noindex` (a blocked page can
   still be indexed from links). The unused `Host:` line is gone.
+- A signed-out visit to a page that does not exist gets a 404 instead of a
+  redirect to sign-in, which search engines read as a soft 404. Only the
+  pages behind sign-in (the dashboard, admin, new Org) still redirect there.
 - The home page's structured data names an Organization (name, logo, GitHub)
   as the application's publisher, and the docs landing page has its own
   description.
