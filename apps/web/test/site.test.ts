@@ -24,7 +24,7 @@ describe('robots', () => {
     })
       .filter((entry) => entry.isDirectory())
       .map((entry) => `/${entry.name}`)
-    for (const route of [...routes, '/admin']) {
+    for (const route of [...routes, '/admin', '/new-org']) {
       expect(disallowed, route).toContain(route)
     }
   })
