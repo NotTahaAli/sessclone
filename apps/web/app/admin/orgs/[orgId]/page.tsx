@@ -8,6 +8,7 @@ import { InlineName } from '../../../(dashboard)/inline-name'
 import { AddOrgRateForm, DeleteOrgRate } from './org-rate-form'
 import { PageHeader } from '../../../(dashboard)/page-header'
 import { Field, Row, SectionBreak } from '../../../_ui/primitives'
+import { approvalRequired } from '../../../../lib/approval'
 import { asOperator } from '../../../../lib/platform-admin'
 import {
   listOrgRates,
@@ -206,7 +207,8 @@ export default async function Page({
 
       {/* Waiting, as the Org list counts it: never approved, so nothing to
           keep. The database refuses anything past waiting either way. */}
-      {org.status === null || org.status === 'inactive' ? (
+      {approvalRequired() &&
+      (org.status === null || org.status === 'inactive') ? (
         <>
           <SectionBreak>Delete</SectionBreak>
           <div className="py-3">

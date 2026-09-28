@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation'
 import { after } from 'next/server'
 import { z } from 'zod'
 
-import { approvalRequired } from '../../lib/approval'
+import { approvalRequired, isLocked } from '../../lib/approval'
 import { createOwnOrg, PendingOrgExists } from '../../lib/auth/bootstrap'
 import { parsePlan } from '../../lib/auth/plan'
 import { asViewer } from '../../lib/db'
@@ -183,6 +183,10 @@ export const deleteWaitingOrg = async (
   const orgId = Id.safeParse(formData.get('orgId'))
   if (!orgId.success || orgId.data !== viewer.orgId) {
     return { error: 'Reload the page: this is not the Org you have open.' }
+  }
+  // With approval off nothing waits: an Org with no subscription row is live.
+  if (!isLocked(viewer.subscriptionStatus)) {
+    return { error: 'This Org is not waiting for approval.' }
   }
   const typed = z.string().trim().safeParse(formData.get('name'))
   if (!typed.success || typed.data !== viewer.orgName.trim()) {

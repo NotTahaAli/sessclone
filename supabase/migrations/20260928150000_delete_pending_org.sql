@@ -4,8 +4,8 @@
 -- no subscription row at all. A cancelled Org was approved once and keeps its
 -- history, so it stays.
 --
--- Who: an Owner of that Org, or a platform admin from the Admin panel. An
--- Owner in their deletion grace does not count, as nowhere else does.
+-- Who: an Owner of that Org, or a platform admin from the Admin panel.
+-- Nobody in their deletion grace.
 --
 -- What: the row goes for real, and with it everything that cascades from it —
 -- memberships, invitations, the plan asked for and its events. A waiting Org
@@ -19,32 +19,37 @@
 create or replace function sessclone_delete_pending_org(target uuid)
   returns boolean language plpgsql security definer
   set search_path = pg_catalog, public, pg_temp as $$
+declare
+  current subscription_status;
 begin
-  if not (
+  if exists (
+    select 1 from users
+     where id = sessclone_user_id() and deletion_requested_at is not null
+  ) or not (
     sessclone_is_platform_admin()
     or exists (
       select 1 from members member
-        join users person on person.id = member.user_id
        where member.org_id = target
          and member.user_id = sessclone_user_id()
          and member.removed_at is null
          and member.role = 'owner'
-         and person.deletion_requested_at is null
     )
   ) then
     return false;
   end if;
 
-  -- Holds the Org against an approval landing between the check and the delete.
   perform 1 from orgs where id = target for update;
   if not found then
     return false;
   end if;
 
-  if exists (
-    select 1 from subscriptions
-     where org_id = target and status <> 'inactive'
-  ) then
+  -- Locks the subscription before reading its status, so an approval landing
+  -- at the same time is either read here (the lock waits for it and re-reads
+  -- the row) or waits for the delete. Never deleted from under it.
+  select status into current from subscriptions
+   where org_id = target
+   for update;
+  if current is not null and current <> 'inactive' then
     raise exception 'org is not waiting for approval';
   end if;
 

@@ -74,15 +74,19 @@ test('nobody but an Owner or a platform admin can', async () => {
   expect(await exists()).toBe(true)
 })
 
-test('an Owner in their deletion grace cannot', async () => {
-  await sql.begin(async (tx) => {
+const startGrace = (userId: string) =>
+  sql.begin(async (tx) => {
     await tx`select set_config('sessclone.account_deletion', 'on', true)`
     await tx`
-      update users set deletion_requested_at = now()
-       where id = ${fixture.acme.users.owner}
+      update users set deletion_requested_at = now() where id = ${userId}
     `
   })
+
+test('nobody in their deletion grace can, Owner or platform admin', async () => {
+  await startGrace(fixture.acme.users.owner)
+  await startGrace(fixture.platformAdmin.userId)
   expect(await remove(fixture.acme.users.owner)).toBe('forbidden')
+  expect(await remove(fixture.platformAdmin.userId)).toBe('forbidden')
   expect(await exists()).toBe(true)
 })
 

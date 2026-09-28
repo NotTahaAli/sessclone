@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
+import { approvalRequired } from '../../../../lib/approval'
 import { asOperator, currentOperator } from '../../../../lib/platform-admin'
 import { setSubscription } from '../../../../lib/subscriptions'
 import { NAME_LIMIT, setOrgOperatorName } from '../../../../lib/names'
@@ -150,6 +151,10 @@ export const deleteOrgAction = async (
 ): Promise<OrgActionState> => {
   if (!(await currentOperator())) {
     return { error: 'Only a platform administrator may delete an Org here.' }
+  }
+  // With approval off nothing waits: an Org with no subscription row is live.
+  if (!approvalRequired()) {
+    return { error: 'Nothing waits for approval on this deployment.' }
   }
 
   const orgId = z.uuid().safeParse(formData.get('orgId'))
