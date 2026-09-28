@@ -5,6 +5,15 @@
   "author": {
     "name": "sessclone contributors"
   },
+  "icon": "./.claude-plugin/icon.svg",
+  "keywords": [
+    "usage",
+    "cost",
+    "tokens",
+    "analytics",
+    "teams",
+    "observability"
+  ],
   "userConfig": {
     "url": {
       "type": "string",
