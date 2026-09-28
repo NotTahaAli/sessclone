@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 
+import { DeleteWaitingOrg } from './delete-waiting-org'
+import { deleteWaitingOrg } from './org-actions'
 import { signOut } from '../sign-in/actions'
 import { Button, buttonClass } from '../_ui/primitives'
 
@@ -16,13 +18,19 @@ import { Button, buttonClass } from '../_ui/primitives'
  */
 export function Waiting({
   cancelled,
+  orgId,
   orgName,
   planName,
   operator,
+  deletable,
   children,
 }: {
   cancelled: boolean
+  orgId: string
   orgName: string
+  /** Its Owner may delete an Org still on the waitlist; a cancelled one
+   * keeps its history. */
+  deletable: boolean
   /** The plan asked for at sign-up, when there is a subscription row. */
   planName: string | null
   /** A platform admin whose own Org is locked — the first sign-in on a fresh
@@ -56,6 +64,15 @@ export function Waiting({
             <Button type="submit">Sign out</Button>
           </form>
         </div>
+        {deletable && !cancelled ? (
+          <div className="border-rule mt-8 border-t pt-4">
+            <DeleteWaitingOrg
+              orgId={orgId}
+              orgName={orgName}
+              action={deleteWaitingOrg}
+            />
+          </div>
+        ) : null}
       </main>
     </div>
   )
