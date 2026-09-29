@@ -67,7 +67,11 @@ export function PillMenu({
   return (
     <>
       <button ref={pill} type="button" popoverTarget={id} className={pillClass}>
-        <span className="shrink-0">{label}</span>
+        {/* The detail gives way first; the label truncates only once it alone
+            fills the pill, leaving the chevron's 18px (12px and the gap). */}
+        <span className="max-w-[calc(100%-18px)] shrink-0 truncate">
+          {label}
+        </span>
         {detail ? (
           <span className="text-text-muted truncate text-caption">
             · {detail}
