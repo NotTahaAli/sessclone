@@ -21,6 +21,21 @@ import { ChevronDown, pillClass } from './primitives'
 // the pill, right edges aligned, as it opens.
 // ponytail: not re-placed on a resize while open; close and reopen fixes it.
 
+/** The menu's `w-64`, which placing it needs before it has a box. */
+const MENU_WIDTH = 256
+
+/** The menu's right offset: under the pill, right edges aligned, but never
+ * past 8px from either side of the viewport. A pill near the left edge, as a
+ * phone wraps them, would otherwise push the menu off the screen. */
+export const menuRight = (viewport: number, pillRight: number) =>
+  Math.max(
+    8,
+    Math.min(
+      viewport - pillRight,
+      viewport - Math.min(MENU_WIDTH, viewport - 16) - 8,
+    ),
+  )
+
 export function PillMenu({
   label,
   detail,
@@ -44,7 +59,7 @@ export function PillMenu({
     if (event.newState === 'open' && box) {
       setPlace({
         top: box.bottom + 6,
-        right: Math.max(8, document.documentElement.clientWidth - box.right),
+        right: menuRight(document.documentElement.clientWidth, box.right),
       })
     }
   }, [])
@@ -52,7 +67,11 @@ export function PillMenu({
   return (
     <>
       <button ref={pill} type="button" popoverTarget={id} className={pillClass}>
-        <span className="truncate">{label}</span>
+        {/* The detail gives way first; the label truncates only once it alone
+            fills the pill, leaving the chevron's 18px (12px and the gap). */}
+        <span className="max-w-[calc(100%-18px)] shrink-0 truncate">
+          {label}
+        </span>
         {detail ? (
           <span className="text-text-muted truncate text-caption">
             · {detail}

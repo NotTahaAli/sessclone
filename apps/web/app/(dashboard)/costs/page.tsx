@@ -130,12 +130,21 @@ export default async function Costs({
         actions={
           showChrome ? (
             <>
-              <RangeControl path="/costs" resolved={resolved} query={params} />
-              <ViewMenu
-                current={view}
-                params={params}
-                failuresCount={failuresCount}
-              />
+              {/* One group, so on a phone the period and the view wrap under
+                  the title together and truncate, rather than the view
+                  dropping to a line of its own. */}
+              <div className="flex min-w-0 items-center gap-2.5">
+                <RangeControl
+                  path="/costs"
+                  resolved={resolved}
+                  query={params}
+                />
+                <ViewMenu
+                  current={view}
+                  params={params}
+                  failuresCount={failuresCount}
+                />
+              </div>
               <HistoryNote
                 range={range}
                 historyDays={viewer.historyDays}
