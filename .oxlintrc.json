@@ -20,6 +20,14 @@
     "suspicious": "error",
     "perf": "error"
   },
+  "overrides": [
+    {
+      // oxlint 1.85 widened this rule to helpers declared inside a test's
+      // describe block, where they sit next to the cases that read them.
+      "files": ["**/*.test.ts", "**/*.test.tsx"],
+      "rules": { "unicorn/consistent-function-scoping": "off" }
+    }
+  ],
   "ignorePatterns": [
     "**/node_modules/**",
     "**/.next/**",

@@ -71,10 +71,9 @@ test('a delete that S3 refuses per key is a failure, not a success', async () =>
   // `send` is overloaded, so its mock's parameter resolves to `void` and the
   // answer has to be asserted in. Test-only, and the assertion is what makes
   // the S3 answer shape explicit rather than hiding it.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- overloaded signature, see above
   const send = vi.spyOn(S3Client.prototype, 'send').mockResolvedValue({
     Errors: [{ Key: 'orgs/a/one.jsonl', Code: 'AccessDenied' }],
-  } as never)
+  } as never) // oxlint-disable-line typescript/no-unsafe-type-assertion -- overloaded signature, see above
 
   await expect(deleteObjects(['orgs/a/one.jsonl'])).rejects.toThrow(
     /AccessDenied/,
