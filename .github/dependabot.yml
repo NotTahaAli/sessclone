@@ -11,6 +11,11 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+    # @types/node describes the Node the code runs on, which is the major in
+    # `.nvmrc` and `engines`. Its majors move with that Node, by hand.
+    ignore:
+      - dependency-name: '@types/node'
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
     directory: /
