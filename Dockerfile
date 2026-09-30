@@ -7,7 +7,7 @@
 # The versions are pinned because an unpinned base silently changes the Node a
 # hook runs under, and `packages/shared` is TypeScript that Node strips at
 # runtime — a feature with a floor (22.18) rather than a polyfill.
-FROM node:22.23.2-trixie-slim AS build
+FROM node:22.23.3-trixie-slim AS build
 
 # Corepack reads `packageManager` from package.json, which is where this
 # repo's pnpm version is already pinned.
@@ -45,7 +45,7 @@ ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL \
     ENABLE_DEMO=$ENABLE_DEMO
 RUN pnpm --filter web build
 
-FROM node:22.23.2-trixie-slim AS run
+FROM node:22.23.3-trixie-slim AS run
 WORKDIR /app/apps/web
 ENV NODE_ENV=production
 
