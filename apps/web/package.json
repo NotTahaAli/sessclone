@@ -30,7 +30,7 @@
     "fumadocs-ui": "16.15.14",
     "lucide-react": "1.48.0",
     "next": "catalog:",
-    "nodemailer": "10.0.10",
+    "nodemailer": "10.0.11",
     "postgres": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
