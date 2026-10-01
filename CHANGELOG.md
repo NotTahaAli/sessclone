@@ -6,6 +6,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-01
+
+Deploy the web app, then installs pick the plugin up with `/plugin update
+sessclone@sessclone`. No migrations.
+
 ### Added
 
 - Approving an Org from the Admin panel emails its Owners that they are in,
@@ -14,6 +19,17 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A new key shows the whole setup in order (add the marketplace, install
   with the key, restart Claude Code), and the empty Costs and Devices pages
   say what to do next.
+
+### Fixed
+
+- On a Node older than 22.18, every session start says which Node Claude Code
+  is running the hooks on, that nothing is being collected, and how to fix it
+  (a newer `node` on Claude Code's PATH, then a restart), instead of calling
+  it a configuration problem. On a machine, the sessions from meanwhile are
+  sent over the next session starts.
+- On that old Node, the per-turn archive hook no longer prints a stack trace
+  into the session after every turn in a cloud container, and
+  `scripts/verify-collector.mjs` names the Node instead of crashing.
 
 ## [0.4.0] - 2026-09-27
 
@@ -215,7 +231,8 @@ The first public release.
 - Self-hosting: a Dockerfile, `compose.yaml` and a guide, free at any size
   under AGPL-3.0-only with the additional term in `NOTICE.md`.
 
-[Unreleased]: https://github.com/NotTahaAli/sessclone/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/NotTahaAli/sessclone/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/NotTahaAli/sessclone/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/NotTahaAli/sessclone/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/NotTahaAli/sessclone/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/NotTahaAli/sessclone/compare/v0.2.0...v0.2.1

@@ -18,13 +18,19 @@
 // `scripts/` directory and no `node_modules` beside it (PR #12), so there is no
 // copy of this file on an installed machine to run instead.
 
+import { nodeProblem } from '../packages/plugin/src/configuration.mjs'
 import { throughProxy } from '../packages/plugin/src/proxy.mjs'
-import {
-  format,
-  formatCount,
-  collect,
-  handCount,
-} from '../packages/plugin/src/verify.mjs'
+
+// `verify.mjs` imports `packages/shared` as TypeScript, which an old Node
+// cannot load: imported at the top, this printed a stack trace on exactly the
+// Node it should be naming. So the Node first, then the import.
+const node = nodeProblem(process.versions.node)
+if (node) {
+  process.stderr.write(`${node}\n`)
+  process.exit(1)
+}
+const { format, formatCount, collect, handCount } =
+  await import('../packages/plugin/src/verify.mjs')
 
 // Ticket 98: the probe takes the route the hooks take, proxy included.
 throughProxy()

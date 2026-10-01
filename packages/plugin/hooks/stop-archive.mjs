@@ -14,11 +14,10 @@
 // loses that turn's lines, never the rest. The deployment still decides:
 // nothing leaves the machine unless this Member has opted in.
 //
-// Local machines are skipped before anything else runs: `SessionEnd` and the
+// Local machines are skipped before anything is read or sent: `SessionEnd` and the
 // sweep already cover them, and a full upload per turn is bytes they need not
 // spend. Silent and exit 0 for the reasons `stop.mjs` gives.
 
-import { archiveAfterTurn, archivesEveryTurn } from '../src/archive.mjs'
 import { readConfiguration } from '../src/configuration.mjs'
 import { debugFailure } from '../src/debug.mjs'
 import { deadlineIn } from '../src/deadline.mjs'
@@ -44,11 +43,17 @@ const readStdin = async () => {
   return input
 }
 
-if (archivesEveryTurn(process.env)) {
-  // Ticket 98: the upload has to go through the proxy too.
-  throughProxy()
-  const deadline = deadlineIn(HOOK_BUDGET_MS)
-  try {
+// `archive.mjs` imports `packages/shared` as TypeScript, which a Node below
+// 22.18 cannot load. Imported at the top, it threw before any handler existed
+// and printed a stack trace into the session after every turn; here it fails
+// silently like every other hook, and session start says why.
+try {
+  const { archiveAfterTurn, archivesEveryTurn } =
+    await import('../src/archive.mjs')
+  if (archivesEveryTurn(process.env)) {
+    // Ticket 98: the upload has to go through the proxy too.
+    throughProxy()
+    const deadline = deadlineIn(HOOK_BUDGET_MS)
     const event = JSON.parse(await readStdin())
     await archiveAfterTurn({
       configuration: readConfiguration(),
@@ -58,8 +63,8 @@ if (archivesEveryTurn(process.env)) {
       deadline,
       uploadTimeoutMs: UPLOAD_BUDGET_MS,
     })
-  } catch (error) {
-    // Deliberately silent unless somebody is looking: see `src/debug.mjs`.
-    debugFailure('the per-turn archive', error)
   }
+} catch (error) {
+  // Deliberately silent unless somebody is looking: see `src/debug.mjs`.
+  debugFailure('the per-turn archive', error)
 }
