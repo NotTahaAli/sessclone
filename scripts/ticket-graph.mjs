@@ -191,6 +191,13 @@ const PHASES = [
     pos: [270, 1000],
     range: [139, 141],
   },
+  {
+    id: 'contrib',
+    label: 'First Issues',
+    type: 'frontend',
+    pos: [40, 1000],
+    range: [153, 157],
+  },
 ]
 
 const phaseOf = (n) =>
