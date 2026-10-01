@@ -52,7 +52,9 @@ export default async function Join({
   // spent, withdrawn or invented one resolves to nothing and names nothing.
   const [user, org] = await Promise.all([
     realSessionUser(),
-    readAnonymously((tx) => invitationOrg(tx, token)),
+    // Decoration, so a database that cannot be reached names nothing
+    // rather than taking the page down.
+    readAnonymously((tx) => invitationOrg(tx, token)).catch(() => null),
   ])
   const invitedTo = org ? <InvitedTo org={org} /> : null
 

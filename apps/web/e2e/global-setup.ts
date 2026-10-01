@@ -95,6 +95,8 @@ export default async function globalSetup(config: FullConfig) {
     with alpha as (select id from orgs where name = 'Alpha'),
     inviter as (
       select member.id from members member join alpha on alpha.id = member.org_id
+       where member.role = 'owner'
+       limit 1
     ),
     teammate as (
       insert into users (email) values ('teammate@alpha.test') returning id

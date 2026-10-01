@@ -161,11 +161,13 @@ async function WithoutOrg({
     <main className="bg-ground text-text mx-auto max-w-2xl p-6">
       <h1 className="text-heading-lg">No Org yet</h1>
       <p className="text-text-secondary mt-2 text-body">
-        {invites === null
-          ? 'You are signed in, but this account is not a Member of any Org, and the deployment’s database is not reachable right now.'
-          : invites.length > 0
-            ? 'You are signed in, but not in an Org yet. Accept an invitation to join that Org.'
-            : 'You are signed in, but this account is not a Member of any Org. Ask an Owner or Admin of your team’s Org for an invitation, or start one of your own.'}
+        {!user
+          ? 'This session is not one this deployment can read. Sign out and sign in again.'
+          : invites === null
+            ? 'You are signed in, but this account is not a Member of any Org, and the deployment’s database is not reachable right now.'
+            : invites.length > 0
+              ? 'You are signed in, but not in an Org yet. Accept an invitation to join that Org.'
+              : 'You are signed in, but this account is not a Member of any Org. Ask an Owner or Admin of your team’s Org for an invitation, or start one of your own.'}
       </p>
       {invites?.length ? (
         <div className="border-rule mt-4 max-w-sm rounded-md border">

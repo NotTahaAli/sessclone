@@ -108,7 +108,7 @@ export const sendMagicLink = async (formData: FormData) => {
  * as somebody else passes its own path as `next` (ticket 161), so signing in
  * as the right address comes back to it rather than to the dashboard.
  */
-export const signOut = async (formData?: FormData) => {
+export const signOut = async (formData?: unknown) => {
   const supabase = await supabaseServer()
   await supabase.auth.signOut()
 
@@ -122,7 +122,12 @@ export const signOut = async (formData?: FormData) => {
   store.delete(DEMO_COOKIE)
 
   // Only an invitation's path: anything else is the plain way out.
-  const token = invitationToken(safeNext(formData?.get('next')))
+  const token = invitationToken(
+    safeNext(
+      // A public action: anything but a form is the plain way out.
+      formData instanceof FormData ? formData.get('next') : null,
+    ),
+  )
   redirect(
     token
       ? `/sign-in?next=${encodeURIComponent(invitePath(token))}`

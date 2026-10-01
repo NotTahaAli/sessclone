@@ -34,11 +34,14 @@ export function PersonControls({
 }) {
   const [state, action, pending] = useActionState(run, null)
   const [picked, setPicked] = useState(role)
-  const [shown, setShown] = useState(role)
+  // What the row shows, and the form's key below.
+  const saved = `${role}:${removed}`
+  const [shown, setShown] = useState(saved)
 
-  // The page re-renders with the saved Role; the pill follows it.
-  if (shown !== role) {
-    setShown(role)
+  // The page re-renders with the saved Role or removal; the pill follows it,
+  // dropping any pick left unsaved from before.
+  if (shown !== saved) {
+    setShown(saved)
     setPicked(role)
   }
 
@@ -57,7 +60,7 @@ export function PersonControls({
           to go back to; `onReset` keeps a refused pick in step with the
           select it was reset to. */}
       <form
-        key={`${role}:${removed}`}
+        key={saved}
         action={action}
         onReset={reset}
         className="flex items-center gap-1.5"

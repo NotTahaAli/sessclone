@@ -24,6 +24,26 @@ test('a saved Role stays on the Role picker', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Save' })).toHaveCount(0)
 })
 
+test('an unsaved pick does not outlive a removal', async ({ page }) => {
+  await page.goto('/settings/org/members')
+  const role = page.getByRole('combobox', {
+    name: 'Role for teammate@alpha.test',
+  })
+  const saved = await role.inputValue()
+
+  await role.selectOption(saved === 'admin' ? 'member' : 'admin')
+  await page.getByRole('button', { name: 'Remove teammate@alpha.test' }).click()
+  await page
+    .getByRole('button', { name: 'Re-admit teammate@alpha.test' })
+    .click()
+
+  await expect(
+    page.getByRole('button', { name: 'Remove teammate@alpha.test' }),
+  ).toBeVisible()
+  await expect(role).toHaveValue(saved)
+  await expect(page.getByRole('button', { name: 'Save' })).toHaveCount(0)
+})
+
 test.describe('somebody signed in with no Org', () => {
   test.use({ storageState: INVITEE_STATE })
 
