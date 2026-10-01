@@ -82,6 +82,14 @@ instead, and setting it up in Claude Code cloud environments.
 
 ### Self-host it
 
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FNotTahaAli%2Fsessclone&root-directory=apps%2Fweb&project-name=sessclone&repository-name=sessclone&env=DATABASE_URL,INGEST_DATABASE_URL,NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,NEXT_PUBLIC_APP_URL&envDescription=Two%20database%20connections%20%28the%20dashboard%20role%20and%20the%20owning%20role%29%2C%20your%20Supabase%20project%20URL%20and%20anon%20key%2C%20and%20the%20address%20this%20deployment%20will%20answer%20on.&envLink=https%3A%2F%2Fsessclone.com%2Fdocs%2Fself-hosting%23quick-start-vercel-and-supabase)
+
+The quickest path is Supabase for the database and sign-in plus Vercel for the
+app: create the Supabase project, run `node apps/web/scripts/setup-db.mjs` once
+to migrate it, then press the button above.
+[Quick start](https://sessclone.com/docs/self-hosting#quick-start-vercel-and-supabase)
+has the six steps.
+
 Self-hosting is free at any size. You supply a Postgres 16+ cluster, an
 S3-compatible bucket (optional; without one, archival is off) and a Supabase
 project for sign-in. [The self-hosting guide](https://sessclone.com/docs/self-hosting) goes from a

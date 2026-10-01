@@ -8,6 +8,63 @@ fails CI if a provider's hostname ever appears in application code.
 This page goes from a clone to the first collected Turn. `docs/configuration.md`
 is the reference for every variable; this is the order to do them in.
 
+## Quick start: Vercel and Supabase
+
+The shortest path, and it fits both providers' free plans to start: Supabase holds the database and sign-in, Vercel runs the app. Supabase's free plan has a small database and pauses a project left idle, so a team collecting every day outgrows it; its pricing page has the current limits. Storage stays off until you add a
+bucket ([checking one](#3-check-your-bucket-actually-works)). Vercel's Hobby plan is for personal, non-commercial
+use; a company deploying for its team wants Vercel Pro, or the
+[Docker path](#4-run-it) on its own machine.
+
+1. **Create a Supabase project.** From **Connect**, copy the project URL and the **Transaction pooler** connection string, and from **Project Settings → API Keys** the legacy `anon` key. Choose a password for the dashboard's role
+   — `openssl rand -hex 24` gives one with nothing to escape in a URL.
+
+2. **Set up the database**, from a clone:
+
+   ```bash
+   git clone https://github.com/NotTahaAli/sessclone && cd sessclone
+   pnpm install
+   INGEST_DATABASE_URL='postgresql://postgres.<ref>:<database password>@<pooler host>:6543/postgres' \
+   DATABASE_URL='postgresql://sessclone_app.<ref>:<the password you chose>@<pooler host>:6543/postgres' \
+     node apps/web/scripts/setup-db.mjs
+   ```
+
+   It applies every migration, gives `sessclone_app` its login, and ends on
+   `DATABASE_URL reads as sessclone_app: row-level security applies`. Anything else is the line to fix, and running it again picks up where it stopped. A first run that stopped part way may, on the second run, hold back a file "to run after the deploy": with nothing deployed yet, add `--after-deploy` straight away.
+
+3. **Deploy.** [Deploy to Vercel](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FNotTahaAli%2Fsessclone&root-directory=apps%2Fweb&project-name=sessclone&repository-name=sessclone&env=DATABASE_URL,INGEST_DATABASE_URL,NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,NEXT_PUBLIC_APP_URL&envDescription=Two%20database%20connections%20%28the%20dashboard%20role%20and%20the%20owning%20role%29%2C%20your%20Supabase%20project%20URL%20and%20anon%20key%2C%20and%20the%20address%20this%20deployment%20will%20answer%20on.&envLink=https%3A%2F%2Fsessclone.com%2Fdocs%2Fself-hosting%23quick-start-vercel-and-supabase)
+   copies the repository into your GitHub account and asks for five values:
+   the two URLs from step 2, the Supabase URL and `anon` key, and
+   `NEXT_PUBLIC_APP_URL`: enter `https://<project name>.vercel.app` for the project name on that form, no trailing slash. If Vercel gives the project a different domain (the name was taken), or you add your own, change it to that and redeploy: the browser bundle reads it at build time.
+
+4. **Point sign-in at it.** In Supabase, **Authentication → URL
+   Configuration**: set **Site URL** to `NEXT_PUBLIC_APP_URL` and add
+   `NEXT_PUBLIC_APP_URL/auth/callback` to **Redirect URLs**. Email sign-in
+   then works as it is; Supabase's own mailer sends only a few emails an hour,
+   so give it SMTP before inviting a team. GitHub sign-in needs a GitHub
+   **OAuth App**, not a GitHub App
+   ([why](#5-sign-in-and-collect-the-first-turn)).
+
+5. **Sign in, and let yourself in.** Your first sign-in creates an Org that
+   waits for approval. Make yourself platform admin, sign out and back in,
+   and set your Org to `active` under **/admin → Orgs**:
+
+   ```bash
+   INGEST_DATABASE_URL='…same as step 2…' \
+     node apps/web/scripts/setup-db.mjs --admin you@example.com
+   ```
+
+   On a deployment only you can sign up to (sign-ups disabled or allow-listed in Supabase), you can skip approval instead: set `SIGNUP_APPROVAL=off` in the Vercel project and redeploy.
+
+6. **Collect.** Issue a key under **Keys** and install the Collector with
+   your deployment's URL ([install](install.md)).
+
+Later, as needed: the retention schedule (set `CRON_SECRET` and
+`RETENTION_SWEEP_SECRET` to one value; `vercel.json` already schedules the
+call), a bucket for transcripts, and SMTP for invitation email
+([configuration](configuration.md)). **Upgrading**: the button made a copy, not a fork, so add this repository as a remote once (`git remote add upstream https://github.com/NotTahaAli/sessclone`), then `git pull upstream main`, run step 2's command, and push. The script holds back any migration whose header says to run it after the deploy; once Vercel has deployed, run it again with `--after-deploy`. Use the deployment's own `DATABASE_URL`: a different password in it would replace the live one.
+
+The rest of this page is the same thing by hand, on any Postgres and any host.
+
 ## What you need first
 
 | Thing                     | Why                                                                                             |
@@ -85,6 +142,22 @@ errors on the first file. Apply only the files added since your last upgrade,
 in filename order, and read the header of each one first — the retention
 warning below is an example of an upgrade that acts on data.
 
+Or, with the two roles created, let one script do the loop, the ledger and
+the check that `DATABASE_URL` is the unprivileged role — from a clone after
+`pnpm install`, with the two URLs the application will use:
+
+```bash
+INGEST_DATABASE_URL="$OWNER_URL" \
+DATABASE_URL="postgres://sessclone_app:choose-another@your-host:5432/sessclone" \
+  node apps/web/scripts/setup-db.mjs
+```
+
+It records what it applied in `supabase_migrations.schema_migrations`, so a
+second run applies only what is new and `schema-drift.mjs` below has a ledger
+to read. A database already migrated by the loop has tables and no ledger; the
+script refuses it rather than re-running the first file, so keep upgrading
+that one by hand.
+
 Then point `DATABASE_URL` at `sessclone_app` and `INGEST_DATABASE_URL` at
 `sessclone`. `apps/web/test/app-role.test.ts` fails if the dashboard is ever
 pointed at a privileged role.
@@ -108,10 +181,7 @@ deploy, it fails every archival upload until the new code is live.
 
 It names every migration the checkout has and the database does not, and
 exits non-zero when there are any. It reads
-`supabase_migrations.schema_migrations`, which only the Supabase CLI and the
-Management API write: applying the files with the `psql` loop above leaves no
-ledger, and the script says so and stops rather than calling every migration
-missing.
+`supabase_migrations.schema_migrations`, which `setup-db.mjs`, the Supabase CLI and the Management API write: applying the files with the `psql` loop above leaves no ledger, and the script says so and stops rather than calling every migration missing. It compares the ledger's names with the file names, and the CLI records a shorter name, so a ledger the CLI wrote reads as missing everything.
 
 ## 3. Check your bucket actually works
 
