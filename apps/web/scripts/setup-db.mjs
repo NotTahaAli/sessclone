@@ -13,7 +13,8 @@
 //   2. records each in `supabase_migrations.schema_migrations`, the ledger
 //      `schema-drift.mjs` reads, creating it if it is not there;
 //   3. gives `sessclone_app` its login and the password in `DATABASE_URL`,
-//      unless that URL already connects;
+//      unless that URL already connects, and never replaces the password of
+//      a role that already has a login;
 //   4. connects as `DATABASE_URL` and checks it is the unprivileged role,
 //      because pointing it at the owner switches row-level security off with
 //      no error anywhere to say so.
@@ -215,6 +216,19 @@ const ensureAppRole = async (owner, appUrl) => {
     // Only a refused login is ours to fix. Anything else — a mistyped host,
     // the network — must not rotate the password a live deployment uses.
     if (!['28P01', '28000'].includes(error.code)) throw error
+  }
+  // A refused login from a role that can already log in is a wrong password
+  // in DATABASE_URL, not a first run. The role is cluster-wide, so setting it
+  // here would lock out whichever deployment holds the real one.
+  const [role] = await owner`
+    select rolcanlogin from pg_roles where rolname = 'sessclone_app'
+  `
+  if (role?.rolcanlogin) {
+    throw new Error(
+      'sessclone_app refused the password in DATABASE_URL, and already has ' +
+        'a login. Check DATABASE_URL; to change the password on purpose, run: ' +
+        "alter role sessclone_app password '<the new password>';",
+    )
   }
   // Sent as a SCRAM verifier, never as the password, so no statement log
   // holds it; `format('%L')` quotes it because `alter role` takes no bind.

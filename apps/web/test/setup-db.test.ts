@@ -179,6 +179,38 @@ describe('setup against a database', () => {
     }
   }, 120_000)
 
+  // `sessclone_app` is cluster-wide: a mistyped password must stop the run,
+  // not become the password every deployment on this cluster logs in with.
+  it('refuses a wrong password for a role that can already log in', async () => {
+    const database = 'sessclone_setup_wrongpw'
+    await owner.unsafe(`drop database if exists ${database}`)
+    await owner.unsafe(`create database ${database}`)
+    const real = new URL(process.env.APP_DATABASE_URL!)
+    const wrong = new URL(withDatabase(real.toString(), database))
+    wrong.password = 'not-the-password'
+    try {
+      const result = await run({
+        INGEST_DATABASE_URL: withDatabase(process.env.DATABASE_URL!, database),
+        DATABASE_URL: wrong.toString(),
+      })
+      expect(result.code).toBe(1)
+      expect(result.out).toMatch(/already has a login/)
+      const app = postgres(real.toString(), { max: 1 })
+      try {
+        const [row] = await app`select current_user as role`
+        expect(row?.role).toBe('sessclone_app')
+      } finally {
+        await app.end()
+      }
+    } finally {
+      // Undo a rotation should the guard ever regress, so later suites log in.
+      await owner.unsafe(
+        `alter role sessclone_app password '${scram(decodeURIComponent(real.password))}'`,
+      )
+      await owner.unsafe(`drop database if exists ${database} with (force)`)
+    }
+  }, 120_000)
+
   // The password reaches the server only as this verifier; a wrong one would
   // lock the dashboard out of its own database.
   it('writes a SCRAM verifier Postgres accepts', async () => {
