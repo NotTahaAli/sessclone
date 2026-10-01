@@ -1,6 +1,6 @@
 import Link from 'next/link'
 
-import { siteFlags } from '../../lib/site-flags'
+import { siteFlags, siteLinks } from '../../lib/site-flags'
 import { LogoMark } from './logo'
 
 /**
@@ -11,11 +11,16 @@ import { LogoMark } from './logo'
  */
 export function AuthLogo() {
   const mark = <LogoMark size={28} className="text-text" />
-  if (!siteFlags().landing) return <div className="mb-4">{mark}</div>
+  const flags = siteFlags()
+  if (!flags.landing) return <div className="mb-4">{mark}</div>
+  const { logo } = siteLinks(flags)
   return (
+    // Not prefetched, like the dashboard's mark: most visitors here are
+    // signing in, not going back.
     <Link
-      href="/"
-      aria-label="SessClone home page"
+      href={logo.href}
+      prefetch={false}
+      aria-label={logo.label}
       className="hover:bg-surface-hover -m-1 mb-3 self-start rounded p-1"
     >
       {mark}
