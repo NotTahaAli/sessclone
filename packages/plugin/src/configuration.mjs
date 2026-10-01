@@ -44,17 +44,22 @@ export const DEFAULT_URL = 'https://sessclone.com'
  * 22.18 (and in 23.6 on the other line). Older Node throws
  * `Unknown file extension ".ts"` from inside a hook, where every failure is
  * swallowed — so a Member on Node 20 would see a plugin that installs, starts
- * cleanly and silently reports nothing. Checked once, at session start, where
- * it can be said out loud.
+ * cleanly and silently reports nothing. Checked first thing at session start,
+ * where it can be said out loud, every session until it is fixed.
  */
 export const MINIMUM_NODE = [22, 18]
 
 /**
- * A sentence naming the Node problem, or null.
+ * A sentence naming the Node problem and its fix, or null.
+ *
+ * A cloud container's fix is its environment's setup script, and its sessions
+ * leave with it, so nothing from meanwhile is promised there. On a machine the
+ * session-start sweep sends them, newest first, over the next session starts.
  *
  * @param {string} version `process.versions.node`.
+ * @param {Record<string, string | undefined>} [environment]
  */
-export const nodeProblem = (version) => {
+export const nodeProblem = (version, environment = process.env) => {
   const [major = 0, minor = 0] = version.split('.').map(Number)
   const [wantMajor, wantMinor] = MINIMUM_NODE
   const old =
@@ -62,9 +67,11 @@ export const nodeProblem = (version) => {
     (major === wantMajor && minor < wantMinor) ||
     // The 23 line never received type stripping by default before 23.6.
     (major === 23 && minor < 6)
-  return old
-    ? `Node ${version} is too old for the Collector, which needs ${wantMajor}.${wantMinor} or newer (or 24). Nothing will be collected from this machine until Claude Code runs on a newer Node.`
-    : null
+  if (!old) return null
+  const problem = `sessclone needs Node ${wantMajor}.${wantMinor} or newer (or 24), and Claude Code is running its hooks on Node ${version}, so nothing is being collected from this machine.`
+  return environment.CLAUDE_CODE_REMOTE?.trim() === 'true'
+    ? `${problem} Install a newer Node in this cloud environment's setup script.`
+    : `${problem} Install a newer Node as the \`node\` on Claude Code's PATH and restart Claude Code. Sessions from meanwhile are sent over the next session starts, while Claude Code still keeps them (30 days by default).`
 }
 
 /**
@@ -228,9 +235,6 @@ export const readConfiguration = (
   // one shell at a second deployment on purpose.
   const url = readUrl(env.SESSCLONE_URL?.trim() || option(env, 'url'))
   if ('problem' in url) problems.push(url.problem)
-
-  const node = nodeProblem(process.versions.node)
-  if (node) problems.push(node)
 
   const stateDir =
     env.SESSCLONE_STATE_DIR?.trim() || defaultStateDir(platform, env)

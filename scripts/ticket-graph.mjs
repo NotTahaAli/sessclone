@@ -94,8 +94,9 @@ const PHASES = [
     type: 'external',
     pos: [1190, 122],
     range: [66, 71],
-    // 150 (one-command self-hosting) extends ticket 67's self-host path.
-    also: [79, 96, 98, 99, 143, 150],
+    // 150 (one-command self-hosting) extends ticket 67's self-host path; 160
+    // (old Node says so) the Collector 143 shipped.
+    also: [79, 96, 98, 99, 143, 150, 160],
   },
   {
     id: 'archival',
