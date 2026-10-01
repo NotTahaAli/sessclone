@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'vitest'
 
-import { presetHref, presetRange, resolveRange } from '../lib/range'
+import { DEMO_USER_ID } from '../lib/demo'
+import { demoWindow } from '../lib/demo-data'
+import {
+  defaultPreset,
+  presetHref,
+  presetRange,
+  resolveRange,
+} from '../lib/range'
 
 // Ticket 53. Pure, so it is tested here rather than through a page: what has
 // to be right is which two dates a URL means, in the Org's timezone, and what
@@ -57,6 +64,7 @@ describe('the URL', () => {
     expect(resolveRange({}, 'UTC', NOW)).toEqual({
       range: { from: '2026-09-01', to: '2026-10-01' },
       preset: 'this-month',
+      fallback: 'this-month',
     })
   })
 
@@ -67,6 +75,7 @@ describe('the URL', () => {
       // 30 days ending today, today included, from `NOW` of 21 September.
       range: { from: '2026-08-23', to: '2026-09-22' },
       preset: 'last-30',
+      fallback: 'this-month',
     })
   })
 
@@ -75,7 +84,11 @@ describe('the URL', () => {
     // and what a person means by "to the 8th". The half-open end is the 9th.
     expect(
       resolveRange({ from: '2026-03-01', to: '2026-03-08' }, 'UTC', NOW),
-    ).toEqual({ range: { from: '2026-03-01', to: '2026-03-09' }, preset: null })
+    ).toEqual({
+      range: { from: '2026-03-01', to: '2026-03-09' },
+      preset: null,
+      fallback: 'this-month',
+    })
   })
 
   test('one day is a range of one day', () => {
@@ -127,6 +140,26 @@ describe('the URL', () => {
     )
     expect(presetHref('/costs', 'this-month', 'devices')).toBe(
       '/costs?view=devices',
+    )
+  })
+})
+
+describe('the demo default', () => {
+  // A demo day is seeded only once it has ended (`demoWindow`), so on the 1st
+  // "this month" holds nothing. The demo opens every period-less page on a
+  // window that reaches back into seeded days; a real Org keeps the month.
+  test('holds a seeded day on the 1st of a month', () => {
+    const first = new Date('2026-10-01T08:00:00Z')
+    const fallback = defaultPreset(DEMO_USER_ID)
+    const { range, preset } = resolveRange({}, 'UTC', first, fallback)
+    const seeded = demoWindow(first).at(-1)!
+    expect(preset).toBe('last-30')
+    expect(seeded >= range.from && seeded < range.to).toBe(true)
+  })
+
+  test('a real viewer keeps the calendar month', () => {
+    expect(defaultPreset('11111111-1111-4111-8111-111111111111')).toBe(
+      'this-month',
     )
   })
 })

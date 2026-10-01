@@ -2,7 +2,11 @@ import { notFound } from 'next/navigation'
 
 import { Cut } from './cut'
 import type { Dimension } from '../../../../../lib/breakdown'
-import { resolveRange, type RangeParams } from '../../../../../lib/range'
+import {
+  defaultPreset,
+  resolveRange,
+  type RangeParams,
+} from '../../../../../lib/range'
 import { currentViewer } from '../../../../../lib/viewer'
 
 // Ticket 88's first level: a ranked row was a dead end, and this is what is
@@ -52,7 +56,12 @@ export default async function CutPage({
         viewer={viewer}
         dimension={dimension}
         id={id}
-        resolved={resolveRange(query, viewer.orgTimezone)}
+        resolved={resolveRange(
+          query,
+          viewer.orgTimezone,
+          undefined,
+          defaultPreset(viewer.userId),
+        )}
         query={query}
       />
     </div>

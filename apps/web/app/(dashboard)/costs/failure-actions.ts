@@ -5,7 +5,7 @@ import { z } from 'zod'
 
 import { asViewer } from '../../../lib/db'
 import { markFailuresViewed } from '../../../lib/failures'
-import { resolveRange } from '../../../lib/range'
+import { defaultPreset, resolveRange } from '../../../lib/range'
 import { currentViewer } from '../../../lib/viewer'
 
 // Taha, 2026-09-23: "allow to mark failed as Viewed". One Session, or every
@@ -57,7 +57,12 @@ export const markFailuresViewedAction = async (
       orgId: viewer.orgId,
       viewerMemberId: viewer.memberId,
       timezone: viewer.orgTimezone,
-      range: resolveRange(period, viewer.orgTimezone).range,
+      range: resolveRange(
+        period,
+        viewer.orgTimezone,
+        undefined,
+        defaultPreset(viewer.userId),
+      ).range,
       session: memberId && sessionId ? { memberId, sessionId } : undefined,
       seenAt,
     }),
