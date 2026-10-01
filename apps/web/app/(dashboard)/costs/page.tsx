@@ -26,7 +26,11 @@ import { appUrl } from '../../../lib/auth/app-url'
 import { onboardingState, type OnboardingFacts } from '../../../lib/onboarding'
 import { type Breakdown, type Dimension } from '../../../lib/breakdown'
 import type { Failures } from '../../../lib/failures'
-import { resolveRange, type RangeParams } from '../../../lib/range'
+import {
+  defaultPreset,
+  resolveRange,
+  type RangeParams,
+} from '../../../lib/range'
 import { costsReads } from '../../../lib/page-reads'
 import { spendSeries, type SpendSeries } from '../../../lib/series'
 import { currentViewer } from '../../../lib/viewer'
@@ -68,7 +72,12 @@ export default async function Costs({
   // to a period. Anything the URL cannot mean falls back to the default rather
   // than failing the page.
   const params = await searchParams
-  const resolved = resolveRange(params, viewer.orgTimezone)
+  const resolved = resolveRange(
+    params,
+    viewer.orgTimezone,
+    undefined,
+    defaultPreset(viewer.userId),
+  )
   const { range } = resolved
   const view = resolveView(params.view)
 

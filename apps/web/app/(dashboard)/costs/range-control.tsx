@@ -7,8 +7,8 @@ import {
 import { buttonClass, inputClass } from '../../_ui/primitives'
 import { hrefWith, type Query } from '../query'
 import {
-  DEFAULT_PRESET,
   PRESETS,
+  periodPatch,
   type PresetKey,
   type ResolvedRange,
 } from '../../../lib/range'
@@ -69,7 +69,7 @@ export function RangeControl({
         <MenuItem
           key={item.key}
           on={preset === item.key}
-          href={hrefWith(path, query, periodPatch(item.key))}
+          href={hrefWith(path, query, periodPatch(item.key, resolved.fallback))}
         >
           {item.label}
         </MenuItem>
@@ -112,12 +112,5 @@ export function RangeControl({
     </PillMenu>
   )
 }
-
-/** A preset replaces whatever period was there, custom dates included. */
-const periodPatch = (key: PresetKey) => ({
-  range: key === DEFAULT_PRESET ? undefined : key,
-  from: undefined,
-  to: undefined,
-})
 
 export type { PresetKey }
