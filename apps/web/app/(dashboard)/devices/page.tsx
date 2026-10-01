@@ -22,6 +22,8 @@ import { currentViewer } from '../../../lib/viewer'
 
 const whole = new Intl.NumberFormat('en-US')
 
+const SET_UP_A_MACHINE = { href: '/keys', label: 'Set up a machine' }
+
 export default async function Page() {
   const viewer = await currentViewer()
   if (!viewer) notFound()
@@ -44,9 +46,11 @@ export default async function Page() {
       <PageHeader title="Devices" />
 
       {devices.length === 0 ? (
-        <EmptyState headline="Nothing has reported yet">
+        <EmptyState
+          headline="Nothing has reported yet"
+          action={SET_UP_A_MACHINE}
+        >
           A machine appears here the first time its Collector sends a Turn.
-          Install one from Keys, and this fills itself in.
         </EmptyState>
       ) : (
         <>

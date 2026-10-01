@@ -11,6 +11,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Approving an Org from the Admin panel emails its Owners that they are in,
   with a link to start, when SMTP is set. The waiting page says so instead of
   asking them to reload it.
+- A new key shows the whole setup in order (add the marketplace, install
+  with the key, restart Claude Code), and the empty Costs and Devices pages
+  say what to do next.
 
 ## [0.4.0] - 2026-09-27
 

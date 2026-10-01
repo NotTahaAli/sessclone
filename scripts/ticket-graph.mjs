@@ -138,10 +138,10 @@ const PHASES = [
     type: 'frontend',
     pos: [730, 800],
     range: [111, 117],
-    // Tickets 142 (email redesign) and 145 (Costs header on a phone) extend
-    // the visual overhaul; 147 (search and answer engines) the public site
-    // and docs.
-    also: [142, 145, 147],
+    // Tickets 142 (email redesign), 145 (Costs header on a phone) and 148
+    // (first-run steps) extend the visual overhaul; 147 (search and answer
+    // engines) the public site and docs.
+    also: [142, 145, 147, 148],
   },
   {
     id: 'approval',
