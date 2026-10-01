@@ -140,8 +140,9 @@ const PHASES = [
     range: [111, 117],
     // Tickets 142 (email redesign), 145 (Costs header on a phone) and 148
     // (first-run steps) extend the visual overhaul; 147 (search and answer
-    // engines) and 149 (page speed) the public site and docs.
-    also: [142, 145, 147, 148, 149],
+    // engines), 149 (page speed) and 151 (cost guides) the public site and
+    // docs.
+    also: [142, 145, 147, 148, 149, 151],
   },
   {
     id: 'approval',

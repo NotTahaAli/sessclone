@@ -1,0 +1,118 @@
+---
+title: Claude Code cache tokens explained
+description: What cache read and cache write tokens are in Claude Code usage, why they are most of a long session's tokens, the 5-minute and 1-hour cache lifetimes, and the habits that keep the cache warm.
+---
+
+Open the usage of any long Claude Code session and the biggest numbers are not
+input or output. They are **cache read** and **cache write** tokens, often in
+the hundreds of thousands while input is a few thousand. That is prompt caching
+working, and it is why Claude Code is affordable at all.
+
+## Why the numbers are so big
+
+The model remembers nothing between requests. On every turn, and after every
+batch of tool results, Claude Code re-sends the whole context: system prompt,
+tool definitions, CLAUDE.md, and every message and tool result so far
+([how Claude Code uses prompt caching](https://code.claude.com/docs/en/prompt-caching)).
+
+The API caches the start of each request, the **prefix**. When the next
+request begins with the same prefix, that part is read from the cache instead
+of being processed again. So each turn reports:
+
+- **Cache read**: the part of the history that matched the cache. Billed at a
+  fraction of the input rate.
+- **Cache write**: the new part, stored so the next turn can read it. Billed at
+  1.25x the input rate for the 5-minute cache, 2x for the 1-hour cache.
+- **Input**: tokens neither read from nor written to the cache. Usually small.
+
+A session's cache reads grow with every turn, because every turn re-reads
+everything before it.
+
+## What they cost
+
+From Anthropic's
+[pricing page](https://platform.claude.com/docs/en/about-claude/pricing),
+relative to a model's base input rate:
+
+| Operation        | Price       | Lasts                       |
+| ---------------- | ----------- | --------------------------- |
+| 5-minute write   | 1.25x input | 5 minutes                   |
+| 1-hour write     | 2x input    | 1 hour                      |
+| Cache read (hit) | 0.1x input  | Refreshes the same lifetime |
+
+The read price is lower on some models: 0.05x on Claude Opus 5.5 and 0.025x on
+Claude Fable 5.1 and Mythos 5.1. A 5-minute write pays for itself after one
+read, a 1-hour write after two.
+
+### A worked example
+
+Anthropic's [`/usage` example](https://code.claude.com/docs/en/costs#using-the-usage-command)
+is a Claude Sonnet 4.6 session: 1.2k input, 5.3k output, 940k cache read and
+50k cache write tokens, for $0.55. The cache reads alone are $0.28 of that,
+about half.
+
+Without caching, all 991k tokens of context would be billed as input at $3 per
+million: about $2.97, plus the same $0.08 of output, so roughly $3.05. Caching
+cut the session's cost by about 80%. The full arithmetic is in
+[Claude Code cost per session](/docs/claude-code-cost-per-session#worked-example).
+
+## The 5-minute and 1-hour lifetimes
+
+Each cache hit resets the timer, so the cache stays warm while you keep
+working. Which lifetime Claude Code asks for depends on how you pay
+([cache lifetime](https://code.claude.com/docs/en/prompt-caching#cache-lifetime)):
+
+| How you pay                               | Main conversation | Everything else (subagents, compaction, …) |
+| ----------------------------------------- | ----------------- | ------------------------------------------ |
+| Claude subscription, within plan usage    | 1 hour            | 5 minutes                                  |
+| Usage credits, API key, or cloud provider | 5 minutes         | 5 minutes                                  |
+
+The 1-hour cache costs more to write but survives a coffee break. On an API
+key you can ask for it with `"promptCacheTtl": "1h"` in settings or
+`CLAUDE_CODE_PROMPT_CACHE_TTL=1h`. It costs more on short bursts of work that
+never pause for five minutes.
+
+## What makes the cache miss
+
+A miss means the next request rewrites the whole prefix at the write rate. The
+common causes:
+
+- **A long break.** The first message after the lifetime expires reprocesses
+  the full context.
+- **Switching models.** Each model has its own cache.
+- **Changing effort level**, on most models.
+- **Turning on fast mode**, once per conversation.
+- **Connecting an MCP server or enabling a plugin that adds MCP tools**, when
+  tool search is off. With tool search on, the default on supported models,
+  the cache survives.
+- **Compaction.** It replaces the history with a summary, by design.
+- **Upgrading Claude Code**, for the first conversation after the upgrade.
+
+Editing files, editing CLAUDE.md, changing permission mode, running skills and
+`/rewind` all keep the cache.
+
+## Habits that keep cache costs down
+
+- Pick the model and effort level at the start of a session, not halfway.
+- `/clear` between unrelated tasks. A small context is cheap to re-read; a
+  day-long one is re-read on every message.
+- `/compact` at a natural break rather than waiting for auto-compaction
+  mid-task.
+- Check `/usage`: recent versions add a `Prompt cache (main)` line with the hit
+  rate and the likely cause of the last miss.
+
+## Cache tokens in SessClone
+
+SessClone records all five counts per Turn (input, output, cache read, and
+the 5-minute and 1-hour cache writes) and prices each at its own rate. A
+model's column on the Costs page breaks its tokens down by class (input,
+output, cache read, cache write) with the cost of each, so you can see how much
+of a person's or a Project's spend is history being re-read.
+
+The 5-minute and 1-hour writes are different prices, so SessClone keeps the
+split Claude Code reports. If a Turn reports a cache-write total without that
+split, its cost is shown as unpriced rather than guessed.
+
+To see this across every machine your team works on, including cloud sessions (which need Claude's API credentials, currently on Pro
+and Max plans only), [install the Collector](/docs/install), or read
+[how to track costs per developer and team](/docs/track-claude-code-costs-per-team).

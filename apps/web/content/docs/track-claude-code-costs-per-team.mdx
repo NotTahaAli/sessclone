@@ -1,0 +1,97 @@
+---
+title: How to track Claude Code costs per developer and team
+description: Where per-person Claude Code spend shows up for each kind of account, why mixed accounts and cloud sessions fall through the gaps, and how to see one total per Member, Project and Device.
+---
+
+Claude Code is billed by the token, and per-developer spend varies a lot.
+Anthropic's own [cost guide](https://code.claude.com/docs/en/costs) puts the
+enterprise average at around $13 per developer per active day and $150–250
+per developer per month, with 90% of users under $30 per active day. The
+spread is the reason to measure: a handful of long Opus sessions can outweigh
+the rest of a team.
+
+## What each account type already gives you
+
+Where the per-person numbers live depends on how each developer signs in to
+Claude Code:
+
+| How a developer signs in       | Where spend shows up                                                                                                                                                  | Per person?                                   |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| Claude for Teams or Enterprise | Spend report in claude.ai org analytics, for usage credits past the seat allowance                                                                                    | Yes, inside that organization                 |
+| Claude Console (API key)       | The Console usage page and Claude Code dashboard, or the [Claude Code Analytics API](https://platform.claude.com/docs/en/build-with-claude/claude-code-analytics-api) | Yes, inside that Console account              |
+| Bedrock, Google Cloud, Foundry | Your cloud billing console                                                                                                                                            | No, unless you add OpenTelemetry or a gateway |
+| Personal Pro or Max            | claude.ai **Settings > Usage** and the `/usage` plan bars: account-wide usage, no per-session dollars                                                                 | Only their own                                |
+
+Each of these is accurate for what it covers. The gaps open when a team does
+not fit in one row.
+
+## Where per-person tracking breaks
+
+- **Mixed accounts.** One developer is on a personal Max plan, another on the
+  company's Console key, a contractor on their own. No single vendor
+  dashboard sees all three.
+- **More than one machine.** `/usage` and local tools such as
+  [ccusage](https://github.com/ryoppippi/ccusage) read the files on the
+  machine they run on. A laptop, a dev server and a cloud session are three
+  separate answers that nobody adds up.
+- **Cloud sessions.** A Claude Code cloud container is discarded after
+  the session, and its usage files go with it. Nothing on anyone's laptop
+  records it.
+- **Cost by repository.** Vendor reports group by person and model. "What did
+  the payments service cost us this month?" needs each request tied to the
+  repository it ran in.
+
+## Track it with SessClone
+
+SessClone puts a small plugin, the **Collector**, on each machine. It reads the
+usage Claude Code already writes, and reports token counts, models, timings
+and the git remote of each Turn to your Org. It never sends a prompt or a
+file's contents, unless a Member opts in to transcript archival. Because it reports from the machine, it does not matter which
+account a developer signs in with.
+
+1. **Create an Org** at [sign up](/sign-up), or
+   [self-host](/docs/self-hosting) it for free.
+2. **Install the Collector** on each machine: two commands in Claude Code and
+   a restart. See [Install the Collector](/docs/install).
+3. **Add it to cloud environments** too, so cloud sessions are counted. The
+   same plugin runs from a
+   [cloud environment's setup script](/docs/install#in-a-claude-code-cloud-environment),
+   and every container a Member uses collapses into one Device. This needs
+   Claude's API credentials for cloud environments, which are offered on Pro
+   and Max plans only for now.
+4. **Invite your team.** Each person issues their own API key under **Keys**,
+   so their Turns land on them.
+
+Costs then reads the same data four ways:
+
+- **Over time**: a bar per day, opening that day's tokens by class and model,
+  then the Sessions that ran.
+- **People**: one row per Member, with their token table, a breakdown by
+  model, and their Sessions.
+- **Projects**: one row per repository, keyed on the normalised git remote, so
+  spend lands on the code that caused it.
+- **Devices**: one row per machine or cloud environment.
+
+Roles decide who sees what. Owners and Admins see the whole Org, a Manager sees
+only the Members in their Scope, and a Member sees their own usage.
+
+## What the number means
+
+Every cost in SessClone is an **estimate**: the Turn's tokens multiplied by the
+published per-token rate for its model at the time it ran. It is not your
+invoice. For subscription users it answers "what would this have cost on the
+API?", which is the figure to compare when deciding whether a seat, a Max plan
+or an API key is cheaper for a given person. A Turn on a model with no rate
+shows as unpriced rather than $0.
+
+[Claude Code cost per session](/docs/claude-code-cost-per-session) shows the
+arithmetic, and [cache tokens explained](/docs/claude-code-cache-tokens) covers
+the token class that usually dominates the bill.
+
+## Is SessClone the right tool?
+
+If you only need your own spend on one machine, `npx ccusage@latest` is
+quicker. If everyone is in one Claude organization, Anthropic's analytics may
+be enough. [SessClone vs ccusage vs Anthropic's analytics](/docs/compare)
+compares them side by side. Plans and prices for the hosted service are on the
+[pricing page](/pricing); self-hosting is free at any size.
