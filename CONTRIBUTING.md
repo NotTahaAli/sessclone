@@ -10,6 +10,24 @@ Thanks for looking. Bug reports, fixes, docs and features are all welcome.
 - **Setting up.** [`README.md`](README.md#development) has the install, the
   local Postgres roles and the commands CI runs.
 
+## Where to start
+
+Tickets live as Markdown files in
+[`.scratch/sessclone-v1/issues/`](.scratch/sessclone-v1/issues/); one whose
+`**Status:**` line reads `todo` is open. The ones marked **Good first issue**
+are small, need no database, and say what done looks like:
+
+| Ticket                                                                    | What                                                   |
+| ------------------------------------------------------------------------- | ------------------------------------------------------ |
+| [151](.scratch/sessclone-v1/issues/151-money-format-tests.md)             | Unit tests for the money and count formatters          |
+| [152](.scratch/sessclone-v1/issues/152-debug-failure-test.md)             | A unit test for the Collector's debug output           |
+| [153](.scratch/sessclone-v1/issues/153-verify-collector-missing-value.md) | `verify-collector.mjs` ignores a flag given no value   |
+| [154](.scratch/sessclone-v1/issues/154-redact-transcript-errors.md)       | `redact-transcript.mjs` gets `--help` and clear errors |
+| [155](.scratch/sessclone-v1/issues/155-verify-collector-flags-doc.md)     | Document every `verify-collector.mjs` flag (after 153) |
+
+Say in the pull request which ticket it closes, and set the ticket's
+`**Status:**` line to `done` in the same pull request.
+
 ## Licence of what you send
 
 Contributions are accepted under **AGPL-3.0-only together with the additional

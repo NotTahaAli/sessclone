@@ -11,7 +11,10 @@ per Device.
 [![CI](https://github.com/NotTahaAli/sessclone/actions/workflows/ci.yml/badge.svg)](https://github.com/NotTahaAli/sessclone/actions/workflows/ci.yml)
 [![Licence: AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue.svg)](LICENSE)
 [![Collector: MIT](https://img.shields.io/badge/collector-MIT-green.svg)](packages/plugin/LICENSE)
+[![Release](https://img.shields.io/github/v/release/NotTahaAli/sessclone)](https://github.com/NotTahaAli/sessclone/releases)
+[![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-informational.svg)](#install-the-collector)
 
+[Live demo](https://sessclone.com/demo) ·
 [Website](https://sessclone.com) ·
 [Docs](https://sessclone.com/docs) ·
 [Self-hosting](https://sessclone.com/docs/self-hosting) ·
@@ -19,7 +22,20 @@ per Device.
 
 </div>
 
-<!-- ![SessClone dashboard](docs/assets/screenshot.png) -->
+[![The Costs page of the SessClone dashboard, showing a month of spend split by model and by day](docs/assets/dashboard-costs.png)](https://sessclone.com/demo)
+
+<sub>The [live demo](https://sessclone.com/demo) runs on made-up data. No sign-up needed.</sub>
+
+## Why
+
+Claude Code's `/cost` shows one Session on one machine. A team runs Claude
+Code on laptops, on servers and in cloud environments, under several people,
+and the bill arrives as one number. SessClone collects every Turn from
+every one of those places and answers the questions that number cannot: who
+spent it, on which Project, with which model, from which Device.
+
+Self-hosting is free at any size. [sessclone.com](https://sessclone.com) runs
+the same code as paid hosted plans for teams that would rather not operate it.
 
 ## What it does
 
@@ -178,7 +194,9 @@ verifies against.
 
 ## Contributing
 
-Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before you open a pull request.
+Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before you open a pull request. Its
+[Where to start](CONTRIBUTING.md#where-to-start) section lists small tickets
+that need no database.
 Contributions are accepted under AGPL-3.0-only plus the additional term in
 `NOTICE.md`. Every commit needs a DCO sign-off (`git commit -s`), and there is
 no CLA. Everyone taking part agrees to the
