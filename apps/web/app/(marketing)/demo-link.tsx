@@ -13,13 +13,16 @@ import { buttonClass } from '../_ui/primitives'
  * the demo cookie, so for them `/demo` only opened their own dashboard. The
  * prerendered shell carries nothing, and the link appears once the session
  * read finds nobody signed in: never a link a signed-in reader could click.
+ * The shell holds its place with an invisible copy, no link and unread, so
+ * the buttons beside it do not rewrap when it lands (a 0.106 layout shift on
+ * a phone, 2026-10-01); only a signed-in reader sees the space close.
  * `block` puts it on its own line, as the pricing intro wants, without leaving
  * an empty line behind when it is hidden.
  */
 export function DemoLink({ block = false }: { block?: boolean }) {
   if (!demoEnabled()) return null
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={block ? BLOCK_PLACEHOLDER : PLACEHOLDER}>
       <DemoLinkResolved block={block} />
     </Suspense>
   )
@@ -42,3 +45,13 @@ const INLINE = (
   </a>
 )
 const BLOCK = <p className="mb-4">{INLINE}</p>
+
+const PLACEHOLDER = (
+  <span
+    aria-hidden="true"
+    className={`${buttonClass()} invisible h-10 px-4 text-[14px]`}
+  >
+    Try the demo
+  </span>
+)
+const BLOCK_PLACEHOLDER = <p className="mb-4">{PLACEHOLDER}</p>

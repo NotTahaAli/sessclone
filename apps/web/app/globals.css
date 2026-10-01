@@ -24,6 +24,25 @@
   }
 }
 
+/* Geist's size-matched fallback, for the devices next/font's misses.
+   next/font writes one, `Geist Fallback`, from `local(Arial)` alone, and
+   Android, Linux and the Lighthouse runner have no Arial: the text painted in
+   unadjusted system-ui and jumped when Geist arrived, a 0.106 layout shift
+   on the landing page (2026-10-01). Liberation Sans and Arimo are drawn to
+   Arial's metrics and Roboto's average width is within 0.3% of it, so the
+   overrides are next/font's own, copied from its generated face. */
+@font-face {
+  font-family: 'Geist Local Fallback';
+  src:
+    local('Liberation Sans'), local('LiberationSans'), local('Arimo'),
+    local('Arimo-Regular'), local('Roboto'), local('Roboto-Regular'),
+    local('Roboto Regular');
+  ascent-override: 95.94%;
+  descent-override: 28.16%;
+  line-gap-override: 0%;
+  size-adjust: 104.76%;
+}
+
 /* `static` because several tokens — --control-h, the accent set, the status
    fills read through color-mix — are reached through hand-written var()
    rather than through a generated utility, and Tailwind otherwise emits only
@@ -34,7 +53,8 @@
      the marketing headlines ticket 112 has not rebuilt yet. The first entry
      of each stack is served by next/font in `layout.tsx`, self-hosted. */
   --font-sans:
-    var(--font-geist), system-ui, 'Segoe UI', Helvetica, Arial, sans-serif;
+    var(--font-geist), 'Geist Local Fallback', system-ui, 'Segoe UI', Helvetica,
+    Arial, sans-serif;
   --font-mono:
     var(--font-geist-mono), ui-monospace, 'SF Mono', Monaco, monospace;
   --font-serif: Georgia, 'Times New Roman', serif;

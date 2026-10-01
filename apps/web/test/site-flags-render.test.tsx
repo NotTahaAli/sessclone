@@ -107,6 +107,20 @@ describe('Try the demo', () => {
     expect(renderToStaticMarkup(<DemoLink />)).not.toContain('/demo')
   })
 
+  // The link streams in after the session read; with nothing in its place the
+  // hero's buttons rewrapped when it landed, a 0.106 layout shift on a phone
+  // (2026-10-01). The shell holds its exact size, unclickable and unread.
+  it.each([false, true])(
+    'holds its place in the shell (block: %s)',
+    (block) => {
+      flags(true, true, true)
+      const shell = renderToStaticMarkup(<DemoLink block={block} />)
+      expect(shell).toMatch(/<span aria-hidden="true" class="[^"]*invisible/)
+      expect(shell).toContain('Try the demo')
+      expect(shell.includes('<p class="mb-4">')).toBe(block)
+    },
+  )
+
   it('is hidden from someone signed in, whose session wins over the demo', async () => {
     flags(true, true, true)
     expect(links(renderToStaticMarkup(await DemoLinkResolved({})))).toEqual([

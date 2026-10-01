@@ -4,7 +4,7 @@ import type { MDXComponents } from 'mdx/types'
 
 import { openapi } from '../../lib/openapi'
 import { siteHost, siteUrl } from '../../lib/site'
-import { OpenAPIPage } from './openapi-page'
+import { OpenAPIPage } from './openapi-page-lazy'
 
 /**
  * One API's operations, rendered from its spec. `document` is a key of
