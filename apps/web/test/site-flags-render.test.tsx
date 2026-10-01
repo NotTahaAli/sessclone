@@ -121,6 +121,20 @@ describe('Try the demo', () => {
     },
   )
 
+  it('holds exactly the link’s box: same classes, plus invisible', async () => {
+    flags(true, true, true)
+    const classes = (html: string, tag: string) =>
+      new Set(
+        (
+          html.match(new RegExp(`<${tag} [^>]*class="([^"]*)"`))?.[1] ?? ''
+        ).split(' '),
+      )
+    const shell = classes(renderToStaticMarkup(<DemoLink />), 'span')
+    const link = classes(renderToStaticMarkup(await DemoLinkResolved({})), 'a')
+    expect(link.has('h-10')).toBe(true)
+    expect(shell).toEqual(new Set([...link, 'invisible']))
+  })
+
   it('is hidden from someone signed in, whose session wins over the demo', async () => {
     flags(true, true, true)
     expect(links(renderToStaticMarkup(await DemoLinkResolved({})))).toEqual([
