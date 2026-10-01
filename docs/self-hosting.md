@@ -61,7 +61,7 @@ use; a company deploying for its team wants Vercel Pro, or the
 Later, as needed: the retention schedule (set `CRON_SECRET` and
 `RETENTION_SWEEP_SECRET` to one value; `vercel.json` already schedules the
 call), a bucket for transcripts, and SMTP for invitation email
-([configuration](configuration.md)). **Upgrading**: the button made a copy, not a fork, so add this repository as a remote once (`git remote add upstream https://github.com/NotTahaAli/sessclone`), then `git pull upstream main`, run step 2's command, and push. The script holds back any migration whose header says to run it after the deploy; once Vercel has deployed, run it again with `--after-deploy`. Use the deployment's own `DATABASE_URL`: a different password in it would replace the live one.
+([configuration](configuration.md)). **Upgrading**: the button made a copy, not a fork, so add this repository as a remote once (`git remote add upstream https://github.com/NotTahaAli/sessclone`), then `git pull upstream main`, run step 2's command, and push. The script holds back any migration whose header says to run it after the deploy; once Vercel has deployed, run it again with `--after-deploy`. Use the deployment's own `DATABASE_URL`: the script stops on a password that does not match, rather than replacing the live one.
 
 The rest of this page is the same thing by hand, on any Postgres and any host.
 
