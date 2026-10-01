@@ -107,6 +107,34 @@ describe('Try the demo', () => {
     expect(renderToStaticMarkup(<DemoLink />)).not.toContain('/demo')
   })
 
+  // The link streams in after the session read; with nothing in its place the
+  // hero's buttons rewrapped when it landed, a 0.106 layout shift on a phone
+  // (2026-10-01). The shell holds its exact size, unclickable and unread.
+  it.each([false, true])(
+    'holds its place in the shell (block: %s)',
+    (block) => {
+      flags(true, true, true)
+      const shell = renderToStaticMarkup(<DemoLink block={block} />)
+      expect(shell).toMatch(/<span aria-hidden="true" class="[^"]*invisible/)
+      expect(shell).toContain('Try the demo')
+      expect(shell.includes('<p class="mb-4">')).toBe(block)
+    },
+  )
+
+  it('holds exactly the link’s box: same classes, plus invisible', async () => {
+    flags(true, true, true)
+    const classes = (html: string, tag: string) =>
+      new Set(
+        (
+          html.match(new RegExp(`<${tag} [^>]*class="([^"]*)"`))?.[1] ?? ''
+        ).split(' '),
+      )
+    const shell = classes(renderToStaticMarkup(<DemoLink />), 'span')
+    const link = classes(renderToStaticMarkup(await DemoLinkResolved({})), 'a')
+    expect(link.has('h-10')).toBe(true)
+    expect(shell).toEqual(new Set([...link, 'invisible']))
+  })
+
   it('is hidden from someone signed in, whose session wins over the demo', async () => {
     flags(true, true, true)
     expect(links(renderToStaticMarkup(await DemoLinkResolved({})))).toEqual([
