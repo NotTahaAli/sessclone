@@ -1,4 +1,4 @@
-# 155: `redact-transcript.mjs` gets `--help` and a readable error on a bad line
+# 156: `redact-transcript.mjs` gets `--help` and a readable error on a bad line
 
 **Good first issue.** A contributor-facing script; the logic moves into a
 tested function.

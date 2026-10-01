@@ -1,4 +1,4 @@
-# 152: Unit tests for the money and count formatters
+# 153: Unit tests for the money and count formatters
 
 **Good first issue.** Pure functions, one new test file, no database.
 

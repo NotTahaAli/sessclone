@@ -19,11 +19,11 @@ are small, need no database, and say what done looks like:
 
 | Ticket                                                                    | What                                                   |
 | ------------------------------------------------------------------------- | ------------------------------------------------------ |
-| [152](.scratch/sessclone-v1/issues/152-money-format-tests.md)             | Unit tests for the money and count formatters          |
-| [153](.scratch/sessclone-v1/issues/153-debug-failure-test.md)             | A unit test for the Collector's debug output           |
-| [154](.scratch/sessclone-v1/issues/154-verify-collector-missing-value.md) | `verify-collector.mjs` ignores a flag given no value   |
-| [155](.scratch/sessclone-v1/issues/155-redact-transcript-errors.md)       | `redact-transcript.mjs` gets `--help` and clear errors |
-| [156](.scratch/sessclone-v1/issues/156-verify-collector-flags-doc.md)     | Document every `verify-collector.mjs` flag (after 154) |
+| [153](.scratch/sessclone-v1/issues/153-money-format-tests.md)             | Unit tests for the money and count formatters          |
+| [154](.scratch/sessclone-v1/issues/154-debug-failure-test.md)             | A unit test for the Collector's debug output           |
+| [155](.scratch/sessclone-v1/issues/155-verify-collector-missing-value.md) | `verify-collector.mjs` ignores a flag given no value   |
+| [156](.scratch/sessclone-v1/issues/156-redact-transcript-errors.md)       | `redact-transcript.mjs` gets `--help` and clear errors |
+| [157](.scratch/sessclone-v1/issues/157-verify-collector-flags-doc.md)     | Document every `verify-collector.mjs` flag (after 155) |
 
 Say in the pull request which ticket it closes, and set the ticket's
 `**Status:**` line to `done` in the same pull request.

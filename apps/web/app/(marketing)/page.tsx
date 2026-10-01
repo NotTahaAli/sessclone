@@ -205,6 +205,17 @@ export default async function Landing() {
             </div>
           ))}
         </dl>
+        {/* A reader who got to the last answer is the likeliest to act, and
+            otherwise finds only the footer. */}
+        <div className="border-rule mt-10 flex flex-wrap items-center gap-x-4 gap-y-3 border-t pt-6">
+          <p className="text-[15px] font-medium lg:mr-auto">
+            See your whole team&apos;s Claude Code spend in one place.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <SignedInLink variant="hero" />
+            <DemoLink />
+          </div>
+        </div>
       </section>
     </>
   )

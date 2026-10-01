@@ -9,7 +9,7 @@ import { peopleLabel, priceFor } from '../../lib/plans'
 import type { SignupPlan } from '../../lib/subscriptions'
 import type { MarketingTier } from '../../lib/tiers'
 import { PanelCredit } from '../(dashboard)/credit'
-import { LogoMark } from '../_ui/logo'
+import { AuthLogo } from '../_ui/auth-logo'
 import { buttonClass, inputClass } from '../_ui/primitives'
 import { sendMagicLink, signInWithGitHub } from '../sign-in/actions'
 import { Notices } from '../sign-in/notices'
@@ -179,7 +179,7 @@ function Account({
 export default function SignUp({ searchParams }: { searchParams: Query }) {
   return (
     <main className="mx-auto flex max-w-md flex-col px-4 py-16">
-      <LogoMark size={28} className="text-text mb-4" />
+      <AuthLogo />
 
       <Suspense fallback={null}>
         <Steps searchParams={searchParams} />

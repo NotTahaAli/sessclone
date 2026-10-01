@@ -1,4 +1,4 @@
-# 154: `verify-collector.mjs` ignores `--day` or `--tz` given with no value
+# 155: `verify-collector.mjs` ignores `--day` or `--tz` given with no value
 
 **Good first issue.** A real bug in a small script, with a pure function to
 pull out and test.
