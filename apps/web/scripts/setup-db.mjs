@@ -75,6 +75,20 @@ export const plan = (files, ledger, headers, { afterDeploy = false } = {}) => {
   return { apply: pending.filter((f) => !held.includes(f)), held }
 }
 
+/**
+ * A migration's leading comment block as one line of prose, so the
+ * after-deploy marker is found wherever the block puts it, wrapped or not.
+ */
+export const header = (source) => {
+  const lines = source.split('\n')
+  const end = lines.findIndex((line) => !line.trimStart().startsWith('--'))
+  return lines
+    .slice(0, end === -1 ? lines.length : end)
+    .map((line) => line.trimStart().replace(/^--/, ''))
+    .join(' ')
+    .replace(/\s+/g, ' ')
+}
+
 /** `sessclone_app`, or `sessclone_app.<ref>` through Supabase's pooler. */
 export const appRole = (url) => {
   const { username, password } = new URL(url)
@@ -145,9 +159,7 @@ const migrate = async (owner, afterDeploy) => {
       ]),
     ),
   )
-  const headers = Object.fromEntries(
-    files.map((f) => [f, sources[f].split('\n', 3).join('\n')]),
-  )
+  const headers = Object.fromEntries(files.map((f) => [f, header(sources[f])]))
   const { apply, held } = plan(files, ledger, headers, { afterDeploy })
 
   for (const file of apply) {

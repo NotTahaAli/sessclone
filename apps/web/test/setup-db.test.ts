@@ -4,7 +4,7 @@ import { promisify } from 'node:util'
 import postgres from 'postgres'
 import { describe, expect, it } from 'vitest'
 // @ts-expect-error — a plain script, deliberately outside the TypeScript build.
-import { appRole, plan, scram } from '../scripts/setup-db.mjs'
+import { appRole, header, plan, scram } from '../scripts/setup-db.mjs'
 import { owner } from './harness'
 
 const SCRIPT = fileURLToPath(
@@ -83,6 +83,35 @@ describe('which migrations setup applies', () => {
   it('applies nothing when the ledger is complete', () => {
     const all = ['a', 'b', 'c', 'd'].map((version) => ({ version, name: '' }))
     expect(plan(files, all, headers)).toEqual({ apply: [], held: [] })
+  })
+})
+
+describe('the after-deploy marker', () => {
+  // Found anywhere in the leading comment block, even wrapped over two lines;
+  // a marker missed is a migration that breaks the live code before deploy.
+  it('is read from the whole leading comment, wrapped or not', () => {
+    const source =
+      '-- Ticket 9.\n--\n-- Then: RUN THIS AFTER\n--   THE DEPLOY, never before.\nalter table x;\n-- RUN THIS AFTER THE DEPLOY'
+    expect(header(source)).toMatch(/RUN THIS AFTER THE DEPLOY/)
+    expect(header(source)).not.toMatch(/alter table/)
+  })
+
+  it('is found in the repository’s own after-deploy migrations', async () => {
+    const dir = new URL('../../../supabase/migrations/', import.meta.url)
+    const { readFile, readdir } = await import('node:fs/promises')
+    const files = (await readdir(dir)).filter((f) => f.endsWith('.sql'))
+    const marked = []
+    for (const f of files) {
+      // oxlint-disable-next-line no-await-in-loop -- a few dozen small files.
+      const text = await readFile(new URL(f, dir), 'utf8')
+      if (/RUN THIS AFTER THE DEPLOY/.test(header(text))) marked.push(f)
+    }
+    expect(marked).toEqual(
+      expect.arrayContaining([
+        '20260923140000_artifact_kind_drop_old_key.sql',
+        '20260925170000_drop_one_argument_accept.sql',
+      ]),
+    )
   })
 })
 
