@@ -217,8 +217,12 @@ test('a Node too old to run the Collector is a problem named at session start', 
   expect(nodeProblem('22.17.9')).toMatch(/22\.18 or newer/)
   expect(nodeProblem('23.5.0')).toMatch(/Node 23\.5\.0/)
   // The fix, not just the fault: which Node, and that nothing is lost.
-  expect(nodeProblem('20.11.0')).toMatch(/restart Claude Code/)
-  expect(nodeProblem('20.11.0')).toMatch(/sent then/)
+  expect(nodeProblem('20.11.0', {})).toMatch(/restart Claude Code/)
+  expect(nodeProblem('20.11.0', {})).toMatch(/next session starts/)
+  // A cloud container's sessions leave with it, so none are promised there.
+  const cloud = nodeProblem('20.11.0', { CLAUDE_CODE_REMOTE: 'true' })
+  expect(cloud).toMatch(/setup script/)
+  expect(cloud).not.toMatch(/session starts/)
 
   expect(nodeProblem('22.18.0')).toBeNull()
   expect(nodeProblem('23.6.0')).toBeNull()

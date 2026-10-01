@@ -253,3 +253,39 @@ test.each(['stop', 'stop-archive', 'stop-failure', 'session-end'])(
     expect(finished.code).toBe(0)
   },
 )
+
+test.each([
+  ['hooks/session-start.mjs', 2],
+  ['../../scripts/verify-collector.mjs', 1],
+])(
+  'on a Node too old for the Collector, %s says which Node and the fix',
+  async (path, exitCode) => {
+    // Session start is the only place an old Node is reported, and it has to
+    // come before anything else: the configuration no longer checks it. An
+    // old Node is faked by overriding `process.versions` before the file runs.
+    const old = `data:text/javascript,Object.defineProperty(process,'versions',{value:{...process.versions,node:'20.11.0'}})`
+    const child = execFile(
+      'node',
+      ['--import', old, new URL(`../${path}`, import.meta.url).pathname],
+      {
+        env: {
+          ...process.env,
+          CLAUDE_PLUGIN_OPTION_API_KEY: `sk_${'a'.repeat(43)}`,
+          CLAUDE_CODE_REMOTE: '',
+        },
+      },
+    )
+    child.stdin?.end('{}')
+
+    const finished = await new Promise((resolve) => {
+      let stderr = ''
+      child.stderr?.on('data', (chunk) => (stderr += chunk))
+      child.on('close', (code) => resolve({ code, stderr }))
+    })
+
+    expect(finished.stderr).toMatch(/hooks on Node 20\.11\.0/)
+    expect(finished.stderr).toMatch(/restart Claude Code/)
+    expect(finished.stderr).not.toMatch(/sk_/)
+    expect(finished.code).toBe(exitCode)
+  },
+)

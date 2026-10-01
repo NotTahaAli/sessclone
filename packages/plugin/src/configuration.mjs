@@ -50,11 +50,16 @@ export const DEFAULT_URL = 'https://sessclone.com'
 export const MINIMUM_NODE = [22, 18]
 
 /**
- * A sentence naming the Node problem, or null.
+ * A sentence naming the Node problem and its fix, or null.
+ *
+ * A cloud container's fix is its environment's setup script, and its sessions
+ * leave with it, so nothing from meanwhile is promised there. On a machine the
+ * session-start sweep sends them, newest first, over the next session starts.
  *
  * @param {string} version `process.versions.node`.
+ * @param {Record<string, string | undefined>} [environment]
  */
-export const nodeProblem = (version) => {
+export const nodeProblem = (version, environment = process.env) => {
   const [major = 0, minor = 0] = version.split('.').map(Number)
   const [wantMajor, wantMinor] = MINIMUM_NODE
   const old =
@@ -62,9 +67,11 @@ export const nodeProblem = (version) => {
     (major === wantMajor && minor < wantMinor) ||
     // The 23 line never received type stripping by default before 23.6.
     (major === 23 && minor < 6)
-  return old
-    ? `sessclone needs Node ${wantMajor}.${wantMinor} or newer (or 24), and Claude Code is running its hooks on Node ${version}, so nothing is being collected from this machine. Install a newer Node as the \`node\` on Claude Code's PATH and restart Claude Code. Sessions from meanwhile are sent then, while Claude Code still keeps them (30 days by default).`
-    : null
+  if (!old) return null
+  const problem = `sessclone needs Node ${wantMajor}.${wantMinor} or newer (or 24), and Claude Code is running its hooks on Node ${version}, so nothing is being collected from this machine.`
+  return environment.CLAUDE_CODE_REMOTE?.trim() === 'true'
+    ? `${problem} Install a newer Node in this cloud environment's setup script.`
+    : `${problem} Install a newer Node as the \`node\` on Claude Code's PATH and restart Claude Code. Sessions from meanwhile are sent over the next session starts, while Claude Code still keeps them (30 days by default).`
 }
 
 /**

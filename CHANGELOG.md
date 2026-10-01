@@ -8,8 +8,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.4.1] - 2026-10-01
 
-No migrations. Installs pick the plugin up with `/plugin update
-sessclone@sessclone`.
+Deploy the web app, then installs pick the plugin up with `/plugin update
+sessclone@sessclone`. No migrations.
 
 ### Added
 
@@ -25,10 +25,11 @@ sessclone@sessclone`.
 - On a Node older than 22.18, every session start says which Node Claude Code
   is running the hooks on, that nothing is being collected, and how to fix it
   (a newer `node` on Claude Code's PATH, then a restart), instead of calling
-  it a configuration problem. The sessions from meanwhile are sent after the
-  restart.
+  it a configuration problem. On a machine, the sessions from meanwhile are
+  sent over the next session starts.
 - On that old Node, the per-turn archive hook no longer prints a stack trace
-  into the session after every turn in a cloud container.
+  into the session after every turn in a cloud container, and
+  `scripts/verify-collector.mjs` names the Node instead of crashing.
 
 ## [0.4.0] - 2026-09-27
 
