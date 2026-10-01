@@ -32,6 +32,7 @@
 // tables and no ledger. The script refuses it rather than re-running the first
 // migration over live data; keep upgrading that one by hand.
 
+import { createHash, createHmac, pbkdf2Sync, randomBytes } from 'node:crypto'
 import { readFile, readdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
@@ -39,14 +40,22 @@ import postgres from 'postgres'
 
 const MIGRATIONS = new URL('../../../supabase/migrations/', import.meta.url)
 const AFTER_DEPLOY = /RUN THIS AFTER THE DEPLOY/
+// Any constant: serialises two runs against one database.
+const LOCK = 7_461_100_149
 
 /**
- * Which migrations to apply now, and which one an upgrade stops at.
+ * Which migrations to apply now, and which an upgrade holds back.
  *
  * `files` is the directory listing, `ledger` the rows already recorded, and
  * `headers` maps a file to its first lines. A row counts as a file when either
  * its version (the timestamp prefix) or its name (the whole stem) matches:
- * the Supabase CLI writes the short name, a hand-applied row the stem.
+ * the Supabase CLI writes the short name, a hand-applied row the stem. (A
+ * Management API row carries its apply time as `version`; one colliding with
+ * another file's timestamp to the second is possible and not worth a guard.)
+ *
+ * An upgrade holds back only the after-deploy files and applies the rest:
+ * the code about to be deployed needs every other file, and the ledger is a
+ * set, so applying a held file later and out of order is fine.
  */
 export const plan = (files, ledger, headers, { afterDeploy = false } = {}) => {
   const versions = new Set(ledger.map((row) => row.version))
@@ -60,11 +69,10 @@ export const plan = (files, ledger, headers, { afterDeploy = false } = {}) => {
     })
 
   // A fresh database runs everything: there is no live code to break.
-  if (ledger.length === 0 || afterDeploy) return { apply: pending, held: null }
+  if (ledger.length === 0 || afterDeploy) return { apply: pending, held: [] }
 
-  const stop = pending.findIndex((f) => AFTER_DEPLOY.test(headers[f] ?? ''))
-  if (stop === -1) return { apply: pending, held: null }
-  return { apply: pending.slice(0, stop), held: pending[stop] }
+  const held = pending.filter((f) => AFTER_DEPLOY.test(headers[f] ?? ''))
+  return { apply: pending.filter((f) => !held.includes(f)), held }
 }
 
 /** `sessclone_app`, or `sessclone_app.<ref>` through Supabase's pooler. */
@@ -80,6 +88,21 @@ export const appRole = (url) => {
   return decodeURIComponent(password)
 }
 
+const hmac = (key, text) => createHmac('sha256', key).update(text).digest()
+
+/**
+ * The SCRAM-SHA-256 verifier Postgres stores for a password (RFC 5802/7677),
+ * in the form `alter role … password` accepts as already hashed.
+ */
+export const scram = (password, salt = randomBytes(16), iterations = 4096) => {
+  const salted = pbkdf2Sync(password, salt, iterations, 32, 'sha256')
+  const stored = createHash('sha256')
+    .update(hmac(salted, 'Client Key'))
+    .digest()
+  const server = hmac(salted, 'Server Key')
+  return `SCRAM-SHA-256$${iterations}:${salt.toString('base64')}$${stored.toString('base64')}:${server.toString('base64')}`
+}
+
 const connect = (url) =>
   // `prepare: false` as in `apps/web/lib/db.ts`: a transaction-mode pooler
   // hands the next statement to another backend. `onnotice` because every
@@ -87,24 +110,30 @@ const connect = (url) =>
   postgres(url, { prepare: false, max: 1, onnotice: () => {} })
 
 const migrate = async (owner, afterDeploy) => {
-  await owner.unsafe(`
-    create schema if not exists supabase_migrations;
-    create table if not exists supabase_migrations.schema_migrations
-      (version text primary key, statements text[], name text);
-  `)
-  const ledger = await owner`
-    select version, name from supabase_migrations.schema_migrations
+  // Decide before writing anything: creating an empty ledger on a database
+  // migrated by hand would turn `schema-drift.mjs`'s "applied by hand" into
+  // "every migration missing".
+  const [{ hasLedger, hasTables }] = await owner`
+    select to_regclass('supabase_migrations.schema_migrations') is not null as "hasLedger",
+           to_regclass('public.orgs') is not null as "hasTables"
   `
-  if (ledger.length === 0) {
-    const [{ present }] = await owner`
-      select to_regclass('public.orgs') is not null as present
-    `
-    if (present) {
-      throw new Error(
-        'this database has SessClone tables and no migration ledger, so it was migrated by hand; ' +
-          'apply new files by hand as docs/self-hosting.md describes rather than letting this re-run them',
-      )
-    }
+  const ledger = hasLedger
+    ? await owner`select version, name from supabase_migrations.schema_migrations`
+    : []
+  if (ledger.length === 0 && hasTables) {
+    throw new Error(
+      'this database has SessClone tables and no migration ledger, so it was migrated by hand; ' +
+        'apply new files by hand as docs/self-hosting.md describes rather than letting this re-run them',
+    )
+  }
+  // Only when absent: `if not exists` still wants create on a schema that,
+  // on some Supabase projects, belongs to another role.
+  if (!hasLedger) {
+    await owner.unsafe(`
+      create schema if not exists supabase_migrations;
+      create table if not exists supabase_migrations.schema_migrations
+        (version text primary key, statements text[], name text);
+    `)
   }
 
   const files = (await readdir(MIGRATIONS)).filter((f) => f.endsWith('.sql'))
@@ -127,6 +156,13 @@ const migrate = async (owner, afterDeploy) => {
     // oxlint-disable-next-line no-await-in-loop -- migrations apply in order.
     await owner
       .begin(async (tx) => {
+        // Two runs at once: the second waits here, then finds the row and
+        // skips. A transaction lock, because the pooler drops session ones.
+        await tx`select pg_advisory_xact_lock(${LOCK})`
+        const [done] = await tx`
+          select 1 from supabase_migrations.schema_migrations where name = ${stem}
+        `
+        if (done) return
         await tx.unsafe(sources[file])
         await tx`
           insert into supabase_migrations.schema_migrations (version, name)
@@ -148,9 +184,9 @@ const migrate = async (owner, afterDeploy) => {
     console.log('done')
   }
   if (apply.length === 0) console.log('no migrations to apply')
-  if (held) {
+  for (const file of held) {
     console.log(
-      `held back ${held}: its header says to run it after the deploy. ` +
+      `held back ${file}: its header says to run it after the deploy. ` +
         'Deploy this version, then run this again with --after-deploy.',
     )
   }
@@ -162,14 +198,16 @@ const ensureAppRole = async (owner, appUrl) => {
   try {
     await probe`select 1`
     return probe
-  } catch {
-    // Not yet able to log in, or a different password: set it below.
+  } catch (error) {
     await probe.end()
+    // Only a refused login is ours to fix. Anything else — a mistyped host,
+    // the network — must not rotate the password a live deployment uses.
+    if (!['28P01', '28000'].includes(error.code)) throw error
   }
-  // The password goes through `format('%L')` on the server rather than
-  // through string building here: `alter role` takes no bind parameter.
+  // Sent as a SCRAM verifier, never as the password, so no statement log
+  // holds it; `format('%L')` quotes it because `alter role` takes no bind.
   const [{ statement }] = await owner`
-    select format('alter role sessclone_app login password %L', ${password}::text) as statement
+    select format('alter role sessclone_app login password %L', ${scram(password)}::text) as statement
   `
   try {
     await owner.unsafe(statement)
@@ -187,13 +225,12 @@ const ensureAppRole = async (owner, appUrl) => {
 
 const verifyAppRole = async (app) => {
   try {
+    // Postgres's own answer, which also catches a role that merely inherits
+    // the owner's privileges — something a `tableowner` comparison misses.
     const [row] = await app`
-      select current_user as role,
-             (select rolsuper or rolbypassrls from pg_roles where rolname = current_user) as exempt,
-             (select tableowner = current_user from pg_tables
-               where schemaname = 'public' and tablename = 'orgs') as owner
+      select current_user as role, row_security_active('public.orgs') as rls
     `
-    if (row.role !== 'sessclone_app' || row.exempt || row.owner) {
+    if (row.role !== 'sessclone_app' || !row.rls) {
       throw new Error(
         `DATABASE_URL reads as ${row.role}, which row-level security does not apply to`,
       )
