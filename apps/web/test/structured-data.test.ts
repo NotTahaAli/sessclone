@@ -63,10 +63,10 @@ describe('offers', () => {
     expect(offers([enterprise])).toEqual([])
   })
 
-  it('states Self-Hosted at 0 under its own name, with no unit price', () => {
-    const [offer] = offers([selfHosted])
-    expect(offer).toMatchObject({ name: 'Self-Hosted', price: 0 })
-    expect(offer).not.toHaveProperty('priceSpecification')
+  it('leaves out the free Self-Hosted Tier, so no $0 plan sits beside hosted ones', () => {
+    expect(offers([selfHosted, personal]).map((offer) => offer.name)).toEqual([
+      'Personal',
+    ])
   })
 })
 
@@ -118,9 +118,12 @@ describe('docsGraph', () => {
     })
   })
 
-  it('gives the docs index one crumb, not a duplicate of itself', () => {
+  it('gives the docs index no one-crumb trail, which Google flags', () => {
     const graph = docsGraph({ url: '/docs', title: 'Introduction' })
-    expect(node(graph, 'BreadcrumbList')?.itemListElement).toHaveLength(1)
+    expect(node(graph, 'BreadcrumbList')).toBeUndefined()
+    expect(node(graph, 'TechArticle')).toMatchObject({
+      headline: 'Introduction',
+    })
   })
 })
 

@@ -24,15 +24,15 @@ different questions, and plenty of teams use more than one.
 
 ## Side by side
 
-|                                      | ccusage                      | Anthropic's analytics         | SessClone                                    |
-| ------------------------------------ | ---------------------------- | ----------------------------- | -------------------------------------------- |
-| Where it runs                        | Your machine                 | Anthropic's dashboards        | Hosted at sessclone.com, or self-hosted      |
-| Machines covered                     | The one it runs on           | Accounts in one Claude org    | Every machine with the Collector             |
-| People on different Claude accounts  | One at a time                | Only inside that organization | One Org, whatever account each signs in with |
-| Cost per Project, Device and Session | Per session, on that machine | Spend per user                | Yes, per Member, Project, Device, Session    |
-| Transcripts archived for review      | No                           | —                             | Opt-in, per Member                           |
-| Roles and scoped views               | No                           | Role-based access             | Owner, Admin, Manager, Member                |
-| Source                               | MIT                          | Closed                        | AGPL-3.0, Collector MIT                      |
+|                                      | ccusage                                       | Anthropic's analytics         | SessClone                                    |
+| ------------------------------------ | --------------------------------------------- | ----------------------------- | -------------------------------------------- |
+| Where it runs                        | Your machine                                  | Anthropic's dashboards        | Hosted at sessclone.com, or self-hosted      |
+| Machines covered                     | The files on the machine it runs on           | Accounts in one Claude org    | Every machine with the Collector             |
+| People on different Claude accounts  | One at a time                                 | Only inside that organization | One Org, whatever account each signs in with |
+| Cost per Project, Device and Session | Per day, session and project, on that machine | Spend per user                | Yes, per Member, Project, Device, Session    |
+| Transcripts archived for review      | No                                            | —                             | Opt-in, per Member                           |
+| Roles and scoped views               | No                                            | Role-based access             | Owner, Admin, Manager, Member                |
+| Source                               | MIT                                           | Closed                        | AGPL-3.0, Collector MIT                      |
 
 A dash means the published docs say nothing either way.
 
@@ -56,9 +56,13 @@ A dash means the published docs say nothing either way.
 
 - **You only want your own spend on one machine.** `npx ccusage@latest` gives
   you that with nothing to set up.
-- **You want accepted-line and pull-request metrics.** Anthropic's Teams and
-  Enterprise dashboard connects to GitHub for those; SessClone counts tokens
-  and cost, not lines shipped.
+- **You want accepted-line or pull-request metrics.** Both of Anthropic's
+  dashboards count accepted lines, and the Teams and Enterprise one connects
+  to GitHub for pull requests shipped with Claude Code. SessClone counts
+  tokens and cost, not lines.
+- **Everyone is in one Claude organization and you run an observability
+  stack.** Claude Code can export per-user token and cost metrics over
+  [OpenTelemetry](https://code.claude.com/docs/en/monitoring-usage).
 
 ## What SessClone sends
 

@@ -10,15 +10,22 @@ import { siteFlags, siteLinks } from '../../lib/site-flags'
 // Markdown is the build's (`includeProcessedMarkdown` in `lib/docs.ts`).
 // Links follow the flags as `/llms.txt`'s do: this deployment's docs, or
 // sessclone.com's where it serves none.
+
 /**
  * A page's Markdown, made to stand alone: the `[#id]` anchors Fumadocs
- * appends to headings dropped, and site-relative links made absolute against
- * `base`, since the reader has no page to resolve them from.
+ * appends to headings dropped, numeric entities it escapes back to their
+ * characters, and site-relative links (Markdown or a component's `href`)
+ * made absolute against `base`, since the reader has no page to resolve
+ * them from.
  */
 const standalone = (markdown: string, base: string) =>
   markdown
     .replace(/ \[#[\w-]+\]$/gm, '')
+    .replace(/&#x([\da-f]+);/gi, (_, hex: string) =>
+      String.fromCodePoint(Number.parseInt(hex, 16)),
+    )
     .replace(/\]\(\//g, `](${base}/`)
+    .replace(/href="\//g, `href="${base}/`)
     .trim()
 
 export async function GET() {

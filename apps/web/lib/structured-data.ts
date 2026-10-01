@@ -25,17 +25,18 @@ const organization = () => ({
 })
 
 /**
- * One Offer per Tier with a price. A "Talk to us" Tier (both prices null) has
- * none to state and is left out rather than read as free. A seat price is the
- * headline where there is one, as `shortPrice` shows it; otherwise the flat
- * monthly price.
+ * One Offer per paid Tier. A "Talk to us" Tier (both prices null) has no price
+ * to state, and the free Self-Hosted Tier is left out too: beside the hosted
+ * plans a $0 Offer reads as a free hosted plan, which there is not. "Free to
+ * self-host" is in the description, which is where it is true. A seat price
+ * is the headline where there is one, as `shortPrice` shows it; otherwise the
+ * flat monthly price.
  */
 export const offers = (tiers: MarketingTier[]) =>
   tiers.flatMap((tier) => {
     const { basePriceUsd: base, seatPriceUsd: seat } = tier
-    if (base === null && seat === null) return []
-    const free = isFree(tier)
-    const price = free ? 0 : seat ? seat : (base ?? 0)
+    if ((base === null && seat === null) || isFree(tier)) return []
+    const price = seat ? seat : (base ?? 0)
     return [
       {
         '@type': 'Offer',
@@ -44,16 +45,12 @@ export const offers = (tiers: MarketingTier[]) =>
         price,
         priceCurrency: 'USD',
         url: canonical('/pricing'),
-        ...(free
-          ? {}
-          : {
-              priceSpecification: {
-                '@type': 'UnitPriceSpecification',
-                price,
-                priceCurrency: 'USD',
-                unitText: seat ? 'per seat per month' : 'per month',
-              },
-            }),
+        priceSpecification: {
+          '@type': 'UnitPriceSpecification',
+          price,
+          priceCurrency: 'USD',
+          unitText: seat ? 'per seat per month' : 'per month',
+        },
       },
     ]
   })
@@ -104,14 +101,30 @@ export const landingGraph = ({
   }
 }
 
-/** A docs page's graph: where it sits under Docs, and what it is. */
+/**
+ * A docs page's graph: where it sits under Docs, and what it is. The docs
+ * index has no trail to show (one crumb is not a breadcrumb to Google), so
+ * it carries only the article.
+ */
 export const docsGraph = (page: {
   url: string
   title: string
   description?: string
 }) => {
   const url = canonical(page.url)
-  const isIndex = page.url === '/docs'
+  const article = {
+    '@type': 'TechArticle',
+    headline: page.title,
+    description: page.description,
+    url,
+    mainEntityOfPage: url,
+    inLanguage: 'en',
+    isPartOf: { '@id': `${siteUrl()}/#website` },
+    publisher: organization(),
+  }
+  if (page.url === '/docs') {
+    return { '@context': 'https://schema.org', '@graph': [article] }
+  }
   return {
     '@context': 'https://schema.org',
     '@graph': [
@@ -124,28 +137,10 @@ export const docsGraph = (page: {
             name: 'Docs',
             item: canonical('/docs'),
           },
-          ...(isIndex
-            ? []
-            : [
-                {
-                  '@type': 'ListItem',
-                  position: 2,
-                  name: page.title,
-                  item: url,
-                },
-              ]),
+          { '@type': 'ListItem', position: 2, name: page.title, item: url },
         ],
       },
-      {
-        '@type': 'TechArticle',
-        headline: page.title,
-        description: page.description,
-        url,
-        mainEntityOfPage: url,
-        inLanguage: 'en',
-        isPartOf: { '@id': `${siteUrl()}/#website` },
-        publisher: organization(),
-      },
+      article,
     ],
   }
 }

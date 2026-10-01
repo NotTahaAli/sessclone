@@ -38,6 +38,12 @@ const main = async () => {
   const sitemap = await fetch(`${site}/sitemap.xml`)
   if (!sitemap.ok) throw new Error(`sitemap: HTTP ${sitemap.status}`)
   const body = submission(site, sitemapUrls(await sitemap.text()))
+  // A sitemap on another host (www against the apex, or a deployment whose
+  // NEXT_PUBLIC_APP_URL differs from the address given) leaves nothing to
+  // submit, and IndexNow refuses an empty list with a less helpful message.
+  if (body.urlList.length === 0) {
+    throw new Error(`no sitemap URLs on ${body.host}; check the address`)
+  }
   const response = await fetch('https://api.indexnow.org/indexnow', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json; charset=utf-8' },

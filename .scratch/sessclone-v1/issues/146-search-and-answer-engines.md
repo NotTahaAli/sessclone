@@ -8,7 +8,8 @@ for search engines and AI assistants to read, cite and recommend, at no cost.
 - Landing JSON-LD gains a `WebSite` node, a `FAQPage` built from the visible
   questions, and `offers` built from the same Tier rows the page renders, so
   prices still live only in the `tiers` table. A "Talk to us" Tier states no
-  offer rather than reading as free.
+  offer, and neither does the free Self-Hosted Tier, so no $0 plan sits beside
+  the hosted ones.
 - Every docs page carries `BreadcrumbList` and `TechArticle` JSON-LD.
 - `/llms-full.txt` serves every docs page's Markdown in one file, linked from
   `/llms.txt`.

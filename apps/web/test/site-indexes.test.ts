@@ -14,7 +14,7 @@ vi.mock('../lib/docs', () => ({
           title: 'Docs',
           description: 'Start here',
           getText: async () =>
-            'Intro body\n\n## Install [#install]\n\nSee [it](/docs/install).\n',
+            'Intro body\n\n## Install [#install]\n\nSee [it](/docs/install) &#x60;x&#x60;.\n\n<Card href="/docs/api" />\n',
         },
       },
       {
@@ -113,7 +113,7 @@ describe('llms-full.txt', () => {
     flags(true, true)
     const body = await (await llmsFull()).text()
     expect(body).toContain(
-      '# Docs\n\nSource: https://self.example/docs\n\n> Start here\n\nIntro body\n\n## Install\n\nSee [it](https://self.example/docs/install).\n',
+      '# Docs\n\nSource: https://self.example/docs\n\n> Start here\n\nIntro body\n\n## Install\n\nSee [it](https://self.example/docs/install) `x`.\n\n<Card href="https://self.example/docs/api" />\n',
     )
     expect(body).toContain(
       '# Self-hosting\n\nSource: https://self.example/docs/self-hosting\n\nClone it.\n',
@@ -124,7 +124,7 @@ describe('llms-full.txt', () => {
     flags(false, false)
     const body = await (await llmsFull()).text()
     expect(body).toContain('Source: https://sessclone.com/docs/self-hosting')
-    expect(body).toContain('See [it](https://sessclone.com/docs/install).')
+    expect(body).toContain('See [it](https://sessclone.com/docs/install)')
     expect(body).not.toContain('self.example/docs')
   })
 })
