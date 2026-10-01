@@ -1,7 +1,7 @@
 import { connection } from 'next/server'
 
 import { source, type DocsPage } from '../../lib/docs'
-import { SITE_DESCRIPTION, canonical } from '../../lib/site'
+import { REPOSITORY, SITE_DESCRIPTION, canonical } from '../../lib/site'
 import { siteFlags, siteLinks } from '../../lib/site-flags'
 
 // https://llmstxt.org: a Markdown index an assistant can read in one request
@@ -33,7 +33,8 @@ export async function GET() {
     '## Optional',
     '',
     ...(pricing ? [`- [Pricing](${canonical(pricing)})`] : []),
-    '- [Source code](https://github.com/NotTahaAli/sessclone)',
+    `- [Full docs as one file](${canonical('/llms-full.txt')})`,
+    `- [Source code](${REPOSITORY})`,
     '',
   ].join('\n')
   return new Response(body, {
