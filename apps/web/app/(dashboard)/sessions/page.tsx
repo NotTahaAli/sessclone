@@ -12,7 +12,11 @@ import { PageHeader } from '../page-header'
 import { hrefWith, one, type Query } from '../query'
 import { Row, SectionBreak } from '../../_ui/primitives'
 import { sessionsReads } from '../../../lib/page-reads'
-import { resolveRange, type RangeParams } from '../../../lib/range'
+import {
+  defaultPreset,
+  resolveRange,
+  type RangeParams,
+} from '../../../lib/range'
 import { compact, usd } from '../../../lib/money'
 import { sessionCursorOf, type SessionRow } from '../../../lib/sessions'
 import { currentViewer } from '../../../lib/viewer'
@@ -64,7 +68,12 @@ export default async function Sessions({
   if (!viewer) return null
 
   const params = await searchParams
-  const resolved = resolveRange(params, viewer.orgTimezone)
+  const resolved = resolveRange(
+    params,
+    viewer.orgTimezone,
+    undefined,
+    defaultPreset(viewer.userId),
+  )
 
   const project = one(params.project)
   const member = one(params.member)

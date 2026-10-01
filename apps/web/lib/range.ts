@@ -1,3 +1,4 @@
+import { isDemoUser } from './demo'
 import { addDays, currentMonth, type LocalRange } from './series'
 
 // Ticket 53: the period every Costs view answers for.
@@ -12,7 +13,7 @@ import { addDays, currentMonth, type LocalRange } from './series'
 // exists to prevent one level down.
 //
 // **The default is the current calendar month**, which is the period a bill is
-// drawn on.
+// drawn on. The demo visitor is the one exception (`defaultPreset`).
 //
 // **It is read in the Org's timezone.** A preset is anchored on the Org's
 // today, and a custom range is two calendar dates that mean instants only once
@@ -52,6 +53,17 @@ export const PRESETS: Preset[] = [
 ]
 
 export const DEFAULT_PRESET: PresetKey = 'this-month'
+
+/**
+ * The period a page opens on when its URL names none.
+ *
+ * The demo is the exception: it seeds a day only once that day has ended, so
+ * on the 1st "this month" is empty and a visitor's first screen would read
+ * "Nothing in this period". It opens on the last 30 days instead. A real Org
+ * keeps the calendar month.
+ */
+export const defaultPreset = (userId: string): PresetKey =>
+  isDemoUser(userId) ? 'last-30' : DEFAULT_PRESET
 
 /**
  * The longest range that may be asked for.
@@ -127,6 +139,8 @@ export type ResolvedRange = {
   range: LocalRange
   /** The preset the URL named, or `null` when it carried dates of its own. */
   preset: PresetKey | null
+  /** What a URL with no period means here, so a link to it can omit it. */
+  fallback: PresetKey
 }
 
 /**
@@ -135,12 +149,13 @@ export type ResolvedRange = {
  * Every rejection falls back to the default rather than erroring: these are
  * query parameters, which anybody may type and a stale link may carry, and a
  * Costs page that refuses to render because a date is malformed is worse than
- * one that shows this month and lets the reader choose again.
+ * one that shows the default period and lets the reader choose again.
  */
 export const resolveRange = (
   params: RangeParams,
   timezone: string,
   now: Date = new Date(),
+  fallback: PresetKey = DEFAULT_PRESET,
 ): ResolvedRange => {
   const from = one(params.from)
   const to = one(params.to)
@@ -153,15 +168,15 @@ export const resolveRange = (
     // submits another.
     const days = daysBetween(from, to)
     if (days >= 0 && days < MAX_DAYS) {
-      return { range: { from, to: addDays(to, 1) }, preset: null }
+      return { range: { from, to: addDays(to, 1) }, preset: null, fallback }
     }
   }
 
   const named = one(params.range)
   const preset =
-    PRESETS.find((candidate) => candidate.key === named)?.key ?? DEFAULT_PRESET
+    PRESETS.find((candidate) => candidate.key === named)?.key ?? fallback
 
-  return { range: presetRange(preset, timezone, now), preset }
+  return { range: presetRange(preset, timezone, now), preset, fallback }
 }
 
 /**
@@ -172,10 +187,27 @@ export const resolveRange = (
  * breakdown tab silently answers a different question: the reader lands back
  * on Over time having asked only for a different month.
  */
-export const presetHref = (path: string, key: PresetKey, view?: string) => {
+export const presetHref = (
+  path: string,
+  key: PresetKey,
+  view?: string,
+  fallback: PresetKey = DEFAULT_PRESET,
+) => {
   const query = new URLSearchParams()
   if (view) query.set('view', view)
-  if (key !== DEFAULT_PRESET) query.set('range', key)
+  const { range } = periodPatch(key, fallback)
+  if (range) query.set('range', range)
   const search = query.toString()
   return search ? `${path}?${search}` : path
 }
+
+/**
+ * The period keys a preset link writes. A preset replaces whatever period was
+ * there, custom dates included, and the default preset here is left out so a
+ * bare URL and its menu link are the same page.
+ */
+export const periodPatch = (key: PresetKey, fallback: PresetKey) => ({
+  range: key === fallback ? undefined : key,
+  from: undefined,
+  to: undefined,
+})
