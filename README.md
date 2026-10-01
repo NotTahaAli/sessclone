@@ -34,8 +34,9 @@ and the bill arrives as one number. SessClone collects every Turn from
 every one of those places and answers the questions that number cannot: who
 spent it, on which Project, with which model, from which Device.
 
-Self-hosting is free at any size. [sessclone.com](https://sessclone.com) runs
-the same code as paid hosted plans for teams that would rather not operate it.
+Self-hosting is free at any size. Hosted plans on
+[sessclone.com](https://sessclone.com) run the same code for teams that would
+rather not operate it; they are paid, and on a waitlist for now.
 
 ## What it does
 
@@ -106,7 +107,7 @@ to migrate it, then press the button above.
 [Quick start](https://sessclone.com/docs/self-hosting#quick-start-vercel-and-supabase)
 has the six steps.
 
-Self-hosting is free at any size. You supply a Postgres 16+ cluster, an
+You supply a Postgres 16+ cluster, an
 S3-compatible bucket (optional; without one, archival is off) and a Supabase
 project for sign-in. [The self-hosting guide](https://sessclone.com/docs/self-hosting) goes from a
 clone to the first collected Turn: the database roles, the migrations, a script

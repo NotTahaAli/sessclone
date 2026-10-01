@@ -5,8 +5,9 @@ tested function.
 
 **What to build:** `scripts/redact-transcript.mjs` is what
 `packages/shared/fixtures/transcripts/README.md` tells fixture contributors to
-run. `--help` is read as an input file name, and one truncated JSONL line
-throws a bare `SyntaxError` with no line number.
+run. `--help` alone prints the usage line but exits 1, `--help x` reads a file
+named `--help`, and one truncated JSONL line throws a bare `SyntaxError` with
+no line number.
 
 **Blocked by:** none
 
