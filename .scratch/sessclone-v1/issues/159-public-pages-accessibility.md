@@ -26,5 +26,8 @@ dark, with axe-core and a keyboard-only walk, turned up three AA failures:
 Left as is, on purpose: the `/demo` spend chart's day bars are 11px wide on a
 phone (2.5.8 Target Size), but the same days are full-width links in the
 "Over time" list on the same page, which is 2.5.8's equivalent-control
-exception. Fumadocs' own landmark notes on `/docs` (TOC outside a landmark, a
+exception, so axe's `target-size` rule still reports them on `/demo` and that
+is expected, not a regression. Both scroll regions stay Tab stops at 1440,
+where they do not overflow; harmless, and cheaper than a resize listener.
+Fumadocs' own landmark notes on `/docs` (TOC outside a landmark, a
 second `header`) are axe best-practice, not WCAG failures.
