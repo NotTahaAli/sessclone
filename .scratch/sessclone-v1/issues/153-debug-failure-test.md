@@ -3,7 +3,8 @@
 **Good first issue.** One small test file beside the code it tests.
 
 **What to build:** `packages/plugin/src/debug.mjs` exports `debugFailure`,
-which prints a swallowed hook error to stderr only when `SESSCLONE_DEBUG=1`.
+which prints a swallowed hook error to stderr only when `SESSCLONE_DEBUG` is
+set to a non-empty value (the docs say `1`).
 Its comment promises it prints the error message and never the configuration
 (which holds the API key). Nothing tests either half of that.
 

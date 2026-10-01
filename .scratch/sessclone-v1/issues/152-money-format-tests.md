@@ -4,8 +4,8 @@
 
 **What to build:** `apps/web/lib/money.ts` formats every dollar figure and
 token count the dashboard shows (`usd`, `count`, `compact`), and its header
-states a rule that matters: a sub-cent Turn shows its real digits, never
-`$0.00`. No test pins that rule today, so a refactor could break it silently.
+states a rule that matters: an amount below half a cent (`Math.abs(value) <
+0.005`) shows six decimals, never `$0.00`. No test pins that rule today, so a refactor could break it silently.
 
 **Blocked by:** none
 
