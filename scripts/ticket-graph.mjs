@@ -94,7 +94,8 @@ const PHASES = [
     type: 'external',
     pos: [1190, 122],
     range: [66, 71],
-    also: [79, 96, 98, 99, 143],
+    // 149 (one-command self-hosting) extends ticket 67's self-host path.
+    also: [79, 96, 98, 99, 143, 149],
   },
   {
     id: 'archival',
