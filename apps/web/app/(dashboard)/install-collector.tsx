@@ -1,6 +1,6 @@
 import { CodeBlock } from './code-block'
 import { SetupTabs } from './setup-tabs'
-import { installCommand } from '../../lib/install-command'
+import { installCommand, MARKETPLACE_COMMAND } from '../../lib/install-command'
 
 // The install step, shown wherever somebody has to put the Collector on a
 // machine: the onboarding state on Costs, and the Keys page for a second
@@ -30,8 +30,6 @@ import { installCommand } from '../../lib/install-command'
 
 const PLACEHOLDER = 'sk_your_key'
 
-const MARKETPLACE = 'claude plugin marketplace add NotTahaAli/sessclone'
-
 export function InstallCollector({ appUrl }: { appUrl: string }) {
   return (
     <SetupTabs>
@@ -50,7 +48,10 @@ function OnAMachine({ appUrl }: { appUrl: string }) {
           In a terminal on the machine whose usage you want collected.
         </p>
         <div className="mt-2">
-          <CodeBlock command={MARKETPLACE} label="the marketplace command" />
+          <CodeBlock
+            command={MARKETPLACE_COMMAND}
+            label="the marketplace command"
+          />
         </div>
       </li>
 
@@ -114,7 +115,7 @@ function InACloudEnvironment({ appUrl }: { appUrl: string }) {
         </p>
         <div className="mt-2">
           <CodeBlock
-            command={`${MARKETPLACE}\n${installCommand(appUrl)}`}
+            command={`${MARKETPLACE_COMMAND}\n${installCommand(appUrl)}`}
             label="the setup script"
           />
         </div>

@@ -1,4 +1,4 @@
-# 148: Public page speed and layout stability
+# 149: Public page speed and layout stability
 
 **What to build:** coordinator, 2026-10-01, overnight while Taha slept: measure
 Lighthouse mobile on the live landing, pricing and docs pages and fix the
