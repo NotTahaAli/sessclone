@@ -1,4 +1,4 @@
-# 147: First-run steps in order, on the surfaces a new person lands on
+# 148: First-run steps in order, on the surfaces a new person lands on
 
 **What to build:** Overnight review (2026-10-01) of what a just-approved
 Owner sees on a phone, ahead of the 10-plan Personal pilot. Three places

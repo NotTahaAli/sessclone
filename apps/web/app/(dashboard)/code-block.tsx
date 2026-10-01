@@ -10,7 +10,7 @@ import { useCallback, useState } from 'react'
 // reader with no JavaScript sees the command and can select it — they lose the
 // button, not the instructions.
 //
-// Wrapped rather than scrolled (ticket 147): on a phone a scrolled line hid the
+// Wrapped rather than scrolled (ticket 148): on a phone a scrolled line hid the
 // key at its end with no cue that there was more, so nobody could check what
 // they were about to paste.
 

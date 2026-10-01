@@ -3,7 +3,7 @@ import { expect, test, vi } from 'vitest'
 
 import { installCommand, MARKETPLACE_COMMAND } from '../lib/install-command'
 
-// Ticket 147: the one render that has the key is the whole setup, in order.
+// Ticket 148: the one render that has the key is the whole setup, in order.
 // It used to offer the install command alone and point at "step 1 below",
 // past the key list, so a first-time reader on a phone ran step 2 first.
 

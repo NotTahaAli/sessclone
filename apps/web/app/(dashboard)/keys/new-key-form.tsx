@@ -113,7 +113,7 @@ export function Revealed({
       </div>
 
       {/* The whole setup, in order, on the one render that has the key
-          (Taha, 2026-09-22; ticket 147). Everywhere else the same command
+          (Taha, 2026-09-22; ticket 148). Everywhere else the same command
           carries a placeholder, because nothing stores a key to put here.
           Step 1 used to live only in the panel below the key list, which a
           first-time reader on a phone never scrolled to before running step
