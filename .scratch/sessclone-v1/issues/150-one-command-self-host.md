@@ -1,4 +1,4 @@
-# 149: Self-hosting in one command and one button
+# 150: Self-hosting in one command and one button
 
 **What to build:** Overnight (2026-10-01). Self-hosting is the free way in,
 and its guide was a dozen hand-run steps: create two roles, a `psql` loop over
