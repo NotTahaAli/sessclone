@@ -251,12 +251,7 @@ export function SwitcherBody({
       </section>
       {invites.length > 0 ? (
         <section className="border-rule mt-1.5 border-t">
-          <h2 className={HEADING}>Pending invites</h2>
-          <ul className={`${LIST} flex flex-col`}>
-            {invites.map((invite) => (
-              <InviteRow key={invite.id} invite={invite} now={now} />
-            ))}
-          </ul>
+          <PendingInvites invites={invites} now={now} />
         </section>
       ) : null}
       {/* Leaving the only Org lands on the no-Org page with no way back
@@ -279,6 +274,27 @@ export function SwitcherBody({
           <span>New Org</span>
         </Link>
       </div>
+    </>
+  )
+}
+
+/** The invitations addressed to the viewer, each with Accept and Decline:
+ * in the switcher, and on the page somebody with no Org lands on. */
+export function PendingInvites({
+  invites,
+  now,
+}: {
+  invites: PendingInvite[]
+  now: string
+}) {
+  return (
+    <>
+      <h2 className={HEADING}>Pending invites</h2>
+      <ul className={`${LIST} flex flex-col`}>
+        {invites.map((invite) => (
+          <InviteRow key={invite.id} invite={invite} now={now} />
+        ))}
+      </ul>
     </>
   )
 }

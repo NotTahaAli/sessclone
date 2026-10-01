@@ -21,6 +21,8 @@ const APP_URL =
 export const AUTH_URL = 'http://127.0.0.1:54135'
 export const BASE_URL = 'http://127.0.0.1:3135'
 export const STATE = './e2e/.auth/state.json'
+// Ticket 161: a second person, signed in with no Org and one invitation.
+export const INVITEE_STATE = './e2e/.auth/invitee.json'
 
 export default defineConfig({
   testDir: './e2e',

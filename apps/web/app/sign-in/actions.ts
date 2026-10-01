@@ -8,8 +8,9 @@ import { APPEARANCE_COOKIE } from '../../lib/appearance'
 import { DEMO_COOKIE } from '../../lib/demo'
 
 import { appUrl } from '../../lib/auth/app-url'
-import { safeNext } from '../../lib/auth/next-path'
+import { invitationToken, safeNext } from '../../lib/auth/next-path'
 import { parsePlan, planQuery, returnPath } from '../../lib/auth/plan'
+import { invitePath } from '../../lib/invitations'
 import { supabaseServer } from '../../lib/supabase/server'
 import { marketingTiers } from '../../lib/tiers'
 
@@ -102,7 +103,12 @@ export const sendMagicLink = async (formData: FormData) => {
   redirect(returnPath(formData, 'sent=1'))
 }
 
-export const signOut = async () => {
+/**
+ * Signs out, back to the sign-in page. An invitation opened while signed in
+ * as somebody else passes its own path as `next` (ticket 161), so signing in
+ * as the right address comes back to it rather than to the dashboard.
+ */
+export const signOut = async (formData?: FormData) => {
   const supabase = await supabaseServer()
   await supabase.auth.signOut()
 
@@ -115,5 +121,11 @@ export const signOut = async () => {
   // Ticket 137: signing out of the demo leaves it.
   store.delete(DEMO_COOKIE)
 
-  redirect('/sign-in')
+  // Only an invitation's path: anything else is the plain way out.
+  const token = invitationToken(safeNext(formData?.get('next')))
+  redirect(
+    token
+      ? `/sign-in?next=${encodeURIComponent(invitePath(token))}`
+      : '/sign-in',
+  )
 }

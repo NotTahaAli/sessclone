@@ -35,10 +35,15 @@ import { asViewer } from '../../lib/db'
 import { currentOperator } from '../../lib/platform-admin'
 import { pendingOrgCount } from '../../lib/subscriptions'
 import { accountUser } from '../../lib/supabase/server'
+import { ownInvitations } from '../../lib/invitations'
+import { signOut } from '../sign-in/actions'
+import { Button, buttonClass } from '../_ui/primitives'
+import { PendingInvites } from './org-choices'
 import {
   deletionRequestedAt,
   orgSwitcherData,
   sessionViewer,
+  type PendingInvite,
 } from '../../lib/viewer'
 
 // Ticket 83: this layout prerenders a static shell.
@@ -139,19 +144,63 @@ function DemoBanner() {
  * What a signed-in person with no Org sees. Not a redirect: a redirect to the
  * sign-in page from a page that *is* signed in is a loop, and this is what a
  * deployment with no database configured looks like from here.
+ *
+ * Ticket 161: whoever lands here with an invitation waiting (signed up from
+ * one and wandered off before accepting, or removed from their only Org and
+ * invited back) can accept it here, and anybody else has the two ways on
+ * that do not need one: start an Org, or sign out.
  */
-function WithoutOrg() {
+async function WithoutOrg({
+  user,
+}: {
+  user: { id: string; email: string } | null
+}) {
+  const invites = user ? await invitesWithoutOrg(user) : null
+
   return (
     <main className="bg-ground text-text mx-auto max-w-2xl p-6">
       <h1 className="text-heading-lg">No Org yet</h1>
       <p className="text-text-secondary mt-2 text-body">
-        You are signed in, but this account is not a Member of any Org. Signing
-        out and back in creates one; if it does not, the deployment&apos;s
-        database is not reachable.
+        {invites === null
+          ? 'You are signed in, but this account is not a Member of any Org, and the deployment’s database is not reachable right now.'
+          : invites.length > 0
+            ? 'You are signed in, but not in an Org yet. Accept an invitation to join that Org.'
+            : 'You are signed in, but this account is not a Member of any Org. Ask an Owner or Admin of your team’s Org for an invitation, or start one of your own.'}
       </p>
+      {invites?.length ? (
+        <div className="border-rule mt-4 max-w-sm rounded-md border">
+          <PendingInvites invites={invites} now={new Date().toISOString()} />
+        </div>
+      ) : null}
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <Link href="/new-org" className={buttonClass()}>
+          New Org
+        </Link>
+        <form action={signOut}>
+          <Button type="submit">Sign out</Button>
+        </form>
+      </div>
     </main>
   )
 }
+
+/** The person's pending invitations as the switcher has them (expiry as
+ * ISO, so server and browser agree), or null when they cannot be read. */
+const invitesWithoutOrg = (user: {
+  id: string
+  email: string
+}): Promise<PendingInvite[] | null> =>
+  asViewer(user.id, (tx) => ownInvitations(tx, user.email)).then(
+    (rows) =>
+      rows.map((invite) => ({
+        ...invite,
+        expiresAt: invite.expiresAt.toISOString(),
+      })),
+    (cause: unknown) => {
+      console.error('could not read invitations without an Org', cause)
+      return null
+    },
+  )
 
 /**
  * What a non-active subscription says, in the reader's terms.
@@ -273,7 +322,7 @@ async function Content({ children }: { children: ReactNode }) {
   if (deleting) return <DeletionPending due={deletionDue(deleting)} />
 
   const viewer = await sessionViewer()
-  if (!viewer) return <WithoutOrg />
+  if (!viewer) return <WithoutOrg user={account} />
 
   // Ticket 119: an Org waiting for approval, or cancelled, sees only this.
   // The page is not rendered at all, so nothing it reads reaches the reader.

@@ -3,6 +3,11 @@ import Link from 'next/link'
 
 import { AcceptForm } from './accept-form'
 import { PanelCredit } from '../../(dashboard)/credit'
+import { OrgMark } from '../../org-mark'
+import { signOut } from '../../sign-in/actions'
+import { readAnonymously } from '../../../lib/db'
+import { invitationOrg, invitePath } from '../../../lib/invitations'
+import { logoPath } from '../../../lib/org-logo'
 import { realSessionUser } from '../../../lib/supabase/server'
 
 // Reachable by crawlers (robots.txt leaves it open) so they read this noindex.
@@ -42,7 +47,14 @@ export default async function Join({
 }) {
   const { token } = await params
   // Ticket 137: the demo visitor is signed out here.
-  const user = await realSessionUser()
+  // Ticket 161: and the Org, named, as `/sign-in` already names it. The token
+  // is in the URL the visitor followed, so resolving it discloses nothing; a
+  // spent, withdrawn or invented one resolves to nothing and names nothing.
+  const [user, org] = await Promise.all([
+    realSessionUser(),
+    readAnonymously((tx) => invitationOrg(tx, token)),
+  ])
+  const invitedTo = org ? <InvitedTo org={org} /> : null
 
   // Signed out: sign in first and come back here. The token stays in the URL
   // rather than moving into a cookie, so nothing about it is stored anywhere
@@ -51,6 +63,7 @@ export default async function Join({
     const next = encodeURIComponent(`/join/${token}`)
     return (
       <Shell headline="Sign in to accept this invitation">
+        {invitedTo}
         <p className="text-text-secondary text-sm">
           An invitation is for one address, so it only works once you are signed
           in as the person it was sent to.
@@ -70,11 +83,23 @@ export default async function Join({
   // by loading a URL is one anything can trigger on the visitor's behalf.
   return (
     <Shell headline="Accept this invitation">
+      {invitedTo}
       <p className="text-text-secondary text-sm">
         You are signed in as {user.email}. An invitation only works for the
         address it was sent to, and only once.
       </p>
       <AcceptForm token={token} />
+      {/* Ticket 161: the way out when it was sent to another address, back
+          to this page once signed in as that one. */}
+      <form action={signOut} className="mt-1">
+        <input type="hidden" name="next" value={invitePath(token)} />
+        <button
+          type="submit"
+          className="text-text-muted hover:text-text text-caption underline"
+        >
+          Not {user.email}? Sign out
+        </button>
+      </form>
     </Shell>
   )
 }
@@ -96,5 +121,23 @@ function Shell({
         <PanelCredit />
       </div>
     </main>
+  )
+}
+
+/** Which Org the invitation is to, with its mark (ticket 161). */
+function InvitedTo({
+  org,
+}: {
+  org: { orgId: string; orgName: string; logo: Date | null }
+}) {
+  return (
+    <p className="text-text mb-3 flex items-center gap-2 text-body">
+      <OrgMark
+        name={org.orgName}
+        src={org.logo ? logoPath(org.orgId, org.logo) : null}
+        size={32}
+      />
+      You were invited to {org.orgName}.
+    </p>
   )
 }
