@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
-  "receiptId": "3edf92bc-ba34-4b4d-bdbb-093f38c1403e",
+  "receiptId": "94f90a1f-e549-44eb-a0db-823bbc91be94",
   "status": "current",
   "command": "deliver",
   "type": "architecture",
   "input": "/home/user/sessclone/docs/tickets/ticket-graph.architecture.json",
   "output": "/home/user/sessclone/docs/tickets/ticket-graph.html",
   "specification": {
-    "sha256": "182beca5868f54e69824d49fd38987cd077630899d72a3af2e579ea9507d6b91",
-    "bytes": 6720
+    "sha256": "1c8c997f0d1a50cd4a10454757ad20301776f3717236b6835f5663915bf5422b",
+    "bytes": 6962
   },
   "artifact": {
-    "sha256": "5089e18a998724192d7686c58fed0f3809626d6416e0be86e5b485e747fa08d5",
-    "bytes": 775515
+    "sha256": "cfd16c83a10f7e7548405a12329b252cc8b08c12be4d91684f67fb124ae05347",
+    "bytes": 776849
   }
 }
