@@ -8,7 +8,7 @@ import { readAnonymously } from '../../lib/db'
 import { invitationOrg } from '../../lib/invitations'
 import { logoPath } from '../../lib/org-logo'
 import { OrgMark } from '../org-mark'
-import { LogoMark } from '../_ui/logo'
+import { AuthLogo } from '../_ui/auth-logo'
 import { buttonClass, inputClass } from '../_ui/primitives'
 import { Notices } from './notices'
 import { invitationToken, safeNext } from '../../lib/auth/next-path'
@@ -112,7 +112,7 @@ async function JoinLink({ searchParams }: { searchParams: Query }) {
 export default function SignIn({ searchParams }: { searchParams: Query }) {
   return (
     <main className="mx-auto flex max-w-md flex-col px-4 py-16">
-      <LogoMark size={28} className="text-text mb-4" />
+      <AuthLogo />
       <h1 className="text-heading-lg">Sign in to SessClone</h1>
 
       <Suspense fallback={null}>

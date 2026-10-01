@@ -3,6 +3,7 @@ import { RootProvider } from 'fumadocs-ui/provider/next'
 import type { ReactNode } from 'react'
 
 import { source } from '../../lib/docs'
+import { siteFlags } from '../../lib/site-flags'
 import { Lockup } from '../_ui/logo'
 import { CloudflareAnalytics } from '../cloudflare-analytics'
 
@@ -21,11 +22,25 @@ import './docs.css'
 // Module scope, so each render passes the same objects.
 const THEME = { enabled: false }
 const NAV = { title: <Lockup size={18} />, url: '/' }
+// A reader who arrived on a guide from search had no way from the docs to
+// plans or an account. Only where this deployment serves the landing page,
+// since that is where `/pricing` exists.
+const LINKS = siteFlags().landing
+  ? [
+      { text: 'Pricing', url: '/pricing' },
+      { text: 'Sign up', url: '/sign-up' },
+    ]
+  : []
 
 export default function Layout({ children }: { children: ReactNode }) {
   return (
     <RootProvider theme={THEME}>
-      <DocsLayout tree={source.getPageTree()} nav={NAV} themeSwitch={THEME}>
+      <DocsLayout
+        tree={source.getPageTree()}
+        nav={NAV}
+        links={LINKS}
+        themeSwitch={THEME}
+      >
         {children}
       </DocsLayout>
       <CloudflareAnalytics />
