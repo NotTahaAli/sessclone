@@ -4,7 +4,9 @@ import { appUrl } from './auth/app-url'
 import { asViewer } from './db'
 import {
   mailerConfigured,
+  sendApprovalNotice,
   sendSignupNotice,
+  type ApprovalNotice,
   type Delivery,
   type SignupNotice,
 } from './mailer'
@@ -76,6 +78,52 @@ export const notifySignup = async (
     })
   } catch (cause) {
     console.error('sign-up: the notice to the operators failed', cause)
+    return 'failed'
+  }
+}
+
+/**
+ * Ticket 146: who hears that an Org was approved, read as the operator who
+ * approved it (`users_read` and `members_read` let a platform admin see every
+ * Org's people). The Org's current Owners: not a removed one, and not a
+ * scrubbed account, whose address is no longer theirs. Null when the reader
+ * cannot see the Org at all.
+ */
+export const approvalNotice = async (
+  tx: TransactionSql,
+  orgId: string,
+): Promise<Omit<ApprovalNotice, 'link'> | null> => {
+  const [row] = await tx<{ org_name: string; recipients: string[] }[]>`
+    select org.name as org_name,
+           array(
+             select person.email
+               from members member
+               join users person on person.id = member.user_id
+              where member.org_id = org.id
+                and member.role = 'owner'
+                and member.removed_at is null
+                and person.deleted_at is null
+              order by person.email
+           ) as recipients
+      from orgs org
+     where org.id = ${orgId}
+  `
+  return row ? { to: row.recipients, orgName: row.org_name } : null
+}
+
+/** Tells the Owners their Org is in. Never throws, like `notifySignup`: the
+ * approval has committed, and this runs after the response (`after()`). */
+export const notifyApproval = async (
+  operatorId: string,
+  orgId: string,
+): Promise<Delivery> => {
+  if (!mailerConfigured()) return 'not-configured'
+  try {
+    const notice = await asViewer(operatorId, (tx) => approvalNotice(tx, orgId))
+    if (!notice) return 'failed'
+    return await sendApprovalNotice({ ...notice, link: `${appUrl()}/costs` })
+  } catch (cause) {
+    console.error('approval: the notice to the Owners failed', cause)
     return 'failed'
   }
 }

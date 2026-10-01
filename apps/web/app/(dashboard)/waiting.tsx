@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 
 import { DeleteWaitingOrg } from './delete-waiting-org'
 import { deleteWaitingOrg } from './org-actions'
+import { mailerConfigured } from '../../lib/mailer'
 import { signOut } from '../sign-in/actions'
 import { Button, buttonClass } from '../_ui/primitives'
 
@@ -52,7 +53,7 @@ export function Waiting({
         <p className="text-text-muted text-body">
           {cancelled
             ? `${orgName}'s subscription has been cancelled. Nothing is collected while it is. Whoever operates this deployment can turn it back on.`
-            : `${orgName} is on the waitlist${planName ? ` for the ${planName} plan` : ''}. Paid plans open by invitation from the waitlist, and nothing is collected until yours does. Reload this page once you hear it is approved.`}
+            : `${orgName} is on the waitlist${planName ? ` for the ${planName} plan` : ''}. Paid plans open by invitation from the waitlist, and nothing is collected until yours does. ${mailerConfigured() ? 'Its Owners get an email the moment it is approved.' : 'Reload this page once you hear it is approved.'}`}
         </p>
         <div className="flex flex-wrap gap-2">
           {operator ? (
