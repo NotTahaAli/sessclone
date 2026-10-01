@@ -148,6 +148,8 @@ const PHASES = [
     type: 'backend',
     pos: [500, 800],
     range: [118, 121],
+    // Ticket 146 (the approval email) answers ticket 120's sign-up notice.
+    also: [146],
   },
   {
     id: 'review',

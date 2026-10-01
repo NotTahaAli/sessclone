@@ -1,5 +1,6 @@
 import type { TransactionSql } from 'postgres'
 
+import { UNLOCKED_STATUSES } from './approval'
 import type { SubscriptionStatus } from './tier'
 
 // Ticket 48: activation by hand, and the record it leaves.
@@ -23,6 +24,10 @@ import type { SubscriptionStatus } from './tier'
 // history before and after reads as one series.
 
 export const ORG_PAGE = 50
+
+/** Whether this status lets an Org in (ticket 119), whatever the switch. */
+const unlocked = (status: string | null) =>
+  (UNLOCKED_STATUSES as readonly (string | null)[]).includes(status)
 
 /** How many events one Org's history shows; the page says so when it is cut. */
 export const HISTORY_PAGE = 20
@@ -353,7 +358,14 @@ export const setSubscription = async (
      * days; null clears it, omitted keeps it. */
     retentionMaxDays?: number | null
   },
-): Promise<{ saved: boolean; recorded: boolean }> => {
+): Promise<{
+  saved: boolean
+  recorded: boolean
+  /** Ticket 146: this save let a locked Org in (ticket 119), so its Owners
+   * are told. Says nothing about whether the deployment requires approval;
+   * the caller asks `approvalRequired()`. */
+  approved: boolean
+}> => {
   const [before] = await tx<
     {
       tier_id: string
@@ -411,6 +423,10 @@ export const setSubscription = async (
   // claiming an activation.
   return {
     saved: rows.length > 0,
+    approved:
+      rows.length > 0 &&
+      !unlocked(before?.status ?? null) &&
+      unlocked(subscription.status),
     recorded:
       rows.length > 0 &&
       (!before ||

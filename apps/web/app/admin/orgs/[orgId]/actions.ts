@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { after } from 'next/server'
 import { z } from 'zod'
 
 import { approvalRequired } from '../../../../lib/approval'
@@ -9,6 +10,7 @@ import { asOperator, currentOperator } from '../../../../lib/platform-admin'
 import { setSubscription } from '../../../../lib/subscriptions'
 import { NAME_LIMIT, setOrgOperatorName } from '../../../../lib/names'
 import { deletePendingOrg } from '../../../../lib/org'
+import { notifyApproval } from '../../../../lib/signup-notice'
 import type { NameState } from '../../../(dashboard)/inline-name'
 import type { OrgActionState } from '../../../(dashboard)/org-actions'
 
@@ -54,7 +56,8 @@ export const activateAction = async (
   _previous: unknown,
   formData: FormData,
 ): Promise<{ error: string } | { saved: 'recorded' | 'unchanged' } | null> => {
-  if (!(await currentOperator())) {
+  const operator = await currentOperator()
+  if (!operator) {
     return { error: 'Only a platform administrator may activate an Org.' }
   }
 
@@ -95,6 +98,12 @@ export const activateAction = async (
   // activation that did not happen.
   if (!result.saved) {
     return { error: 'That subscription could not be saved.' }
+  }
+
+  // Ticket 146: the Owners hear they are in, after the response and only
+  // once the write has committed. `notifyApproval` never throws.
+  if (result.approved && approvalRequired()) {
+    after(() => notifyApproval(operator.userId, orgId))
   }
 
   // Not just this page: status decides what the Org's own dashboard says on
