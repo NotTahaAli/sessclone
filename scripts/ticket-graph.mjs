@@ -139,9 +139,9 @@ const PHASES = [
     pos: [730, 800],
     range: [111, 117],
     // Tickets 142 (email redesign) and 145 (Costs header on a phone) extend
-    // the visual overhaul; 146 (search and answer engines) the public site
+    // the visual overhaul; 147 (search and answer engines) the public site
     // and docs.
-    also: [142, 145, 146],
+    also: [142, 145, 147],
   },
   {
     id: 'approval',
@@ -149,6 +149,8 @@ const PHASES = [
     type: 'backend',
     pos: [500, 800],
     range: [118, 121],
+    // Ticket 146 (the approval email) answers ticket 120's sign-up notice.
+    also: [146],
   },
   {
     id: 'review',

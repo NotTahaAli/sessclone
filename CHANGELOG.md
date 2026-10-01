@@ -6,6 +6,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Approving an Org from the Admin panel emails its Owners that they are in,
+  with a link to start, when SMTP is set. The waiting page says so instead of
+  asking them to reload it.
+
 ## [0.4.0] - 2026-09-27
 
 Upgrading from 0.3.0: deploy the web app before telling anyone to update the

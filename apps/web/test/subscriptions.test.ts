@@ -52,7 +52,7 @@ test('an operator activates an Org, and the event says who and why', async () =>
         note: 'invoice INV-2026-014 paid by transfer',
       }),
     ),
-  ).toEqual({ saved: true, recorded: true })
+  ).toEqual({ saved: true, recorded: true, approved: true })
 
   const [event] = await asOperator((tx) =>
     subscriptionHistory(tx, fixture.acme.id),
@@ -239,6 +239,7 @@ test('a save that changes nothing says so instead of claiming a record', async (
   expect(await set('invoice INV-2026-014')).toEqual({
     saved: true,
     recorded: true,
+    approved: true,
   })
 
   // `sessclone_write_subscription_event` returns early when neither the Tier
@@ -247,6 +248,7 @@ test('a save that changes nothing says so instead of claiming a record', async (
   expect(await set('meant to correct the note')).toEqual({
     saved: true,
     recorded: false,
+    approved: false,
   })
 
   const history = await asOperator((tx) =>
@@ -480,6 +482,7 @@ test('a price-only change is a change, and the history keeps the price', async (
   expect(await set(50_000, 'agreed on the call')).toEqual({
     saved: true,
     recorded: true,
+    approved: false,
   })
 
   const events = await sql<{ note: string; base: number | null }[]>`
@@ -547,14 +550,48 @@ test('a status-only change keeps the agreed price', async () => {
   )
 
   // Omitted is "leave it"; only an explicit null clears it.
-  expect(await set()).toEqual({ saved: true, recorded: true })
+  expect(await set()).toEqual({
+    saved: true,
+    recorded: true,
+    approved: false,
+  })
   const price = () => sql<{ base: number | null; seat: number | null }[]>`
     select price_base_cents as base, price_seat_cents as seat
       from subscriptions where org_id = ${fixture.acme.id}
   `
   expect(await price()).toEqual([{ base: 50_000, seat: 800 }])
-  expect(await set()).toEqual({ saved: true, recorded: false })
+  expect(await set()).toEqual({
+    saved: true,
+    recorded: false,
+    approved: false,
+  })
 
   await set({ priceBaseCents: null, priceSeatCents: null })
   expect(await price()).toEqual([{ base: null, seat: null }])
+})
+
+test('approved is true only for the save that lets a locked Org in', async () => {
+  // Ticket 146: the save that should email the Owner. Locked is no row,
+  // `inactive` or `cancelled` (ticket 119); in is `active` or `past_due`.
+  const tierId = await seedTier('team')
+  const save = async (
+    status: 'inactive' | 'active' | 'past_due' | 'cancelled',
+  ) =>
+    (
+      await asOperator((tx) =>
+        setSubscription(tx, {
+          orgId: fixture.acme.id,
+          tierId,
+          status,
+          note: null,
+        }),
+      )
+    ).approved
+
+  expect(await save('inactive')).toBe(false)
+  expect(await save('active')).toBe(true)
+  expect(await save('active')).toBe(false)
+  expect(await save('past_due')).toBe(false)
+  expect(await save('cancelled')).toBe(false)
+  expect(await save('past_due')).toBe(true)
 })

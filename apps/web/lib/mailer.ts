@@ -191,6 +191,45 @@ export const sendSignupNotice = (notice: SignupNotice): Promise<Delivery> =>
     ? Promise.resolve('not-configured')
     : deliver(renderSignupNotice(notice))
 
+export type ApprovalNotice = {
+  /** The Org's current Owners. */
+  to: string[]
+  orgName: string
+  /** Where they start: the dashboard, absolute. */
+  link: string
+}
+
+/** Ticket 146: the Owners hear that their Org is in, rather than reloading the
+ * waiting page until it is. Exported for the same reason `renderInvite` is. */
+export const renderApprovalNotice = ({
+  to,
+  orgName,
+  link,
+}: ApprovalNotice) => ({
+  to,
+  subject: `${orgName} is approved on SessClone`,
+  text: [
+    `${orgName} is approved. You're in.`,
+    '',
+    `Create an API key and install the Collector; your first Turn shows on Costs a moment after Claude Code answers: ${link}`,
+  ].join('\n'),
+  html: renderLayout({
+    title: `${orgName} is approved on SessClone`,
+    heading: `${orgName} is approved`,
+    intro: `You're in. Create an API key and install the Collector, and your first Turn shows on Costs a moment after Claude Code answers.`,
+    action: { label: 'Open SessClone', href: link },
+    rows: [['Org', orgName]],
+    notes: ['You get this because you own this Org on SessClone.'],
+  }),
+})
+
+export const sendApprovalNotice = (
+  notice: ApprovalNotice,
+): Promise<Delivery> =>
+  notice.to.length === 0
+    ? Promise.resolve('not-configured')
+    : deliver(renderApprovalNotice(notice))
+
 /**
  * Sends one message, or reports why it could not.
  *

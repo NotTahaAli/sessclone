@@ -1,4 +1,4 @@
-# 146: Search and answer-engine readiness
+# 147: Search and answer-engine readiness
 
 **What to build:** Taha, 2026-10-01: make sessclone.com as easy as possible
 for search engines and AI assistants to read, cite and recommend, at no cost.
