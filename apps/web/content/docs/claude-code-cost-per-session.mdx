@@ -1,0 +1,111 @@
+---
+title: Claude Code cost per session, and how it is calculated
+description: How a Claude Code session turns into dollars — the five token classes, the per-model rates, the modifiers for fast mode, US-only inference and batch — with a worked example you can check by hand.
+---
+
+A Claude Code session is a run of model requests. Each request (a **Turn** in
+SessClone) reports how many tokens it used, split into classes, and each class
+has its own price per million tokens (MTok). The session's cost is the sum
+over its Turns. Nothing else is billed per token.
+
+## The five token classes
+
+Every Claude Code response reports its usage in these classes:
+
+| Class            | What it is                                                  | Price relative to input |
+| ---------------- | ----------------------------------------------------------- | ----------------------- |
+| Input            | New tokens sent that were not read from the prompt cache    | 1x                      |
+| Cache write (5m) | Tokens written to the 5-minute prompt cache                 | 1.25x                   |
+| Cache write (1h) | Tokens written to the 1-hour prompt cache                   | 2x                      |
+| Cache read       | Tokens served from the prompt cache                         | 0.1x on most models     |
+| Output           | Tokens the model generated, **including extended thinking** | Its own rate, 5x input  |
+
+The multipliers are from Anthropic's
+[pricing page](https://platform.claude.com/docs/en/about-claude/pricing). The
+cache read multiplier has exceptions: 0.05x on Claude Opus 5.5 and 0.025x on
+Claude Fable 5.1 and Mythos 5.1. Thinking tokens are billed as output
+([Claude Code docs](https://code.claude.com/docs/en/costs#adjust-extended-thinking)),
+which is why lowering the effort level saves money.
+
+## Current rates
+
+Per million tokens, from the
+[pricing page](https://platform.claude.com/docs/en/about-claude/pricing), read
+on 2026-10-01:
+
+| Model             | Input | 5m write | 1h write | Cache read | Output |
+| ----------------- | ----- | -------- | -------- | ---------- | ------ |
+| Claude Fable 5.1  | $10   | $12.50   | $20      | $0.25      | $50    |
+| Claude Opus 5.5   | $4    | $5       | $8       | $0.20      | $20    |
+| Claude Opus 5     | $5    | $6.25    | $10      | $0.50      | $25    |
+| Claude Sonnet 5.5 | $2    | $2.50    | $4       | $0.20      | $10    |
+| Claude Sonnet 4.6 | $3    | $3.75    | $6       | $0.30      | $15    |
+| Claude Haiku 4.5  | $1    | $1.25    | $2       | $0.10      | $5     |
+
+Check the page itself before relying on a figure: prices change, and this
+table is a snapshot.
+
+## Worked example
+
+Anthropic's own [`/usage` example](https://code.claude.com/docs/en/costs#using-the-usage-command)
+shows a Claude Sonnet 4.6 session with 1.2k input, 5.3k output, 940k cache
+read and 50k cache write tokens, totalling **$0.55**. The arithmetic, with the
+cache writes at the 5-minute rate:
+
+| Class            | Tokens  | Rate per MTok | Cost       |
+| ---------------- | ------- | ------------- | ---------- |
+| Input            | 1,200   | $3            | $0.0036    |
+| Output           | 5,300   | $15           | $0.0795    |
+| Cache read       | 940,000 | $0.30         | $0.2820    |
+| Cache write (5m) | 50,000  | $3.75         | $0.1875    |
+| **Total**        |         |               | **$0.553** |
+
+Two things stand out. Over half the cost is cache reads, because every request
+re-sends the whole conversation and most of it comes back from the cache. And
+the 5.3k output tokens the user actually saw cost about 8 cents of it. A long
+session costs more per message than a short one for the same question. See
+[cache tokens explained](/docs/claude-code-cache-tokens).
+
+## Modifiers on top of the rate
+
+Three settings multiply the token rates:
+
+- **Fast mode** on Claude Opus 5.5, Opus 5 and Opus 4.8 costs twice the
+  standard input and output rate, on the Claude API only.
+- **US-only inference** (`inference_geo: "us"`) costs 1.1x on every token
+  class, on Claude 4.6 and later models, on the Claude API and Claude Platform on
+  AWS.
+- **The Batch API** halves input and output. Claude Code sessions are
+  interactive, so this rarely applies to them.
+
+Server tools are priced per request, not per token: web search is $10 per
+1,000 searches, web fetch has no extra charge.
+
+## Subscriptions, API keys and cloud providers
+
+- **API key or Console:** you are billed these rates per token. `/usage`
+  shows the session's estimate; the Console usage page is the bill.
+- **Pro, Max, Team or Enterprise seat:** usage draws on the plan's allowance,
+  not per token. The per-token figure is still useful as a measure of how much
+  work a session did, and to compare against what an API key would cost.
+- **Bedrock, Google Cloud, Foundry:** your cloud provider sets the price, and
+  regional endpoints cost more. Check its pricing page.
+
+## Seeing it per session, across every machine
+
+`/usage` covers the session in front of you, on that machine, and resets on
+`/clear`. SessClone keeps the Sessions from every machine a Member works on, within
+your plan's history window, including cloud sessions where Claude offers the
+API credential they need (Pro and Max today). It prices each Turn with the
+rate in force when it ran: a new price takes effect from its date and leaves
+earlier Turns at the old rate. A session's page lists
+its Turns with the tokens and cost of each, its cost by model, and the
+subagent runs it started.
+
+Two things it will not do: invent a rate for a model it has no price for (the
+Turn shows as unpriced, not $0), or call the estimate an invoice. An Enterprise
+Org can set its own per-model rates so the estimates match a negotiated
+contract.
+
+[Install the Collector](/docs/install) to start, or see
+[how to track costs per developer and team](/docs/track-claude-code-costs-per-team).
