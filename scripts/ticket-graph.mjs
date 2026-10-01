@@ -138,9 +138,9 @@ const PHASES = [
     type: 'frontend',
     pos: [730, 800],
     range: [111, 117],
-    // Tickets 142 (email redesign) and 145 (Costs header on a phone) extend
-    // the visual overhaul.
-    also: [142, 145],
+    // Tickets 142 (email redesign), 145 (Costs header on a phone) and 147
+    // (first-run steps) extend the visual overhaul.
+    also: [142, 145, 147],
   },
   {
     id: 'approval',

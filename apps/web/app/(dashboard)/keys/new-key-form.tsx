@@ -10,7 +10,11 @@ import {
   inputClass,
   SectionBreak,
 } from '../../_ui/primitives'
-import { installCommand } from '../../../lib/install-command'
+import { CodeBlock } from '../code-block'
+import {
+  installCommand,
+  MARKETPLACE_COMMAND,
+} from '../../../lib/install-command'
 
 // The one client component on this page, and it is client-side for exactly one
 // reason: the new key lives in `useActionState`'s return value and nowhere
@@ -72,10 +76,14 @@ export function NewKeyForm({
  * Shown once, on the render that created it. Navigating away or reloading
  * loses it, and that is not a bug to fix later — nothing stored it.
  */
-function Revealed({ apiKey, appUrl }: { apiKey: string; appUrl: string }) {
+export function Revealed({
+  apiKey,
+  appUrl,
+}: {
+  apiKey: string
+  appUrl: string
+}) {
   const [copied, setCopied] = useState(false)
-  const [copiedCommand, setCopiedCommand] = useState(false)
-  const command = installCommand(appUrl, apiKey)
 
   const copy = useCallback(() => {
     // Unavailable over plain HTTP and refusable by the browser, so the key
@@ -85,13 +93,6 @@ function Revealed({ apiKey, appUrl }: { apiKey: string; appUrl: string }) {
       () => setCopied(false),
     )
   }, [apiKey])
-
-  const copyCommand = useCallback(() => {
-    navigator.clipboard?.writeText(command).then(
-      () => setCopiedCommand(true),
-      () => setCopiedCommand(false),
-    )
-  }, [command])
 
   return (
     <div role="status" className={`${cardClass} mt-3`}>
@@ -111,41 +112,54 @@ function Revealed({ apiKey, appUrl }: { apiKey: string; appUrl: string }) {
         </button>
       </div>
 
-      {/* The install command with the key already in it, on the one render
-          that has the key (Taha, 2026-09-22). Everywhere else the same
-          command carries a placeholder, because nothing stores a key to put
-          here — and a machine set up by one paste is the whole point of the
-          `--config` flags. The marketplace command runs first, which the
-          panel below this form spells out.
+      {/* The whole setup, in order, on the one render that has the key
+          (Taha, 2026-09-22; ticket 147). Everywhere else the same command
+          carries a placeholder, because nothing stores a key to put here.
+          Step 1 used to live only in the panel below the key list, which a
+          first-time reader on a phone never scrolled to before running step
+          2.
 
           The caveat is not hidden: a command carries its argument into shell
           history, so the prompt route is named right beside it for anybody
           who would rather it did not. */}
-      <div className="mt-4">
-        <p className="text-text text-sm font-medium">
-          Or install the Collector in one command
-        </p>
-        <p className="text-text-secondary mt-1 text-sm">
-          After <code className="font-mono">claude plugin marketplace add</code>
-          , which is step 1 below. This has your key in it, so it will be kept
-          in your shell&apos;s history; running{' '}
-          <code className="font-mono">/plugin install sessclone</code> inside
-          Claude Code asks for the key at a prompt instead.
-        </p>
-        <div className="bg-surface-hover mt-2 flex items-center gap-2 rounded-md p-2">
-          <code className="text-text grow overflow-x-auto px-1 font-mono text-sm whitespace-pre">
-            {command}
-          </code>
-          <button
-            type="button"
-            onClick={copyCommand}
-            className={`${buttonClass()} shrink-0`}
-          >
-            {copiedCommand ? 'Copied' : 'Copy'}
-            <span className="sr-only"> the install command</span>
-          </button>
-        </div>
-      </div>
+      <ol className="mt-4 flex flex-col gap-3">
+        <li>
+          <p className="text-text text-sm font-medium">
+            1. Add the marketplace
+          </p>
+          <div className="mt-1.5">
+            <CodeBlock
+              command={MARKETPLACE_COMMAND}
+              label="the marketplace command"
+            />
+          </div>
+        </li>
+        <li>
+          <p className="text-text text-sm font-medium">
+            2. Install the Collector with this key
+          </p>
+          <div className="mt-1.5">
+            <CodeBlock
+              command={installCommand(appUrl, apiKey)}
+              label="the install command"
+            />
+          </div>
+          <p className="text-text-secondary mt-1.5 text-sm">
+            This keeps the key in your shell&apos;s history. To avoid that, run{' '}
+            <code className="font-mono">/plugin install sessclone</code> inside
+            Claude Code and paste the key at its prompt.
+          </p>
+        </li>
+        <li>
+          <p className="text-text text-sm font-medium">
+            3. Restart Claude Code
+          </p>
+          <p className="text-text-secondary mt-0.5 text-sm">
+            Your first Turn shows on Costs a moment after Claude Code next
+            answers.
+          </p>
+        </li>
+      </ol>
     </div>
   )
 }

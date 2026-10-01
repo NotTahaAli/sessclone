@@ -320,15 +320,17 @@ function Body({
       )
 
     // No key and no Turn: the Collector has nothing to report with, so that is
-    // the one thing worth saying. The sentence is the product IA's, for the
-    // Keys surface's own day-one state.
+    // the one thing worth saying, with the rest of the way to a first Turn
+    // in one sentence so the button is not a leap into the unknown (ticket
+    // 147).
     default:
       return (
         <EmptyState
           headline="Nothing has been collected yet"
           action={CREATE_A_KEY}
         >
-          You have no API key yet. The Collector needs one to report.
+          Create a key and install the Collector on your machine; your first
+          Turn shows here a moment after Claude Code next answers.
         </EmptyState>
       )
   }

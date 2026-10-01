@@ -24,3 +24,8 @@ export const installCommand = (appUrl: string, apiKey?: string) =>
 
 /** `default` of the `url` option in `packages/plugin/.claude-plugin/plugin.json`. */
 export const HOSTED_URL = 'https://sessclone.com'
+
+/** Step 1 on every surface that installs the Collector: the install panel and
+ * the new-key form (ticket 147). */
+export const MARKETPLACE_COMMAND =
+  'claude plugin marketplace add NotTahaAli/sessclone'

@@ -9,6 +9,10 @@ import { useCallback, useState } from 'react'
 // here is. The command itself is rendered by the server into the markup, so a
 // reader with no JavaScript sees the command and can select it — they lose the
 // button, not the instructions.
+//
+// Wrapped rather than scrolled (ticket 147): on a phone a scrolled line hid the
+// key at its end with no cue that there was more, so nobody could check what
+// they were about to paste.
 
 export function CodeBlock({
   command,
@@ -36,7 +40,7 @@ export function CodeBlock({
 
   return (
     <div className="border-rule bg-surface flex items-center gap-2 rounded-lg border py-1.5 pr-1.5 pl-2">
-      <code className="text-text grow overflow-x-auto px-1 text-caption whitespace-pre">
+      <code className="text-text min-w-0 grow px-1 text-caption whitespace-pre-wrap [overflow-wrap:anywhere]">
         {command}
       </code>
       <button
