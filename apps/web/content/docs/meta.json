@@ -8,6 +8,10 @@
     "configuration",
     "self-hosting",
     "compare",
+    "---Costs---",
+    "track-claude-code-costs-per-team",
+    "claude-code-cost-per-session",
+    "claude-code-cache-tokens",
     "---Reference---",
     "...api"
   ]

@@ -1,4 +1,4 @@
-# 155: Document every `verify-collector.mjs` flag in the install guide
+# 156: Document every `verify-collector.mjs` flag in the install guide
 
 **Good first issue.** Docs only.
 
@@ -8,7 +8,7 @@ cannot reach the deployment), that leaving out `--day` counts every day, or
 that `--tz` defaults to the machine's zone. The script's own `--help` already
 has the wording.
 
-**Blocked by:** 153, so the guide describes the final behaviour
+**Blocked by:** 154, so the guide describes the final behaviour
 
 **Status:** todo
 
