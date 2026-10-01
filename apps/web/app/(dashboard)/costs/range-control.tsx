@@ -6,7 +6,12 @@ import {
 } from '../../_ui/pill-menu'
 import { buttonClass, inputClass } from '../../_ui/primitives'
 import { hrefWith, type Query } from '../query'
-import { PRESETS, type PresetKey, type ResolvedRange } from '../../../lib/range'
+import {
+  PRESETS,
+  periodPatch,
+  type PresetKey,
+  type ResolvedRange,
+} from '../../../lib/range'
 import { addDays, type LocalRange } from '../../../lib/series'
 
 // Ticket 53's control, redrawn as Direction A's header pill (ticket 112): the
@@ -107,12 +112,5 @@ export function RangeControl({
     </PillMenu>
   )
 }
-
-/** A preset replaces whatever period was there, custom dates included. */
-const periodPatch = (key: PresetKey, fallback: PresetKey) => ({
-  range: key === fallback ? undefined : key,
-  from: undefined,
-  to: undefined,
-})
 
 export type { PresetKey }

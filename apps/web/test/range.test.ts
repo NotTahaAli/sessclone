@@ -157,6 +157,14 @@ describe('the demo default', () => {
     expect(seeded >= range.from && seeded < range.to).toBe(true)
   })
 
+  test('the demo menu leaves its own default out of the link', () => {
+    // A bare `/costs` and the menu's "Last 30 days" must be one page.
+    expect(presetHref('/costs', 'last-30', undefined, 'last-30')).toBe('/costs')
+    expect(presetHref('/costs', 'this-month', undefined, 'last-30')).toBe(
+      '/costs?range=this-month',
+    )
+  })
+
   test('a real viewer keeps the calendar month', () => {
     expect(defaultPreset('11111111-1111-4111-8111-111111111111')).toBe(
       'this-month',

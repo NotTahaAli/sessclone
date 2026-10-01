@@ -13,7 +13,7 @@ import { addDays, currentMonth, type LocalRange } from './series'
 // exists to prevent one level down.
 //
 // **The default is the current calendar month**, which is the period a bill is
-// drawn on.
+// drawn on. The demo visitor is the one exception (`defaultPreset`).
 //
 // **It is read in the Org's timezone.** A preset is anchored on the Org's
 // today, and a custom range is two calendar dates that mean instants only once
@@ -149,7 +149,7 @@ export type ResolvedRange = {
  * Every rejection falls back to the default rather than erroring: these are
  * query parameters, which anybody may type and a stale link may carry, and a
  * Costs page that refuses to render because a date is malformed is worse than
- * one that shows this month and lets the reader choose again.
+ * one that shows the default period and lets the reader choose again.
  */
 export const resolveRange = (
   params: RangeParams,
@@ -187,10 +187,27 @@ export const resolveRange = (
  * breakdown tab silently answers a different question: the reader lands back
  * on Over time having asked only for a different month.
  */
-export const presetHref = (path: string, key: PresetKey, view?: string) => {
+export const presetHref = (
+  path: string,
+  key: PresetKey,
+  view?: string,
+  fallback: PresetKey = DEFAULT_PRESET,
+) => {
   const query = new URLSearchParams()
   if (view) query.set('view', view)
-  if (key !== DEFAULT_PRESET) query.set('range', key)
+  const { range } = periodPatch(key, fallback)
+  if (range) query.set('range', range)
   const search = query.toString()
   return search ? `${path}?${search}` : path
 }
+
+/**
+ * The period keys a preset link writes. A preset replaces whatever period was
+ * there, custom dates included, and the default preset here is left out so a
+ * bare URL and its menu link are the same page.
+ */
+export const periodPatch = (key: PresetKey, fallback: PresetKey) => ({
+  range: key === fallback ? undefined : key,
+  from: undefined,
+  to: undefined,
+})
