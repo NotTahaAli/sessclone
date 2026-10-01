@@ -399,7 +399,7 @@ test('/demo sets the cookie and stays on the host it was asked on', async () => 
   expect(response.status).toBe(307)
   // Relative: behind a proxy the server's idea of its host is not the
   // browser's, and a redirect there arrives without the cookie.
-  expect(response.headers.get('location')).toBe('/costs')
+  expect(response.headers.get('location')).toBe('/costs?range=last-30')
   expect(response.headers.get('set-cookie')).toMatch(
     /^sessclone-demo=1;.*HttpOnly/i,
   )
