@@ -130,7 +130,7 @@ export function Revealed({
           <div className="mt-1.5">
             <CodeBlock
               command={MARKETPLACE_COMMAND}
-              label="the marketplace command"
+              label="the marketplace command, step 1 for your new key"
             />
           </div>
         </li>
@@ -141,13 +141,13 @@ export function Revealed({
           <div className="mt-1.5">
             <CodeBlock
               command={installCommand(appUrl, apiKey)}
-              label="the install command"
+              label="the install command with your new key"
             />
           </div>
           <p className="text-text-secondary mt-1.5 text-sm">
             This keeps the key in your shell&apos;s history. To avoid that, run{' '}
             <code className="font-mono">/plugin install sessclone</code> inside
-            Claude Code and paste the key at its prompt.
+            Claude Code and answer the two questions it asks.
           </p>
         </li>
         <li>
