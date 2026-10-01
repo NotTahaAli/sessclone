@@ -267,3 +267,9 @@
   color: var(--color-text-muted);
   font-weight: 500;
 }
+/* Fumadocs strips the focus ring from the phone table-of-contents trigger
+   (`focus-visible:outline-none`); unlayered, this puts the app's ring back. */
+[data-toc-popover-trigger]:focus-visible {
+  outline: 3px solid var(--color-accent-fill);
+  outline-offset: -3px;
+}

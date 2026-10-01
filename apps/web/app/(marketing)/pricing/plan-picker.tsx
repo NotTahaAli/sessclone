@@ -106,7 +106,13 @@ export function PlanPicker({
       </div>
 
       <SectionBreak>Compare every plan</SectionBreak>
-      <div className="relative overflow-x-auto">
+      {/* Focusable so a keyboard can scroll it on a phone. */}
+      <div
+        role="region"
+        aria-label="Compare every plan"
+        tabIndex={0}
+        className="relative overflow-x-auto"
+      >
         <table className="w-full min-w-[560px] table-fixed border-collapse text-[13px]">
           <thead>
             <tr className="border-rule border-b">
@@ -186,7 +192,7 @@ function PlanRow({
       className={
         picked
           ? 'bg-surface border-rule my-1 rounded-xl border px-3.5 py-3'
-          : `border-rule border-t py-3 first:border-t-0 [li.bg-surface+&]:border-t-0 ${why ? 'opacity-45' : ''}`
+          : `border-rule border-t py-3 first:border-t-0 [li.bg-surface+&]:border-t-0 ${why ? 'text-text-muted' : ''}`
       }
     >
       <div className="grid grid-cols-[1fr_auto] items-baseline gap-x-2.5 gap-y-0.5">

@@ -36,7 +36,13 @@ export function InstallCommand({ commands }: { commands: string[] }) {
 
   return (
     <div className="bg-surface border-rule flex items-center justify-between gap-3 rounded-[10px] border py-2 pr-2 pl-3">
-      <div className="flex min-w-0 flex-col overflow-x-auto font-mono text-caption leading-[1.8] whitespace-nowrap">
+      {/* Focusable so a keyboard can scroll a long command on a phone. */}
+      <div
+        role="region"
+        aria-label="Install commands"
+        tabIndex={0}
+        className="flex min-w-0 flex-col overflow-x-auto font-mono text-caption leading-[1.8] whitespace-nowrap"
+      >
         {commands.map((command) => (
           <code key={command}>
             <span className="text-text-muted">$ </span>
