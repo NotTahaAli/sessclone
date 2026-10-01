@@ -1,11 +1,10 @@
-import { contactEmail } from '../../lib/site'
+import { REPOSITORY, contactEmail } from '../../lib/site'
 
 // Ordinary constants, beside the pages rather than inside `layout.tsx`: Next
 // treats that file specially, and a module a framework owns is a poor home
 // for a string two siblings import.
 
-/** Upstream, and fixed: the source every deployment is conveyed from. */
-export const REPOSITORY = 'https://github.com/NotTahaAli/sessclone'
+export { REPOSITORY }
 
 /** Where a visitor with no address to write to can still ask. */
 export const ISSUES = `${REPOSITORY}/issues`

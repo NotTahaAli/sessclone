@@ -8,8 +8,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../lib/docs', () => ({
   source: {
     getPages: () => [
-      { url: '/docs', data: { title: 'Docs', description: 'Start here' } },
-      { url: '/docs/self-hosting', data: { title: 'Self-hosting' } },
+      {
+        url: '/docs',
+        data: {
+          title: 'Docs',
+          description: 'Start here',
+          getText: async () =>
+            'Intro body\n\n## Install [#install]\n\nSee [it](/docs/install) &#x60;x&#x60;.\n\n<Card href="/docs/api" />\n',
+        },
+      },
+      {
+        url: '/docs/self-hosting',
+        data: { title: 'Self-hosting', getText: async () => 'Clone it.' },
+      },
     ],
   },
 }))
@@ -25,6 +36,7 @@ vi.mock('next/server', async (original) => ({
 
 const { default: sitemap } = await import('../app/sitemap')
 const { GET: llms } = await import('../app/llms.txt/route')
+const { GET: llmsFull } = await import('../app/llms-full.txt/route')
 
 const flags = (landing: boolean, docs: boolean) => {
   vi.stubEnv('ENABLE_LANDING', String(landing))
@@ -78,6 +90,7 @@ describe('llms.txt', () => {
     expect(body).toContain('- [Docs](https://self.example/docs): Start here')
     expect(body).toContain('https://self.example/docs/self-hosting')
     expect(body).toContain('- [Pricing](https://self.example/pricing)')
+    expect(body).toContain('https://self.example/llms-full.txt')
   })
 
   it('links the hosted docs, and no pricing, when it serves neither', async () => {
@@ -87,5 +100,31 @@ describe('llms.txt', () => {
     expect(body).toContain('https://sessclone.com/docs/self-hosting')
     expect(body).not.toContain('self.example/docs')
     expect(body).not.toContain('Pricing')
+  })
+})
+
+describe('llms-full.txt', () => {
+  it('is rendered per request', async () => {
+    await llmsFull()
+    expect(connection).toHaveBeenCalledOnce()
+  })
+
+  it('carries every docs page whole, each with its source link', async () => {
+    flags(true, true)
+    const body = await (await llmsFull()).text()
+    expect(body).toContain(
+      '# Docs\n\nSource: https://self.example/docs\n\n> Start here\n\nIntro body\n\n## Install\n\nSee [it](https://self.example/docs/install) `x`.\n\n<Card href="https://self.example/docs/api" />\n',
+    )
+    expect(body).toContain(
+      '# Self-hosting\n\nSource: https://self.example/docs/self-hosting\n\nClone it.\n',
+    )
+  })
+
+  it('links the hosted docs when this deployment serves none', async () => {
+    flags(false, false)
+    const body = await (await llmsFull()).text()
+    expect(body).toContain('Source: https://sessclone.com/docs/self-hosting')
+    expect(body).toContain('See [it](https://sessclone.com/docs/install)')
+    expect(body).not.toContain('self.example/docs')
   })
 })

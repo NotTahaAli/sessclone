@@ -27,6 +27,9 @@ export const siteHost = () => new URL(siteUrl()).host
  */
 export const contactEmail = () => process.env.NEXT_PUBLIC_CONTACT_EMAIL || null
 
+/** Upstream, and fixed: the source every deployment is conveyed from. */
+export const REPOSITORY = 'https://github.com/NotTahaAli/sessclone'
+
 export const SITE_DESCRIPTION =
   'Claude Code usage and cost for a whole team: laptops, cloud sessions and CI in one priced ledger. Open source, free to self-host.'
 

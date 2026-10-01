@@ -5,7 +5,9 @@ import { SignedInLink } from './signed-in-link'
 import { TiersUnavailable } from './tiers-unavailable'
 import { shortPrice } from '../../lib/plans'
 import { marketingTiers } from '../../lib/tiers'
-import { SITE_DESCRIPTION, canonical, siteUrl } from '../../lib/site'
+import { canonical } from '../../lib/site'
+import { landingGraph } from '../../lib/structured-data'
+import { JsonLd } from '../_ui/json-ld'
 import {
   buttonClass,
   cardClass,
@@ -76,6 +78,16 @@ const FAQ = [
       'The Collector reports from a cursor and re-reports on restart. A Turn has an identity, so the same Turn reported twice leaves one row, and a run that died mid-stream is marked incomplete rather than silently counted as a total.',
   },
   {
+    question: 'How is it different from ccusage or Anthropic’s own analytics?',
+    answer:
+      'ccusage reads the usage files on the one machine it runs on. Anthropic’s dashboards cover the people inside one Claude organization or Console account. SessClone collects from every machine each person works on, whichever account they sign in with, into one Org, priced per Member, Project and Device.',
+  },
+  {
+    question: 'What does it cost?',
+    answer:
+      'Hosted plans are priced per person, not per machine: every laptop, cloud session and CI job a person runs counts once. The pricing page lists them. Self-hosting is free at any size.',
+  },
+  {
     question: 'Can we run it ourselves?',
     answer:
       'Yes, free, at any size: your database, your storage, your network. It is AGPL-3.0, so keep the panel’s licence notice and SessClone credit visible, and if you run a modified copy for other people, offer those users its source.',
@@ -84,48 +96,14 @@ const FAQ = [
 
 export const metadata = { alternates: { canonical: canonical('/') } }
 
-// Structured data for search results: what the product is and where its
-// source lives. No price here, since prices are rows in the `tiers` table and
-// a second copy would drift from them.
-// The Organization node is what search engines read for the site's name, logo
-// and profiles; the application points at it as its publisher.
-const JSON_LD = JSON.stringify({
-  '@context': 'https://schema.org',
-  '@graph': [
-    {
-      '@type': 'Organization',
-      '@id': `${siteUrl()}/#organization`,
-      name: 'SessClone',
-      url: siteUrl(),
-      logo: `${siteUrl()}/apple-icon.png`,
-      sameAs: [REPOSITORY],
-    },
-    {
-      '@type': 'SoftwareApplication',
-      name: 'SessClone',
-      url: siteUrl(),
-      description: SITE_DESCRIPTION,
-      applicationCategory: 'DeveloperApplication',
-      operatingSystem: 'macOS, Linux, Windows',
-      license: 'https://www.gnu.org/licenses/agpl-3.0.html',
-      publisher: { '@id': `${siteUrl()}/#organization` },
-      sameAs: [REPOSITORY],
-    },
-  ],
-})
-const JSON_LD_HTML = { __html: JSON_LD }
-
 export default async function Landing() {
   const tiers = await marketingTiers()
 
   return (
     <>
-      <script
-        type="application/ld+json"
-        // A constant built above from string literals, nothing a visitor sends.
-        // oxlint-disable-next-line no-danger
-        dangerouslySetInnerHTML={JSON_LD_HTML}
-      />
+      {/* Built from the same Tier rows and questions this page shows, so the
+          two cannot disagree. */}
+      <JsonLd graph={landingGraph({ tiers, faq: FAQ })} />
       <section
         className={`${FRAME} grid grid-cols-[minmax(0,1fr)] gap-8 pt-4 pb-6 lg:grid-cols-[1.05fr_.95fr] lg:items-center lg:gap-14 lg:pt-14 lg:pb-10`}
       >
