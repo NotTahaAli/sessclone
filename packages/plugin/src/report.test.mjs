@@ -222,27 +222,34 @@ test('the API key is not in the environment `git` runs with', async () => {
   expect(readFileSync(dump, 'utf8')).not.toContain('sk_')
 })
 
-test('a Node too old to read the shared modules fails quietly', async () => {
-  // `packages/shared` is TypeScript the hooks import directly, which a Node
-  // below 22.18 cannot load. Imported at the top of `stop.mjs` that throws
-  // before any handler exists: a hook error notice on every turn, and the
-  // stack trace on stderr — which lands in the next transcript, the one this
-  // product uploads. `--no-experimental-strip-types` is that Node, here.
-  const hook = new URL('../hooks/stop.mjs', import.meta.url)
-  const child = execFile('node', [
-    '--no-experimental-strip-types',
-    hook.pathname,
-  ])
-  child.stdin?.end(
-    JSON.stringify({ session_id: 'session-1', transcript_path: '/nowhere' }),
-  )
+test.each(['stop', 'stop-archive', 'stop-failure', 'session-end'])(
+  'a Node too old to read the shared modules leaves %s quiet',
+  async (name) => {
+    // `packages/shared` is TypeScript the hooks import directly, which a Node
+    // below 22.18 cannot load. Imported at the top of a hook that throws
+    // before any handler exists: a hook error notice on every turn, and the
+    // stack trace on stderr — which lands in the next transcript, the one
+    // this product uploads. `stop-archive.mjs` did exactly that until 0.4.1.
+    // Session start is the one place that says so, once, in plain words.
+    // `--no-experimental-strip-types` is that Node, here.
+    const hook = new URL(`../hooks/${name}.mjs`, import.meta.url)
+    const child = execFile(
+      'node',
+      ['--no-experimental-strip-types', hook.pathname],
+      // A cloud container, so `stop-archive.mjs` gets past its first check.
+      { env: { ...process.env, CLAUDE_CODE_REMOTE: 'true' } },
+    )
+    child.stdin?.end(
+      JSON.stringify({ session_id: 'session-1', transcript_path: '/nowhere' }),
+    )
 
-  const finished = await new Promise((resolve) => {
-    let stderr = ''
-    child.stderr?.on('data', (chunk) => (stderr += chunk))
-    child.on('close', (code) => resolve({ code, stderr }))
-  })
+    const finished = await new Promise((resolve) => {
+      let stderr = ''
+      child.stderr?.on('data', (chunk) => (stderr += chunk))
+      child.on('close', (code) => resolve({ code, stderr }))
+    })
 
-  expect(finished.stderr).toBe('')
-  expect(finished.code).toBe(0)
-})
+    expect(finished.stderr).toBe('')
+    expect(finished.code).toBe(0)
+  },
+)

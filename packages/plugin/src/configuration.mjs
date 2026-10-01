@@ -44,8 +44,8 @@ export const DEFAULT_URL = 'https://sessclone.com'
  * 22.18 (and in 23.6 on the other line). Older Node throws
  * `Unknown file extension ".ts"` from inside a hook, where every failure is
  * swallowed — so a Member on Node 20 would see a plugin that installs, starts
- * cleanly and silently reports nothing. Checked once, at session start, where
- * it can be said out loud.
+ * cleanly and silently reports nothing. Checked first thing at session start,
+ * where it can be said out loud, every session until it is fixed.
  */
 export const MINIMUM_NODE = [22, 18]
 
@@ -63,7 +63,7 @@ export const nodeProblem = (version) => {
     // The 23 line never received type stripping by default before 23.6.
     (major === 23 && minor < 6)
   return old
-    ? `Node ${version} is too old for the Collector, which needs ${wantMajor}.${wantMinor} or newer (or 24). Nothing will be collected from this machine until Claude Code runs on a newer Node.`
+    ? `sessclone needs Node ${wantMajor}.${wantMinor} or newer (or 24), and Claude Code is running its hooks on Node ${version}, so nothing is being collected from this machine. Install a newer Node as the \`node\` on Claude Code's PATH and restart Claude Code. Sessions from meanwhile are sent then, while Claude Code still keeps them (30 days by default).`
     : null
 }
 
@@ -228,9 +228,6 @@ export const readConfiguration = (
   // one shell at a second deployment on purpose.
   const url = readUrl(env.SESSCLONE_URL?.trim() || option(env, 'url'))
   if ('problem' in url) problems.push(url.problem)
-
-  const node = nodeProblem(process.versions.node)
-  if (node) problems.push(node)
 
   const stateDir =
     env.SESSCLONE_STATE_DIR?.trim() || defaultStateDir(platform, env)

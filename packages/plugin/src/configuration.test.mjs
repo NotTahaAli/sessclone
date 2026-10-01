@@ -213,9 +213,12 @@ test('a Node too old to run the Collector is a problem named at session start', 
   // stripping the types. On Node 20 that throws `Unknown file extension
   // ".ts"` inside a hook, where every failure is swallowed — so without this
   // check the plugin installs, starts cleanly and silently reports nothing.
-  expect(nodeProblem('20.11.0')).toMatch(/too old/)
+  expect(nodeProblem('20.11.0')).toMatch(/running its hooks on Node 20\.11\.0/)
   expect(nodeProblem('22.17.9')).toMatch(/22\.18 or newer/)
-  expect(nodeProblem('23.5.0')).toMatch(/too old/)
+  expect(nodeProblem('23.5.0')).toMatch(/Node 23\.5\.0/)
+  // The fix, not just the fault: which Node, and that nothing is lost.
+  expect(nodeProblem('20.11.0')).toMatch(/restart Claude Code/)
+  expect(nodeProblem('20.11.0')).toMatch(/sent then/)
 
   expect(nodeProblem('22.18.0')).toBeNull()
   expect(nodeProblem('23.6.0')).toBeNull()

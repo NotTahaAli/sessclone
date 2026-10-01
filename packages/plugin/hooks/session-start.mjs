@@ -28,13 +28,26 @@
 // configuration this reads, which is why they land here rather than in a hook
 // of their own.
 
-import { ConfigurationError, readConfiguration } from '../src/configuration.mjs'
+import {
+  ConfigurationError,
+  nodeProblem,
+  readConfiguration,
+} from '../src/configuration.mjs'
 import { checkConnection, recordConnection } from '../src/connection.mjs'
 import { debugFailure } from '../src/debug.mjs'
 import { throughProxy } from '../src/proxy.mjs'
 
 // Ticket 98: before anything is read or sent, so the child gets stdin whole.
 throughProxy()
+
+// First, and on its own: on a Node this old every other hook fails silently,
+// so this line is the only sign a person gets. Its fix is not a variable, so
+// it is not reported as configuration.
+const node = nodeProblem(process.versions.node)
+if (node) {
+  process.stderr.write(`${node}\n`)
+  process.exit(2)
+}
 
 let configuration
 try {
