@@ -40,6 +40,12 @@ test(
       return ran(JSON.stringify(STANDING))
     })
 
+    // Another mod's drawing in the shared band survives this one's.
+    on('ui.render', { component: 'AbovePrompt' }, (inner, e) => {
+      const { Text } = inner.ui.resolve(e)
+      return <Text>another mod</Text>
+    })
+
     on('classic.SessionStart', () => ({}))
     await $.session.start({
       cwd: '/',
@@ -81,6 +87,7 @@ test(
       expect((await ui.find({ type: 'Link' }))?.props?.href).toBe(
         'https://sessclone.com/sessions/session-1',
       )
+      expect(await ui.find({ type: 'Text', text: 'another mod' })).toBeDefined()
       await ui.unmount()
     }
     /* oxlint-enable no-await-in-loop */

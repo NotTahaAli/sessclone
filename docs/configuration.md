@@ -663,9 +663,10 @@ connected: reporting to `<Org>`." the first session after a key or deployment
 changes, and "sessclone is not connected: …" every session for as long as the
 deployment refuses it or none is set. While it is refused the Collector sends
 nothing, rather than resending a session's history on every turn. Claude Code
-gives the key to hooks and to the plugin's mod only: `/sessclone-status` (or
-`/sessclone:status` where mods cannot load) prints that record with the Device,
-this session's unsent Turns, the reports waiting and the last push.
+gives the key to hooks and to the plugin's mod only: `/sessclone-status` prints
+that record with the Device, this session's unsent Turns, the reports waiting
+and the last push (`/sessclone:status`, where mods cannot load, all but the
+unsent Turns).
 `/sessclone-sync` runs the session-start check and sweep at once, with the key
 the mod hands it; `/sessclone:sync` leaves a request that the `Stop` hook
 ending the same turn carries out.

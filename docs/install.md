@@ -166,8 +166,8 @@ queued, and `↗`, which opens this session in the dashboard. The bar and the
 two commands are the plugin's
 [mod](https://code.claude.com/docs/en/plugins/mods/overview). Where mods
 cannot load (an older Claude Code, or mods turned off), `/sessclone:status`
-and `/sessclone:sync` do the same; that sync is carried out by the hook that
-ends the turn.
+and `/sessclone:sync` do the same, except that status leaves out this
+session's count and sync is carried out by the hook that ends the turn.
 
 There is also a command that reads this machine and prints what it found —
 the Node version, the resolved state directory, the cursor and queue files as

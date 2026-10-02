@@ -39,8 +39,8 @@ Requires Node 22.18 or newer (or 23.6+, or 24).
 
 These are the plugin's mod (`hooks/register.tsx`), which needs Claude Code
 2.1.287 or newer. Where mods cannot load, `/sessclone:status` and
-`/sessclone:sync` do the same: status reads what the hooks recorded, and sync
-is carried out by the hook that ends that turn.
+`/sessclone:sync` do the same, except that status leaves out this session's
+unsent Turns, and sync is carried out by the hook that ends that turn.
 
 ## What it sends, and where
 

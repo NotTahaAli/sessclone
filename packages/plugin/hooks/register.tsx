@@ -148,28 +148,34 @@ export const register: Register = (on, options) => {
 
     const { Box, Text, Link } = $.ui.resolve(e)
     const href = sessionLink(s.url, s.sessionId)
+    // The band is shared: a tree replaces what the mods after this one draw,
+    // unless it carries theirs.
+    const others = await next(e)
 
     return (
-      // Short of the band's own [-] mark, so the words are cut, not the link.
-      <Box
-        flexDirection="row"
-        gap={1}
-        width={Math.max(10, e.props.bodyColumns - 4)}
-      >
-        <Text color={dotColor(s)}>●</Text>
-        <Box flexShrink={1}>
-          <Text dimColor wrap="truncate-end">
-            sessclone · {barParts(s).join(' · ')}
-          </Text>
-        </Box>
-        {/* Kept whole when the line is cut: the words give way first. */}
-        {href ? (
-          <Box flexShrink={0}>
-            <Text>
-              <Link href={href} label="↗" />
+      <Box flexDirection="column">
+        {/* Short of the band's own [-] mark, so the words are cut, not the link. */}
+        <Box
+          flexDirection="row"
+          gap={1}
+          width={Math.max(10, e.props.bodyColumns - 4)}
+        >
+          <Text color={dotColor(s)}>●</Text>
+          <Box flexShrink={1}>
+            <Text dimColor wrap="truncate-end">
+              sessclone · {barParts(s).join(' · ')}
             </Text>
           </Box>
-        ) : null}
+          {/* Kept whole when the line is cut: the words give way first. */}
+          {href ? (
+            <Box flexShrink={0}>
+              <Text>
+                <Link href={href} label="↗" />
+              </Text>
+            </Box>
+          ) : null}
+        </Box>
+        {others}
       </Box>
     )
   })
