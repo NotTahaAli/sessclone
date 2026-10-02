@@ -3,7 +3,7 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "sessclone v1 — ticket status",
-    "subtitle": "162 tickets · 157 done · 4 ready to start · 1 blocked",
+    "subtitle": "163 tickets · 158 done · 4 ready to start · 1 blocked",
     "output": "docs/tickets/ticket-graph.html",
     "quality_profile": "showcase"
   },
@@ -194,7 +194,7 @@
       "id": "overhaul",
       "type": "frontend",
       "label": "Redesign + Docs (111-117)",
-      "sublabel": "17 done",
+      "sublabel": "18 done",
       "pos": [
         730,
         800

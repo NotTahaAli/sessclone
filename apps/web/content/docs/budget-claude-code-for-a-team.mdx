@@ -1,0 +1,150 @@
+---
+title: How to budget Claude Code for a team
+description: Estimate a team's monthly Claude Code spend from Anthropic's published per-developer figures, pick the billing model that fits, set spend caps on Team and Enterprise, the Console or a gateway, and review the budget against real usage.
+---
+
+Claude Code spend is hard to predict before a team starts, and it varies a
+lot from one developer to the next. A budget that holds up has three parts: a
+starting estimate, a cap that stops a bad month turning into a bad quarter,
+and a review against what people actually used. Every Anthropic figure below
+was read on 2026-10-02.
+
+## 1. Start from Anthropic's numbers
+
+Anthropic's [cost guide](https://code.claude.com/docs/en/costs) gives the
+only published baseline across enterprise deployments:
+
+- About **$13 per developer per active day** on average.
+- **$150–250 per developer per month**.
+- Below **$30 per active day** for 90% of users.
+
+A first estimate is developers × active days × cost per day. For a team of
+10 developers each active on 20 working days a month (an assumption; use your
+own calendar):
+
+| Scenario                        | Per developer per day | Monthly total |
+| ------------------------------- | --------------------- | ------------- |
+| Average                         | $13                   | $2,600        |
+| Everyone at the 90th percentile | $30                   | $6,000        |
+
+Budget the average and cap near the high end. A small group of heavy users,
+long Opus sessions or automation can sit above the 90th percentile, so a
+single average hides most of the risk. Anthropic's own advice is to run a
+small pilot first and measure it before a wider rollout.
+
+## 2. Pick how the team pays
+
+The billing model decides which controls you get
+([Manage costs](https://code.claude.com/docs/en/costs#manage-costs-for-your-organization)):
+
+| Setup                          | How usage is billed                                                 | Where you cap it                           |
+| ------------------------------ | ------------------------------------------------------------------- | ------------------------------------------ |
+| Claude for Teams or Enterprise | Each seat's allowance first, then usage credits if you turn them on | Spend limits in claude.ai admin settings   |
+| Claude Console (API key)       | Per token, prepaid or invoiced                                      | Workspace spend limits and the tier's cap  |
+| Bedrock, Google Cloud, Foundry | Per token, on your cloud bill                                       | Your cloud's budget controls, or a gateway |
+
+With seats, the allowance is the default ceiling, so spend beyond the seat
+happens only where you turn on usage credits. Per-token billing tracks usage
+exactly, so a quiet month costs less and a busy one more. Prices for seats are
+on [claude.com/pricing](https://claude.com/pricing) and per-token rates on
+Anthropic's [pricing page](https://platform.claude.com/docs/en/about-claude/pricing).
+If a developer signs in another way, such as a personal Max plan, their usage
+is metered there and never reaches your organization's reports.
+
+## 3. Set the caps
+
+### Teams and Enterprise
+
+The seat allowance is the default ceiling. Members go past it only when you
+turn on usage credits, and then only up to the limits you set
+([consumption guide](https://support.claude.com/en/articles/14782391-claude-enterprise-consumption-guide)):
+
+- **Per member**, overriding any group limit, higher or lower.
+- **Per group**: every member inherits the same individual
+  limit. Anthropic recommends starting here, with groups by job function
+  rather than org chart.
+- **Pooled group budgets** (Enterprise, beta): one shared monthly amount a group draws
+  from, for a team with a fixed budget and uneven usage. When the pool runs
+  out, the whole group pauses.
+- **Organization-wide**, as a hard ceiling. Hitting it stops everyone at
+  once, so keep it above the sum you expect.
+
+On Enterprise, admins are alerted at 75% and 90% of an organization limit; pools alert at
+50%, 75%, 95% and 100%. With no limit anywhere, a member's spend is not
+capped.
+
+### Claude Console
+
+Each usage tier carries a monthly spend cap ($500 on Start, $1,000 on Build,
+$200,000 on Scale, none on Custom), and you can set your own lower limit on
+the Billing page ([rate limits](https://platform.claude.com/docs/en/api/rate-limits#spend-limits)).
+Claude Code gets its own "Claude Code" workspace the first time someone signs
+in with a Console account. Give that workspace a spend limit, and a rate limit
+if it shares the organization's limits with production traffic.
+
+For rate limits, Anthropic suggests per-user tokens and requests per minute by
+team size, falling as the team grows because fewer people use it at the same
+moment ([Manage costs](https://code.claude.com/docs/en/costs#rate-limit-recommendations)):
+
+| Team size | Tokens per minute per user | Requests per minute per user |
+| --------- | -------------------------- | ---------------------------- |
+| 1–5       | 200k–300k                  | 5–7                          |
+| 5–20      | 100k–150k                  | 2.5–3.5                      |
+| 20–50     | 50k–75k                    | 1.25–1.75                    |
+| 50–100    | 25k–35k                    | 0.62–0.87                    |
+| 100–500   | 15k–20k                    | 0.37–0.47                    |
+| 500+      | 10k–15k                    | 0.25–0.35                    |
+
+### Cloud providers and gateways
+
+On Bedrock, Google Cloud or Foundry, Anthropic's dashboards do not see the
+usage. A self-hosted
+[Claude apps gateway](https://code.claude.com/docs/en/claude-apps-gateway-spend-limits)
+can cap each developer by day, week or month, and blocks them until the period
+resets on a UTC boundary or an admin raises the cap. An LLM gateway that
+tracks spend per key is the other option.
+
+### Scripts and CI
+
+A headless run can cap itself: `claude -p --max-budget-usd 5.00 "…"` stops
+once the run's estimated spend, subagents included, reaches the amount. Use it
+on anything scheduled, where nobody is watching the meter.
+
+## 4. Lower the cost per task
+
+Caps limit the damage; habits lower the bill. The levers with the most effect,
+from Anthropic's [cost guide](https://code.claude.com/docs/en/costs#reduce-token-usage):
+
+- **Set the default model.** Opus left as everyone's default is a common cause
+  of unexpectedly high spend. Match the model to the job, and use Sonnet for agent teammates.
+- **Lower the effort level** for routine tasks. Thinking tokens are billed as
+  output.
+- **`/clear` between unrelated tasks.** Every request re-sends the whole
+  conversation; see [cache tokens explained](/docs/claude-code-cache-tokens).
+- **Keep agent teams small** and shut teammates down when their work is done.
+  Each one runs its own context window.
+- **Report at contracted rates.** If you pay less than list price, the
+  `modelPricing` managed setting makes `/usage`, the status line and
+  OpenTelemetry show your rates.
+
+## 5. Review against real usage
+
+Review weekly while the team ramps up, then monthly. Look at who is near their
+limit before raising it: Anthropic notes that members at their limit are often
+your strongest adopters, and a lower effort level or clearer model guidance
+can matter more than a bigger cap.
+
+The review needs one view of everyone's usage, and that is where mixed
+accounts break down: a contractor on their own plan, a developer on a
+personal Max seat and a cloud session that leaves no files behind all fall
+outside your organization's reports. SessClone's Collector runs on each
+machine and reports every Turn to your Org whatever account it was billed to,
+so Costs shows one estimate per Member, Project, Device and day. An Enterprise
+Org can set its own per-model rates so the estimates match a negotiated
+contract. It tracks spend; the caps stay with Anthropic, your cloud or your
+gateway.
+
+[Track costs per developer and team](/docs/track-claude-code-costs-per-team)
+covers the setup, and [SessClone vs ccusage vs Anthropic's analytics](/docs/compare)
+compares the options. Hosted plans are on the [pricing page](/pricing);
+self-hosting is free at any size. [Create an Org](/sign-up) to start.

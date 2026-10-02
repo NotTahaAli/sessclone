@@ -12,6 +12,8 @@
     "track-claude-code-costs-per-team",
     "claude-code-cost-per-session",
     "claude-code-cache-tokens",
+    "claude-code-usage-limits",
+    "budget-claude-code-for-a-team",
     "---Reference---",
     "...api"
   ]
