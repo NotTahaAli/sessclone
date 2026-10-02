@@ -33,8 +33,13 @@ const script = ($: EngineInterface, name: string, args: string[] = []) =>
   })
 
 const refresh = async ($: EngineInterface) => {
-  // `claude -p`, the SDK and cloud sessions draw nothing: no bar to feed.
-  if ((await $.session.surfaces()).length === 0) return
+  // Only the terminal and the Desktop app draw the band; `claude -p`, the SDK,
+  // cloud sessions and the VS Code panel have no bar to feed.
+  const surfaces = await $.session.surfaces()
+  if (
+    !surfaces.some((surface) => surface === 'terminal' || surface === 'desktop')
+  )
+    return
   const sessionId = await $.session.id()
   const { stdout } = await script($, 'status.mjs', [
     '--json',

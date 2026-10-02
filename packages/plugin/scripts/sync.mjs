@@ -18,10 +18,13 @@ const BUDGET_MS = 20_000
 
 throughProxy()
 
-try {
-  const node = nodeProblem(process.versions.node)
-  if (node) throw new Error(node)
+const node = nodeProblem(process.versions.node)
+if (node) {
+  console.log(node)
+  process.exit(0)
+}
 
+try {
   const configuration = readConfiguration()
   const { checkConnection, recordConnection } =
     await import('../src/connection.mjs')
@@ -55,6 +58,9 @@ try {
   console.log(
     error instanceof ConfigurationError
       ? `Not configured: ${error.problems.join('; ')}`
-      : `Sync failed: ${error instanceof Error ? error.message : String(error)}`,
+      : // The name only: this line is the command's output, which the model
+        // reads and the transcript keeps, and an error's message can carry
+        // what the configuration held, the key among it.
+        `Sync failed (${error instanceof Error ? error.name : 'unknown error'}). The next session start tries again.`,
   )
 }
