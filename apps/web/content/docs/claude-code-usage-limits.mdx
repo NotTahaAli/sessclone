@@ -1,0 +1,158 @@
+---
+title: Claude Code usage limits explained
+description: Which Claude Code limit you hit depends on how you sign in — the 5-hour and weekly windows on Pro and Max, seat allowances and spend limits on Team and Enterprise, rate limits and monthly caps on an API key — with what each message means and what to do about it.
+---
+
+"Claude Code usage limit" means a different thing depending on how you sign
+in. A Pro subscriber, a Team seat and a Console API key each have a different
+ceiling, and the message you see names which one you reached. This page
+covers each, with every figure taken from Anthropic's docs as read on
+2026-10-02.
+
+## Which limit applies to you
+
+| How you sign in                | What limits you                                                              | What happens at the limit                                       |
+| ------------------------------ | ---------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Pro or Max                     | A rolling 5-hour window and a weekly window, shared with Claude chat         | Blocked until the reset, unless you turn on usage credits       |
+| Team or Enterprise seat        | The seat's 5-hour and weekly allowance, then any spend limits your admin set | Blocked until the reset, or billed to usage credits up to a cap |
+| Claude Console (API key)       | Rate limits per minute, and a monthly spend cap set by your usage tier       | `429` per-minute errors, or a hard stop until the month ends    |
+| Bedrock, Google Cloud, Foundry | Your cloud project's quotas and budgets                                      | `429` from the provider                                         |
+
+Run `/status` to see which credential a session is using. If an
+`ANTHROPIC_API_KEY` is set in your environment, Claude Code uses it instead of
+your subscription, so you get API charges and API rate limits rather than your
+plan's allowance
+([Anthropic support](https://support.claude.com/en/articles/11145838-using-claude-code-with-your-pro-or-max-plan)).
+
+## Pro and Max: the 5-hour and weekly windows
+
+Pro and Max plans include a rolling usage allowance shared across Claude and
+Claude Code: chat, the terminal and the IDE extensions all draw on the same
+limits. Usage counts against two windows at once, a **5-hour session window**
+and a **weekly window**
+([error reference](https://code.claude.com/docs/en/errors#youve-hit-your-session-limit)).
+When one runs out you see one of:
+
+```text
+You've hit your session limit · resets 3:45pm
+You've hit your weekly limit · resets Mon 12:00am
+You've hit your Opus limit · resets 3:45pm
+You've hit your Sonnet limit · resets 3:45pm
+```
+
+- **Session and weekly limits** cover every model, so switching with `/model`
+  does not help. One heavy burst, such as a large fan-out of subagents, can
+  use up the weekly window before the session window resets.
+- **Opus and Sonnet limits** apply only to that model family. Switching to a
+  model outside it keeps you working, though the first request after the
+  switch re-reads the whole conversation with no cache hits, because each
+  model has its own cache.
+
+What you can do:
+
+- **See where you stand.** `/usage` shows your plan bars and reset times, and
+  a breakdown of what drove your usage: skills, subagents, plugins, MCP servers
+  and flags such as long context or cache misses. The breakdown covers this
+  machine only
+  ([Manage costs](https://code.claude.com/docs/en/costs#plan-usage-breakdown)).
+  The status line can show both windows continuously through its
+  `rate_limits.five_hour` and `rate_limits.seven_day` fields
+  ([status line docs](https://code.claude.com/docs/en/statusline)).
+- **Wait it out.** Recent versions of Claude Code can wait in the open session
+  and continue the interrupted task shortly after the reset.
+- **Turn on usage credits** with `/usage-credits` to keep working past the
+  allowance, billed separately, optionally up to a monthly spend limit you set.
+- **Upgrade** from Pro to Max 5x, or Max 5x to Max 20x, if you hit the
+  limit regularly. Plan prices are on
+  [claude.com/pricing](https://claude.com/pricing).
+
+## Team and Enterprise seats
+
+On Claude for Teams and Enterprise, each member's Claude Code usage draws on a
+per-seat allowance with the same 5-hour and weekly windows, shared with Claude
+chat and Cowork. Its size depends on the seat tier, Standard or Premium
+([Manage costs](https://code.claude.com/docs/en/costs#claude-for-teams-and-enterprise)).
+
+Past the allowance, a member can keep working only if the organization has
+turned on usage credits, and then only up to the spend limits an admin set for
+the organization, a group or that member. Those produce different messages:
+
+```text
+You've hit your individual spend limit · ask your admin for a higher limit
+You've hit your org's monthly spend limit · visit claude.ai/admin-settings/usage to raise it
+You've hit your team's shared budget · ask your admin to raise it at claude.ai/admin-settings/usage
+```
+
+`/usage-credits` sends the member's request for more to the admins. An admin
+raises the limit under **Admin settings > Usage** on claude.ai. When the
+message also names a plan reset time, waiting for it works too. Setting those
+limits is covered in [how to budget Claude Code for a team](/docs/budget-claude-code-for-a-team).
+
+## API keys: rate limits and monthly spend caps
+
+With a Claude Console API key there is no 5-hour window. Two other limits
+apply ([rate limits](https://platform.claude.com/docs/en/api/rate-limits)):
+
+- **Rate limits** in requests per minute, input tokens per minute and output
+  tokens per minute, per model class. Going over returns a `429` with a
+  `retry-after` header, and Claude Code retries automatically. The limits use
+  a token bucket, so capacity refills continuously rather than at a fixed
+  time. For most current models, **cache reads do not count** toward the
+  input tokens limit, which matters for Claude Code because most of a long
+  session's input is cache reads (see
+  [cache tokens explained](/docs/claude-code-cache-tokens)).
+- **A monthly spend cap** set by the organization's usage tier: $500 on Start,
+  $1,000 on Build and $200,000 on Scale, with no cap on Custom. At the cap,
+  requests stop until the next calendar month. You can set your own lower
+  limit on the Console Billing page, and per-workspace spend and rate limits
+  too.
+
+The first time you sign in to Claude Code with a Console account, a
+workspace called "Claude Code" is created for its usage. On an organization with custom rate limits, Claude Code traffic counts toward the
+organization-wide limits, so a workspace rate limit on that workspace stops it
+crowding out production traffic
+([Manage costs](https://code.claude.com/docs/en/costs#claude-console)).
+
+A `Credit balance is too low` error means the Console organization has run out
+of prepaid credit, or that Claude Code is using an API key you did not mean
+it to use.
+
+## Messages that are not your limit
+
+- **`Server is temporarily limiting requests (not your usage limit)`** is a
+  short server-side throttle. Claude Code retries it automatically; if it
+  persists, check [status.claude.com](https://status.claude.com).
+- **A context or auto-compact warning** means the conversation is close to the
+  context window, not that your allowance is spent.
+- **`Usage credits required for 1M context`** is an entitlement check for the
+  1M-token context window. It fires even when your allowance has room left.
+  Turn on usage credits with `/usage-credits` and restart, or pick the model without the `[1m]` suffix in `/model`.
+
+## Why your limit runs out faster than you expect
+
+Every request re-sends the whole conversation. A one-line question in a
+session that has been open all day still draws usage for everything above it,
+and Anthropic lists the usual reasons a long session climbs
+([Manage costs](https://code.claude.com/docs/en/costs#why-usage-climbs-in-a-long-session)):
+
+- **Long context.** Run `/clear` between unrelated tasks. It costs nothing,
+  where `/compact` is itself a large request.
+- **Cache misses.** Coming back after more than the cache lifetime (an hour
+  on a subscription, five minutes on usage credits or an API key by default)
+  reprocesses the full context.
+- **Background work.** Scheduled `/loop` tasks, subagents, agent teammates and
+  goal check-ins each send requests on top of yours.
+- **Model and effort.** Opus at high effort spends more of the allowance per
+  request than Sonnet at a lower one; thinking tokens are output tokens.
+
+## Seeing what used your allowance
+
+Plan limits are shown as a percentage, and the `/usage` breakdown of what used them only sees the machine it runs on. If you work across a laptop, a dev box and cloud sessions, nothing
+adds them up. SessClone's Collector reports each Turn's tokens and model from
+every machine to one place, so you can see which Sessions, Projects and models
+the week went on, and what the same work would have cost on an API key. It is
+an estimate, not your plan's meter.
+
+[Install the Collector](/docs/install) to start, or read
+[Claude Code cost per session](/docs/claude-code-cost-per-session) for how a
+Turn's tokens become dollars.
