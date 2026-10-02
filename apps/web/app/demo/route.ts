@@ -8,9 +8,8 @@ import { DEMO_COOKIE, DEMO_COOKIE_OPTIONS, demoEnabled } from '../../lib/demo'
 //
 // Costs opens on the last 30 days, not the default calendar month: the demo
 // seeds a day only once it has ended, so on the 1st "this month" is empty and
-// the visitor's first screen would read "Nothing in this period". Only the
-// first screen: the nav's bare `/costs` and Sessions still default to the
-// month, which on the 1st stays empty until that day is seeded.
+// the visitor's first screen would read "Nothing in this period". Every
+// other demo page defaults to the same period (`defaultPreset`, `lib/range.ts`).
 
 export function GET() {
   if (!demoEnabled()) return new Response('Not found', { status: 404 })
