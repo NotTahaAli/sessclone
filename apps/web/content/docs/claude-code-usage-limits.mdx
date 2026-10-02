@@ -61,7 +61,7 @@ What you can do:
 - **Wait it out.** Recent versions of Claude Code can wait in the open session
   and continue the interrupted task shortly after the reset.
 - **Turn on usage credits** with `/usage-credits` to keep working past the
-  allowance, billed separately, with a monthly spend limit you set.
+  allowance, billed separately, optionally up to a monthly spend limit you set.
 - **Upgrade** from Pro to Max 5x, or Max 5x to Max 20x, if you hit the
   limit regularly. Plan prices are on
   [claude.com/pricing](https://claude.com/pricing).
@@ -108,8 +108,7 @@ apply ([rate limits](https://platform.claude.com/docs/en/api/rate-limits)):
   too.
 
 The first time you sign in to Claude Code with a Console account, a
-workspace called "Claude Code" is created for its usage. On an organization
-with shared rate limits, Claude Code traffic counts toward the
+workspace called "Claude Code" is created for its usage. On an organization with custom rate limits, Claude Code traffic counts toward the
 organization-wide limits, so a workspace rate limit on that workspace stops it
 crowding out production traffic
 ([Manage costs](https://code.claude.com/docs/en/costs#claude-console)).
@@ -127,7 +126,7 @@ it to use.
   context window, not that your allowance is spent.
 - **`Usage credits required for 1M context`** is an entitlement check for the
   1M-token context window. It fires even when your allowance has room left.
-  Pick the model without the `[1m]` suffix in `/model`.
+  Turn on usage credits with `/usage-credits` and restart, or pick the model without the `[1m]` suffix in `/model`.
 
 ## Why your limit runs out faster than you expect
 
@@ -148,8 +147,7 @@ and Anthropic lists the usual reasons a long session climbs
 
 ## Seeing what used your allowance
 
-Plan limits are shown as a percentage, and `/usage` only sees the machine it
-runs on. If you work across a laptop, a dev box and cloud sessions, nothing
+Plan limits are shown as a percentage, and the `/usage` breakdown of what used them only sees the machine it runs on. If you work across a laptop, a dev box and cloud sessions, nothing
 adds them up. SessClone's Collector reports each Turn's tokens and model from
 every machine to one place, so you can see which Sessions, Projects and models
 the week went on, and what the same work would have cost on an API key. It is
