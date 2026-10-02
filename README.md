@@ -42,7 +42,9 @@ rather not operate it; they are paid, and on a waitlist for now.
 
 - **A Collector that is a Claude Code plugin.** Two commands and a restart per
   machine. It reports usage only (token counts, models, timings), never a
-  prompt or a file's contents.
+  prompt or a file's contents. A line above the prompt shows whether it is
+  connected and synced, with a link to the session in the dashboard;
+  `/sessclone-status` and `/sessclone-sync` check or push at once.
 - **Costs per Member, per Project and per Device.** Every Turn is priced from
   a reviewed rate table. A Turn with no matching rate is counted as unpriced,
   never as zero.

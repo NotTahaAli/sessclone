@@ -107,7 +107,11 @@ pnpm test        # vitest, every suite
 pnpm format      # prettier --check
 pnpm test:db     # routes, schema and policies, against Postgres
 pnpm --filter web e2e   # the Playwright browser flows
+claude plugin test packages/plugin   # the Collector's mod, on Claude Code 2.1.287+
 ```
+
+CI does not run the mod's tests, since it has no Claude Code; run them when
+you change `packages/plugin/hooks/register.tsx` or `bar.ts`.
 
 The database suites and the browser flows need a local Postgres;
 [`README.md`](README.md#the-database) says how to get one, and how to install
