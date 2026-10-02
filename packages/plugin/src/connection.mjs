@@ -6,7 +6,7 @@
 // itself, so the answer says whether that credential is connected too.
 //
 // Only a hook can ask: Claude Code gives the setup prompt's answers to hook
-// processes and to nothing Claude runs, so `/sessclone:status` cannot read the
+// processes and to nothing Claude runs, so `/sessclone-status` cannot read the
 // key. The session-start hook therefore writes what it learned to the state
 // directory (never the key: its first three characters and length), and the
 // status command, the Collector's own sends and `verify-collector.mjs` read it.

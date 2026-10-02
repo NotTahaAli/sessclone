@@ -96,8 +96,9 @@ const PHASES = [
     range: [66, 71],
     // 150 (one-command self-hosting) extends ticket 67's self-host path; 160
     // (old Node says so) the Collector 143 shipped; 162 (setup-db keeps the
-    // live password) hardens 150.
-    also: [79, 96, 98, 99, 143, 150, 160, 162],
+    // live password) hardens 150; 166 (status bar and commands as a mod) the
+    // Collector again.
+    also: [79, 96, 98, 99, 143, 150, 160, 162, 166],
   },
   {
     id: 'archival',

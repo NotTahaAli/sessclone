@@ -196,6 +196,47 @@ const resumable = async (handle, start, size) => {
 }
 
 /**
+ * How many of a session's Turns are not acknowledged yet: what the next flush
+ * would send, counted from the same cursors and with the same rule for whose
+ * Turns a file holds. Reads only past each cursor, so a session that is caught
+ * up costs one small read per file. Unreadable files count nothing.
+ *
+ * @param {object} input
+ * @param {string} input.sessionId
+ * @param {string | undefined} input.transcriptPath
+ * @param {Record<string, string | undefined>} input.environment
+ * @param {string} input.stateDir
+ */
+export const unsentTurns = async ({
+  sessionId,
+  transcriptPath,
+  environment,
+  stateDir,
+}) => {
+  const files = await sessionTranscripts({
+    transcriptPath,
+    sessionId,
+    environment,
+  })
+  const counts = await Promise.all(
+    files.map(async (file) => {
+      try {
+        const from = await readCursor(stateDir, file.path)
+        const { text } = await readFrom(file.path, from?.byteOffset ?? 0)
+        return parseTranscript(text).filter(
+          (turn) =>
+            turn.sessionId === sessionId &&
+            (file.agentRun ? turn.agentId !== null : turn.agentId === null),
+        ).length
+      } catch {
+        return 0
+      }
+    }),
+  )
+  return counts.reduce((sum, count) => sum + count, 0)
+}
+
+/**
  * Groups in first-seen order, which is file order.
  *
  * @template T, K

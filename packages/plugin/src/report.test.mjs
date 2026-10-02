@@ -5,7 +5,8 @@ import { join } from 'node:path'
 
 import { expect, test } from 'vitest'
 
-import { buildPayloads, originRemote } from './report.mjs'
+import { writeCursor } from './cursors.mjs'
+import { buildPayloads, originRemote, unsentTurns } from './report.mjs'
 import { IngestPayload } from '../../shared/src/ingest.ts'
 import { TURNS_PER_REPORT } from '../../shared/src/limits.ts'
 
@@ -289,3 +290,34 @@ test.each([
     expect(finished.code).toBe(exitCode)
   },
 )
+
+test('unsent Turns are those past the cursor, for the status bar', async () => {
+  // Claude Code ends every line, the last one too; the cursor stops at the
+  // last newline.
+  const path = transcript([assistant(), assistant({ messageId: 'msg_2' })])
+  writeFileSync(path, `${readFileSync(path, 'utf8')}\n`)
+  const stateDir = mkdtempSync(join(tmpdir(), 'sessclone-state-'))
+  const count = () =>
+    unsentTurns({
+      sessionId: 'session-1',
+      transcriptPath: path,
+      environment: { CLAUDE_CONFIG_DIR: stateDir },
+      stateDir,
+    })
+
+  expect(await count()).toBe(2)
+
+  const [{ advance }] = await buildPayloads({
+    transcriptPath: path,
+    sessionId: 'session-1',
+    cwd: '/home/dev/api',
+    environment: { SESSCLONE_DEVICE: 'host:build-box' },
+    stateDir,
+  })
+  await Promise.all(
+    advance.map(({ path: file, cursor }) =>
+      writeCursor(stateDir, file, cursor),
+    ),
+  )
+  expect(await count()).toBe(0)
+})

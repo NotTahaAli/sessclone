@@ -152,14 +152,22 @@ sessclone is not connected: <why — no key set, or the deployment refused this 
 session once the answer is settled; "not connected" repeats every session
 until it is fixed.
 
-`/sessclone:status` shows what the last session start found, plus this
+`/sessclone-status` shows what the last session start found, plus this
 machine's side: the deployment, the key's first three characters and length,
-whether it was connected and to which Org, this Device, how many reports are
-waiting to send, and the last push. It reads rather than asks, because Claude
-Code gives the key to the plugin's hooks and never to a command. For the same
-reason `/sessclone:sync` does not send by itself: it asks the hook that ends
-that turn to drain the retry queue and resend unsent Turns right away, and
-that hook prints what it sent.
+whether it was connected and to which Org, this Device, how many of this
+session's Turns are not sent yet, how many reports are waiting to send, and
+the last push. `/sessclone-sync` drains the retry queue and resends unsent
+Turns right away, without a Claude turn, and prints what it sent.
+
+On Claude Code 2.1.287 or newer, a line above the prompt shows the same at a
+glance: a green, yellow or red dot, whether the key is connected and to which
+Org, whether this session is synced or how many Turns it is behind, what is
+queued, and `↗`, which opens this session in the dashboard. The bar and the
+two commands are the plugin's
+[mod](https://code.claude.com/docs/en/plugins/mods/overview). Where mods
+cannot load (an older Claude Code, or mods turned off), `/sessclone:status`
+and `/sessclone:sync` do the same; that sync is carried out by the hook that
+ends the turn.
 
 There is also a command that reads this machine and prints what it found —
 the Node version, the resolved state directory, the cursor and queue files as

@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 
 import { sessionDetailView, UUID } from './detail'
 import { currentViewer } from '../../../../lib/viewer'
@@ -20,10 +20,19 @@ export default async function Session({
   const { sessionId } = await params
   const { member, after } = await searchParams
 
+  // No member: the viewer's own Session in the active Org. That is the link
+  // the Collector's status bar opens, which knows the Session but not who the
+  // dashboard calls its person; the redirect keeps one address per page.
+  if (member === undefined) {
+    redirect(
+      `/sessions/${encodeURIComponent(decodeURIComponent(sessionId))}?member=${viewer.memberId}`,
+    )
+  }
+
   // A member id is a uuid and the statements compare it as one, so anything
   // else would be a cast error rather than an empty result. Refuse it here: a
   // hand-typed URL is a 404, not a 500.
-  if (!member || !UUID.test(member)) notFound()
+  if (!UUID.test(member)) notFound()
 
   const detail = await sessionDetailView({
     viewer,
