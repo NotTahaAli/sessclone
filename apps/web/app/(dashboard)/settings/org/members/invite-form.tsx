@@ -3,6 +3,7 @@
 import { useActionState } from 'react'
 
 import { sendInvite } from './invite-actions'
+import { CodeBlock } from '../../../code-block'
 import { Button, cardClass, inputClass } from '../../../../_ui/primitives'
 import type { Delivery } from '../../../../../lib/mailer'
 
@@ -90,20 +91,18 @@ export function InviteForm({
             <p className="text-caption">
               {deliveryLine(state.delivery, state.email)}
             </p>
-            {/* Readonly rather than text, so it is one tap to copy on a phone
-                and cannot be edited into a link that goes nowhere. */}
-            <input
-              readOnly
-              value={`${origin}${state.link}`}
-              onFocus={select}
-              className={`${inputClass} mt-2 w-full font-mono text-caption`}
-            />
+            {/* Wrapped, with Copy beside it (ticket 161): the readonly field
+                this was showed a phone a third of the link and no way to
+                copy it but a long-press inside a field. */}
+            <div className="mt-2">
+              <CodeBlock
+                command={`${origin}${state.link}`}
+                label="the invitation link"
+              />
+            </div>
           </div>
         ) : null}
       </div>
     </>
   )
 }
-
-const select = (event: React.FocusEvent<HTMLInputElement>) =>
-  event.currentTarget.select()

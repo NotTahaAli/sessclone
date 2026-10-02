@@ -34,11 +34,14 @@ export function PersonControls({
 }) {
   const [state, action, pending] = useActionState(run, null)
   const [picked, setPicked] = useState(role)
-  const [shown, setShown] = useState(role)
+  // What the row shows, and the form's key below.
+  const saved = `${role}:${removed}`
+  const [shown, setShown] = useState(saved)
 
-  // The page re-renders with the saved Role; the pill follows it.
-  if (shown !== role) {
-    setShown(role)
+  // The page re-renders with the saved Role or removal; the pill follows it,
+  // dropping any pick left unsaved from before.
+  if (shown !== saved) {
+    setShown(saved)
     setPicked(role)
   }
 
@@ -46,10 +49,22 @@ export function PersonControls({
     (event: ChangeEvent<HTMLSelectElement>) => setPicked(event.target.value),
     [],
   )
+  const reset = useCallback(() => setPicked(role), [role])
 
   return (
     <div className="flex flex-col items-end gap-0.5">
-      <form action={action} className="flex items-center gap-1.5">
+      {/* Keyed by what the row shows. React resets a form once its action
+          settles, and a reset puts the select back on the option it was
+          first drawn with: after a save, the old Role, beside a row that
+          says the new one. A new form for each saved state has nothing old
+          to go back to; `onReset` keeps a refused pick in step with the
+          select it was reset to. */}
+      <form
+        key={saved}
+        action={action}
+        onReset={reset}
+        className="flex items-center gap-1.5"
+      >
         <input type="hidden" name="memberId" value={memberId} />
         <label className="sr-only" htmlFor={`role-${memberId}`}>
           Role for {who}
@@ -94,7 +109,9 @@ export function PersonControls({
       <p
         role="status"
         aria-live="polite"
-        className="text-bad-text text-right text-caption"
+        // Capped, so a refusal wraps under the controls rather than widening
+        // them and squeezing the person's name to a letter on a phone.
+        className="text-bad-text max-w-44 text-right text-caption"
       >
         {state?.error ?? ''}
       </p>

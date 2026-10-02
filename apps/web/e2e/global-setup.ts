@@ -6,7 +6,13 @@ import { dirname, join } from 'node:path'
 import type { FullConfig } from '@playwright/test'
 import postgres from 'postgres'
 
-import { AUTH_URL, BASE_URL, OWNER_URL, STATE } from '../playwright.config'
+import {
+  AUTH_URL,
+  BASE_URL,
+  INVITEE_STATE,
+  OWNER_URL,
+  STATE,
+} from '../playwright.config'
 
 // Once per run: a fresh schema, the seed, and a signed-in session.
 //
@@ -21,6 +27,12 @@ import { AUTH_URL, BASE_URL, OWNER_URL, STATE } from '../playwright.config'
 const PERSON = {
   id: '00000000-0000-4000-8000-000000000135',
   email: 'e2e@sessclone.test',
+}
+
+// Ticket 161: somebody signed in with no Org yet, whom Alpha has invited.
+const INVITEE = {
+  id: '00000000-0000-4000-8000-000000000161',
+  email: 'invitee@sessclone.test',
 }
 
 const b64url = (value: string | Buffer) =>
@@ -49,6 +61,8 @@ export default async function globalSetup(config: FullConfig) {
   }
 
   // Alpha, the person's own and approved; Bravo, which has invited them.
+  // Alpha has a Member besides them (ticket 161), and has invited `INVITEE`,
+  // who has signed in but is in no Org.
   await owner`
     with tier as (select id from tiers where key = 'team'),
     person as (
@@ -77,6 +91,28 @@ export default async function globalSetup(config: FullConfig) {
            now() + interval '7 days', joined.id
       from bravo join joined on joined.org_id = bravo.id
   `
+  await owner`
+    with alpha as (select id from orgs where name = 'Alpha'),
+    inviter as (
+      select member.id from members member join alpha on alpha.id = member.org_id
+       where member.role = 'owner'
+       limit 1
+    ),
+    teammate as (
+      insert into users (email) values ('teammate@alpha.test') returning id
+    ),
+    invitee as (
+      insert into users (id, email) values (${INVITEE.id}, ${INVITEE.email})
+    ),
+    joined as (
+      insert into members (org_id, user_id, role)
+      select alpha.id, teammate.id, 'member' from alpha, teammate
+    )
+    insert into invitations (org_id, email, role, token_hash, expires_at, invited_by)
+    select alpha.id, ${INVITEE.email}, 'member', ${randomBytes(32).toString('hex')},
+           now() + interval '7 days', inviter.id
+      from alpha, inviter
+  `
   await owner.end()
 
   // The key, and the one endpoint of Supabase Auth the app calls.
@@ -101,52 +137,57 @@ export default async function globalSetup(config: FullConfig) {
     server.listen(Number(port), hostname, resolve),
   )
 
-  const now = Math.floor(Date.now() / 1000)
-  const expiresAt = now + 4 * 3600
-  const head = b64url(JSON.stringify({ alg: 'ES256', typ: 'JWT', kid }))
-  const body = b64url(
-    JSON.stringify({
-      sub: PERSON.id,
-      email: PERSON.email,
-      role: 'authenticated',
-      aud: 'authenticated',
-      iat: now,
-      exp: expiresAt,
-    }),
-  )
-  const signature = sign('sha256', Buffer.from(`${head}.${body}`), {
-    key: privateKey,
-    dsaEncoding: 'ieee-p1363',
-  })
-  const session = {
-    access_token: `${head}.${body}.${b64url(signature)}`,
-    refresh_token: 'e2e',
-    token_type: 'bearer',
-    expires_in: expiresAt - now,
-    expires_at: expiresAt,
-    user: { id: PERSON.id, email: PERSON.email, aud: 'authenticated' },
-  }
+  // One session per person, each a storage state a test file names.
+  const signIn = (person: typeof PERSON, path: string) => {
+    const now = Math.floor(Date.now() / 1000)
+    const expiresAt = now + 4 * 3600
+    const head = b64url(JSON.stringify({ alg: 'ES256', typ: 'JWT', kid }))
+    const body = b64url(
+      JSON.stringify({
+        sub: person.id,
+        email: person.email,
+        role: 'authenticated',
+        aud: 'authenticated',
+        iat: now,
+        exp: expiresAt,
+      }),
+    )
+    const signature = sign('sha256', Buffer.from(`${head}.${body}`), {
+      key: privateKey,
+      dsaEncoding: 'ieee-p1363',
+    })
+    const session = {
+      access_token: `${head}.${body}.${b64url(signature)}`,
+      refresh_token: 'e2e',
+      token_type: 'bearer',
+      expires_in: expiresAt - now,
+      expires_at: expiresAt,
+      user: { id: person.id, email: person.email, aud: 'authenticated' },
+    }
 
-  const state = join(root, STATE)
-  mkdirSync(dirname(state), { recursive: true })
-  writeFileSync(
-    state,
-    JSON.stringify({
-      cookies: [
-        {
-          name: `sb-${hostname.split('.')[0]}-auth-token`,
-          value: `base64-${b64url(JSON.stringify(session))}`,
-          domain: new URL(BASE_URL).hostname,
-          path: '/',
-          expires: expiresAt,
-          httpOnly: false,
-          secure: false,
-          sameSite: 'Lax',
-        },
-      ],
-      origins: [],
-    }),
-  )
+    const state = join(root, path)
+    mkdirSync(dirname(state), { recursive: true })
+    writeFileSync(
+      state,
+      JSON.stringify({
+        cookies: [
+          {
+            name: `sb-${hostname.split('.')[0]}-auth-token`,
+            value: `base64-${b64url(JSON.stringify(session))}`,
+            domain: new URL(BASE_URL).hostname,
+            path: '/',
+            expires: expiresAt,
+            httpOnly: false,
+            secure: false,
+            sameSite: 'Lax',
+          },
+        ],
+        origins: [],
+      }),
+    )
+  }
+  signIn(PERSON, STATE)
+  signIn(INVITEE, INVITEE_STATE)
 
   // Returned, so Playwright runs it as the teardown.
   return () => new Promise<void>((resolve) => server.close(() => resolve()))
