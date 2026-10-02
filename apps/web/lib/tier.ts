@@ -146,6 +146,31 @@ export const orgTier = async (
   }
 }
 
+/**
+ * The Org's Seats: how many are in use and the most it may have, null for no
+ * limit (ticket 164). Both from one query, counted the way the
+ * `members_guard_seat_ceiling` trigger counts them and capped by the function
+ * it refuses against, so the Members page and the database agree.
+ */
+export const orgSeats = async (
+  tx: TransactionSql,
+  orgId: string,
+): Promise<{ used: number; ceiling: number | null }> => {
+  const [row] = await tx<{ used: string; ceiling: number | null }[]>`
+    select (select count(*) from members
+             where org_id = ${orgId} and removed_at is null) as used,
+           sessclone_org_seat_ceiling(${orgId}) as ceiling
+  `
+  return { used: Number(row!.used), ceiling: row!.ceiling }
+}
+
+/** The Members page's head count: Seats used out of the ceiling, where the
+ * Org has one, and plain Members where it does not. A Seat is a person. */
+export const seatCount = (active: number, ceiling: number | null): string =>
+  ceiling === null
+    ? `${active} ${active === 1 ? 'Member' : 'Members'}`
+    : `${active} of ${ceiling} ${ceiling === 1 ? 'Seat' : 'Seats'}`
+
 /** The retention ceiling in a sentence. Null is no ceiling, not zero days. */
 export const retentionCeiling = (tier: OrgTier): string =>
   tier.retentionMaxDays === null

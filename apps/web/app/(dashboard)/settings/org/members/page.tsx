@@ -13,6 +13,7 @@ import {
   type OrgMember,
 } from '../../../../../lib/scopes'
 import { appUrl } from '../../../../../lib/auth/app-url'
+import { orgSeats, seatCount } from '../../../../../lib/tier'
 import {
   listInvitations,
   type Invitation,
@@ -45,20 +46,22 @@ export default async function Members() {
   // One transaction, independent statements — and `listScopes` is one query
   // for the whole Org rather than one per Manager, which on a page with five
   // Managers would be the query-in-a-loop this repo calls a bug.
-  const [{ members, more }, scopes, invitations] = await asViewer(
+  const [{ members, more }, scopes, invitations, seats] = await asViewer(
     viewer.userId,
     (tx) =>
       Promise.all([
         listOrgMembers(tx, viewer.orgId),
         listScopes(tx, viewer.orgId),
         listInvitations(tx, viewer.orgId),
+        orgSeats(tx, viewer.orgId),
       ]),
   )
 
   const managers = members.filter(
     (member) => member.role === 'manager' && !member.removed,
   )
-  const active = members.filter((member) => !member.removed).length
+  // From its own count, not the listed rows: the list stops at 200.
+  const full = seats.ceiling !== null && seats.used >= seats.ceiling
 
   return (
     <div className="flex max-w-3xl flex-col">
@@ -90,9 +93,12 @@ export default async function Members() {
       ) : null}
 
       <SectionBreak>
-        People · {active} {active === 1 ? 'Member' : 'Members'}
+        People · {seatCount(seats.used, seats.ceiling)}
       </SectionBreak>
       <p className="text-text-muted text-caption">
+        {full
+          ? 'Every Seat is in use, so nobody new can join until somebody is removed or the plan allows more Seats. '
+          : ''}
         A Role takes effect at once. Removing somebody frees their Seat and
         stops their keys reporting, and keeps everything they have already spent
         in this Org&apos;s history — so the totals still add up.

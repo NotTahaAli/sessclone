@@ -146,8 +146,9 @@ const PHASES = [
     // engines), 149 (page speed), 151 (cost guides), 152 (visitor funnel)
     // 158 (demo default period) and 159 (accessibility pass) the public site
     // and docs; 161 (Team walkthrough fixes) the join page and the no-Org
-    // page; 163 (usage limits and budget guides) the docs.
-    also: [142, 145, 147, 148, 149, 151, 152, 158, 159, 161, 163],
+    // page; 163 (usage limits and budget guides) the docs; 164 (Seats on the
+    // Members page) and 165 (terms without a free hosted plan) the pages.
+    also: [142, 145, 147, 148, 149, 151, 152, 158, 159, 161, 163, 164, 165],
   },
   {
     id: 'approval',
