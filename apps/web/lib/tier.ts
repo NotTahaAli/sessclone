@@ -147,18 +147,21 @@ export const orgTier = async (
 }
 
 /**
- * The most Members the Org may have, or null for no limit (ticket 164). The
- * same function the `members_guard_seat_ceiling` trigger refuses against, so
- * the Members page cannot promise a Seat the database would refuse.
+ * The Org's Seats: how many are in use and the most it may have, null for no
+ * limit (ticket 164). Both from one query, counted the way the
+ * `members_guard_seat_ceiling` trigger counts them and capped by the function
+ * it refuses against, so the Members page and the database agree.
  */
-export const orgSeatCeiling = async (
+export const orgSeats = async (
   tx: TransactionSql,
   orgId: string,
-): Promise<number | null> => {
-  const [row] = await tx<{ ceiling: number | null }[]>`
-    select sessclone_org_seat_ceiling(${orgId}) as ceiling
+): Promise<{ used: number; ceiling: number | null }> => {
+  const [row] = await tx<{ used: string; ceiling: number | null }[]>`
+    select (select count(*) from members
+             where org_id = ${orgId} and removed_at is null) as used,
+           sessclone_org_seat_ceiling(${orgId}) as ceiling
   `
-  return row?.ceiling ?? null
+  return { used: Number(row!.used), ceiling: row!.ceiling }
 }
 
 /** The Members page's head count: Seats used out of the ceiling, where the

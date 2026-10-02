@@ -4,7 +4,7 @@ import { beforeEach, expect, test } from 'vitest'
 
 import {
   isActive,
-  orgSeatCeiling,
+  orgSeats,
   orgTier,
   retentionCeiling,
   agreedPrice,
@@ -230,13 +230,14 @@ test('an agreed price reads as base plus per seat, or whichever is set', () => {
 // Ticket 164: the Members page heads its People with the Seats in use. An
 // Admin reaches that page too, and the ceiling is the trigger's own function,
 // so the count cannot promise a Seat the database would refuse.
-test('an Admin reads the Seat ceiling the trigger refuses against', async () => {
-  const ceiling = () =>
-    asRole(fixture.acme, 'admin', (tx) => orgSeatCeiling(tx, fixture.acme.id))
+test('an Admin reads the Org’s Seats, counted as the trigger counts them', async () => {
+  const seats = () =>
+    asRole(fixture.acme, 'admin', (tx) => orgSeats(tx, fixture.acme.id))
 
-  expect(await ceiling()).toBeNull()
+  // Six Members in the fixture, one removed: five Seats in use.
+  expect(await seats()).toEqual({ used: 5, ceiling: null })
   await seedTier()
-  expect(await ceiling()).toBe(10)
+  expect(await seats()).toEqual({ used: 5, ceiling: 10 })
 })
 
 test('the head count says Seats only where there is a ceiling', () => {

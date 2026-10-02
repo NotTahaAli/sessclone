@@ -12,7 +12,7 @@ so an Owner or Admin sees how full the Org is before inviting.
 - With a ceiling: "People · 3 of 10 Seats". With none (Enterprise without a
   limit, Self-Hosted, an unapproved ask): "People · 3 Members", as before.
 - When every Seat is in use, the People note says nobody new can join until
-  somebody is removed or the Org moves to a bigger plan.
+  somebody is removed or the plan allows more Seats.
 - No schema change: the function was already granted to `sessclone_app`.
 
 **Blocked by:** none
