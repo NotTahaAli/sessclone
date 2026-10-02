@@ -55,12 +55,13 @@ try {
     )
   }
 } catch (error) {
+  // Fixed words, nothing taken from the error: this line is the command's
+  // output, which the model reads and the transcript keeps, and an error can
+  // carry what the configuration held, the key among it. A session start
+  // names a configuration problem in full.
   console.log(
     error instanceof ConfigurationError
-      ? `Not configured: ${error.problems.join('; ')}`
-      : // The name only: this line is the command's output, which the model
-        // reads and the transcript keeps, and an error's message can carry
-        // what the configuration held, the key among it.
-        `Sync failed (${error instanceof Error ? error.name : 'unknown error'}). The next session start tries again.`,
+      ? 'Not configured: start a new session to see what to fix, or run /plugin configure sessclone.'
+      : 'Sync failed. The next session start tries again; SESSCLONE_DEBUG=1 shows why in its hooks.',
   )
 }
