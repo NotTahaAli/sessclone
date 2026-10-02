@@ -282,3 +282,117 @@ test('filtering by model keeps the rows that price every model', async () => {
   const { rates } = await asOperator((tx) => listRates(tx, { model: 'opus' }))
   expect(rates.some((rate) => rate.model === null)).toBe(true)
 })
+
+// The unknown-model list prices one Turn per shape rather than every Turn
+// (2026-10-02: 102k Turns took the Rates page 11s on average, 21s at worst).
+// These two hold it to the same answer the per-Turn pass gives, and to being
+// cheaper than that pass.
+
+/** What `sessclone_unknown_models` would say if it priced every Turn. */
+const unknownByEveryTurn = () => sql<
+  { model: string; turns: string; last_seen_at: Date }[]
+>`
+  select turn.model, count(*) as turns, max(turn.occurred_at) as last_seen_at
+    from turns turn
+    join turn_costs cost on cost.turn_id = turn.id
+   where cost.unpriced
+   group by turn.model
+   order by count(*) desc, turn.model
+`
+
+test('the unknown models are the same answer as pricing every Turn', async () => {
+  // One model priced for input only, so its Turns split by which counters are
+  // non-zero; one priced from a date, so its Turns split by day; one priced
+  // nowhere. Every shape the grouping keys on is here at least twice.
+  await asOperator(async (tx) => {
+    await addRate(tx, {
+      model: 'claude-partial-9',
+      class: 'input',
+      priceUsd: 1,
+      effectiveFrom: '2026-01-01',
+      source: null,
+    })
+    await addRate(tx, {
+      model: 'claude-dated-9',
+      class: 'input',
+      priceUsd: 1,
+      effectiveFrom: '2026-09-20',
+      source: null,
+    })
+  })
+  const turns = [
+    ['claude-partial-9', '2026-09-20T08:00:00Z', 10, 0],
+    ['claude-partial-9', '2026-09-20T09:00:00Z', 10, 0],
+    ['claude-partial-9', '2026-09-20T10:00:00Z', 10, 5],
+    ['claude-partial-9', '2026-09-21T11:00:00Z', 10, 5],
+    ['claude-dated-9', '2026-09-19T08:00:00Z', 10, 0],
+    ['claude-dated-9', '2026-09-19T12:00:00Z', 10, 0],
+    ['claude-dated-9', '2026-09-20T08:00:00Z', 10, 0],
+    ['claude-nowhere-9', '2026-09-18T08:00:00Z', 10, 0],
+    ['claude-nowhere-9', '2026-09-22T08:00:00Z', 10, 0],
+  ] as const
+  await sql`
+    insert into turns ${sql(
+      turns.map(([model, at, input, output], index) => ({
+        org_id: fixture.acme.id,
+        member_id: fixture.acme.members.member,
+        session_id: 'session-1',
+        message_id: `msg_shape_${index}`,
+        occurred_at: at,
+        model,
+        input_tokens: input,
+        output_tokens: output,
+      })),
+    )}
+  `
+
+  const { models } = await asOperator((tx) => unknownModels(tx))
+  const expected = await unknownByEveryTurn()
+  expect(expected.map((row) => row.model)).toEqual([
+    'claude-dated-9',
+    'claude-nowhere-9',
+    'claude-partial-9',
+  ])
+  expect(models).toEqual(
+    expected.map((row) => ({
+      model: row.model,
+      turns: Number(row.turns),
+      lastSeenAt: row.last_seen_at,
+    })),
+  )
+})
+
+test('the unknown models price one Turn per shape, not every Turn', async () => {
+  // Fifty Turns of one shape. Pricing a Turn looks its Org's overrides up
+  // once through `org_rate_overrides_resolution_idx`, so the count of scans
+  // of that index in this transaction is the count of Turns priced. Memoize is
+  // off because production's plan did not use it at 102k Turns, and with it on
+  // a small table hides the per-Turn pass this is about. Exactly one, not
+  // fewer than some bound: a plan that stops using the index reads zero and
+  // should fail here rather than pass for the wrong reason.
+  await sql`
+    insert into turns (org_id, member_id, session_id, message_id, occurred_at,
+                       model, input_tokens)
+    select ${fixture.acme.id}, ${fixture.acme.members.member}, 'session-1',
+           'msg_bulk_' || n, '2026-09-20T08:00:00Z', 'claude-unreleased-9', 10
+      from generate_series(1, 50) n
+  `
+
+  const { models, reads } = await asOperator(async (tx) => {
+    await tx`set local enable_memoize = off`
+    const scans = async () => {
+      const [row] = await tx<{ n: string }[]>`
+        select pg_stat_get_xact_numscans(
+          'org_rate_overrides_resolution_idx'::regclass
+        ) as n
+      `
+      return Number(row!.n)
+    }
+    const before = await scans()
+    const listed = await unknownModels(tx)
+    return { models: listed.models, reads: (await scans()) - before }
+  })
+
+  expect(models).toMatchObject([{ model: 'claude-unreleased-9', turns: 50 }])
+  expect(reads).toBe(1)
+})
