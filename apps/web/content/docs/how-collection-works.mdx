@@ -45,6 +45,11 @@ That sweep is time-boxed to fit inside the session-start hook and works
 newest-first, so a very large backlog — a fresh install over a year of existing
 history, say — is caught up across several sessions rather than all in one.
 
+To catch up without starting a session, run `/sessclone-sync`: the same
+drain and sweep, at once and without a Claude turn. On Claude Code 2.1.287 or
+newer, the line above the prompt shows how many of this session's Turns are
+still to send and what is queued. See [Install](/docs/install).
+
 <Callout title="The one residual gap">
   A dropped _Turn_ is always recovered, because its cursor did not advance. A
   dropped session **event** — a stop failure or a clean session end — reads no
