@@ -196,6 +196,52 @@ const resumable = async (handle, start, size) => {
 }
 
 /**
+ * How many of a session's Turns are not acknowledged yet: what the next flush
+ * would send, counted from the same cursors and with the same rule for whose
+ * Turns a file holds. Reads only past each cursor, so a session that is caught
+ * up costs one small read per file. Unreadable files count nothing.
+ *
+ * @param {object} input
+ * @param {string} input.sessionId
+ * @param {string | undefined} input.transcriptPath
+ * @param {Record<string, string | undefined>} input.environment
+ * @param {string} input.stateDir
+ */
+export const unsentTurns = async ({
+  sessionId,
+  transcriptPath,
+  environment,
+  stateDir,
+}) => {
+  const files = await sessionTranscripts({
+    transcriptPath,
+    sessionId,
+    environment,
+  })
+  let count = 0
+  // One file at a time: a session far behind has large tails to read.
+  for (const file of files) {
+    try {
+      // eslint-disable-next-line no-await-in-loop -- sequential on purpose, as above
+      const from = await readCursor(stateDir, file.path)
+      // eslint-disable-next-line no-await-in-loop -- as above
+      const { text } = await readFrom(file.path, from?.byteOffset ?? 0)
+      count += parseTranscript(text).filter(
+        (turn) =>
+          turn.sessionId === sessionId &&
+          (file.agentRun ? turn.agentId !== null : turn.agentId === null) &&
+          // A last line with no newline yet is re-read from before it, but
+          // its Turn was acknowledged.
+          turn.messageId !== from?.messageId,
+      ).length
+    } catch {
+      // Unreadable: counts nothing, as `reportsFor` sends nothing from it.
+    }
+  }
+  return count
+}
+
+/**
  * Groups in first-seen order, which is file order.
  *
  * @template T, K

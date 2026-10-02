@@ -6,6 +6,25 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-02
+
+Deploy the web app first: the status bar's link opens `/sessions/<id>`
+without a `member`, which older deployments answer with a 404. Then installs
+pick the plugin up with `/plugin update sessclone@sessclone`. No migrations.
+
+### Added
+
+- On Claude Code 2.1.287 or newer, a line above the prompt shows whether the
+  key is connected and to which Org, whether this session is synced or how
+  many Turns it is behind, what is queued, and `↗`, which opens this session
+  in the dashboard.
+- `/sessclone-status` and `/sessclone-sync` run at once, without a Claude
+  turn; status also says how many of this session's Turns are not sent yet.
+  Where mods cannot load, `/sessclone:status` and `/sessclone:sync` still work
+  as before, and are hidden from the menu where they can.
+- A Session's page opened without `?member=` shows the viewer's own Session in
+  the active Org.
+
 ## [0.4.1] - 2026-10-01
 
 Deploy the web app, then installs pick the plugin up with `/plugin update
@@ -231,7 +250,8 @@ The first public release.
 - Self-hosting: a Dockerfile, `compose.yaml` and a guide, free at any size
   under AGPL-3.0-only with the additional term in `NOTICE.md`.
 
-[Unreleased]: https://github.com/NotTahaAli/sessclone/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/NotTahaAli/sessclone/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/NotTahaAli/sessclone/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/NotTahaAli/sessclone/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/NotTahaAli/sessclone/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/NotTahaAli/sessclone/compare/v0.2.1...v0.3.0

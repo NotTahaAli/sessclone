@@ -25,17 +25,22 @@ transcripts Claude Code still keeps.
 
 Requires Node 22.18 or newer (or 23.6+, or 24).
 
-## Commands
+## Commands and the status bar
 
-- `/sessclone:status` shows what the last session start found: the
+- `/sessclone-status` shows what the last session start found: the
   deployment, the key's first three characters and length, whether it was
-  accepted and for which Org, plus this Device, what is waiting to send and the
-  last push.
-- `/sessclone:sync` sends everything waiting at the end of that turn instead
-  of at the next session start, and says what it sent.
+  accepted and for which Org, plus this Device, how many of this session's
+  Turns are not sent yet, what is waiting to send and the last push.
+- `/sessclone-sync` sends everything waiting now, without a Claude turn, and
+  says what it sent.
+- A line above the prompt shows whether the key is connected, whether this
+  session is synced or how many Turns it is behind, what is queued, and `↗`,
+  which opens this session in the dashboard.
 
-Only the plugin's hooks are given the key, so the commands read what the hooks
-recorded, and sync is carried out by the hook that ends the turn.
+These are the plugin's mod (`hooks/register.tsx`), which needs Claude Code
+2.1.287 or newer. Where mods cannot load, `/sessclone:status` and
+`/sessclone:sync` do the same, except that status leaves out this session's
+unsent Turns, and sync is carried out by the hook that ends that turn.
 
 ## What it sends, and where
 

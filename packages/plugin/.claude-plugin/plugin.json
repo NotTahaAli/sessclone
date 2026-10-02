@@ -1,11 +1,12 @@
 {
   "name": "sessclone",
   "description": "Sends Claude Code usage to a SessClone deployment.",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "author": {
     "name": "sessclone contributors"
   },
   "icon": "./.claude-plugin/icon.svg",
+  "types": "./types/index.d.ts",
   "keywords": [
     "usage",
     "cost",
