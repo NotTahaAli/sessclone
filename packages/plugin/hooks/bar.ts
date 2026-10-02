@@ -3,27 +3,43 @@
 
 import type { Standing } from '../types'
 
-/** Claude Code gives a hook these; the mod hands them on to the scripts. */
+/**
+ * Claude Code gives a hook these; the mod hands them on to sync. Every string
+ * answer is set, an empty one too, so a variable of the same name already in
+ * Claude Code's environment never stands in for the setup prompt.
+ */
 export const optionEnvironment = (
   options: Readonly<Record<string, unknown>>,
 ) => {
-  const env: Record<string, string> = {}
+  const env: Record<string, string> = {
+    CLAUDE_PLUGIN_OPTION_URL: '',
+    CLAUDE_PLUGIN_OPTION_API_KEY: '',
+  }
   for (const [name, value] of Object.entries(options)) {
-    if (typeof value === 'string' && value.trim()) {
+    if (typeof value === 'string') {
       env[`CLAUDE_PLUGIN_OPTION_${name.toUpperCase()}`] = value
     }
   }
   return env
 }
 
-/** The dashboard page for a session, where the surface can draw the link. */
+/**
+ * The dashboard page for a session, under the deployment's own path, or null
+ * where a surface would refuse the link (and with it the whole bar): only
+ * `https:`, or `http:` on localhost, with no credentials in it.
+ */
 export const sessionLink = (url: string | null, sessionId: string) => {
   if (!url) return null
   try {
-    const href = new URL(`/sessions/${encodeURIComponent(sessionId)}`, url).href
-    return href.startsWith('https://') || href.startsWith('http://localhost')
-      ? href
-      : null
+    const base = new URL(url)
+    const allowed =
+      base.protocol === 'https:' ||
+      (base.protocol === 'http:' && base.hostname === 'localhost')
+    if (!allowed || base.username || base.password) return null
+    base.pathname = `${base.pathname.replace(/\/$/, '')}/sessions/${encodeURIComponent(sessionId)}`
+    base.search = ''
+    base.hash = ''
+    return base.href
   } catch {
     return null
   }

@@ -35,23 +35,31 @@ try {
     console.log(
       `Did not sync: ${configuration.url} refused the key. Create one under Keys, run /plugin configure sessclone, and start a new session.`,
     )
+  } else if (connection.state === 'unknown' && connection.status === null) {
+    // Nothing would land: leave the sweep to the next session start.
+    const { queued } = await import('../src/queue.mjs')
+    console.log(
+      `Could not reach ${configuration.url}. ${await queued(configuration.stateDir)} waiting; the next session start tries again.`,
+    )
   } else {
     const { sweep } = await import('../src/report.mjs')
     const { queued } = await import('../src/queue.mjs')
+    const { readAnswer } = await import('../src/last-answer.mjs')
     const before = await queued(configuration.stateDir)
-    const started = Date.now()
+    const started = new Date()
     await sweep({
       configuration,
       environment: process.env,
       budgetMs: BUDGET_MS,
     })
     const after = await queued(configuration.stateDir)
-    const unreachable =
-      connection.state === 'unknown' && connection.status === null
+    const answer = await readAnswer(configuration.stateDir)
+    const answered =
+      answer && Date.parse(answer.at) >= started.getTime() ? answer.status : 200
     console.log(
-      unreachable
-        ? `Could not reach ${configuration.url}. ${after} waiting; the next session start tries again.`
-        : `Synced to ${configuration.url}: ${before} waiting before, ${after} now.${Date.now() - started >= BUDGET_MS ? ' Out of time; the next session start sends the rest.' : ''}`,
+      answered === null || answered >= 300
+        ? `Sync did not land: ${configuration.url} answered ${answered ?? 'nothing'}. ${after} waiting; the next session start tries again.`
+        : `Synced to ${configuration.url}: ${before} waiting before, ${after} now.${Date.now() - started.getTime() >= BUDGET_MS ? ' Out of time; the next session start sends the rest.' : ''}`,
     )
   }
 } catch (error) {

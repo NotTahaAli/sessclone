@@ -45,13 +45,24 @@ test('the link is the session page, only where a surface may draw it', () => {
   expect(sessionLink('http://localhost:3000', 's')).toBe(
     'http://localhost:3000/sessions/s',
   )
+  expect(sessionLink('https://example.com/sessclone/', 's')).toBe(
+    'https://example.com/sessclone/sessions/s',
+  )
   // A Link to anything else refuses the whole bar.
   expect(sessionLink('http://intranet.example', 's')).toBeNull()
+  expect(sessionLink('http://localhost.evil.example', 's')).toBeNull()
+  expect(sessionLink('https://user:pass@sessclone.com', 's')).toBeNull()
   expect(sessionLink(null, 's')).toBeNull()
 })
 
-test('only the answers given are handed on, under the hook names', () => {
+test('the answers are handed on under the hook names, empty ones too', () => {
+  // Empty still set: an inherited variable must not stand in for the prompt.
   expect(optionEnvironment({ url: '', api_key: 'sk_x', flag: true })).toEqual({
+    CLAUDE_PLUGIN_OPTION_URL: '',
     CLAUDE_PLUGIN_OPTION_API_KEY: 'sk_x',
+  })
+  expect(optionEnvironment({})).toEqual({
+    CLAUDE_PLUGIN_OPTION_URL: '',
+    CLAUDE_PLUGIN_OPTION_API_KEY: '',
   })
 })

@@ -26,11 +26,28 @@ const standing = atom(
 /** The setup prompt's answers, as `register` received them. */
 let optionEnv: Record<string, string> = {}
 
-const script = ($: EngineInterface, name: string, args: string[] = []) =>
+/**
+ * Runs one of the plugin's scripts. Only sync is handed the setup prompt's
+ * answers, the key among them: status reads what the hooks recorded, and an
+ * env passed here is visible to any mod hooked on `process.run`.
+ */
+const script = (
+  $: EngineInterface,
+  name: 'status.mjs' | 'sync.mjs',
+  args: string[] = [],
+) =>
   $.process.run(['node', `${$.plugin.root}/scripts/${name}`, ...args], {
-    env: optionEnv,
-    timeoutMs: 30_000,
+    ...(name === 'sync.mjs' ? { env: optionEnv } : {}),
+    // Sync's own budget is 20 seconds, behind a 3-second key check.
+    timeoutMs: name === 'sync.mjs' ? 60_000 : 30_000,
   })
+
+/** What a command answers when its script could not run at all. */
+const failed = (what: string) =>
+  `sessclone ${what} could not run: is \`node\` on Claude Code's PATH? Node 22.18 or newer.`
+
+/** Which refresh is newest, so a slow one never overwrites a later one. */
+let generation = 0
 
 const refresh = async ($: EngineInterface) => {
   // Only the terminal and the Desktop app draw the band; `claude -p`, the SDK,
@@ -40,6 +57,7 @@ const refresh = async ($: EngineInterface) => {
     !surfaces.some((surface) => surface === 'terminal' || surface === 'desktop')
   )
     return
+  const mine = ++generation
   const sessionId = await $.session.id()
   const { stdout } = await script($, 'status.mjs', [
     '--json',
@@ -47,7 +65,7 @@ const refresh = async ($: EngineInterface) => {
     sessionId,
   ])
   const parsed = JSON.parse(stdout)
-  if (parsed.error) return
+  if (parsed.error || mine !== generation) return
   await update($, standing, () => ({ ...parsed, sessionId }))
 }
 
@@ -71,8 +89,16 @@ export const register: Register = (on, options) => {
       description:
         'Sends everything the sessclone Collector has waiting now, instead of at the next session start.',
     })
-    refreshSoon($)
+    // No refresh here: `classic.SessionStart` below runs once the key check
+    // has been recorded, which is what the bar shows first.
     return next(e)
+  })
+
+  // A surface that joins later (a Desktop or remote client) gets the bar.
+  on('session.attach', async ($, e, next) => {
+    const result = await next(e)
+    refreshSoon($)
+    return result
   })
 
   // Both after the settings hooks beneath have run: the session-start check
@@ -99,18 +125,21 @@ export const register: Register = (on, options) => {
   }
 
   on('command.run', { command: 'sessclone-status' }, async ($) => {
+    const sessionId = await $.session.id()
     const { stdout } = await script($, 'status.mjs', [
       '--session',
-      await $.session.id(),
-    ])
+      sessionId,
+    ]).catch(() => ({ stdout: '' }))
     refreshSoon($)
-    return { text: stdout.trim() || 'sessclone status printed nothing.' }
+    return { text: stdout.trim() || failed('status') }
   })
 
   on('command.run', { command: 'sessclone-sync' }, async ($) => {
-    const { stdout } = await script($, 'sync.mjs')
+    const { stdout } = await script($, 'sync.mjs').catch(() => ({
+      stdout: '',
+    }))
     refreshSoon($)
-    return { text: stdout.trim() || 'sessclone sync printed nothing.' }
+    return { text: stdout.trim() || failed('sync') }
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {

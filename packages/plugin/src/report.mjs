@@ -218,22 +218,27 @@ export const unsentTurns = async ({
     sessionId,
     environment,
   })
-  const counts = await Promise.all(
-    files.map(async (file) => {
-      try {
-        const from = await readCursor(stateDir, file.path)
-        const { text } = await readFrom(file.path, from?.byteOffset ?? 0)
-        return parseTranscript(text).filter(
-          (turn) =>
-            turn.sessionId === sessionId &&
-            (file.agentRun ? turn.agentId !== null : turn.agentId === null),
-        ).length
-      } catch {
-        return 0
-      }
-    }),
-  )
-  return counts.reduce((sum, count) => sum + count, 0)
+  let count = 0
+  // One file at a time: a session far behind has large tails to read.
+  for (const file of files) {
+    try {
+      // eslint-disable-next-line no-await-in-loop -- sequential on purpose, as above
+      const from = await readCursor(stateDir, file.path)
+      // eslint-disable-next-line no-await-in-loop -- as above
+      const { text } = await readFrom(file.path, from?.byteOffset ?? 0)
+      count += parseTranscript(text).filter(
+        (turn) =>
+          turn.sessionId === sessionId &&
+          (file.agentRun ? turn.agentId !== null : turn.agentId === null) &&
+          // A last line with no newline yet is re-read from before it, but
+          // its Turn was acknowledged.
+          turn.messageId !== from?.messageId,
+      ).length
+    } catch {
+      // Unreadable: counts nothing, as `reportsFor` sends nothing from it.
+    }
+  }
+  return count
 }
 
 /**

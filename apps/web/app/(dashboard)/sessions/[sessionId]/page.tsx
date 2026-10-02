@@ -24,9 +24,9 @@ export default async function Session({
   // the Collector's status bar opens, which knows the Session but not who the
   // dashboard calls its person; the redirect keeps one address per page.
   if (member === undefined) {
-    redirect(
-      `/sessions/${encodeURIComponent(decodeURIComponent(sessionId))}?member=${viewer.memberId}`,
-    )
+    const query = new URLSearchParams({ member: viewer.memberId })
+    if (after) query.set('after', after)
+    redirect(`/sessions/${sessionId}?${query}`)
   }
 
   // A member id is a uuid and the statements compare it as one, so anything

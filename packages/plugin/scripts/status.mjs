@@ -13,15 +13,15 @@
 // mod draws (`hooks/register.tsx`).
 
 import { hostname } from 'node:os'
-import { parseArgs } from 'node:util'
 
-const { values } = parseArgs({
-  options: {
-    json: { type: 'boolean', default: false },
-    session: { type: 'string' },
-  },
-  strict: false,
-})
+// By hand rather than `util.parseArgs`, so a Node too old for that still
+// reaches the line that says which Node it is.
+const argv = process.argv.slice(2)
+const at = argv.indexOf('--session')
+const values = {
+  json: argv.includes('--json'),
+  session: at === -1 ? undefined : argv[at + 1],
+}
 
 try {
   const { defaultStateDir, nodeProblem } =
@@ -44,9 +44,10 @@ try {
       deviceKey({ hostname: hostname(), environment: process.env }),
     )
     .catch(() => null)
-  const sessionId = typeof values.session === 'string' ? values.session : null
+  const sessionId = values.session ?? null
+  // A refused key sends nothing, so the count would only grow; it is not read.
   const unsent =
-    sessionId && !oldNode
+    sessionId && !oldNode && checked?.state !== 'refused'
       ? await import('../src/report.mjs').then(({ unsentTurns }) =>
           unsentTurns({
             sessionId,

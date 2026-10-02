@@ -292,10 +292,9 @@ test.each([
 )
 
 test('unsent Turns are those past the cursor, for the status bar', async () => {
-  // Claude Code ends every line, the last one too; the cursor stops at the
-  // last newline.
+  // No newline after the last line yet: the cursor stops before it, and its
+  // acknowledged Turn is still not counted.
   const path = transcript([assistant(), assistant({ messageId: 'msg_2' })])
-  writeFileSync(path, `${readFileSync(path, 'utf8')}\n`)
   const stateDir = mkdtempSync(join(tmpdir(), 'sessclone-state-'))
   const count = () =>
     unsentTurns({

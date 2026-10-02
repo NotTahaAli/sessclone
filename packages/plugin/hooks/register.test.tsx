@@ -40,11 +40,13 @@ test(
       return ran(JSON.stringify(STANDING))
     })
 
+    on('classic.SessionStart', () => ({}))
     await $.session.start({
       cwd: '/',
       surface: 'terminal',
       isInteractive: true,
     })
+    await $.classic.SessionStart({ source: 'startup' })
     await clock.advance(1)
 
     expect(runs[0]?.argv.slice(-3)).toEqual([
@@ -52,7 +54,8 @@ test(
       '--session',
       'session-1',
     ])
-    expect(runs[0]?.env?.CLAUDE_PLUGIN_OPTION_API_KEY).toBe('sk_test_key')
+    // Status never gets the key: another mod on `process.run` would see it.
+    expect(runs[0]?.env).toBeUndefined()
 
     /* oxlint-disable no-await-in-loop -- one drawing per surface, in turn */
     for (const surface of ['terminal', 'desktop'] as const) {
@@ -84,29 +87,60 @@ test(
   },
 )
 
-test('sync runs the sync script and prints its line', async ($, on) => {
+test(
+  'sync runs the sync script with the key and prints its line',
+  { options: { api_key: 'sk_test_key' } },
+  async ($, on) => {
+    mock.clock(on)
+    let env: Record<string, string> | undefined
+    on('session.surfaces', () => ({ value: [] }))
+    on('session.id', () => ({ value: 'session-1' }))
+    on('command.register', (_$, e) => ({ value: { command: e.name } }))
+    on('session.start', (_$, e) => ({ cwd: e.cwd }))
+    on('process.run', (_$, e) => {
+      const isSync = e.argv.some((part) => part.endsWith('/scripts/sync.mjs'))
+      if (isSync) env = e.init?.env
+      return ran(
+        isSync
+          ? 'Synced to https://sessclone.com: 3 waiting before, 0 now.\n'
+          : '',
+      )
+    })
+
+    await $.session.start({ cwd: '/', surface: null, isInteractive: false })
+    const { text } = await $.command.run({
+      command: 'sessclone-sync',
+      args: '',
+      origin: { kind: 'composer' },
+      presentation: { isFullscreen: false, columns: 100 },
+    })
+
+    expect(text).toBe(
+      'Synced to https://sessclone.com: 3 waiting before, 0 now.',
+    )
+    expect(env?.CLAUDE_PLUGIN_OPTION_API_KEY).toBe('sk_test_key')
+  },
+)
+
+test('a script that cannot start says so instead of nothing', async ($, on) => {
   mock.clock(on)
   on('session.surfaces', () => ({ value: [] }))
   on('session.id', () => ({ value: 'session-1' }))
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
-  on('process.run', (_$, e) =>
-    ran(
-      e.argv.some((part) => part.endsWith('/scripts/sync.mjs'))
-        ? 'Synced to https://sessclone.com: 3 waiting before, 0 now.\n'
-        : '',
-    ),
-  )
+  on('process.run', () => {
+    throw new Error('spawn node ENOENT')
+  })
 
   await $.session.start({ cwd: '/', surface: null, isInteractive: false })
   const { text } = await $.command.run({
-    command: 'sessclone-sync',
+    command: 'sessclone-status',
     args: '',
     origin: { kind: 'composer' },
     presentation: { isFullscreen: false, columns: 100 },
   })
 
-  expect(text).toBe('Synced to https://sessclone.com: 3 waiting before, 0 now.')
+  expect(text).toMatch(/could not run/)
 })
 
 test('the fallback skills leave the menu where the mod loads', async ($, on) => {
