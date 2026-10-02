@@ -146,6 +146,28 @@ export const orgTier = async (
   }
 }
 
+/**
+ * The most Members the Org may have, or null for no limit (ticket 164). The
+ * same function the `members_guard_seat_ceiling` trigger refuses against, so
+ * the Members page cannot promise a Seat the database would refuse.
+ */
+export const orgSeatCeiling = async (
+  tx: TransactionSql,
+  orgId: string,
+): Promise<number | null> => {
+  const [row] = await tx<{ ceiling: number | null }[]>`
+    select sessclone_org_seat_ceiling(${orgId}) as ceiling
+  `
+  return row?.ceiling ?? null
+}
+
+/** The Members page's head count: Seats used out of the ceiling, where the
+ * Org has one, and plain Members where it does not. A Seat is a person. */
+export const seatCount = (active: number, ceiling: number | null): string =>
+  ceiling === null
+    ? `${active} ${active === 1 ? 'Member' : 'Members'}`
+    : `${active} of ${ceiling} ${ceiling === 1 ? 'Seat' : 'Seats'}`
+
 /** The retention ceiling in a sentence. Null is no ceiling, not zero days. */
 export const retentionCeiling = (tier: OrgTier): string =>
   tier.retentionMaxDays === null

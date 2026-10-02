@@ -12,7 +12,7 @@ export const metadata = {
 
 export default function Terms() {
   return (
-    <Legal title="Terms" updated="25 September 2026">
+    <Legal title="Terms" updated="2 October 2026">
       <p>
         These terms cover the service at {siteHost()}. By creating an account
         you agree to them. The source code is separate: it is licensed under the{' '}
@@ -24,9 +24,11 @@ export default function Terms() {
 
       <h2>The service</h2>
       <p>
-        The hosted service is free while it is new. Paid plans are a waitlist
-        for now; before any plan charges you, you will see its price and agree
-        to it. New Orgs wait for approval before they can collect.
+        The hosted service is paid: there is no free hosted plan, and the{' '}
+        <Link href="/pricing">Pricing</Link> page lists each plan and its price.
+        Self-hosting the source code is free at any size. Before any plan
+        charges you, you will see its price and agree to it. New Orgs wait for
+        approval before they can collect.
       </p>
 
       <h2>Your account</h2>

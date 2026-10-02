@@ -4,9 +4,11 @@ import { beforeEach, expect, test } from 'vitest'
 
 import {
   isActive,
+  orgSeatCeiling,
   orgTier,
   retentionCeiling,
   agreedPrice,
+  seatCount,
   shownCapabilities,
 } from '../lib/tier'
 import { tierPrice, tierSeats } from '../lib/tiers'
@@ -223,4 +225,23 @@ test('an agreed price reads as base plus per seat, or whichever is set', () => {
   expect(agreed(null, 1_250)).toBe('$12.50/seat/month')
   expect(agreed(0, 800)).toBe('$0 + $8/seat/month')
   expect(agreed(null, null)).toBeNull()
+})
+
+// Ticket 164: the Members page heads its People with the Seats in use. An
+// Admin reaches that page too, and the ceiling is the trigger's own function,
+// so the count cannot promise a Seat the database would refuse.
+test('an Admin reads the Seat ceiling the trigger refuses against', async () => {
+  const ceiling = () =>
+    asRole(fixture.acme, 'admin', (tx) => orgSeatCeiling(tx, fixture.acme.id))
+
+  expect(await ceiling()).toBeNull()
+  await seedTier()
+  expect(await ceiling()).toBe(10)
+})
+
+test('the head count says Seats only where there is a ceiling', () => {
+  expect(seatCount(5, null)).toBe('5 Members')
+  expect(seatCount(1, null)).toBe('1 Member')
+  expect(seatCount(5, 10)).toBe('5 of 10 Seats')
+  expect(seatCount(1, 1)).toBe('1 of 1 Seat')
 })
