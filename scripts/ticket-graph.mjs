@@ -77,8 +77,9 @@ const PHASES = [
     type: 'backend',
     pos: [960, 122],
     range: [29, 43],
-    // Ticket added after the ranges were drawn; see the note on `archival`.
-    also: [81],
+    // Tickets added after the ranges were drawn; see the note on `archival`.
+    // 167 (Turn rollups) is 81's read path again, at scale.
+    also: [81, 167],
   },
   {
     id: 'product',

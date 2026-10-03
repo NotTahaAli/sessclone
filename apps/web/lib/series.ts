@@ -91,20 +91,12 @@ type RawRow = {
 /**
  * Spend per day per model, over a range, in the Org's timezone.
  *
- * `turn_costs` is joined back to `turns` for the model and the token counts,
- * which the view does not carry. Both quals are repeated on both sides so each
- * reaches `turns_org_occurred_at_idx`: the view is a plain join over `turns`
- * since ticket 81, so the planner bounds both scans to the range rather than
- * pricing the deployment and discarding it.
+ * Read from `turn_rollup_costs`, which carries the model, the token sums and
+ * the price of each group of a Session's Turns on one Org-local day. At 200k
+ * Turns over 90 days, a 31-day range went from 0.65s over the Turns to 0.02s
+ * over their rollups as `sessclone_app`, with the same figures.
  *
- * Measured on one box at 200k Turns, 100k in the target Org, over a 31-day
- * range holding 20,832 of them: 0.46s, against 0.44s for the same range
- * through `orgSpend`, which reads one side. Both sides come back through
- * `turns_org_occurred_at_idx` and the join is a hash on the primary key, so
- * the model and the tokens cost about 5% rather than a second scan of the
- * deployment.
- *
- * `org_id` is a filter and not the authorisation — `turns_read` is (ADR 0001),
+ * `org_id` is a filter and not the authorisation — `turn_rollups_read` is (ADR 0001),
  * so a Manager gets their Scope's days and a Member their own, through the
  * same query.
  *
@@ -138,29 +130,27 @@ export const dailySpend = async (
            count(distinct (picked.member_id, picked.session_id)) as sessions,
            sum(picked.cost_usd) as cost_usd,
            sum(picked.tokens) as tokens,
-           count(*) as turns,
-           count(*) filter (where picked.unpriced) as unpriced_turns
+           sum(picked.turns) as turns,
+           sum(picked.unpriced_turns) as unpriced_turns
       from (
-        select (turn.occurred_at at time zone ${timezone})::date as day,
-               turn.model,
-               turn.member_id,
-               turn.session_id,
-               cost.cost_usd,
-               cost.unpriced,
-               turn.input_tokens + turn.output_tokens
-                 + turn.cache_read_input_tokens
-                 + turn.cache_creation_input_tokens as tokens
-          from turn_costs cost
-          join turns turn on turn.id = cost.turn_id
-         where cost.org_id = ${orgId}
-           and turn.org_id = ${orgId}
-           and cost.occurred_at
+        -- Rollup rows rather than Turns (20261004120000_turn_rollups.sql):
+        -- each is one Session's Turns on one Org-local day, which is the day
+        -- this groups by, so the same sums come from far fewer rows.
+        select rollup.day,
+               rollup.model,
+               rollup.member_id,
+               rollup.session_id,
+               rollup.cost_usd,
+               rollup.turns,
+               rollup.unpriced_turns,
+               rollup.input_tokens + rollup.output_tokens
+                 + rollup.cache_read_input_tokens
+                 + rollup.cache_creation_input_tokens as tokens
+          from turn_rollup_costs rollup
+         where rollup.org_id = ${orgId}
+           and rollup.day_start
                  >= (${range.from}::date)::timestamp at time zone ${timezone}
-           and cost.occurred_at
-                 < (${range.to}::date)::timestamp at time zone ${timezone}
-           and turn.occurred_at
-                 >= (${range.from}::date)::timestamp at time zone ${timezone}
-           and turn.occurred_at
+           and rollup.day_start
                  < (${range.to}::date)::timestamp at time zone ${timezone}
       ) picked
      group by grouping sets ((picked.day, picked.model), (picked.day), ())

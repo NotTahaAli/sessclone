@@ -189,13 +189,15 @@ describe('the read', () => {
 
   test('reads the range through the index', async () => {
     // The measurement `AGENTS.md` asks to be recorded, kept as a test so it
-    // stays true: the range has to reach `turns_org_occurred_at_idx` rather
-    // than pricing the deployment and discarding it. Seeded so the filter is
+    // stays true: the range has to reach `turn_rollups_key` rather than
+    // pricing the deployment and discarding it. Seeded so the filter is
     // selective enough that a sequential scan is the wrong plan.
     const rows = Array.from({ length: 400 }, (_, index) => ({
       org_id: fixture.globex.id,
       member_id: fixture.globex.members.owner,
-      session_id: 'bulk',
+      // A Session each, so each Turn is a rollup row of its own and the
+      // other Org's rows outnumber the target's.
+      session_id: `bulk-${index}`,
       message_id: `bulk_${index}`,
       occurred_at: '2026-06-01T00:00:00Z',
       model: 'claude-opus-4-6',
@@ -203,7 +205,7 @@ describe('the read', () => {
     }))
     await sql`insert into turns ${sql(rows)}`
     await seedTurn({ input_tokens: MILLION })
-    await sql`analyze turns`
+    await sql`analyze turn_rollups`
 
     // Explained as the statement `dailySpend` actually issues, captured from
     // the driver rather than retyped here — a hand-written copy proves only
@@ -223,7 +225,9 @@ describe('the read', () => {
         await dailySpend(tx, fixture.acme.id, 'UTC', september)
       })
 
-      const issued = seen.find((entry) => entry.query.includes('turn_costs'))
+      const issued = seen.find((entry) =>
+        entry.query.includes('turn_rollup_costs'),
+      )
       expect(issued).toBeDefined()
 
       const plan = await asRole(fixture.acme, 'owner', async (tx) => {
@@ -234,7 +238,7 @@ describe('the read', () => {
         return explained.map((line) => line['QUERY PLAN']).join('\n')
       })
 
-      expect(plan).toMatch(/turns_org_occurred_at_idx/)
+      expect(plan).toMatch(/turn_rollups_key/)
     } finally {
       await watched.end()
     }

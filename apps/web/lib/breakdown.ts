@@ -12,7 +12,7 @@ import type { LocalRange } from './series'
 // is already decided elsewhere. Three copies of that would be three chances to
 // let one of them drift.
 //
-// Nothing here scopes by Role. `turns_read` does (ADR 0001): an Owner and an
+// Nothing here scopes by Role. `turn_rollups_read` does (ADR 0001): an Owner and an
 // Admin see the Org, a Manager sees their Scope, a Member sees themselves, and
 // the same call returns each of them a different set of rows. A page that
 // filtered would be a second answer to a question the database already
@@ -92,14 +92,14 @@ export type Breakdown = {
  * subset of output, so adding either counts a token twice.
  */
 const AGGREGATES = (tx: TransactionSql) => tx`
-  sum(cost.cost_usd) as cost_usd,
+  sum(turn.cost_usd) as cost_usd,
   sum(
     turn.input_tokens + turn.output_tokens + turn.cache_read_input_tokens
       + turn.cache_creation_input_tokens
   ) as tokens,
-  count(*) as turns,
+  sum(turn.turns) as turns,
   count(distinct (turn.member_id, turn.session_id)) as sessions,
-  count(*) filter (where cost.unpriced) as unpriced_turns,
+  sum(turn.unpriced_turns) as unpriced_turns,
   -- The groups' Sessions added up. Exact for people, since a Session is one
   -- Member's; for Projects and Devices a Session that moved between two
   -- would count in each, which a Session, one machine on one repository in
@@ -110,13 +110,13 @@ const AGGREGATES = (tx: TransactionSql) => tx`
   -- grouped aggregates. The row list is capped below, and a total summed from
   -- a capped list is a total that quietly drops the tail — on a page about
   -- money, the worse failure. One pass, no second statement to disagree with.
-  sum(sum(cost.cost_usd)) over () as total_cost_usd,
+  sum(sum(turn.cost_usd)) over () as total_cost_usd,
   sum(sum(
     turn.input_tokens + turn.output_tokens + turn.cache_read_input_tokens
       + turn.cache_creation_input_tokens
   )) over () as total_tokens,
-  sum(count(*)) over () as total_turns,
-  sum(count(*) filter (where cost.unpriced)) over () as total_unpriced_turns,
+  sum(sum(turn.turns)) over () as total_turns,
+  sum(sum(turn.unpriced_turns)) over () as total_unpriced_turns,
   count(*) over () as groups,
   -- Groups whose every Turn is unpriced. They rank last by cost, so they are
   -- the ones the cap hides, and the footer says how many rather than leaving
@@ -124,13 +124,13 @@ const AGGREGATES = (tx: TransactionSql) => tx`
   -- count(x) skips nulls, so the difference is the groups whose every Turn is
   -- unpriced. A filter clause cannot hold an aggregate, which is what the
   -- obvious spelling of this would need.
-  (count(*) over () - count(sum(cost.cost_usd)) over ()) as unpriced_groups
+  (count(*) over () - count(sum(turn.cost_usd)) over ()) as unpriced_groups
 `
 
 /**
  * Cost and tokens per Member, Project or Device over a range.
  *
- * The joins that fetch a name are `left` on purpose. `turns_read` and
+ * The joins that fetch a name are `left` on purpose. `turn_rollups_read` and
  * `members_read` are not the same policy, and a Turn the viewer may read
  * whose *label* row they may not would silently vanish from an inner join —
  * turning a leak-proof policy into an undercount, which on a page about money
@@ -151,24 +151,22 @@ export const breakdown = async (
    * One group by id, for the page that opens it (ticket 88). The drill-down
    * needs that row's own totals above its Turns, and summing the Turns it
    * shows would be a total drawn from a capped page. Asking for the group by
-   * name is the same statement narrowed by one equality, which lands on the
-   * dimension's own `(column, occurred_at)` index — and it is the same
+   * name is the same statement narrowed by one equality — and it is the same
    * arithmetic as the ranked list, so the two cannot disagree.
    *
-   * `null` is the absent group: no Project or no Device reported. `is null`
-   * rather than `is not distinct from`, because only the first is indexable.
+   * `null` is the absent group: no Project or no Device reported.
    */
   group?: { id: string | null },
 ): Promise<Breakdown> => {
   const from = tx`(${range.from}::date)::timestamp at time zone ${timezone}`
   const to = tx`(${range.to}::date)::timestamp at time zone ${timezone}`
+  // Rollup rows rather than Turns (`20261004120000_turn_rollups.sql`): each
+  // is one Session's Turns on one Org-local day with one Project, Device and
+  // model, so every grouping here sums whole rows and gets the Turns' sums.
+  // Called `turn` so the grouping columns read as they did over Turns.
   const source = tx`
-      from turn_costs cost
-      join turns turn on turn.id = cost.turn_id
+      from turn_rollup_costs turn
   `
-  // Both sides carry the qual so each reaches `turns_org_occurred_at_idx`:
-  // `turn_costs` is a plain join over `turns` since ticket 81, and the planner
-  // bounds both scans rather than pricing the deployment and discarding it.
   const column =
     dimension === 'members'
       ? tx`turn.member_id`
@@ -176,10 +174,8 @@ export const breakdown = async (
         ? tx`turn.project_id`
         : tx`turn.device_id`
   const filter = tx`
-     where cost.org_id = ${orgId}
-       and turn.org_id = ${orgId}
-       and cost.occurred_at >= ${from} and cost.occurred_at < ${to}
-       and turn.occurred_at >= ${from} and turn.occurred_at < ${to}
+     where turn.org_id = ${orgId}
+       and turn.day_start >= ${from} and turn.day_start < ${to}
        ${
          group === undefined
            ? tx``
@@ -277,7 +273,7 @@ export const breakdown = async (
  * knows, and the extra row would detect nothing.
  */
 const RANK = (tx: TransactionSql) => tx`
-  order by sum(cost.cost_usd) desc nulls last, count(*) desc
+  order by sum(turn.cost_usd) desc nulls last, sum(turn.turns) desc
   limit ${BREAKDOWN_LIMIT}
 `
 

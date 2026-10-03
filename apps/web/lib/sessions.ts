@@ -19,7 +19,7 @@ import type { LocalRange } from './series'
 // Session rather than derived from it is the `session_end` marker, which comes
 // from `session_events`.
 //
-// Nothing here scopes by Role. `turns_read` and `session_events_read` do (ADR
+// Nothing here scopes by Role. `turn_rollups_read` and `session_events_read` do (ADR
 // 0001), both through `sessclone_visible_member_ids()`: an Owner and an Admin
 // see the Org, a Manager their Scope, a Member themselves. A page that
 // filtered too would be a second answer to a question the database already
@@ -121,29 +121,32 @@ const AGGREGATES = (tx: TransactionSql) => tx`
   max(naming.state) as state,
   max(coalesce(device.nickname, device.key)) as device_label,
   coalesce(bool_or(device.key like 'cloud:%'), false) as cloud,
-  min(turn.occurred_at) as started_at,
-  max(turn.occurred_at) as last_turn_at,
-  count(*) as turns,
+  min(turn.first_at) as started_at,
+  max(turn.last_at) as last_turn_at,
+  sum(turn.turns) as turns,
   count(distinct turn.agent_id) as agent_runs,
   sum(
     turn.input_tokens + turn.output_tokens + turn.cache_read_input_tokens
       + turn.cache_creation_input_tokens
   ) as tokens,
-  sum(cost.cost_usd) as cost_usd,
-  count(*) filter (where cost.unpriced) as unpriced_turns
+  sum(turn.cost_usd) as cost_usd,
+  sum(turn.unpriced_turns) as unpriced_turns
 `
 
 /**
  * Every name join is `left`, which is the rule `breakdown` states and the
- * reason it gives: `turns_read` is not `members_read`, `projects_read` or
+ * reason it gives: `turn_rollups_read` is not `members_read`, `projects_read` or
  * `devices_read`, so a Turn the viewer may read whose label row they may not
  * would vanish from an inner join — turning a leak-proof policy into a silent
  * undercount. An unreadable label comes back null and is named rather than
  * dropped.
  */
 const SOURCE = (tx: TransactionSql) => tx`
-  from turn_costs cost
-  join turns turn on turn.id = cost.turn_id
+  -- Rollup rows rather than Turns (20261004120000_turn_rollups.sql): one
+  -- per Session, Org-local day, Agent Run, Project, Device and model, so a
+  -- Session's sums come from a handful of rows. Called turn so the columns
+  -- this groups and filters on read as they did over Turns.
+  from turn_rollup_costs turn
   left join projects project on project.id = turn.project_id
   left join devices device on device.id = turn.device_id
   left join members member on member.id = turn.member_id
@@ -200,14 +203,14 @@ export const sessionCursorOf = (
 /**
  * The Sessions of a period, newest first.
  *
- * Grouped over the period's Turns, which is the same pass `breakdown` makes
- * over the same rows: both quals land on `turns_org_occurred_at_idx`, so the
+ * Grouped over the period's rollup rows, the same pass `breakdown` makes
+ * over the same rows: both quals land on `turn_rollups_key`, so the
  * scan is the period and not the deployment (ticket 81).
  *
  * The cursor is a `having` rather than a `where`, because the key is an
- * aggregate — `max(occurred_at)` — and a `where` would drop the Turns that
+ * aggregate — `max(last_at)` — and a `where` would drop the Turns that
  * produce it rather than the groups they belong to. The pair is compared as a
- * tuple: `max(occurred_at)` alone is not unique across Sessions, and a page
+ * tuple: `max(last_at)` alone is not unique across Sessions, and a page
  * boundary that repeats or skips a row is worse than no paging at all.
  */
 export const sessionList = async (
@@ -232,15 +235,12 @@ export const sessionList = async (
   const from = tx`(${range.from}::date)::timestamp at time zone ${timezone}`
   const to = tx`(${range.to}::date)::timestamp at time zone ${timezone}`
 
-  const rows = await tx<RawSession[]>`
-    select turn.member_id::text as member_id,
-           turn.session_id,
-           ${AGGREGATES(tx)}
-      ${SOURCE(tx)}
-     where cost.org_id = ${orgId}
-       and turn.org_id = ${orgId}
-       and cost.occurred_at >= ${from} and cost.occurred_at < ${to}
-       and turn.occurred_at >= ${from} and turn.occurred_at < ${to}
+  // The Turns a row is made of: the period, and the filters that narrow a
+  // Session to part of its Turns. A function, so each statement below gets
+  // its own fragment.
+  const rowsOf = () => tx`
+     where turn.org_id = ${orgId}
+       and turn.day_start >= ${from} and turn.day_start < ${to}
        ${
          projectId === undefined
            ? tx``
@@ -261,6 +261,20 @@ export const sessionList = async (
            ? tx``
            : tx`and turn.model is not distinct from ${model}::text`
        }
+  `
+
+  // Two passes. The page's Sessions are chosen from the unpriced rollups, and
+  // only those are priced and named: pricing and naming every Session in the
+  // period to keep 26 was most of the read. At 2M Turns, locally, the list
+  // went from 0.62s to 0.05s, with the same rows.
+  const rows = await tx<RawSession[]>`
+    with page as (
+      select turn.member_id, turn.session_id
+        from turn_rollups turn
+        left join session_labels naming
+          on naming.member_id = turn.member_id
+         and naming.session_id = turn.session_id
+        ${rowsOf()}
        ${
          // Ticket 92. A `where` rather than a `having`, because the state is
          // one value per Session and the join already carries it onto every
@@ -304,15 +318,26 @@ export const sessionList = async (
                 )`
            : tx``
        }
-     group by turn.member_id, turn.session_id
+       group by turn.member_id, turn.session_id
      ${
        before
-         ? tx`having (max(turn.occurred_at), turn.session_id)
+         ? tx`having (max(turn.last_at), turn.session_id)
                     < (${before.lastTurnAt}::timestamptz, ${before.sessionId})`
          : tx``
      }
-     order by max(turn.occurred_at) desc, turn.session_id desc
-     limit ${limit + 1}
+       order by max(turn.last_at) desc, turn.session_id desc
+       limit ${limit + 1}
+    )
+    select turn.member_id::text as member_id,
+           turn.session_id,
+           ${AGGREGATES(tx)}
+      ${SOURCE(tx)}
+      join page
+        on page.member_id = turn.member_id
+       and page.session_id = turn.session_id
+      ${rowsOf()}
+     group by turn.member_id, turn.session_id
+     order by max(turn.last_at) desc, turn.session_id desc
   `
 
   const sessions = rows.slice(0, limit).map(asSession)
@@ -415,7 +440,7 @@ export type AgentRun = {
  * page that silently cut it at the period boundary would show a total that
  * disagrees with itself.
  *
- * Both columns of the filter, because `turns_identity_key` leads on
+ * Both columns of the filter, because `turn_rollups_session_idx` leads on
  * `member_id`: a session id on its own has no index behind it, and this read
  * would be a scan of every Turn on the deployment.
  */
@@ -529,7 +554,7 @@ export type SessionModel = {
  * to something other than the tiles above them, and why `sessions.test.ts`
  * pins exactly that.
  *
- * Both columns of the filter, as everywhere in this file: `turns_identity_key`
+ * Both columns of the filter, as everywhere in this file: `turn_rollups_session_idx`
  * leads on `member_id`, so a session id alone has no index behind it.
  *
  * A Turn with no model is a row of its own rather than a drop. `turns.model`
@@ -555,22 +580,21 @@ export const sessionModels = async (
     }[]
   >`
     select turn.model,
-           count(*) as turns,
+           sum(turn.turns) as turns,
            sum(turn.input_tokens) as input_tokens,
            sum(turn.output_tokens) as output_tokens,
            sum(turn.cache_read_input_tokens) as cache_read_tokens,
            sum(turn.cache_creation_input_tokens) as cache_write_tokens,
-           sum(cost.cost_usd) as cost_usd,
-           count(*) filter (where cost.unpriced) as unpriced_turns
-      from turn_costs cost
-      join turns turn on turn.id = cost.turn_id
+           sum(turn.cost_usd) as cost_usd,
+           sum(turn.unpriced_turns) as unpriced_turns
+      from turn_rollup_costs turn
      where turn.org_id = ${orgId}
        and turn.member_id = ${memberId}
        and turn.session_id = ${sessionId}
      group by turn.model
      -- Biggest spend first, and a model with nothing priced last rather than
      -- first: nulls last on a descending sort, as the ranked lists order.
-     order by sum(cost.cost_usd) desc nulls last, count(*) desc
+     order by sum(turn.cost_usd) desc nulls last, sum(turn.turns) desc
   `
 
   return rows.map((row) => {
