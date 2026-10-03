@@ -328,6 +328,126 @@ test('the modifiers compose rather than overriding one another', async () => {
   expect((await costOf(turn)).cost).toBeCloseTo(5 * 2 * 1.1 * 0.5, 10)
 })
 
+test('one read prices each Turn by its own modifiers, whatever it shares', async () => {
+  // The multiplier sits in the lateral Postgres memoizes, so its cache key
+  // has to carry the modifiers: Turns on one model and one day, priced in one
+  // statement, must still come back at their own multipliers.
+  const plain = await seedTurn({
+    model: 'claude-opus-5',
+    input_tokens: MILLION,
+  })
+  const fast = await seedTurn({
+    model: 'claude-opus-5',
+    speed: 'fast',
+    input_tokens: MILLION,
+  })
+  const batch = await seedTurn({
+    model: 'claude-opus-5',
+    service_tier: 'batch',
+    input_tokens: MILLION,
+  })
+
+  const rows = await sql<{ turn_id: string; cost_usd: string }[]>`
+    select turn_id, cost_usd from turn_costs
+     where turn_id in ${sql([plain, fast, batch])}
+  `
+  const cost = new Map(rows.map((row) => [row.turn_id, Number(row.cost_usd)]))
+
+  expect(cost.get(plain)).toBeCloseTo(5, 10)
+  expect(cost.get(fast)).toBeCloseTo(10, 10)
+  expect(cost.get(batch)).toBeCloseTo(2.5, 10)
+})
+
+test('the view prices the modifiers exactly as sessclone_price_multiplier does', async () => {
+  // `turn_costs` spells the multiplier out rather than calling the function
+  // per Turn (`20261003120000_turn_costs_inline_multiplier.sql`), so the two
+  // are separate statements of one rule. Every combination here, on models
+  // either side of both generation cut-offs and a partner id, must agree.
+  const models = [
+    'claude-opus-4-6',
+    'claude-opus-4-8',
+    'claude-opus-5',
+    'claude-sonnet-4-5',
+    'claude-opus-4-8@20260101',
+    'claude-haiku-4-5',
+  ]
+  const speeds = [null, 'standard', 'fast']
+  const geos = [null, 'not_available', 'us']
+  const tiers = [null, 'standard', 'batch']
+  await Promise.all(
+    models.flatMap((model) =>
+      speeds.flatMap((speed) =>
+        geos.flatMap((inference_geo) =>
+          tiers.map((service_tier) =>
+            seedTurn({ model, speed, inference_geo, service_tier }),
+          ),
+        ),
+      ),
+    ),
+  )
+
+  const disagreeing = await sql`
+    select turn.model, turn.speed, turn.inference_geo, turn.service_tier,
+           cost.multiplier as view,
+           sessclone_price_multiplier(
+             turn.model, turn.speed, turn.inference_geo, turn.service_tier
+           ) as function
+      from turn_costs cost
+      join turns turn on turn.id = cost.turn_id
+     where cost.multiplier is distinct from sessclone_price_multiplier(
+             turn.model, turn.speed, turn.inference_geo, turn.service_tier
+           )
+  `
+  const [counted] = await sql<{ n: string }[]>`
+    select count(*) as n from turn_costs
+  `
+
+  expect(Number(counted!.n)).toBe(models.length * 27)
+  expect(disagreeing).toEqual([])
+})
+
+test('pricing Turns with no fast or US modifier calls no function per Turn', async () => {
+  // Both multiplier functions are pinned to a search path, so Postgres never
+  // inlines them and every call is a real one. Called per Turn, that was most
+  // of the cost of `turn_costs` (production, 2026-10-03: the Sessions list at
+  // 3.2s mean). `track_functions` counts the calls in this transaction, and
+  // the one direct call is the control: a count that stays at zero there
+  // means tracking is off, not that the view is cheap. A `fast` or `us` Turn
+  // still reads its generation through the pinned function, one call each;
+  // production had none on 2026-10-03.
+  await sql`
+    insert into turns (org_id, member_id, session_id, message_id, occurred_at,
+                       model, speed, inference_geo, service_tier, input_tokens)
+    select ${fixture.acme.id}, ${fixture.acme.members.member}, 'session-1',
+           'msg_bulk_' || n, '2026-09-20T08:00:00Z', 'claude-opus-4-6',
+           case when n % 2 = 0 then 'standard' end,
+           case when n % 2 = 0 then 'not_available' end, 'standard', 10
+      from generate_series(1, 50) n
+  `
+
+  const calls = await sql.begin(async (tx) => {
+    await tx`set local track_functions = 'all'`
+    const count = async () => {
+      const [row] = await tx<{ multiplier: string; generation: string }[]>`
+        select pg_stat_get_xact_function_calls(
+                 'sessclone_price_multiplier(text, text, text, text)'::regprocedure
+               ) as multiplier,
+               pg_stat_get_xact_function_calls(
+                 'sessclone_model_generation(text)'::regprocedure
+               ) as generation
+      `
+      return [Number(row!.multiplier), Number(row!.generation)]
+    }
+    await tx`select sum(cost_usd) from turn_costs where org_id = ${fixture.acme.id}`
+    const view = await count()
+    await tx`select sessclone_price_multiplier('claude-opus-5', 'fast', 'not_available', 'standard')`
+    return { view, control: await count() }
+  })
+
+  expect(calls.view).toEqual([0, 0])
+  expect(calls.control).toEqual([1, 1])
+})
+
 test('a model with no rate yields no Cost, never zero', async () => {
   const unknown = await seedTurn({
     model: 'anthropic.claude-something-v9:0',

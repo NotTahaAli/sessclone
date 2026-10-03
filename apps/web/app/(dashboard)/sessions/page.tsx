@@ -99,33 +99,40 @@ export default async function Sessions({
     ...(failed ? { failedOnly: true } : {}),
   } as const
 
-  const [page, options] = await sessionsReads(viewer.userId, {
-    orgId: viewer.orgId,
-    timezone: viewer.orgTimezone,
-    range: resolved.range,
-    filter,
-    before: sessionCursorOf(params.before),
-  })
-
   // The open Session: `<member uuid>:<session id>`. A malformed value opens
   // nothing rather than failing the list.
   const open = one(params.open)
   const colon = open?.indexOf(':') ?? -1
   const openMember = open && colon > 0 ? open.slice(0, colon) : undefined
   const openSession = open && colon > 0 ? open.slice(colon + 1) : undefined
-  const column =
+
+  // The list and the open Session are independent reads, so they run
+  // together rather than one after the other.
+  const [[page, options], detail] = await Promise.all([
+    sessionsReads(viewer.userId, {
+      orgId: viewer.orgId,
+      timezone: viewer.orgTimezone,
+      range: resolved.range,
+      filter,
+      before: sessionCursorOf(params.before),
+    }),
     openMember && openSession && UUID.test(openMember)
-      ? ((await sessionDetailView({
+      ? sessionDetailView({
           viewer,
           member: openMember,
           sessionId: openSession,
           closeHref: hrefWith('/sessions', params, { open: undefined }),
-        })) ?? (
+        })
+      : undefined,
+  ])
+  const column =
+    detail === undefined
+      ? null
+      : (detail ?? (
           <p className="text-text-muted py-4 text-body">
             That session is not one you can read, or it does not exist.
           </p>
         ))
-      : null
 
   const last = page.sessions.at(-1)
   const today = todayIn(viewer.orgTimezone)
