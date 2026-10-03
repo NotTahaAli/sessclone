@@ -140,9 +140,9 @@ export const tokenBreakdown = async (
     with picked as materialized (
       select turn.member_id, turn.session_id, turn.model,
              (turn.occurred_at at time zone ${timezone})::date as on_date,
-             sessclone_price_multiplier(
-               turn.model, turn.speed, turn.inference_geo, turn.service_tier
-             ) as multiplier,
+             -- The view's, rather than a call per Turn: the function is pinned
+             -- to a search path, so it is never inlined.
+             cost.multiplier,
              turn.input_tokens, turn.output_tokens,
              turn.cache_read_input_tokens,
              turn.cache_creation_input_tokens,
