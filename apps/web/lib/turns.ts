@@ -356,7 +356,7 @@ export const turnDetail = async (
            account.email as member_email,
            account.display_name as member_name,
            coalesce(device.nickname, device.key) as device_label,
-           day.multiplier,
+           cost.multiplier,
            day.on_date::text as priced_on,
            sessclone_resolve_rate(turn.org_id, turn.model, 'input', day.on_date)
              as input_usd,
@@ -384,10 +384,7 @@ export const turnDetail = async (
       left join orgs org on org.id = turn.org_id
       cross join lateral (
         select (turn.occurred_at at time zone coalesce(org.timezone, 'UTC'))::date
-                 as on_date,
-               sessclone_price_multiplier(
-                 turn.model, turn.speed, turn.inference_geo, turn.service_tier
-               ) as multiplier
+                 as on_date
       ) as day
      where turn.id = ${turnId}::bigint
        and turn.org_id = ${orgId}

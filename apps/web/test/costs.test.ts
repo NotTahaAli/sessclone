@@ -406,13 +406,15 @@ test('the view prices the modifiers exactly as sessclone_price_multiplier does',
   expect(disagreeing).toEqual([])
 })
 
-test('pricing Turns calls no function per Turn', async () => {
+test('pricing Turns with no fast or US modifier calls no function per Turn', async () => {
   // Both multiplier functions are pinned to a search path, so Postgres never
   // inlines them and every call is a real one. Called per Turn, that was most
   // of the cost of `turn_costs` (production, 2026-10-03: the Sessions list at
   // 3.2s mean). `track_functions` counts the calls in this transaction, and
   // the one direct call is the control: a count that stays at zero there
-  // means tracking is off, not that the view is cheap.
+  // means tracking is off, not that the view is cheap. A `fast` or `us` Turn
+  // still reads its generation through the pinned function, one call each;
+  // production had none on 2026-10-03.
   await sql`
     insert into turns (org_id, member_id, session_id, message_id, occurred_at,
                        model, speed, inference_geo, service_tier, input_tokens)
