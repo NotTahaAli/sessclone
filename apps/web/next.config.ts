@@ -1,7 +1,7 @@
 import { createMDX } from 'fumadocs-mdx/next'
 import type { NextConfig } from 'next'
 
-import { FIXED_HEADERS } from './lib/security-headers'
+import { CROSS_ORIGIN_PATHS, FIXED_HEADERS } from './lib/security-headers'
 
 // Cache Components, for ticket 80: the public pricing section reads the Tier
 // table rather than restating it, and it must not open a connection for every
@@ -13,15 +13,13 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       { source: '/:path*', headers: FIXED_HEADERS },
-      // Org logos are the one thing another origin embeds: the invitation
-      // email's `<img>`, which a webmail client may load straight from here.
       // The later entry wins for the same key.
-      {
-        source: '/api/org-logo/:path*',
+      ...CROSS_ORIGIN_PATHS.map((source) => ({
+        source,
         headers: [
           { key: 'Cross-Origin-Resource-Policy', value: 'cross-origin' },
         ],
-      },
+      })),
     ]
   },
 }

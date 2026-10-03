@@ -25,9 +25,33 @@ export const FIXED_HEADERS = [
   { key: 'Cross-Origin-Resource-Policy', value: 'same-origin' },
 ]
 
-/** The origin of an S3 endpoint URL, or null when unset or not a URL. */
-const originOf = (url: string | undefined) =>
-  url && URL.canParse(url) ? new URL(url).origin : null
+/** Files another origin legitimately loads, which keep CORP `cross-origin`:
+ * Clarity's replays render the page's CSS, fonts and images from
+ * clarity.microsoft.com, the invitation email embeds the Org logo, and a link
+ * preview may hot-link the share image or icons. */
+export const CROSS_ORIGIN_PATHS = [
+  '/_next/static/:path*',
+  '/api/org-logo/:path*',
+  '/opengraph-image',
+  '/icon.svg',
+  '/apple-icon.png',
+  '/favicon.ico',
+]
+
+/** Where presigned storage URLs point, or null when the endpoint is unset or
+ * not a URL. With path-style addressing off (`lib/storage.ts`), the SDK puts
+ * the bucket in the host (`<bucket>.<endpoint host>`), so any subdomain. */
+const storageSources = (env: {
+  STORAGE_ENDPOINT?: string
+  STORAGE_FORCE_PATH_STYLE?: string
+}) => {
+  const url = env.STORAGE_ENDPOINT
+  if (!url || !URL.canParse(url)) return null
+  const { origin, protocol, host } = new URL(url)
+  return env.STORAGE_FORCE_PATH_STYLE === 'false'
+    ? `${origin} ${protocol}//*.${host}`
+    : origin
+}
 
 /**
  * The page policy. Scripts and styles allow `'unsafe-inline'` because the
@@ -46,14 +70,15 @@ const originOf = (url: string | undefined) =>
  */
 export const contentSecurityPolicy = (env: {
   STORAGE_ENDPOINT?: string
+  STORAGE_FORCE_PATH_STYLE?: string
   NODE_ENV?: string
 }) => {
-  const storage = originOf(env.STORAGE_ENDPOINT)
+  const storage = storageSources(env)
   const dev = env.NODE_ENV === 'development'
   const clarity = 'https://*.clarity.ms https://c.bing.com'
   return [
     "default-src 'self'",
-    `script-src 'self' 'unsafe-inline'${dev ? " 'unsafe-eval'" : ''} https://static.cloudflareinsights.com https://*.clarity.ms https://cdnjs.cloudflare.com https://cdn.jsdelivr.net`,
+    `script-src 'self' 'unsafe-inline'${dev ? " 'unsafe-eval'" : ''} https://static.cloudflareinsights.com ${clarity} https://cdnjs.cloudflare.com https://cdn.jsdelivr.net`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     `img-src 'self' data: blob: ${clarity}`,

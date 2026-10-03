@@ -365,3 +365,15 @@ test('every answer carries the page policy, storage endpoint included', async ()
     expect(policy).not.toContain('unsafe-eval')
   }
 })
+
+// Review of the above: with path-style addressing off, presigned URLs name
+// the bucket as a subdomain of the endpoint, which the policy must allow.
+test('the page policy allows bucket subdomains when path-style is off', async () => {
+  vi.stubEnv('STORAGE_ENDPOINT', 'https://s3.eu-west-1.amazonaws.com')
+  vi.stubEnv('STORAGE_FORCE_PATH_STYLE', 'false')
+
+  const policy = (await at('/docs')).headers.get('content-security-policy')
+  expect(policy).toMatch(
+    /connect-src [^;]*https:\/\/\*\.s3\.eu-west-1\.amazonaws\.com[ ;]/,
+  )
+})
