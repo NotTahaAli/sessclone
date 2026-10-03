@@ -48,7 +48,7 @@ export const DEVICE_LIMIT = 50
  *
  * The Session count is a correlated aggregate rather than a join and a group by,
  * and it is bounded to the last 30 days on both counts: bounded, it reaches
- * `turns_device_occurred_at_idx` by its leading columns instead of counting a
+ * `turn_rollups_device_idx` by its leading columns instead of counting a
  * machine's whole history, and thirty days is the question the page asks —
  * "is this machine still reporting", which a last-seen time alone does not
  * answer for a machine that reported once.
@@ -64,10 +64,15 @@ export const listOwnDevices = async (
            device.nickname,
            device.first_seen_at,
            device.last_seen_at,
+           -- Rollup rows rather than Turns: a row's last_at is its latest
+           -- Turn, so it is inside the 30 days exactly when one of its Turns
+           -- is. day_start only bounds the index scan; a day starts at most
+           -- a day (25 hours across a clock change) before its Turns.
            (select count(distinct (turn.member_id, turn.session_id))
-              from turns turn
+              from turn_rollups turn
              where turn.device_id = device.id
-               and turn.occurred_at >= now() - interval '30 days') as sessions
+               and turn.day_start >= now() - interval '32 days'
+               and turn.last_at >= now() - interval '30 days') as sessions
       from devices device
      where device.member_id = ${memberId}
        and device.member_id in (select sessclone_own_member_ids())

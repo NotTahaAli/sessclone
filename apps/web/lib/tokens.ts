@@ -138,23 +138,21 @@ export const tokenBreakdown = async (
 
   const rows = await tx<Raw[]>`
     with picked as materialized (
+      -- Rollup rows rather than Turns (20261004120000_turn_rollups.sql).
+      -- Each holds one Org-local day, one model and one multiplier, which is
+      -- the cell below, so the cells sum to what they summed over Turns.
       select turn.member_id, turn.session_id, turn.model,
-             (turn.occurred_at at time zone ${timezone})::date as on_date,
-             -- The view's, rather than a call per Turn: the function is pinned
-             -- to a search path, so it is never inlined.
-             cost.multiplier,
+             turn.day as on_date,
+             turn.multiplier,
              turn.input_tokens, turn.output_tokens,
              turn.cache_read_input_tokens,
              turn.cache_creation_input_tokens,
              turn.cache_creation_5m_input_tokens,
              turn.cache_creation_1h_input_tokens,
-             cost.cost_usd, cost.unpriced
-        from turn_costs cost
-        join turns turn on turn.id = cost.turn_id
-       where cost.org_id = ${orgId}
-         and turn.org_id = ${orgId}
-         and cost.occurred_at >= ${from} and cost.occurred_at < ${to}
-         and turn.occurred_at >= ${from} and turn.occurred_at < ${to}
+             turn.cost_usd, turn.unpriced_turns
+        from turn_rollup_costs turn
+       where turn.org_id = ${orgId}
+         and turn.day_start >= ${from} and turn.day_start < ${to}
          ${cutFilter(tx, cut)}
     ),
     cell as (
@@ -166,7 +164,7 @@ export const tokenBreakdown = async (
              sum(cache_creation_5m_input_tokens) as cache_5m,
              sum(cache_creation_1h_input_tokens) as cache_1h,
              sum(cost_usd) as cost_usd,
-             count(*) filter (where unpriced) as unpriced_turns
+             sum(unpriced_turns) as unpriced_turns
         from picked
        group by 1, 2, 3
     ),
