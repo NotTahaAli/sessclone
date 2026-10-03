@@ -10,6 +10,7 @@ import {
   servesPath,
   siteFlags,
 } from './lib/site-flags'
+import { contentSecurityPolicy } from './lib/security-headers'
 
 // Next 16 calls this Proxy; it is what earlier versions called Middleware.
 // Two jobs: refresh the Supabase session on every request, and send a
@@ -67,7 +68,18 @@ const withCookies = (redirect: NextResponse, from: NextResponse) => {
   return redirect
 }
 
+// Every answer this Proxy gives carries the page policy: built here rather
+// than in `next.config.ts` because it reads the storage endpoint at run time.
 export async function proxy(request: NextRequest) {
+  const response = await route(request)
+  response.headers.set(
+    'Content-Security-Policy',
+    contentSecurityPolicy(process.env),
+  )
+  return response
+}
+
+async function route(request: NextRequest) {
   let response = NextResponse.next({ request })
 
   const path = request.nextUrl.pathname
