@@ -80,26 +80,6 @@ create policy turn_rollups_read on turn_rollups for select
 
 grant select on turn_rollups to sessclone_app;
 
--- Which counters a Turn consumed, and whether its cache-write split falls
--- short of the reported total: the inputs to `unpriced` besides the Rates.
-create or replace function sessclone_turn_shape(
-  input bigint, output bigint, cache_read bigint, cache_creation bigint,
-  cache_5m bigint, cache_1h bigint, web_search bigint, web_fetch bigint)
-  returns smallint
-  language sql immutable parallel safe
-  set search_path = pg_catalog, public, pg_temp as $$
-  -- Each shift parenthesised: `|` and `<<` share one precedence in Postgres
-  -- and associate left, so `a | b << 1` would shift `a | b`.
-  select ((input > 0)::int
-        | ((output > 0)::int << 1)
-        | ((cache_read > 0)::int << 2)
-        | ((cache_5m > 0)::int << 3)
-        | ((cache_1h > 0)::int << 4)
-        | ((web_search > 0)::int << 5)
-        | ((web_fetch > 0)::int << 6)
-        | ((cache_creation > cache_5m + cache_1h)::int << 7))::smallint
-$$;
-
 -- The groups a set of Turns falls in, summed. One definition, used by the
 -- insert trigger (over the new rows) and by the recompute (over `turns`).
 -- `security definer` because the triggers fire for whoever writes `turns`,
@@ -112,13 +92,43 @@ create or replace function sessclone_rollup_rows(turn_rows turns[])
          turn.project_id, turn.device_id, turn.model,
          local.day,
          local.day::timestamp at time zone org.timezone,
-         sessclone_price_multiplier(turn.model, turn.speed, turn.inference_geo,
-           turn.service_tier),
-         sessclone_turn_shape(turn.input_tokens, turn.output_tokens,
-           turn.cache_read_input_tokens, turn.cache_creation_input_tokens,
-           turn.cache_creation_5m_input_tokens,
-           turn.cache_creation_1h_input_tokens, turn.web_search_requests,
-           turn.web_fetch_requests),
+         -- `sessclone_price_multiplier`, spelled inline as `turn_costs`
+         -- spells it: a call to the pinned function was 7.1s of 8.4s for
+         -- 200k Turns, locally. `rollups.test.ts` fails if the two disagree.
+         case
+           when turn.speed = 'fast' then
+             case
+               when turn.model like 'claude-opus-%'
+                and turn.model not like '%@%'
+                and sessclone_model_generation(turn.model) >= 4.08 then 2
+               else 1
+             end
+           else 1
+         end
+       * case
+           when turn.inference_geo = 'us' then
+             case
+               when turn.model not like '%@%'
+                and sessclone_model_generation(turn.model) >= 4.06 then 1.1
+               else 1
+             end
+           else 1
+         end
+       * case when turn.service_tier = 'batch' then 0.5 else 1 end,
+         -- The shape: one bit per counter that is non-zero, plus the cache
+         -- split shortfall `turn_costs` flags as unpriced. Each shift is
+         -- parenthesised: `|` and `<<` share one precedence and associate
+         -- left, so `a | b << 1` would shift `a | b`.
+         ((turn.input_tokens > 0)::int
+          | ((turn.output_tokens > 0)::int << 1)
+          | ((turn.cache_read_input_tokens > 0)::int << 2)
+          | ((turn.cache_creation_5m_input_tokens > 0)::int << 3)
+          | ((turn.cache_creation_1h_input_tokens > 0)::int << 4)
+          | ((turn.web_search_requests > 0)::int << 5)
+          | ((turn.web_fetch_requests > 0)::int << 6)
+          | ((turn.cache_creation_input_tokens
+              > turn.cache_creation_5m_input_tokens
+              + turn.cache_creation_1h_input_tokens)::int << 7))::smallint,
          count(*), sum(turn.input_tokens), sum(turn.output_tokens),
          sum(turn.cache_read_input_tokens),
          sum(turn.cache_creation_input_tokens),
@@ -266,7 +276,7 @@ create or replace function sessclone_rollup_rebuild_org(org uuid)
   set search_path = pg_catalog, public, pg_temp as $$
 declare
   batch turns[];
-  last_id bigint := 0;
+  last turns;
 begin
   perform pg_advisory_xact_lock(
             hashtextextended('sessclone_turn_rollups:' || org::text, 0));
@@ -274,12 +284,18 @@ begin
   loop
     batch := array(
       select turn from turns turn
-       where turn.org_id = org and turn.id > last_id
-       order by turn.id limit 50000
+       -- Keyset on (occurred_at, id), walked through
+       -- `turns_org_occurred_at_idx`, so each batch starts where the last
+       -- ended rather than rescanning the Org.
+       where turn.org_id = org
+         and (last is null
+              or turn.occurred_at > last.occurred_at
+              or (turn.occurred_at = last.occurred_at and turn.id > last.id))
+       order by turn.occurred_at, turn.id limit 50000
     );
     exit when cardinality(batch) = 0;
     perform sessclone_rollup_add(batch);
-    last_id := batch[cardinality(batch)].id;
+    last := batch[cardinality(batch)];
   end loop;
 end
 $$;
@@ -471,7 +487,10 @@ $$;
 -- read the rollups now; an index nothing reads is a cost on every insert.
 create index turns_session_occurred_at_idx
   on turns (member_id, session_id, occurred_at, id);
-drop index turns_member_project_idx;
 
 -- Every Turn already collected, an Org at a time.
 select sessclone_rollup_rebuild_org(org.id) from orgs org order by org.id;
+
+-- Last: dropping an index locks `turns` against reads until commit, so it
+-- comes after the backfill rather than holding that lock through it.
+drop index turns_member_project_idx;

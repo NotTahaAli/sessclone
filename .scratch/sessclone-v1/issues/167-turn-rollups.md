@@ -35,5 +35,7 @@ Turns: Sessions 7.0s, Costs 6.6s.
 
 - [x] Rollups equal Turns after insert, duplicate, update, delete, timezone
       change and a Rate added later (`rollups.test.ts`)
-- [x] Full DB suite green
+- [x] DB suite 1279/1280; the one failure (`setup-db` wrong password) is
+      local trust auth and fails on `main` too. The add/rebuild lock races
+      have no test (timing-dependent).
 - [x] Measured: 2M Turns, Sessions 7.0s to 0.05s, Costs 6.6s to 0.25s
