@@ -20,9 +20,9 @@
 -- from 1.0s to 0.19s.
 --
 -- `sessclone_price_multiplier` stays the definition of record, and its
--- comments are where the three modifiers are explained. It is still what the
--- single-Turn breakdown calls, and `costs.test.ts` fails if this expression
--- and that function ever disagree.
+-- comments are where the three modifiers are explained. No read path calls it
+-- now: the token and single-Turn breakdowns read `multiplier` from here.
+-- `costs.test.ts` fails if this expression and that function ever disagree.
 --
 -- Otherwise this is `20260921210000_turn_costs_pushdown.sql`'s view with one
 -- column added at the end, so `create or replace` keeps every grant and every
