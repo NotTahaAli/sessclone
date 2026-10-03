@@ -342,3 +342,26 @@ test('behind a proxy, the Referer is compared with NEXT_PUBLIC_APP_URL', async (
     (await behind('http://localhost:3000/costs')).headers.get('location'),
   ).toBe('https://sessclone.com/costs')
 })
+
+// web-check.xyz, 2026-10-03: no Content-Security-Policy. Every way out of the
+// Proxy carries it, a redirect as much as a page, and it lets the browser
+// fetch from the storage endpoint the viewer reads transcripts from.
+test('every answer carries the page policy, storage endpoint included', async () => {
+  vi.stubEnv(
+    'STORAGE_ENDPOINT',
+    'https://ref.storage.supabase.co/storage/v1/s3',
+  )
+
+  for (const response of [
+    await at('/'),
+    await at('/costs'),
+    await at('/docs'),
+  ]) {
+    const policy = response.headers.get('content-security-policy') ?? ''
+    expect(policy).toContain("frame-ancestors 'none'")
+    expect(policy).toMatch(
+      /connect-src [^;]*https:\/\/ref\.storage\.supabase\.co[ ;]/,
+    )
+    expect(policy).not.toContain('unsafe-eval')
+  }
+})
