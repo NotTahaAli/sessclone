@@ -135,12 +135,27 @@ create or replace function sessclone_rollup_rows(turn_rows turns[])
    group by 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
 $$;
 
+-- Every write to an Org's rollups holds that Org's advisory lock: shared for
+-- adding Turns, exclusive for the two rebuilds below. Adds commute with one
+-- another, so ingest never waits on ingest. A rebuild does not commute with an
+-- add: it deletes rows and re-reads `turns`, and a Turn whose add landed in
+-- between would be counted twice, or summed into a day of the old timezone.
+-- One lock per Org, not per Session, so a rebuild touching thousands of
+-- Sessions still holds one lock rather than filling the lock table.
+--
 -- Adds a set of Turns to their groups. Sorted by key so two writers touching
 -- the same groups lock them in the same order rather than deadlocking.
+-- plpgsql, so the insert takes its snapshot after the lock is granted and sees
+-- everything the rebuild it waited on committed, the timezone included.
 create or replace function sessclone_rollup_add(turn_rows turns[])
   returns void
-  language sql security definer
+  language plpgsql security definer
   set search_path = pg_catalog, public, pg_temp as $$
+begin
+  perform pg_advisory_xact_lock_shared(
+            hashtextextended('sessclone_turn_rollups:' || org.org_id::text, 0))
+     from (select distinct turn.org_id from unnest(turn_rows) turn
+            order by 1) org;
   insert into turn_rollups
   select * from sessclone_rollup_rows(turn_rows) added
    order by added.org_id, added.day_start, added.member_id, added.session_id,
@@ -166,7 +181,8 @@ create or replace function sessclone_rollup_add(turn_rows turns[])
     web_fetch_requests
       = turn_rollups.web_fetch_requests + excluded.web_fetch_requests,
     first_at = least(turn_rollups.first_at, excluded.first_at),
-    last_at = greatest(turn_rollups.last_at, excluded.last_at)
+    last_at = greatest(turn_rollups.last_at, excluded.last_at);
+end
 $$;
 
 -- Rebuilds every group of the given Sessions from `turns`. Coarser than the
@@ -178,6 +194,10 @@ create or replace function sessclone_rollup_recompute(
   language plpgsql security definer
   set search_path = pg_catalog, public, pg_temp as $$
 begin
+  perform pg_advisory_xact_lock(
+            hashtextextended('sessclone_turn_rollups:' || org.org_id::text, 0))
+     from (select distinct member.org_id from members member
+            where member.id = any (member_ids) order by 1) org;
   delete from turn_rollups rollup
    using unnest(member_ids, session_ids) touched (member_id, session_id)
    where rollup.member_id = touched.member_id
@@ -237,16 +257,40 @@ create trigger turns_rollup_delete after delete on turns
   referencing old table as removed_turns
   for each statement execute function sessclone_turns_rollup_delete();
 
+-- Rebuilds one Org's rollups from `turns`, a batch of Turns at a time: one
+-- array of every Turn would pass Postgres's 1 GB value limit at a few million
+-- Turns. Batches may split a group; the add sums into it either way.
+create or replace function sessclone_rollup_rebuild_org(org uuid)
+  returns void
+  language plpgsql security definer
+  set search_path = pg_catalog, public, pg_temp as $$
+declare
+  batch turns[];
+  last_id bigint := 0;
+begin
+  perform pg_advisory_xact_lock(
+            hashtextextended('sessclone_turn_rollups:' || org::text, 0));
+  delete from turn_rollups where org_id = org;
+  loop
+    batch := array(
+      select turn from turns turn
+       where turn.org_id = org and turn.id > last_id
+       order by turn.id limit 50000
+    );
+    exit when cardinality(batch) = 0;
+    perform sessclone_rollup_add(batch);
+    last_id := batch[cardinality(batch)].id;
+  end loop;
+end
+$$;
+
 -- An Org's timezone decides which local day each of its Turns is on.
 create or replace function sessclone_orgs_rollup_timezone()
   returns trigger
   language plpgsql security definer
   set search_path = pg_catalog, public, pg_temp as $$
 begin
-  delete from turn_rollups where org_id = new.id;
-  perform sessclone_rollup_add(array(
-    select turn from turns turn where turn.org_id = new.id
-  ));
+  perform sessclone_rollup_rebuild_org(new.id);
   return null;
 end
 $$;
@@ -341,6 +385,7 @@ grant select on turn_rollup_costs to sessclone_app;
 revoke execute on function sessclone_rollup_rows(turns[]) from public;
 revoke execute on function sessclone_rollup_add(turns[]) from public;
 revoke execute on function sessclone_rollup_recompute(uuid[], text[]) from public;
+revoke execute on function sessclone_rollup_rebuild_org(uuid) from public;
 revoke execute on function sessclone_turns_rollup_insert() from public;
 revoke execute on function sessclone_turns_rollup_change() from public;
 revoke execute on function sessclone_turns_rollup_delete() from public;
@@ -352,6 +397,7 @@ begin
     revoke execute on function sessclone_rollup_rows(turns[]) from anon;
     revoke execute on function sessclone_rollup_add(turns[]) from anon;
     revoke execute on function sessclone_rollup_recompute(uuid[], text[]) from anon;
+    revoke execute on function sessclone_rollup_rebuild_org(uuid) from anon;
     revoke execute on function sessclone_turns_rollup_insert() from anon;
     revoke execute on function sessclone_turns_rollup_change() from anon;
     revoke execute on function sessclone_turns_rollup_delete() from anon;
@@ -361,6 +407,7 @@ begin
     revoke execute on function sessclone_rollup_rows(turns[]) from authenticated;
     revoke execute on function sessclone_rollup_add(turns[]) from authenticated;
     revoke execute on function sessclone_rollup_recompute(uuid[], text[]) from authenticated;
+    revoke execute on function sessclone_rollup_rebuild_org(uuid) from authenticated;
     revoke execute on function sessclone_turns_rollup_insert() from authenticated;
     revoke execute on function sessclone_turns_rollup_change() from authenticated;
     revoke execute on function sessclone_turns_rollup_delete() from authenticated;
@@ -417,5 +464,14 @@ create or replace function sessclone_visible_project_ids() returns setof uuid
      and project_id is not null
 $$;
 
--- Every Turn already collected.
-select sessclone_rollup_add(array(select turn from turns turn));
+-- Two index changes on `turns` itself. A Session's Turn list reads in
+-- `occurred_at` order and pages by it; with this index a page is the next
+-- hundred entries rather than a sort of the whole Session. And
+-- `turns_member_project_idx` served only the two Project reads above, which
+-- read the rollups now; an index nothing reads is a cost on every insert.
+create index turns_session_occurred_at_idx
+  on turns (member_id, session_id, occurred_at, id);
+drop index turns_member_project_idx;
+
+-- Every Turn already collected, an Org at a time.
+select sessclone_rollup_rebuild_org(org.id) from orgs org order by org.id;

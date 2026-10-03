@@ -25,7 +25,9 @@ Turns: Sessions 7.0s, Costs 6.6s.
   page, Agent Runs and the transcript costs still read Turns: each is one
   Session or one Turn.
 - The Sessions list picks its page from unpriced rollups and prices only that
-  page.
+  page; a Session's Turn list picks its page through a new
+  `(member_id, session_id, occurred_at, id)` index and prices only that page.
+- `turns_member_project_idx` is dropped: only the two Project reads used it.
 
 **Blocked by:** none
 

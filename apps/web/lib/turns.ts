@@ -149,35 +149,39 @@ export const turnList = async (
     before?: TurnCursor
   } = {},
 ): Promise<{ turns: TurnRow[]; more: boolean }> => {
+  const ordering =
+    order === 'asc'
+      ? () => tx`turn.occurred_at asc, turn.id asc`
+      : () => tx`turn.occurred_at desc, turn.id desc`
+
+  // Two passes: the page's Turns are chosen from `turns` alone, through
+  // `turns_session_occurred_at_idx` for a Session, and only those are priced.
+  // Priced first, a 50k-Turn Session priced every Turn to keep 101: 0.73s
+  // locally, against a few milliseconds this way.
   const rows = await tx<RawTurn[]>`
+    with page as (
+      select turn.id
+        from turns turn
+       where turn.org_id = ${orgId}
+         ${WITHIN(tx, timezone, range)}
+         ${MATCHING(tx, filter)}
+         ${PAST(tx, order, before)}
+       order by ${ordering()}
+       limit ${limit + 1}
+    )
     select ${TURN_COLUMNS(tx)}
-      from turn_costs cost
-      join turns turn on turn.id = cost.turn_id
+      from page
+      join turn_costs cost on cost.turn_id = page.id
+      join turns turn on turn.id = page.id
       left join projects project on project.id = turn.project_id
      where cost.org_id = ${orgId}
-       and turn.org_id = ${orgId}
-       ${WITHIN(tx, timezone, range)}
-       ${MATCHING(tx, filter)}
-       ${PAST(tx, order, before)}
-     order by ${
-       order === 'asc'
-         ? tx`turn.occurred_at asc, turn.id asc`
-         : tx`turn.occurred_at desc, turn.id desc`
-     }
-     limit ${limit + 1}
+     order by ${ordering()}
   `
 
   return { turns: rows.slice(0, limit).map(asRow), more: rows.length > limit }
 }
 
-/**
- * The period, on both sides of the join.
- *
- * Both carry the qual so each reaches `turns_org_occurred_at_idx`, which is
- * the same reason `breakdown` writes it twice: `turn_costs` is a plain join
- * over `turns` since ticket 81, and the planner bounds both scans rather than
- * pricing the deployment and discarding it.
- */
+/** The period, on `turns_org_occurred_at_idx`. */
 const WITHIN = (
   tx: TransactionSql,
   timezone: string | undefined,
@@ -186,8 +190,7 @@ const WITHIN = (
   if (!range || !timezone) return tx``
   const from = tx`(${range.from}::date)::timestamp at time zone ${timezone}`
   const to = tx`(${range.to}::date)::timestamp at time zone ${timezone}`
-  return tx`and cost.occurred_at >= ${from} and cost.occurred_at < ${to}
-            and turn.occurred_at >= ${from} and turn.occurred_at < ${to}`
+  return tx`and turn.occurred_at >= ${from} and turn.occurred_at < ${to}`
 }
 
 /**
@@ -210,8 +213,8 @@ const MATCHING = (tx: TransactionSql, filter: TurnFilter) => {
         ? tx`and turn.device_id is null`
         : tx`and turn.device_id = ${filter.id}`
     default:
-      // Both columns, because `turns_identity_key` leads on `member_id`: a
-      // session id on its own has no index behind it and would be a scan.
+      // Both columns, because `turns_session_occurred_at_idx` leads on
+      // `member_id`: a session id on its own has no index behind it.
       return tx`and turn.member_id = ${filter.memberId}
                 and turn.session_id = ${filter.sessionId}`
   }
