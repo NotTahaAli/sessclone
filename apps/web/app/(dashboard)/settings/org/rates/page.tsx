@@ -35,6 +35,7 @@ export default async function Page() {
   const viewer = await currentViewer()
   if (!viewer || !reachesOrgSettings(viewer.role)) notFound()
 
+  // oxlint-disable-next-line react/purity -- a Server Component renders once per request, so the clock is read once.
   const now = new Date().toISOString().slice(0, 10)
 
   const { tier, overrides, models } = await asViewer(
