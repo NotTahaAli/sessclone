@@ -171,6 +171,7 @@ async function WithoutOrg({
       </p>
       {invites?.length ? (
         <div className="border-rule mt-4 max-w-sm rounded-md border">
+          {/* oxlint-disable-next-line react/purity -- a Server Component renders once per request, so the clock is read once. */}
           <PendingInvites invites={invites} now={new Date().toISOString()} />
         </div>
       ) : null}

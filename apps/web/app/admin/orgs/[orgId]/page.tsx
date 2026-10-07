@@ -51,6 +51,7 @@ export default async function Page({
 
   // Once for the page rather than once per control: two reads either side of
   // midnight would otherwise disagree about what today is.
+  // oxlint-disable-next-line react/purity -- a Server Component renders once per request, so the clock is read once.
   const now = new Date().toISOString().slice(0, 10)
 
   // One transaction: the Org, the Tiers it could be put on, and what has

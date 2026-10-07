@@ -21,7 +21,7 @@ import {
 } from '../../../ui/select';
 import { useTranslations } from '@fuma-translate/react';
 import { type OAuthFlowType, requestOAuthToken, usePlaygroundAuth } from 'fumadocs-openapi/playground';
-import { useOpenAPI } from 'fumadocs-openapi';
+import { useOpenAPI, useServer } from 'fumadocs-openapi';
 
 export interface AuthDialogContentProps {
   schemeId: string;
@@ -64,6 +64,7 @@ function Content({ schemeId, scopes, setToken, setOpen }: AuthDialogContentProps
   const { dereferenced, resolve } = useOpenAPI().doc;
   const schemes = dereferenced.components?.securitySchemes;
   const tokenInfo = usePlaygroundAuth().store[schemeId];
+  const { resolveUrl } = useServer();
   const scheme = resolve(schemes?.[schemeId]);
   if (!scheme || scheme.type !== 'oauth2')
     throw new Error('unexpected schemaId: must be type oauth2');
@@ -131,6 +132,8 @@ function Content({ schemeId, scopes, setToken, setOpen }: AuthDialogContentProps
       schemeId,
       scopes,
       clientAuth,
+      // fumadocs-openapi 12.2 resolves relative flow URLs against the selected server.
+      serverUrl: resolveUrl(),
     });
     if (!token || signal.aborted) return;
 
