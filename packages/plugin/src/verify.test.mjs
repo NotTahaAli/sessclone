@@ -12,6 +12,7 @@ import {
   handCount,
   isWsl,
   keyEvidence,
+  parseArgs,
   probeVerdict,
   reconcile,
   redirectTarget,
@@ -427,5 +428,35 @@ describe('redirectTarget', () => {
   it('is null for anything but a redirect with a Location', () => {
     expect(redirectTarget(answer(400), asked)).toBeNull()
     expect(redirectTarget(answer(301), asked)).toBeNull()
+  })
+})
+
+describe('parseArgs', () => {
+  it('refuses a value flag with no value, naming the flag', () => {
+    expect(parseArgs(['--reconcile', '--day'])).toEqual({
+      error: '--day needs a value',
+    })
+    expect(parseArgs(['--reconcile', '--day', '--tz', 'UTC'])).toEqual({
+      error: '--day needs a value',
+    })
+    expect(parseArgs(['--reconcile', '--tz', '--day', '2026-09-22'])).toEqual({
+      error: '--tz needs a value',
+    })
+  })
+
+  it('reads a day, and leaves the time zone to the machine when omitted', () => {
+    expect(parseArgs(['--reconcile', '--day', '2026-09-22'])).toEqual({
+      help: false,
+      reconcile: true,
+      probe: true,
+      day: '2026-09-22',
+      timeZone: null,
+    })
+  })
+
+  it('still refuses a badly formatted day', () => {
+    expect(parseArgs(['--reconcile', '--day', '22-09-2026'])).toEqual({
+      error: '--day must be YYYY-MM-DD, not 22-09-2026',
+    })
   })
 })

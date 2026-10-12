@@ -839,3 +839,39 @@ export const formatCount = (count) => {
 
   return lines.join('\n')
 }
+
+/**
+ * The command line of `scripts/verify-collector.mjs`, or the reason it is
+ * refused (ticket 155).
+ *
+ * A value flag at the end, or followed by another `--flag`, is an error naming
+ * that flag. Read loosely, `--reconcile --day` counted every day and exited 0,
+ * and `--tz --day 2026-09-22` took `--day` as the time zone and crashed.
+ *
+ * @param {string[]} argv
+ */
+export const parseArgs = (argv) => {
+  const flag = (name) => argv.includes(`--${name}`)
+  const value = (name) => {
+    const at = argv.indexOf(`--${name}`)
+    if (at === -1) return { value: null }
+    const next = argv[at + 1]
+    return next === undefined || next.startsWith('--')
+      ? { error: `--${name} needs a value` }
+      : { value: next }
+  }
+  const day = value('day')
+  if (day.error) return { error: day.error }
+  const tz = value('tz')
+  if (tz.error) return { error: tz.error }
+  if (day.value !== null && !/^\d{4}-\d{2}-\d{2}$/.test(day.value)) {
+    return { error: `--day must be YYYY-MM-DD, not ${day.value}` }
+  }
+  return {
+    help: flag('help'),
+    reconcile: flag('reconcile'),
+    probe: !flag('no-probe'),
+    day: day.value,
+    timeZone: tz.value,
+  }
+}

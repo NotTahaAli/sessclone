@@ -10,12 +10,12 @@ Its comment promises it prints the error message and never the configuration
 
 **Blocked by:** none
 
-**Status:** todo
+**Status:** done
 
-- [ ] `packages/plugin/src/debug.test.mjs`, in the style of `deadline.test.mjs`,
+- [x] `packages/plugin/src/debug.test.mjs`, in the style of `deadline.test.mjs`,
       spying on `process.stderr.write` and passing the environment in
-- [ ] With `SESSCLONE_DEBUG` unset, nothing is written
-- [ ] With `SESSCLONE_DEBUG=1` and an `Error`, exactly one line naming the
+- [x] With `SESSCLONE_DEBUG` unset, nothing is written
+- [x] With `SESSCLONE_DEBUG=1` and an `Error`, exactly one line naming the
       hook and the error is written
-- [ ] A thrown non-`Error` value still writes one line
-- [ ] `pnpm test` passes
+- [x] A thrown non-`Error` value still writes one line
+- [x] `pnpm test` passes

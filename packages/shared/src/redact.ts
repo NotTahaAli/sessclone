@@ -123,3 +123,29 @@ export const redactEntry = (entry: unknown): unknown => {
   if ('attachment' in entry) out.attachment = redactAttachment(entry.attachment)
   return out
 }
+
+/**
+ * A whole JSONL transcript, redacted line by line, ending in one newline.
+ *
+ * Refuses input that is already redacted: redaction is not idempotent, and a
+ * second pass rewrites `[redacted:35]` as `[redacted:13]`, quietly collapsing
+ * every length in the corpus. A line that is not JSON throws with its line
+ * number (ticket 156), so a truncated export names where it broke.
+ */
+export const redactJsonl = (source: string): string => {
+  if (source.includes('[redacted')) {
+    throw new Error('already redacted; refusing to redact it again')
+  }
+  const out: string[] = []
+  for (const [index, line] of source.split('\n').entries()) {
+    if (line === '') continue
+    let entry: unknown
+    try {
+      entry = JSON.parse(line)
+    } catch {
+      throw new Error(`${index + 1}: not valid JSON`)
+    }
+    out.push(JSON.stringify(redactEntry(entry)))
+  }
+  return `${out.join('\n')}\n`
+}

@@ -10,9 +10,9 @@ has the wording.
 
 **Blocked by:** 155, so the guide describes the final behaviour
 
-**Status:** todo
+**Status:** done
 
-- [ ] A short table of `--reconcile`, `--day`, `--tz` and `--no-probe` with
+- [x] A short table of `--reconcile`, `--day`, `--tz` and `--no-probe` with
       their defaults, worded from the script's `--help`
-- [ ] One line saying `--help` prints the same list
-- [ ] `pnpm format` passes
+- [x] One line saying `--help` prints the same list
+- [x] `pnpm format` passes

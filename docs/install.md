@@ -182,8 +182,17 @@ Code copies `packages/plugin` alone into
 `<config dir>/plugins/cache/<marketplace>/<plugin>/<version>/`, and this script
 is not in it. It prints a key's first three characters
 and its length and never more, so the output is safe to paste to whoever is
-helping. `--reconcile --day <date> --tz <zone>` counts a day of Turns off the
-transcripts, for checking a dashboard total by hand.
+helping.
+
+| Flag           | What it does                                                                         |
+| -------------- | ------------------------------------------------------------------------------------ |
+| `--reconcile`  | Count Turns from this machine's transcripts, for checking a dashboard total by hand. |
+| `--day <date>` | `YYYY-MM-DD` for `--reconcile`. Omitted, every day is counted.                       |
+| `--tz <zone>`  | The Org's timezone for `--reconcile`. Default: this machine's.                       |
+| `--no-probe`   | Do not contact `SESSCLONE_URL`, for a machine that cannot reach the deployment.      |
+
+`--day` or `--tz` with no value is refused rather than ignored.
+`node scripts/verify-collector.mjs --help` prints the same list.
 
 - **Something arrives.** Done. There is nothing else to install on this
   machine.
