@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 
-import { redactEntry } from './redact.ts'
+import { redactEntry, redactJsonl } from './redact.ts'
 
 test('keeps the identity of an entry and redacts what it said', () => {
   const redacted = redactEntry({
@@ -280,4 +280,21 @@ test('a redacted non-string carries no length, so its value cannot be read back'
     type: 'attachment',
     attachment: { isInitial: '[redacted]' },
   })
+})
+
+test('a transcript line that is not JSON is named by its line number', () => {
+  expect(() => redactJsonl('{"type":"user"}\n{"type":')).toThrow(
+    '2: not valid JSON',
+  )
+})
+
+test('blank lines are skipped and the output ends in exactly one newline', () => {
+  const out = redactJsonl('\n{"type":"user"}\n\n{"type":"user"}\n\n')
+  expect(out).toBe('{"type":"user"}\n{"type":"user"}\n')
+})
+
+test('an already redacted transcript is refused', () => {
+  expect(() => redactJsonl('{"text":"[redacted:35]"}\n')).toThrow(
+    'already redacted',
+  )
 })

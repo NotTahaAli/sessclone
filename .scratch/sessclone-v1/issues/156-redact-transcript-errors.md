@@ -11,14 +11,14 @@ no line number.
 
 **Blocked by:** none
 
-**Status:** todo
+**Status:** done
 
-- [ ] `--help` and `-h` print the usage line and exit 0
-- [ ] The pure part becomes an exported `redactJsonl(source)` in
+- [x] `--help` and `-h` print the usage line and exit 0
+- [x] The pure part becomes an exported `redactJsonl(source)` in
       `packages/shared/src/redact.ts`, which throws with the line number of a
       line that is not JSON and keeps the refusal of already-redacted input
-- [ ] The script prints `<input>:<n>: not valid JSON` and exits 1
-- [ ] Tests in `redact.test.ts`: a bad second line names line 2, blank lines
+- [x] The script prints `<input>:<n>: not valid JSON` and exits 1
+- [x] Tests in `redact.test.ts`: a bad second line names line 2, blank lines
       are skipped, output ends with exactly one newline, input containing
       `[redacted` is refused
-- [ ] `pnpm test` passes
+- [x] `pnpm test` passes

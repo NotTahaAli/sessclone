@@ -9,12 +9,12 @@ states a rule that matters: an amount below half a cent (`Math.abs(value) <
 
 **Blocked by:** none
 
-**Status:** todo
+**Status:** done
 
-- [ ] `apps/web/test/money.test.ts` covers `usd(null)`, zero, the 0.005
+- [x] `apps/web/test/money.test.ts` covers `usd(null)`, zero, the 0.005
       boundary between six decimals and two, a micro-dollar amount, a
       negative amount, and a large amount
-- [ ] `count` and `compact` each get a thousands case and a millions case
-- [ ] Expected strings come from running the code, not from memory: `Intl`
+- [x] `count` and `compact` each get a thousands case and a millions case
+- [x] Expected strings come from running the code, not from memory: `Intl`
       output depends on the runtime
-- [ ] `pnpm test` passes
+- [x] `pnpm test` passes

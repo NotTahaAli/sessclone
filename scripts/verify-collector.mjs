@@ -29,20 +29,19 @@ if (node) {
   process.stderr.write(`${node}\n`)
   process.exit(1)
 }
-const { format, formatCount, collect, handCount } =
+const { format, formatCount, collect, handCount, parseArgs } =
   await import('../packages/plugin/src/verify.mjs')
 
 // Ticket 98: the probe takes the route the hooks take, proxy included.
 throughProxy()
 
-const argv = process.argv.slice(2)
-const flag = (name) => argv.includes(`--${name}`)
-const value = (name) => {
-  const at = argv.indexOf(`--${name}`)
-  return at === -1 ? undefined : argv[at + 1]
+const args = parseArgs(process.argv.slice(2))
+if (args.error) {
+  process.stderr.write(`${args.error}\n`)
+  process.exit(2)
 }
 
-if (flag('help')) {
+if (args.help) {
   process.stdout.write(
     [
       'Usage: node scripts/verify-collector.mjs [options]',
@@ -57,17 +56,12 @@ if (flag('help')) {
   process.exit(0)
 }
 
-if (flag('reconcile')) {
-  const day = value('day') ?? null
-  if (day !== null && !/^\d{4}-\d{2}-\d{2}$/.test(day)) {
-    process.stderr.write(`--day must be YYYY-MM-DD, not ${day}\n`)
-    process.exit(2)
-  }
+if (args.reconcile) {
   const timeZone =
-    value('tz') ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC'
-  process.stdout.write(`${formatCount(await handCount({ day, timeZone }))}\n`)
-} else {
+    args.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC'
   process.stdout.write(
-    `${format(await collect({ probe: !flag('no-probe') }))}\n`,
+    `${formatCount(await handCount({ day: args.day, timeZone }))}\n`,
   )
+} else {
+  process.stdout.write(`${format(await collect({ probe: args.probe }))}\n`)
 }

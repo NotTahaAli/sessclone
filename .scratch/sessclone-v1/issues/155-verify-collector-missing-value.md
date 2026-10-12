@@ -14,15 +14,15 @@ takes `--day` as the time zone and crashes with a stack trace.
 
 **Blocked by:** none
 
-**Status:** todo
+**Status:** done
 
-- [ ] Argument parsing moves into an exported pure function (for example
+- [x] Argument parsing moves into an exported pure function (for example
       `parseArgs(argv)`) so it can be tested without running the script
-- [ ] A value flag with no value, or followed by another `--flag`, prints
+- [x] A value flag with no value, or followed by another `--flag`, prints
       `--day needs a value` (or `--tz`) to stderr and exits 2, the code the
       date-format check already uses
-- [ ] Tests: `--reconcile --day`, `--reconcile --day --tz UTC` and
+- [x] Tests: `--reconcile --day`, `--reconcile --day --tz UTC` and
       `--reconcile --tz --day 2026-09-22` are errors naming the flag with no
       value; `--reconcile --day 2026-09-22` parses to that day; a badly
       formatted date is still refused
-- [ ] `pnpm test` passes
+- [x] `pnpm test` passes
