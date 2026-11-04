@@ -23,7 +23,7 @@ catalog:
   tailwindcss: 4.3.3
   typescript: 7.0.2
   vitest: 5.0.3
-  zod: 4.6.5
+  zod: 4.6.6
 patchedDependencies:
   '@material/material-color-utilities@0.4.0': patches/@material__material-color-utilities@0.4.0.patch
 # @scalar/json-magic (via fumadocs-openapi) pins undici to exactly 7.24.4,
